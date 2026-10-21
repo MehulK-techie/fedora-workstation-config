@@ -45,6 +45,7 @@ if [ -f ./bin/ocr-snip ]; then
 fi
 
 echo "=== 8. Applying Hardware & Physics Optimizations ==="
+sudo systemctl enable --now fprintd.service 2>/dev/null || true
 if lsusb | grep -qi -E 'fingerprint|synaptics|goodix|validity'; then
     echo "Fingerprint reader found. Enabling PAM authentication..."
     sudo authselect enable-feature with-fingerprint 2>/dev/null || true

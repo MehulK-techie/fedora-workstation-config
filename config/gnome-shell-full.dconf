@@ -4,7 +4,7 @@ command-history=['f2', 'r']
 disable-extension-version-validation=true
 disable-user-extensions=false
 disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com', 'CoverflowAltTab@palatis.blogspot.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com']
-enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'compiz-windows-effect@hermes83.github.com', 'tiling-assistant@leleat-on-github', 'wack-shell@rinzler69-wastaken.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com', 'monitor@astraext.github.io', 'emoji-copy@felipeftn']
+enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'compiz-windows-effect@hermes83.github.com', 'tiling-assistant@leleat-on-github', 'wack-shell@rinzler69-wastaken.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com', 'monitor@astraext.github.io', 'emoji-copy@felipeftn', 'blur-my-shell@aunetx']
 favorite-apps=['app.zen_browser.zen.desktop', 'com.spotify.Client.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop', 'com.rtosta.zapzap.desktop']
 last-selected-power-profile='performance'
 welcome-dialog-last-shown-version='50.0'
@@ -90,7 +90,7 @@ unblur-in-overview=true
 [extensions/blur-my-shell/popup]
 blur=true
 override-background=true
-pipeline='pipeline_default'
+pipeline='pipeline_default_rounded'
 preserve-shell-theme=true
 static-blur=false
 
@@ -455,7 +455,7 @@ automatic-location=true
 locations=[<(uint32 2, <('Jaipur', 'VIJP', true, [(0.46803913356091015, 1.3229595730117016)], [(0.46978446281290459, 1.3232504670381315)])>)>]
 
 [window-switcher]
-current-workspace-only=true
+current-workspace-only=false
 
 [world-clocks]
 locations=@av []

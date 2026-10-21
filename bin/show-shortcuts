@@ -1,0 +1,25 @@
+#!/bin/bash
+zenity --info --title="⌨️ Workstation Hotkey Cheat Sheet" --width=520 --height=580 --text="<b>🚀 FEDORA WORKSTATION SHORTCUT REFERENCE</b>\n
+─────────────────────────────────────────────
+<b>📌 SYSTEM & NAVIGATION</b>
+• <b>Super</b> : Open Application Search & Overview
+• <b>Alt + Tab</b> : Global Window Switcher (Across ALL Workspaces)
+• <b>Super + .</b> : Windows Emoji Picker Board
+• <b>Super + /</b> : Display This Hotkey Cheat Sheet
+
+<b>✂️ UTILITIES & PRODUCTIVITY</b>
+• <b>Super + Shift + T</b> : OCR Text Snippet Extractor
+• <b>PrintScreen</b> : Native Screen Capture & Recorder
+• <b>Super + Z</b> : System Hibernate
+• <b>Super + X</b> : Instant Shutdown
+
+<b>🪟 WINDOW MANAGEMENT (TILING ASSISTANT)</b>
+• <b>Super + Left / Right</b> : Snap Window to Half Screen
+• <b>Super + Up / Down</b> : Maximize / Minimize / Restore
+• <b>Super + Numpad (1-9)</b> : Quarter Grid Tiling
+• <b>Drag to Edges</b> : Windows-Style Auto Snap
+
+<b>🖱️ TOUCHPAD GESTURES</b>
+• <b>3-Finger Swipe Left/Right</b> : Switch Workspaces
+• <b>3-Finger Swipe Up</b> : Open App Overview Grid
+• <b>Tap Trackpad</b> : Tap-to-Click Anywhere" 2>/dev/null

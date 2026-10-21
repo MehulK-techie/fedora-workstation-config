@@ -3,8 +3,8 @@ app-picker-layout=[{'org.fedoraproject.MediaWriter.desktop': <{'position': <0>}>
 command-history=['f2', 'r']
 disable-extension-version-validation=true
 disable-user-extensions=false
-disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com', 'CoverflowAltTab@palatis.blogspot.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com']
-enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'compiz-windows-effect@hermes83.github.com', 'tiling-assistant@leleat-on-github', 'wack-shell@rinzler69-wastaken.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com', 'monitor@astraext.github.io', 'emoji-copy@felipeftn', 'blur-my-shell@aunetx']
+disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com', 'CoverflowAltTab@palatis.blogspot.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com', 'compiz-windows-effect@hermes83.github.com']
+enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'wack-shell@rinzler69-wastaken.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com', 'monitor@astraext.github.io', 'emoji-copy@felipeftn', 'blur-my-shell@aunetx', 'tiling-assistant@leleat-on-github']
 favorite-apps=['app.zen_browser.zen.desktop', 'com.spotify.Client.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop', 'com.rtosta.zapzap.desktop']
 last-selected-power-profile='performance'
 welcome-dialog-last-shown-version='50.0'
@@ -135,7 +135,8 @@ speed=200
 
 [extensions/compiz-windows-effect]
 friction=3.5
-spring-k=50.0
+spring-k=0.34999999999999998
+wobbly-resize=false
 x-tiles=6
 y-tiles=6
 
@@ -363,12 +364,15 @@ activate-layout0=@as []
 activate-layout1=@as []
 activate-layout2=@as []
 activate-layout3=@as []
+animation-time=150
 auto-tile=@as []
 center-window=@as []
 debugging-free-rects=@as []
 debugging-show-tiled-rects=@as []
 default-move-mode=0
 dynamic-keybinding-behavior=0
+enable-snap-assist=true
+enable-tile-animations=true
 focus-hint=0
 focus-hint-color='rgb(53,132,228)'
 import-layout-examples=false

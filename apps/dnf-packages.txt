@@ -26,3 +26,4 @@ ibus
 gnome-characters
 python3-gobject
 gtk3
+wmctrl

@@ -1,0 +1,9 @@
+#!/bin/bash
+CURRENT_WS=$(wmctrl -d | awk '$2=="*"{print $1}')
+
+if [ -n "$CURRENT_WS" ]; then
+    wmctrl -l | awk -v ws="$CURRENT_WS" '$2==ws {print $1}' | while read -r win_id; do
+        wmctrl -c "$win_id"
+    done
+    notify-send "Workspace Manager" "Closed all applications on Workspace $((CURRENT_WS + 1))" -i window-close
+fi

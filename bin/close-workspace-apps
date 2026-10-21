@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
-import subprocess, sys
+import subprocess, time, shutil
 
-try:
-    ws_out = subprocess.check_output(["wmctrl", "-d"], text=True)
-    active_ws = None
-    for line in ws_out.splitlines():
-        if "*" in line:
-            active_ws = line.split()[0]
-            break
-            
-    if active_ws is not None:
-        win_out = subprocess.check_output(["wmctrl", "-l"], text=True)
-        for line in win_out.splitlines():
-            parts = line.split()
-            if len(parts) >= 2 and parts[1] == active_ws:
-                win_id = parts[0]
-                subprocess.run(["wmctrl", "-c", win_id])
-except Exception:
-    pass
+has_wtype = shutil.which("wtype") is not None
+has_xdotool = shutil.which("xdotool") is not None
+
+# Sequentially send Alt+F4 to active windows on the current workspace
+for _ in range(12):
+    if has_wtype:
+        subprocess.run(["wtype", "-M", "alt", "-k", "F4", "-m", "alt"], stderr=subprocess.DEVNULL)
+    elif has_xdotool:
+        subprocess.run(["xdotool", "key", "--clearmodifiers", "Alt+F4"], stderr=subprocess.DEVNULL)
+    time.sleep(0.06)

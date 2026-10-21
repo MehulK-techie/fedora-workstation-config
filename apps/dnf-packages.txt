@@ -1,3 +1,4 @@
 wmctrl
 tesseract
 gnome-characters
+wtype

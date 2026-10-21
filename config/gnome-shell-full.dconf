@@ -3,8 +3,8 @@ app-picker-layout=[{'org.fedoraproject.MediaWriter.desktop': <{'position': <0>}>
 command-history=['f2', 'r']
 disable-extension-version-validation=true
 disable-user-extensions=false
-disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com', 'CoverflowAltTab@palatis.blogspot.com']
-enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'monitor@astraext.github.io', 'blur-my-shell@aunetx', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'compiz-windows-effect@hermes83.github.com', 'tiling-assistant@leleat-on-github', 'wack-shell@rinzler69-wastaken.github.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com']
+disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com', 'CoverflowAltTab@palatis.blogspot.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com']
+enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'blur-my-shell@aunetx', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'compiz-windows-effect@hermes83.github.com', 'tiling-assistant@leleat-on-github', 'wack-shell@rinzler69-wastaken.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com', 'monitor@astraext.github.io', 'emoji-copy@felipeftn']
 favorite-apps=['app.zen_browser.zen.desktop', 'com.spotify.Client.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop', 'com.rtosta.zapzap.desktop']
 last-selected-power-profile='performance'
 welcome-dialog-last-shown-version='50.0'
@@ -262,6 +262,12 @@ trash-icon=false
 [extensions/ding]
 check-x11wayland=true
 
+[extensions/emoji-copy]
+always-show=false
+emoji-keybind=['<Super>period']
+use-keybind=true
+window-location='top-bar'
+
 [extensions/just-perfection]
 accent-color-icon=false
 accessibility-menu=true
@@ -347,6 +353,7 @@ show-panel-icon=true
 
 [extensions/text-extractor]
 extract-shortcut=['<Shift>t']
+show-indicator=false
 
 [extensions/tiling-assistant]
 activate-layout0=@as []

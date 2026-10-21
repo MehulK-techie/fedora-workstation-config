@@ -1,18 +1,18 @@
 #!/bin/bash
-TMP_IMG=$(mktemp /tmp/snip_ocr_XXXXXX.png)
+TMP_IMG="/tmp/ocr_snip.png"
+rm -f "$TMP_IMG"
 
-# Freeze screen and draw selection rectangle
+# Capture area screenshot
 gnome-screenshot -a -f "$TMP_IMG" 2>/dev/null
 
-if [ -s "$TMP_IMG" ]; then
-    # Extract text with Tesseract
-    TEXT=$(tesseract "$TMP_IMG" stdout --psm 6 2>/dev/null || tesseract "$TMP_IMG" stdout 2>/dev/null)
-    CLEAN_TEXT=$(echo "$TEXT" | xargs)
-    
-    if [ -n "$CLEAN_TEXT" ]; then
-        echo -n "$CLEAN_TEXT" | wl-copy
-        notify-send -i edit-paste "Snip OCR Copied" "$CLEAN_TEXT"
+# Process OCR and copy text to clipboard
+if [ -f "$TMP_IMG" ]; then
+    TEXT=$(tesseract "$TMP_IMG" stdout 2>/dev/null)
+    if [ -n "$TEXT" ]; then
+        echo -n "$TEXT" | wl-copy
+        notify-send "OCR Text Extractor" "Copied to clipboard:\n$TEXT" -i edit-paste
+    else
+        notify-send "OCR Text Extractor" "No readable text detected." -i dialog-warning
     fi
+    rm -f "$TMP_IMG"
 fi
-
-rm -f "$TMP_IMG"

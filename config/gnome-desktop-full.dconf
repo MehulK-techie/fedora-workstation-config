@@ -72,7 +72,7 @@ font-hinting='slight'
 gtk-key-theme='Default'
 gtk-theme='Adwaita-dark'
 locate-pointer=true
-show-battery-percentage=false
+show-battery-percentage=true
 toolkit-accessibility=false
 
 [notifications]
@@ -155,6 +155,7 @@ disable-while-typing=false
 natural-scroll=true
 send-events='enabled'
 speed=0.33333333333333326
+tap-to-click=true
 two-finger-scrolling-enabled=true
 
 [privacy]
@@ -191,4 +192,5 @@ switch-windows=['<Alt>Tab']
 unmaximize=@as []
 
 [wm/preferences]
+button-layout=':minimize,maximize,close'
 num-workspaces=4

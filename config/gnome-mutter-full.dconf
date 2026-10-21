@@ -1,6 +1,7 @@
 [/]
+center-new-windows=true
 dynamic-workspaces=true
-edge-tiling=false
+edge-tiling=true
 experimental-features=['scale-monitor-framebuffer']
 workspaces-only-on-primary=true
 

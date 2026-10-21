@@ -1,7 +1,6 @@
 {
   "uuid": "close-workspace-apps@mehul.tech",
   "name": "Close Workspace Apps",
-  "description": "Closes all active windows on the current workspace using Super+Shift+C",
-  "shell-version": [ "45", "46", "47", "48" ],
-  "settings-schema": "org.gnome.shell.extensions.close-workspace-apps"
+  "description": "Direct compositor accelerator to close all active workspace windows via Super+Shift+C",
+  "shell-version": [ "45", "46", "47", "48" ]
 }

@@ -2,17 +2,21 @@
 TMP_IMG="/tmp/ocr_snip.png"
 rm -f "$TMP_IMG"
 
-# Capture area screenshot
-gnome-screenshot -a -f "$TMP_IMG" 2>/dev/null
+# Capture selected region via native Wayland tools
+if command -v grim >/dev/null 2>&1 && command -v slurp >/dev/null 2>&1; then
+    grim -g "$(slurp)" "$TMP_IMG" 2>/dev/null
+else
+    gnome-screenshot -a -f "$TMP_IMG" 2>/dev/null
+fi
 
-# Process OCR and copy text to clipboard
-if [ -f "$TMP_IMG" ]; then
-    TEXT=$(tesseract "$TMP_IMG" stdout 2>/dev/null)
+# Process text with Tesseract
+if [ -s "$TMP_IMG" ]; then
+    TEXT=$(tesseract "$TMP_IMG" stdout 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
     if [ -n "$TEXT" ]; then
         echo -n "$TEXT" | wl-copy
         notify-send "OCR Text Extractor" "Copied to clipboard:\n$TEXT" -i edit-paste
     else
         notify-send "OCR Text Extractor" "No readable text detected." -i dialog-warning
     fi
-    rm -f "$TMP_IMG"
 fi
+rm -f "$TMP_IMG"

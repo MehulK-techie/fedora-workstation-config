@@ -180,6 +180,9 @@ sort-order=['org.gnome.Settings.desktop', 'org.gnome.Contacts.desktop', 'org.gno
 [session]
 idle-delay=uint32 300
 
+[sound]
+allow-volume-above-100-percent=true
+
 [wm/keybindings]
 maximize=@as []
 switch-applications=@as []

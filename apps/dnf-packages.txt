@@ -18,3 +18,9 @@ playerctl
 brightnessctl
 dconf
 gnome-extensions-app
+grim
+slurp
+tesseract-langpack-eng
+libnotify
+ibus
+gnome-characters

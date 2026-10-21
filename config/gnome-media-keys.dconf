@@ -1,5 +1,5 @@
 [/]
-custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']
+custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/system-lock/']
 next=['AudioNext']
 play=['XF86AudioPlay']
 previous=['AudioPrev']
@@ -49,3 +49,8 @@ name='Hibernate'
 binding='<Super>x'
 command='systemctl poweroff'
 name='Shutdown'
+
+[custom-keybindings/system-lock]
+binding='<Super>l'
+command='loginctl lock-session'
+name='System Lock Screen'

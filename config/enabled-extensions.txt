@@ -1,0 +1,10 @@
+monitor@astraext.github.io
+blur-my-shell@aunetx
+clipboard-indicator@tudmotu.com
+compiz-windows-effect@hermes83.github.com
+ding@rastersoft.com
+touchpad-gesture-customization@coooolapps.com
+transparent-top-bar@ftpix.com
+wack-shell@rinzler69-wastaken.github.com
+dash-to-dock@micxgx.gmail.com
+tiling-assistant@leleat-on-github

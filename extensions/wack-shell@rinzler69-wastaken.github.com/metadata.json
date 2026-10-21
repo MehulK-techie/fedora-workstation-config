@@ -1,0 +1,24 @@
+{
+  "name": "WACK Shell",
+  "description": "A macOS-inspired panel suite for GNOME featuring live panel vibrancy, proximity-aware panel coloring, and — when paired with WACK Sonoma Lockscreen — a seamless Cupertino unlock animation powered by real window texture snapshots. Part of the WACK Project.",
+  "uuid": "wack-shell@rinzler69-wastaken.github.com",
+  "session-modes": [
+    "unlock-dialog",
+    "user"
+  ],
+  "shell-version": [
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.wack-shell",
+  "url": "https://github.com/rinzler69-wastaken/wack-shell",
+  "version-name": "1.0.0",
+  "donations": {
+    "paypal": "ArtFazil",
+    "kofi": "mikerinzler69",
+    "custom": "https://saweria.co/rinzler69"
+  }
+}

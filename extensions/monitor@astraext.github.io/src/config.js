@@ -1,0 +1,452 @@
+/*!
+ * Copyright (C) 2023 Lju
+ *
+ * This file is part of Astra Monitor extension for GNOME Shell.
+ * [https://github.com/AstraExt/astra-monitor]
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
+import Utils from './utils/utils.js';
+class Config {
+    static set(key, value, type = 'any') {
+        if (!Config.settings)
+            throw new Error('Critical: Config.settings is not valid');
+        if (type === 'boolean') {
+            if (Config.get_boolean(key) !== value) {
+                Config.settings.set_boolean(key, value);
+            }
+        }
+        else if (type === 'string') {
+            if (Config.get_string(key) !== value) {
+                Config.settings.set_string(key, value);
+            }
+        }
+        else if (type === 'int') {
+            if (Config.get_int(key) !== value) {
+                Config.settings.set_int(key, value);
+            }
+        }
+        else if (type === 'number') {
+            if (Config.get_double(key) !== value) {
+                Config.settings.set_double(key, value);
+            }
+        }
+        else if (type === 'json') {
+            if (Config.get_string(key) !== JSON.stringify(value)) {
+                Config.settings.set_string(key, JSON.stringify(value));
+            }
+        }
+        else
+            Config.settings.set_value(key, value);
+    }
+    static get_value(key) {
+        if (!Config.settings)
+            throw new Error('Critical: Config.settings is not valid');
+        return Config.settings.get_value(key);
+    }
+    static get_boolean(key) {
+        if (!Config.settings)
+            throw new Error('Critical: Config.settings is not valid');
+        return Config.settings.get_boolean(key);
+    }
+    static get_string(key) {
+        if (!Config.settings)
+            throw new Error('Critical: Config.settings is not valid');
+        return Config.settings.get_string(key);
+    }
+    static get_json(key) {
+        if (!Config.settings)
+            throw new Error('Critical: Config.settings is not valid');
+        try {
+            const value = Config.settings.get_string(key);
+            if (value !== null && value !== '')
+                return JSON.parse(value);
+        }
+        catch (e) {
+        }
+        return null;
+    }
+    static get_int(key) {
+        if (!Config.settings)
+            throw new Error('Critical: Config.settings is not valid');
+        return Config.settings.get_int(key);
+    }
+    static get_double(key) {
+        if (!Config.settings)
+            throw new Error('Critical: Config.settings is not valid');
+        return Config.settings.get_double(key);
+    }
+    static reset(key) {
+        const settings = Config.settings;
+        if (!settings)
+            return;
+        const schema = settings.settingsSchema.get_key(key);
+        const type = schema.get_value_type();
+        if (type.equal(new GLib.VariantType('s'))) {
+            if (Config.get_string(key) !== schema.get_default_value().get_string()[0]) {
+                Config.settings?.set_string(key, schema.get_default_value().get_string()[0]);
+            }
+        }
+        else if (type.equal(new GLib.VariantType('b'))) {
+            if (Config.get_boolean(key) !== schema.get_default_value().get_boolean()) {
+                Config.settings?.set_boolean(key, schema.get_default_value().get_boolean());
+            }
+        }
+        else if (type.equal(new GLib.VariantType('i'))) {
+            if (Config.get_int(key) !== schema.get_default_value().get_int32()) {
+                Config.settings?.set_int(key, schema.get_default_value().get_int32());
+            }
+        }
+        else if (type.equal(new GLib.VariantType('d'))) {
+            if (Config.get_double(key) !== schema.get_default_value().get_double()) {
+                Config.settings?.set_double(key, schema.get_default_value().get_double());
+            }
+        }
+        else
+            Utils.log('Unsupported type: ' + type);
+    }
+    static delay() {
+        Config.settings?.delay();
+    }
+    static apply() {
+        Config.settings?.apply();
+    }
+    static bind(key, widget, property, flags = Gio.SettingsBindFlags.DEFAULT) {
+        if (!Config.settings)
+            throw new Error('Critical: Config.settings is not valid');
+        Config.settings.bind(key, widget, property, flags);
+        if (!Config.bindMap.has(widget))
+            Config.bindMap.set(widget, {});
+        Config.bindMap.get(widget)[property] = key;
+    }
+    static unbind(widget, property) {
+        Gio.Settings.unbind(widget, property);
+        if (Config.bindMap.has(widget)) {
+            const widgetBindings = Config.bindMap.get(widget);
+            delete widgetBindings[property];
+            if (Object.keys(widgetBindings).length === 0)
+                Config.bindMap.delete(widget);
+        }
+    }
+    static connect(object, signal, callback) {
+        if (!Config.settings)
+            throw new Error('Critical: Config.settings is not valid');
+        const id = Config.settings.connect(signal, callback);
+        if (!Config.connectMap.has(object))
+            Config.connectMap.set(object, []);
+        Config.connectMap.get(object).push({ id, signal });
+        return id;
+    }
+    static connectAfter(object, signal, callback) {
+        if (!Config.settings)
+            throw new Error('Critical: Config.settings is not valid');
+        const id = Config.settings.connect_after(signal, callback);
+        if (!Config.connectAfterMap.has(object))
+            Config.connectAfterMap.set(object, []);
+        Config.connectAfterMap.get(object).push({ id, signal });
+        return id;
+    }
+    static disconnect(object, signal = null) {
+        if (!Config.connectMap.has(object))
+            return;
+        if (!Config.settings) {
+            Config.connectMap.delete(object);
+            return;
+        }
+        const connections = Config.connectMap.get(object);
+        const remainingConnections = [];
+        for (const connection of connections) {
+            if (signal && connection.signal !== signal) {
+                remainingConnections.push(connection);
+                continue;
+            }
+            Config.settings.disconnect(connection.id);
+        }
+        if (remainingConnections.length === 0) {
+            Config.connectMap.delete(object);
+        }
+        else if (signal) {
+            Config.connectMap.set(object, remainingConnections);
+        }
+    }
+    static disconnectAfter(object, signal = null) {
+        if (!Config.connectAfterMap.has(object))
+            return;
+        if (!Config.settings) {
+            Config.connectAfterMap.delete(object);
+            return;
+        }
+        const connections = Config.connectAfterMap.get(object);
+        const remainingConnections = [];
+        for (const connection of connections) {
+            if (signal && connection.signal !== signal) {
+                remainingConnections.push(connection);
+                continue;
+            }
+            Config.settings.disconnect(connection.id);
+        }
+        if (remainingConnections.length === 0) {
+            Config.connectAfterMap.delete(object);
+        }
+        else if (signal) {
+            Config.connectAfterMap.set(object, remainingConnections);
+        }
+    }
+    static disconnectAll(object) {
+        this.disconnect(object);
+        this.disconnectAfter(object);
+    }
+    static clear(widget) {
+        if (Config.bindMap.has(widget)) {
+            const widgetBindings = Config.bindMap.get(widget);
+            for (const property in widgetBindings)
+                Gio.Settings.unbind(widget, property);
+            Config.bindMap.delete(widget);
+        }
+        Config.disconnect(widget);
+        Config.disconnectAfter(widget);
+        if (Config.syncMap.has(widget))
+            Config.syncMap.delete(widget);
+    }
+    static clearAll() {
+        for (const widget of [...Config.bindMap.keys()])
+            Config.clear(widget);
+        for (const object of [...Config.connectMap.keys()])
+            Config.clear(object);
+        for (const object of [...Config.connectAfterMap.keys()])
+            Config.clear(object);
+        for (const object of [...Config.syncMap.keys()])
+            Config.clear(object);
+    }
+    static getCurrentSettingsData(skips = []) {
+        const settings = Config.settings;
+        const exported = {};
+        if (!settings)
+            return exported;
+        const keys = settings.list_keys();
+        for (const key of keys) {
+            if (skips.includes(key))
+                continue;
+            const value = settings.get_value(key);
+            const schema = settings.settingsSchema.get_key(key);
+            const type = schema.get_value_type();
+            if (type.equal(new GLib.VariantType('s')))
+                exported[key] = value.get_string()[0];
+            else if (type.equal(new GLib.VariantType('b')))
+                exported[key] = value.get_boolean();
+            else if (type.equal(new GLib.VariantType('i')))
+                exported[key] = value.get_int32();
+            else if (type.equal(new GLib.VariantType('d')))
+                exported[key] = Utils.roundFloatingPointNumber(value.get_double());
+            else
+                Utils.log('Unsupported type: ' + type);
+        }
+        return exported;
+    }
+    static exportSettings() {
+        const exported = Config.getCurrentSettingsData();
+        const ordered = {};
+        Object.keys(exported)
+            .sort()
+            .forEach(key => {
+            ordered[key] = exported[key];
+        });
+        return JSON.stringify(ordered);
+    }
+    static importSettings(data) {
+        if (!data)
+            return;
+        const imported = JSON.parse(data);
+        if (!imported)
+            return;
+        const settings = Config.settings;
+        if (!settings)
+            return;
+        Config.settingsTransaction = true;
+        Config.delay();
+        const keys = Object.keys(imported);
+        for (const key of keys) {
+            Config.reset(key);
+            const value = imported[key];
+            try {
+                const schema = settings.settingsSchema.get_key(key);
+                const type = schema.get_value_type();
+                if (type.equal(new GLib.VariantType('s')))
+                    Config.set(key, value, 'string');
+                else if (type.equal(new GLib.VariantType('b')))
+                    Config.set(key, value, 'boolean');
+                else if (type.equal(new GLib.VariantType('i')))
+                    Config.set(key, value, 'int');
+                else if (type.equal(new GLib.VariantType('d')))
+                    Config.set(key, value, 'number');
+                else
+                    Utils.log('Unsupported type: ' + type);
+            }
+            catch (e) {
+                Utils.error('Error importing settings', e);
+            }
+        }
+        Config.apply();
+        Utils.configUpdateFixes();
+        Config.settingsTransaction = false;
+        Config.syncCurrentProfile();
+    }
+    static resetSettings() {
+        const settings = Config.settings;
+        if (!settings)
+            return;
+        Config.settingsTransaction = true;
+        Config.delay();
+        const keys = settings.list_keys();
+        for (const key of keys) {
+            if (key === 'debug-mode')
+                continue;
+            Config.reset(key);
+        }
+        Config.apply();
+        Config.settingsTransaction = false;
+        Config.syncCurrentProfile();
+    }
+    static resetProfile() {
+        const settings = Config.settings;
+        if (!settings)
+            return;
+        Config.settingsTransaction = true;
+        Config.delay();
+        try {
+            const keys = settings.list_keys();
+            for (const key of keys) {
+                if (Config.globalSettingsKeys.includes(key))
+                    continue;
+                Config.reset(key);
+                Config.updatedProfilesConfig(key, true);
+            }
+        }
+        catch (e) {
+            Utils.log('Error resetting profile: ' + e);
+        }
+        Config.apply();
+        Config.settingsTransaction = false;
+        Config.syncCurrentProfile();
+    }
+    static updatedProfilesConfig(key, forced = false) {
+        if (Config.settingsTransaction && !forced)
+            return;
+        const currentProfile = Config.get_string('current-profile') ?? 'default';
+        const profilesData = Config.get_json('profiles');
+        if (!profilesData)
+            return;
+        if (!profilesData[currentProfile])
+            return;
+        const profile = profilesData[currentProfile];
+        const value = Config.get_value(key);
+        switch (value.get_type_string()) {
+            case 's':
+                profile[key] = Config.get_string(key);
+                break;
+            case 'i':
+                profile[key] = Config.get_int(key);
+                break;
+            case 'd':
+                profile[key] = Config.get_double(key);
+                break;
+            case 'b':
+                profile[key] = Config.get_boolean(key);
+                break;
+            default:
+                Utils.log('Unsupported type: ' + value.get_type_string());
+                return;
+        }
+        Config.set('profiles', profilesData, 'json');
+    }
+    static addSyncListener(object, callback) {
+        if (!Config.syncMap.has(object))
+            Config.syncMap.set(object, []);
+        Config.syncMap.get(object).push(callback);
+    }
+    static syncCurrentProfile() {
+        Config.settingsTransaction = true;
+        Config.delay();
+        const currentProfile = Config.get_string('current-profile');
+        if (currentProfile) {
+            const profiles = Config.get_json('profiles');
+            if (profiles && Object.prototype.hasOwnProperty.call(profiles, currentProfile)) {
+                for (const key of Object.keys(profiles[currentProfile])) {
+                    if (Config.globalSettingsKeys.includes(key)) {
+                        continue;
+                    }
+                    const value = profiles[currentProfile][key];
+                    try {
+                        const schema = Config.settings?.settingsSchema.get_key(key);
+                        if (!schema)
+                            continue;
+                        const type = schema.get_value_type();
+                        if (type.equal(new GLib.VariantType('s'))) {
+                            if (Config.get_string(key) !== value) {
+                                Config.set(key, value, 'string');
+                            }
+                        }
+                        else if (type.equal(new GLib.VariantType('b'))) {
+                            if (Config.get_boolean(key) !== value) {
+                                Config.set(key, value, 'boolean');
+                            }
+                        }
+                        else if (type.equal(new GLib.VariantType('i'))) {
+                            if (Config.get_int(key) !== value) {
+                                Config.set(key, value, 'int');
+                            }
+                        }
+                        else if (type.equal(new GLib.VariantType('d'))) {
+                            if (Config.get_double(key) !== value) {
+                                Config.set(key, value, 'number');
+                            }
+                        }
+                        else
+                            Utils.log('Unsupported type: ' + type);
+                    }
+                    catch (e) {
+                        Utils.error('Error syncing profile', e);
+                    }
+                }
+            }
+        }
+        Config.apply();
+        Config.settingsTransaction = false;
+        for (const callback of Config.syncMap.values()) {
+            for (const cb of callback)
+                cb();
+        }
+    }
+}
+Config.settingsTransaction = false;
+Config.bindMap = new Map();
+Config.connectMap = new Map();
+Config.connectAfterMap = new Map();
+Config.syncMap = new Map();
+Config.globalSettingsKeys = [
+    'debug-mode',
+    'queued-pref-category',
+    'current-profile',
+    'profiles',
+    'legacy-subprocess',
+    'processor-menu-gpu',
+    'processor-menu-gpu-color',
+    'headers-height',
+    'gpu-main',
+    'experimental-features',
+];
+Config.experimentalFeatures = [];
+export default Config;

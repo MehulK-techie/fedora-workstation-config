@@ -1,0 +1,1342 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="monitor@astraext.github.io">
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.temperature-unit">
+    <value nick="celsius" value="0"/>
+    <value nick="fahrenheit" value="1"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.panel-box">
+    <value nick="left" value="0"/>
+    <value nick="center" value="1"/>
+    <value nick="right" value="2"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.theme-style">
+    <value nick="dark" value="0"/>
+    <value nick="light" value="1"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.shell-bar-position">
+    <value nick="top" value="0"/>
+    <value nick="bottom" value="1"/>
+    <value nick="left" value="2"/>
+    <value nick="right" value="3"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.memory-used">
+    <value nick="total-free-buffers-cached" value="0"/>
+    <value nick="total-free" value="1"/>
+    <value nick="total-available" value="2"/>
+    <value nick="active" value="3"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.compact-mode-activation">
+    <value nick="both" value="0"/>
+    <value nick="click" value="1"/>
+    <value nick="hover" value="2"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.data-unit">
+    <value nick="kB/s" value="0"/>
+    <value nick="KiB/s" value="1"/>
+    <value nick="kb/s" value="2"/>
+    <value nick="Kibit/s" value="3"/>
+    <value nick="kBps" value="4"/>
+    <value nick="KiBps" value="5"/>
+    <value nick="Kibps" value="6"/>
+    <value nick="kbps" value="7"/>
+    <value nick="Kibitps" value="8"/>
+    <value nick="k " value="9"/>
+    <value nick="Ki" value="10"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.data-unit2">
+    <value nick="kB-kiB" value="0"/>
+    <value nick="kB-KB" value="1"/>
+    <value nick="kiB" value="2"/>
+    <value nick="KiB" value="3"/>
+    <value nick="KB" value="4"/>
+    <value nick="k " value="5"/>
+    <value nick="Ki" value="6"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.processor-frequency-mode">
+    <value nick="average" value="0"/>
+    <value nick="max" value="1"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.source-list1">
+    <value nick="auto" value="0"/>
+    <value nick="proc" value="1"/>
+    <value nick="GTop" value="2"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.source-list2">
+    <value nick="auto" value="0"/>
+    <value nick="GTop" value="1"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.source-list3">
+    <value nick="auto" value="0"/>
+    <value nick="proc" value="1"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.source-list4">
+    <value nick="auto" value="0"/>
+    <value nick="hwmon" value="1"/>
+    <value nick="lm-sensors" value="2"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.source-list5">
+    <value nick="auto" value="0"/>
+    <value nick="iwconfig" value="1"/>
+    <value nick="iw" value="2"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.astra-monitor.enum.source-list6">
+    <value nick="auto" value="0"/>
+    <value nick="nethogs" value="1"/>
+  </enum>
+  <schema id="org.gnome.shell.extensions.astra-monitor" path="/org/gnome/shell/extensions/astra-monitor/">
+    <!-- UTILS -->
+    <key name="debug-mode" type="b">
+      <default>false</default>
+      <summary>Debug</summary>
+      <description>Enable debug mode</description>
+    </key>
+    <key name="queued-pref-category" type="s">
+      <default>''</default>
+      <summary>Default prefs category</summary>
+      <description>Default category when open Extension Settings</description>
+    </key>
+    
+    <!-- PROFILES -->
+    <key name="current-profile" type="s">
+      <default>'default'</default>
+      <summary>Current Profile</summary>
+      <description>Current profile</description>
+    </key>
+    <key name="profiles" type="s">
+      <default>''</default>
+      <summary>Profiles</summary>
+      <description>Profiles</description>
+    </key>
+    
+    <!-- GENERAL -->
+    <key name="startup-delay" type="d">
+      <default>2</default>
+      <summary>Startup Delay</summary>
+      <description>Seconds to wait before placing the headers</description>
+      <range min="1" max="10"/>
+    </key>
+    <key name="panel-box" enum="org.gnome.shell.extensions.astra-monitor.enum.panel-box">
+      <default>'right'</default>
+      <summary>Panel Box Position</summary>
+      <description>Which panel box to use to display the monitors</description>
+    </key>
+    <key name="panel-box-order" type="i">
+      <default>0</default>
+      <summary>Panel Box Ordering</summary>
+      <description>Ordering inside the panel box</description>
+      <range min="-10" max="10"/>
+    </key>
+    <key name="panel-margin-left" type="i">
+      <default>0</default>
+      <summary>Panel Box Left Margin</summary>
+      <description>Add a margin to the left of all headers</description>
+      <range min="0" max="1000"/>
+    </key>
+    <key name="panel-margin-right" type="i">
+      <default>0</default>
+      <summary>Panel Box Right Margin</summary>
+      <description>Add a margin to the right of all headers</description>
+      <range min="0" max="1000"/>
+    </key>
+    <key name="monitors-order" type="s">
+      <default>'""'</default>
+      <summary>Order of the monitors</summary>
+      <description>From left to right, the order of the monitors</description>
+    </key>
+    <key name="theme-style" enum="org.gnome.shell.extensions.astra-monitor.enum.theme-style">
+      <default>'dark'</default>
+      <summary>Preferred Theme Style</summary>
+      <description>Select the preferred theme style</description>
+    </key>
+    <key name="shell-bar-position" enum="org.gnome.shell.extensions.astra-monitor.enum.shell-bar-position">
+      <default>'top'</default>
+      <summary>Topbar/dash screen position</summary>
+      <description>The position of the topbar/dash on the screen</description>
+    </key>
+    <key name="explicit-zero" type="b">
+      <default>false</default>
+      <summary>Explicit Zero</summary>
+      <description>Show 0 instead of '-'</description>
+    </key>
+    <key name="headers-font-family" type="s">
+      <default>''</default>
+      <summary>Headers Font Family</summary>
+      <description>Set the font family of the headers (empty to disable override)</description>
+    </key>
+    <key name="headers-font-size" type="i">
+      <default>0</default>
+      <summary>Headers Font Size</summary>
+      <description>Set the font size of the headers (0 to disable override)</description>
+      <range min="0" max="30"/>
+    </key>
+    <key name="headers-height-override" type="i">
+      <default>28</default>
+      <summary>Headers Height</summary>
+      <description>Set between 15 and 80 to override the height of the headers</description>
+      <range min="0" max="80"/>
+    </key>
+    <key name="compact-mode" type="b">
+      <default>false</default>
+      <summary>Compact Mode</summary>
+      <description>Enable compact mode</description>
+    </key>
+    <key name="compact-mode-activation" enum="org.gnome.shell.extensions.astra-monitor.enum.compact-mode-activation">
+      <default>'both'</default>
+      <summary>Compact Mode Activation</summary>
+      <description>How to expand the headers</description>
+    </key>
+    <key name="compact-mode-start-expanded" type="b">
+      <default>false</default>
+      <summary>Compact Mode Start Expanded</summary>
+      <description>Start with the headers expanded</description>
+    </key>
+    <key name="compact-mode-compact-icon-custom" type="s">
+      <default>''</default>
+      <summary>Compact Mode Custom Compact Icon</summary>
+      <description>Set a custom compact icon for the compact mode</description>
+    </key>
+    <key name="compact-mode-expanded-icon-custom" type="s">
+      <default>''</default>
+      <summary>Compact Mode Custom Expanded Icon</summary>
+      <description>Set a custom expanded icon for the compact mode</description>
+    </key>
+    
+    <!-- PROCESSOR -->
+    <key name="processor-update" type="d">
+      <default>1.5</default>
+      <summary>CPU Update Frequency</summary>
+      <description>Seconds between CPU statistics updates</description>
+      <range min="0.1" max="10"/>
+    </key>
+    <key name="processor-source-cpu-usage" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list1">
+      <default>'auto'</default>
+      <summary>Cpu Usage Source</summary>
+      <description>Source of the cpu usage</description>
+    </key>
+    <key name="processor-source-cpu-cores-usage" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list1">
+      <default>'auto'</default>
+      <summary>Cpu Cores Usage Source</summary>
+      <description>Source of the cpu cores usage</description>
+    </key>
+    <key name="processor-source-top-processes" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list1">
+      <default>'auto'</default>
+      <summary>Top Processes Source</summary>
+      <description>Source of the top processes</description>
+    </key>
+    <key name="processor-source-load-avg" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list3">
+      <default>'auto'</default>
+      <summary>Cpu Load Average Source</summary>
+      <description>Source of the cpu load average</description>
+    </key>
+    <key name="processor-header-show" type="b">
+      <default>true</default>
+      <summary>CPU Header</summary>
+      <description>Show the CPU header</description>
+    </key>
+    <key name="processor-indicators-order" type="s">
+      <default>'""'</default>
+      <summary>Order of the indicators</summary>
+      <description>From left to right, the order of the indicators</description>
+    </key>
+    <key name="processor-header-icon" type="b">
+      <default>true</default>
+      <summary>CPU Header Icon</summary>
+      <description>Show the icon on the header of the CPU monitor</description>
+    </key>
+    <key name="processor-header-icon-custom" type="s">
+      <default>''</default>
+      <summary>CPU Header Custom Icon</summary>
+      <description>Set a custom icon for the CPU monitor</description>
+    </key>
+    <key name="processor-header-icon-color" type="s">
+      <default>''</default>
+      <summary>CPU Header Icon Color</summary>
+      <description>Set a custom color for the CPU monitor icon</description>
+    </key>
+    <key name="processor-header-icon-alert-color" type="s">
+      <default>'rgba(235, 64, 52, 1)'</default>
+      <summary>Icon Alert Color</summary>
+      <description>Color of the alert icon</description>
+    </key>
+    <key name="processor-header-icon-size" type="i">
+      <default>18</default>
+      <summary>Header Icon Size</summary>
+      <description>Size in pixel of the icon</description>
+      <range min="8" max="30"/>
+    </key>
+    <key name="processor-header-percentage" type="b">
+      <default>false</default>
+      <summary>CPU Header Percentage</summary>
+      <description>Show the percentage on the header of the CPU monitor</description>
+    </key>
+    <key name="processor-header-percentage-core" type="b">
+      <default>false</default>
+      <summary>CPU Header Percentage per Single Core</summary>
+      <description>Set the percentage on the header of the CPU monitor to single core</description>
+    </key>
+    <key name="processor-header-percentage-icon-alert-threshold" type="i">
+      <default>0</default>
+      <summary>Percentage Icon Alert Threshold</summary>
+      <description>Threshold in percentage to show the alert icon</description>
+      <range min="0" max="100"/>
+    </key>
+    <key name="processor-header-frequency" type="b">
+      <default>false</default>
+      <summary>CPU Header Frequency</summary>
+      <description>Show the frequency on the header of the CPU monitor</description>
+    </key>
+    <key name="processor-header-frequency-figures" type="i">
+      <default>3</default>
+      <summary>Max Number Figures</summary>
+      <description>Max number of figures to show on the frequency value</description>
+      <range min="2" max="4"/>
+    </key>
+    <key name="processor-header-frequency-mode" enum="org.gnome.shell.extensions.astra-monitor.enum.processor-frequency-mode">
+      <default>'average'</default>
+      <summary>CPU Header Frequency Mode</summary>
+      <description>Frequency mode of the header of the CPU monitor</description>
+    </key>
+    <key name="processor-header-graph" type="b">
+      <default>true</default>
+      <summary>Show History Graph</summary>
+      <description>Show a graph of the CPU percentage through time</description>
+    </key>
+    <key name="processor-header-graph-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Graph Color 1</summary>
+      <description>Main color for processor history graph</description>
+    </key>
+    <key name="processor-header-graph-color2" type="s">
+      <default>'rgba(214,29,29,1.0)'</default>
+      <summary>Graph Color 2</summary>
+      <description>Secondary color for processor history graph</description>
+    </key>
+    <key name="processor-header-graph-width" type="i">
+      <default>30</default>
+      <summary>Graph Width</summary>
+      <description>The width in pixels of the header history graph</description>
+      <range min="10" max="500"/>
+    </key>
+    <key name="processor-header-graph-breakdown" type="b">
+      <default>true</default>
+      <summary>Graph Category Breakdown</summary>
+      <description>Color the graph with categories</description>
+    </key>
+    <key name="processor-header-bars" type="b">
+      <default>false</default>
+      <summary>Show CPU Bar</summary>
+      <description>Show realtime bar of CPU usage</description>
+    </key>
+    <key name="processor-header-bars-core" type="b">
+      <default>false</default>
+      <summary>Show CPU per-core Bars</summary>
+      <description>Show realtime bars of each CPU core</description>
+    </key>
+    <key name="processor-header-bars-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Bars Color 1</summary>
+      <description>Main color for processor realtime bars</description>
+    </key>
+    <key name="processor-header-bars-color2" type="s">
+      <default>'rgba(214,29,29,1.0)'</default>
+      <summary>Bars Color 2</summary>
+      <description>Secondary color for processor realtime bars</description>
+    </key>
+    <key name="processor-header-bars-breakdown" type="b">
+      <default>true</default>
+      <summary>CPU Bars Breakdown</summary>
+      <description>Color the bars with categories</description>
+    </key>
+    
+    <key name="processor-header-tooltip" type="b">
+      <default>true</default>
+      <summary>CPU Header Tooltip</summary>
+      <description>Show the tooltip on the header of the CPU monitor</description>
+    </key>
+    <key name="processor-header-tooltip-percentage" type="b">
+      <default>true</default>
+      <summary>CPU Tooltip Percentage</summary>
+      <description>Show the percentage on the Tooltip of the CPU monitor</description>
+    </key>
+    <key name="processor-header-tooltip-percentage-core" type="b">
+      <default>false</default>
+      <summary>CPU Tooltip Percentage per Single Core</summary>
+      <description>Set the percentage on the Tooltip of the CPU monitor to single core</description>
+    </key>
+    
+    <key name="processor-menu-bars-breakdown" type="b">
+      <default>true</default>
+      <summary>CPU Bars Breakdown</summary>
+      <description>Color the bars with categories</description>
+    </key>
+    <key name="processor-menu-graph-breakdown" type="b">
+      <default>true</default>
+      <summary>Graph Category Breakdown</summary>
+      <description>Color the graph with categories</description>
+    </key>
+    <key name="processor-menu-core-bars-breakdown" type="b">
+      <default>true</default>
+      <summary>CPU Core Bars Breakdown</summary>
+      <description>Color the core bars with categories</description>
+    </key>
+    <key name="processor-menu-top-processes-percentage-core" type="b">
+      <default>true</default>
+      <summary>CPU Top Processes Percentage per Single Core</summary>
+      <description>Set the percentage on the top processes to single core</description>
+    </key>
+    <key name="processor-gpu" type="b">
+      <default>true</default>
+      <summary>GPU</summary>
+      <description>Show the GPU info in the menu</description>
+    </key>
+    
+    <!-- GPU -->
+    <key name="gpu-header-show" type="b">
+      <default>false</default>
+      <summary>GPU Header</summary>
+      <description>Show the GPU header</description>
+    </key>
+    <key name="gpu-update" type="d">
+      <default>2.0</default>
+      <summary>GPU Update Frequency</summary>
+      <description>Seconds between GPU statistics updates</description>
+      <range min="1.0" max="10"/>
+    </key>
+    <key name="gpu-main" type="s">
+      <default>'""'</default>
+      <summary>Main GPU</summary>
+      <description>Main GPU</description>
+    </key>
+    <key name="gpu-data" type="s">
+      <default>'[]'</default>
+      <summary>GPU Data</summary>
+      <description>GPU Data</description>
+    </key>
+    <key name="gpu-indicators-order" type="s">
+      <default>'""'</default>
+      <summary>Order of the indicators</summary>
+      <description>From left to right, the order of the indicators</description>
+    </key>
+    <key name="gpu-header-icon" type="b">
+      <default>true</default>
+      <summary>GPU Header Icon</summary>
+      <description>Show the icon on the header of the GPU monitor</description>
+    </key>
+    <key name="gpu-header-icon-custom" type="s">
+      <default>''</default>
+      <summary>GPU Header Custom Icon</summary>
+      <description>Set a custom icon for the GPU monitor</description>
+    </key>
+    <key name="gpu-header-icon-color" type="s">
+      <default>''</default>
+      <summary>GPU Header Icon Color</summary>
+      <description>Set a custom color for the GPU monitor icon</description>
+    </key>
+    <key name="gpu-header-icon-alert-color" type="s">
+      <default>'rgba(235, 64, 52, 1)'</default>
+      <summary>Icon Alert Color</summary>
+      <description>Color of the alert icon</description>
+    </key>
+    <key name="gpu-header-icon-size" type="i">
+      <default>18</default>
+      <summary>Header Icon Size</summary>
+      <description>Size in pixel of the icon</description>
+      <range min="8" max="30"/>
+    </key>
+    <key name="gpu-header-activity-bar" type="b">
+      <default>true</default>
+      <summary>Show GPU Activity Bar</summary>
+      <description>Show realtime bar of GPU Activity usage</description>
+    </key>
+    <key name="gpu-header-activity-bar-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>GPU Activity Bar Color 1</summary>
+      <description>Main color for gpu realtime bar</description>
+    </key>
+    <key name="gpu-header-activity-graph" type="b">
+      <default>false</default>
+      <summary>Show Activity History Graph</summary>
+      <description>Show a graph of the GPU activity percentage through time</description>
+    </key>
+    <key name="gpu-header-activity-graph-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Activity Graph Color 1</summary>
+      <description>Main color for gpu history graph</description>
+    </key>
+    <key name="gpu-header-activity-graph-width" type="i">
+      <default>30</default>
+      <summary>Activity Graph Width</summary>
+      <description>The width in pixels of the header history graph</description>
+      <range min="10" max="500"/>
+    </key>
+    <key name="gpu-header-activity-percentage" type="b">
+      <default>false</default>
+      <summary>GPU Header Activity Percentage</summary>
+      <description>Show the percentage on the header of the GPU monitor</description>
+    </key>
+    <key name="gpu-header-activity-percentage-icon-alert-threshold" type="i">
+      <default>0</default>
+      <summary>Activity Percentage Icon Alert Threshold</summary>
+      <description>Threshold in percentage to show the alert icon</description>
+      <range min="0" max="100"/>
+    </key>
+    <key name="gpu-header-memory-bar" type="b">
+      <default>true</default>
+      <summary>Show GPU Memory Bar</summary>
+      <description>Show realtime bar of GPU Memory usage</description>
+    </key>
+    <key name="gpu-header-memory-bar-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>GPU Memory Bar Color 1</summary>
+      <description>Main color for gpu memory bar</description>
+    </key>
+    <key name="gpu-header-memory-graph" type="b">
+      <default>false</default>
+      <summary>Show Memory History Graph</summary>
+      <description>Show a graph of the GPU memory percentage through time</description>
+    </key>
+    <key name="gpu-header-memory-graph-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Memory Graph Color 1</summary>
+      <description>Main color for gpu memory history graph</description>
+    </key>
+    <key name="gpu-header-memory-graph-width" type="i">
+      <default>30</default>
+      <summary>Memory Graph Width</summary>
+      <description>The width in pixels of the GPU memory history graph</description>
+      <range min="10" max="500"/>
+    </key>
+    <key name="gpu-header-memory-percentage" type="b">
+      <default>false</default>
+      <summary>GPU Header Memory Percentage</summary>
+      <description>Show the percentage on the header of the GPU monitor</description>
+    </key>
+    <key name="gpu-header-memory-percentage-icon-alert-threshold" type="i">
+      <default>0</default>
+      <summary>Memory Percentage Icon Alert Threshold</summary>
+      <description>Threshold in percentage to show the alert icon</description>
+      <range min="0" max="100"/>
+    </key>
+    <key name="gpu-header-tooltip" type="b">
+      <default>true</default>
+      <summary>GPU Header Tooltip</summary>
+      <description>Show the tooltip on the header of the GPU monitor</description>
+    </key>
+    <key name="gpu-header-tooltip-activity-percentage" type="b">
+      <default>true</default>
+      <summary>GPU Tooltip Activity Percentage</summary>
+      <description>Show the activity percentage on the Tooltip of the GPU monitor</description>
+    </key>
+    <key name="gpu-header-tooltip-memory-percentage" type="b">
+      <default>true</default>
+      <summary>GPU Tooltip Memory Percentage</summary>
+      <description>Show the memory percentage on the Tooltip of the GPU monitor</description>
+    </key>
+    <key name="gpu-header-tooltip-memory-value" type="b">
+      <default>true</default>
+      <summary>GPU Tooltip Memory Value</summary>
+      <description>Show the memory value on the Tooltip of the GPU monitor</description>
+    </key>
+    
+    <!-- MEMORY -->
+    <key name="memory-update" type="d">
+      <default>3</default>
+      <summary>Memory Update Frequency</summary>
+      <description>Seconds between memory statistics updates</description>
+      <range min="0.1" max="10"/>
+    </key>
+    <key name="memory-unit" enum="org.gnome.shell.extensions.astra-monitor.enum.data-unit2">
+      <default>'kB-KB'</default>
+      <summary>Memory Unit</summary>
+      <description>Unit of measurement for the memory</description>
+    </key>
+    <key name="memory-used" enum="org.gnome.shell.extensions.astra-monitor.enum.memory-used">
+      <default>'total-free-buffers-cached'</default>
+      <summary>Preferred Used Memory Calculation</summary>
+      <description>Select the preferred calculation for the used memory value</description>
+    </key>
+    <key name="memory-source-memory-usage" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list1">
+      <default>'auto'</default>
+      <summary>Memory Usage Source</summary>
+      <description>Source of the memory usage</description>
+    </key>
+    <key name="memory-source-top-processes" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list1">
+      <default>'auto'</default>
+      <summary>Top Processes Source</summary>
+      <description>Source of the top processes</description>
+    </key>
+    <key name="memory-header-show" type="b">
+      <default>true</default>
+      <summary>Memory Header</summary>
+      <description>Show the memory header</description>
+    </key>
+    <key name="memory-indicators-order" type="s">
+      <default>'""'</default>
+      <summary>Order of the indicators</summary>
+      <description>From left to right, the order of the indicators</description>
+    </key>
+    <key name="memory-header-icon" type="b">
+      <default>true</default>
+      <summary>Memory Header Icon</summary>
+      <description>Show the icon on the header of the memory monitor</description>
+    </key>
+    <key name="memory-header-icon-custom" type="s">
+      <default>''</default>
+      <summary>Memory Header Custom Icon</summary>
+      <description>Set a custom icon for the Memory monitor</description>
+    </key>
+    <key name="memory-header-icon-color" type="s">
+      <default>''</default>
+      <summary>Memory Header Icon Color</summary>
+      <description>Set a custom color for the Memory monitor icon</description>
+    </key>
+    <key name="memory-header-icon-alert-color" type="s">
+      <default>'rgba(235, 64, 52, 1)'</default>
+      <summary>Icon Alert Color</summary>
+      <description>Color of the alert icon</description>
+    </key>
+    <key name="memory-header-icon-size" type="i">
+      <default>18</default>
+      <summary>Header Icon Size</summary>
+      <description>Size in pixel of the icon</description>
+      <range min="8" max="30"/>
+    </key>
+    <key name="memory-header-percentage" type="b">
+      <default>false</default>
+      <summary>Memory Header Percentage</summary>
+      <description>Show the percentage on the header of the memory monitor</description>
+    </key>
+    <key name="memory-header-percentage-icon-alert-threshold" type="i">
+      <default>0</default>
+      <summary>Percentage Icon Alert Threshold</summary>
+      <description>Threshold in percentage to show the alert icon</description>
+      <range min="0" max="100"/>
+    </key>
+    <key name="memory-header-value" type="b">
+      <default>false</default>
+      <summary>Memory Header Usage Value</summary>
+      <description>Show the usage value on the header of the memory monitor</description>
+    </key>
+    <key name="memory-header-value-figures" type="i">
+      <default>3</default>
+      <summary>Max Number Figures</summary>
+      <description>Max number of figures to show on the usage value</description>
+      <range min="2" max="4"/>
+    </key>
+    <key name="memory-header-free" type="b">
+      <default>false</default>
+      <summary>Memory Header Free Value</summary>
+      <description>Show the free value on the header of the memory monitor</description>
+    </key>
+    <key name="memory-header-free-figures" type="i">
+      <default>3</default>
+      <summary>Max Number Figures</summary>
+      <description>Max number of figures to show on the free value</description>
+      <range min="2" max="4"/>
+    </key>
+    <key name="memory-header-free-icon-alert-threshold" type="i">
+      <default>0</default>
+      <summary>Free Value Icon Alert Threshold</summary>
+      <description>Threshold in MB to show the alert icon</description>
+      <range min="0" max="100000"/>
+    </key>
+    <key name="memory-header-graph" type="b">
+      <default>false</default>
+      <summary>Show History Graph</summary>
+      <description>Show a graph of the memory percentage through time</description>
+    </key>
+    <key name="memory-header-graph-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Graph Color 1</summary>
+      <description>Main color for memory history graph</description>
+    </key>
+    <key name="memory-header-graph-color2" type="s">
+      <default>'rgba(29,172,214,0.3)'</default>
+      <summary>Graph Color 2</summary>
+      <description>Secondary color for memory history graph</description>
+    </key>
+    <key name="memory-header-graph-breakdown" type="b">
+      <default>false</default>
+      <summary>Graph Category Breakdown</summary>
+      <description>Color the graph with categories</description>
+    </key>
+    <key name="memory-header-graph-width" type="i">
+      <default>30</default>
+      <summary>Graph Width</summary>
+      <description>The width in pixels of the header history graph</description>
+      <range min="10" max="500"/>
+    </key>
+    <key name="memory-header-bars" type="b">
+      <default>true</default>
+      <summary>Show Memory Bar</summary>
+      <description>Show realtime bar of memory usage</description>
+    </key>
+    <key name="memory-header-bars-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Bars Color 1</summary>
+      <description>Main color for memory realtime bars</description>
+    </key>
+    <key name="memory-header-bars-color2" type="s">
+      <default>'rgba(29,172,214,0.3)'</default>
+      <summary>Bars Color 2</summary>
+      <description>Secondary color for memory realtime bars</description>
+    </key>
+    <key name="memory-header-bars-breakdown" type="b">
+      <default>true</default>
+      <summary>Memory Bars Breakdown</summary>
+      <description>Color the bars with categories</description>
+    </key>
+    
+    <key name="memory-header-tooltip" type="b">
+      <default>true</default>
+      <summary>Memory Header Tooltip</summary>
+      <description>Show the tooltip on the header of the memory monitor</description>
+    </key>
+    <key name="memory-header-tooltip-percentage" type="b">
+      <default>true</default>
+      <summary>Memory Tooltip Percentage</summary>
+      <description>Show the percentage on the Tooltip of the memory monitor</description>
+    </key>
+    <key name="memory-header-tooltip-value" type="b">
+      <default>true</default>
+      <summary>Memory Tooltip Usage Value</summary>
+      <description>Show the usage value on the Tooltip of the memory monitor</description>
+    </key>
+    <key name="memory-header-tooltip-free" type="b">
+      <default>false</default>
+      <summary>Memory Tooltip Free Value</summary>
+      <description>Show the free value on the Tooltip of the memory monitor</description>
+    </key>
+    
+    <key name="memory-menu-graph-breakdown" type="b">
+      <default>true</default>
+      <summary>Graph Category Breakdown</summary>
+      <description>Color the graph with categories</description>
+    </key>
+    <key name="memory-menu-swap-color" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Swap Bar Color 1</summary>
+      <description>Main color for swap bar</description>
+    </key>
+    
+    <!-- STORAGE -->
+    <key name="storage-update" type="d">
+      <default>3</default>
+      <summary>Storage IO Update Frequency</summary>
+      <description>Seconds between storage IO statistics updates</description>
+      <range min="0.1" max="10"/>
+    </key>
+    <key name="storage-io-unit" enum="org.gnome.shell.extensions.astra-monitor.enum.data-unit">
+      <default>'kB/s'</default>
+      <summary>Storage IO Unit</summary>
+      <description>Unit of measurement for the storage IO</description>
+    </key>
+    <key name="storage-main" type="s">
+      <default>'[default]'</default>
+      <summary>Main storage</summary>
+      <description>Storage to show on the header of the storage monitor</description>
+    </key>
+    <key name="storage-ignored" type="s">
+      <default>'"[]"'</default>
+      <summary>Ignored Storage Devices</summary>
+      <description>A JSON List of Storage Devices to ignore</description>
+    </key>
+    <key name="storage-ignored-regex" type="s">
+      <default>''</default>
+      <summary>Ignored Storage Devices Regex</summary>
+      <description>A regex to match Storage Devices to ignore</description>
+    </key>
+    <key name="storage-source-storage-usage" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list1">
+      <default>'auto'</default>
+      <summary>Storage Usage Source</summary>
+      <description>Source of the storage usage</description>
+    </key>
+    <key name="storage-source-top-processes" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list2">
+      <default>'auto'</default>
+      <summary>Top Processes Source</summary>
+      <description>Source of the top processes</description>
+    </key>
+    <key name="storage-source-storage-io" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list1">
+      <default>'auto'</default>
+      <summary>Storage IO Source</summary>
+      <description>Source of the storage IO</description>
+    </key>
+    <key name="storage-header-show" type="b">
+      <default>true</default>
+      <summary>Storage Header</summary>
+      <description>Show the storage header</description>
+    </key>
+    <key name="storage-indicators-order" type="s">
+      <default>'""'</default>
+      <summary>Order of the indicators</summary>
+      <description>From left to right, the order of the indicators</description>
+    </key>
+    <key name="storage-header-icon" type="b">
+      <default>true</default>
+      <summary>Storage Header Icon</summary>
+      <description>Show the icon on the header of the storage monitor</description>
+    </key>
+    <key name="storage-header-icon-custom" type="s">
+      <default>''</default>
+      <summary>Storage Header Custom Icon</summary>
+      <description>Set a custom icon for the Storage monitor</description>
+    </key>
+    <key name="storage-header-icon-color" type="s">
+      <default>''</default>
+      <summary>Storage Header Icon Color</summary>
+      <description>Set a custom color for the Storage monitor icon</description>
+    </key>
+    <key name="storage-header-icon-alert-color" type="s">
+      <default>'rgba(235, 64, 52, 1)'</default>
+      <summary>Icon Alert Color</summary>
+      <description>Color of the alert icon</description>
+    </key>
+    <key name="storage-header-icon-size" type="i">
+      <default>18</default>
+      <summary>Header Icon Size</summary>
+      <description>Size in pixel of the icon</description>
+      <range min="8" max="30"/>
+    </key>
+    <key name="storage-header-percentage" type="b">
+      <default>false</default>
+      <summary>Storage Header Use Percentage</summary>
+      <description>Show the percentage of storage use on the header of the storage monitor</description>
+    </key>
+    <key name="storage-header-percentage-icon-alert-threshold" type="i">
+      <default>0</default>
+      <summary>Percentage Icon Alert Threshold</summary>
+      <description>Threshold in percentage to show the alert icon</description>
+      <range min="0" max="100"/>
+    </key>
+    <key name="storage-header-value" type="b">
+      <default>false</default>
+      <summary>Storage Header Usage Value</summary>
+      <description>Show the usage value on the header of the storage monitor</description>
+    </key>
+    <key name="storage-header-value-figures" type="i">
+      <default>3</default>
+      <summary>Max Number Figures</summary>
+      <description>Max number of figures to show on the usage value</description>
+      <range min="2" max="4"/>
+    </key>
+    <key name="storage-header-free" type="b">
+      <default>false</default>
+      <summary>Storage Header Free Value</summary>
+      <description>Show the free value on the header of the storage monitor</description>
+    </key>
+    <key name="storage-header-free-figures" type="i">
+      <default>3</default>
+      <summary>Max Number Figures</summary>
+      <description>Max number of figures to show on the free value</description>
+      <range min="2" max="4"/>
+    </key>
+    <key name="storage-header-free-icon-alert-threshold" type="i">
+      <default>0</default>
+      <summary>Free Value Icon Alert Threshold</summary>
+      <description>Threshold in MB to show the alert icon</description>
+      <range min="0" max="1000000"/>
+    </key>
+    <key name="storage-header-bars" type="b">
+      <default>true</default>
+      <summary>Show Storage Usage Bar</summary>
+      <description>Show realtime bar of storage usage</description>
+    </key>
+    <key name="storage-header-bars-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Bar Color 1</summary>
+      <description>Main color for storage usage bar</description>
+    </key>
+    <key name="storage-header-io-bars" type="b">
+      <default>false</default>
+      <summary>Show Storage Realtime IO Bar</summary>
+      <description>Show realtime bar of IO</description>
+    </key>
+    <key name="storage-header-io-bars-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>IO Bar Color 1</summary>
+      <description>Main color for storage io bars</description>
+    </key>
+    <key name="storage-header-io-bars-color2" type="s">
+      <default>'rgba(214,29,29,1.0)'</default>
+      <summary>IO Bar Color 2</summary>
+      <description>Secondary color for storage IO bar</description>
+    </key>
+    <key name="storage-header-graph" type="b">
+      <default>false</default>
+      <summary>Show Storage IO History Graph</summary>
+      <description>Show a graph of the storage IO through time</description>
+    </key>
+    <key name="storage-header-io-graph-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>IO Graph Color 1</summary>
+      <description>Main color for storage io graph</description>
+    </key>
+    <key name="storage-header-io-graph-color2" type="s">
+      <default>'rgba(214,29,29,1.0)'</default>
+      <summary>IO Graph Color 2</summary>
+      <description>Secondary color for storage IO graph</description>
+    </key>
+    <key name="storage-header-graph-width" type="i">
+      <default>30</default>
+      <summary>Graph Width</summary>
+      <description>The width in pixels of the header history graph</description>
+      <range min="10" max="500"/>
+    </key>
+    <key name="storage-header-io" type="b">
+      <default>false</default>
+      <summary>Show Storage IO realtime speed</summary>
+      <description>Show the IO speed in realtime as a label</description>
+    </key>
+    <key name="storage-header-io-layout" type="s">
+      <default>'vertical'</default>
+      <summary>Storage IO speed layout</summary>
+      <description>Show the IO speed in vertical or horizontal layout</description>
+    </key>
+    <key name="storage-header-io-figures" type="i">
+      <default>2</default>
+      <summary>Max Number Figures</summary>
+      <description>Max number of figures to show on the IO label</description>
+      <range min="2" max="4"/>
+    </key>
+    <key name="storage-header-io-threshold" type="i">
+      <default>0</default>
+      <summary>IO Speed Threshold</summary>
+      <description>Threshold in kB/s to show the IO label</description>
+      <range min="0" max="1000000"/>
+    </key>
+    
+    <key name="storage-header-tooltip" type="b">
+      <default>true</default>
+      <summary>Storage Header Tooltip</summary>
+      <description>Show the tooltip on the header of the storage monitor</description>
+    </key>
+    <key name="storage-header-tooltip-percentage" type="b">
+      <default>true</default>
+      <summary>Storage Tooltip Use Percentage</summary>
+      <description>Show the percentage of storage use on the Tooltip of the storage monitor</description>
+    </key>
+    <key name="storage-header-tooltip-value" type="b">
+      <default>false</default>
+      <summary>Storage Tooltip Usage Value</summary>
+      <description>Show the usage value on the Tooltip of the storage monitor</description>
+    </key>
+    <key name="storage-header-tooltip-free" type="b">
+      <default>true</default>
+      <summary>Storage Tooltip Free Value</summary>
+      <description>Show the free value on the Tooltip of the storage monitor</description>
+    </key>
+    <key name="storage-header-tooltip-io" type="b">
+      <default>true</default>
+      <summary>Show Tooltip IO realtime speed</summary>
+      <description>Show the IO speed in on the Tooltip of the storage monitor</description>
+    </key>
+    
+    <key name="storage-menu-arrow-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Arrow Color 1</summary>
+      <description>Main color for storage IO arrows</description>
+    </key>
+    <key name="storage-menu-arrow-color2" type="s">
+      <default>'rgba(214,29,29,1.0)'</default>
+      <summary>Arrow Color 2</summary>
+      <description>Secondary color for storage IO arrows</description>
+    </key>
+    <key name="storage-menu-device-color" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Device Usage Bar Color</summary>
+      <description>Main color for storage usage bars</description>
+    </key>
+    
+    <!-- NETWORK -->
+    <key name="network-update" type="d">
+      <default>1.5</default>
+      <summary>Network IO Update Frequency</summary>
+      <description>Seconds between network IO statistics updates</description>
+      <range min="0.1" max="10"/>
+    </key>
+    <key name="network-io-unit" enum="org.gnome.shell.extensions.astra-monitor.enum.data-unit">
+      <default>'kB/s'</default>
+      <summary>Network IO Unit</summary>
+      <description>Unit of measurement for the network IO</description>
+    </key>
+    <key name="network-ignored" type="s">
+      <default>'"[]"'</default>
+      <summary>Ignored Network Interfaces</summary>
+      <description>A JSON List of Network interfaces to ignore</description>
+    </key>
+    <key name="network-ignored-regex" type="s">
+      <default>''</default>
+      <summary>Ignored Network Interfaces Regex</summary>
+      <description>A regex to match Network Interfaces to ignore</description>
+    </key>
+    <key name="network-source-network-io" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list1">
+      <default>'auto'</default>
+      <summary>Network IO Source</summary>
+      <description>Source of the network IO</description>
+    </key>
+    <key name="network-source-top-processes" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list6">
+      <default>'auto'</default>
+      <summary>Top Processes Source</summary>
+      <description>Source of the top processes</description>
+    </key>
+    <key name="network-source-wireless" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list5">
+      <default>'auto'</default>
+      <summary>Network Wireless Device Source</summary>
+      <description>Source of the wireless device data</description>
+    </key>
+    <key name="network-source-public-ipv4" type="s">
+      <default>'https://api.ipify.org'</default>
+      <summary>Public IPv4 Source</summary>
+      <description>Source of the public IPv4</description>
+    </key>
+    <key name="network-source-public-ipv6" type="s">
+      <default>'https://api6.ipify.org'</default>
+      <summary>Public IPv6 Source</summary>
+      <description>Source of the public IPv6</description>
+    </key>
+    <key name="network-header-show" type="b">
+      <default>true</default>
+      <summary>Network Header</summary>
+      <description>Show the network header</description>
+    </key>
+    <key name="network-indicators-order" type="s">
+      <default>'""'</default>
+      <summary>Order of the indicators</summary>
+      <description>From left to right, the order of the indicators</description>
+    </key>
+    <key name="network-header-icon" type="b">
+      <default>true</default>
+      <summary>Network Header Icon</summary>
+      <description>Show the icon on the header of the network monitor</description>
+    </key>
+    <key name="network-header-icon-custom" type="s">
+      <default>''</default>
+      <summary>Network Header Custom Icon</summary>
+      <description>Set a custom icon for the Network monitor</description>
+    </key>
+    <key name="network-header-icon-color" type="s">
+      <default>''</default>
+      <summary>Network Header Icon Color</summary>
+      <description>Set a custom color for the Network monitor icon</description>
+    </key>
+    <key name="network-header-icon-alert-color" type="s">
+      <default>'rgba(235, 64, 52, 1)'</default>
+      <summary>Icon Alert Color</summary>
+      <description>Color of the alert icon</description>
+    </key>
+    <key name="network-header-icon-size" type="i">
+      <default>18</default>
+      <summary>Header Icon Size</summary>
+      <description>Size in pixel of the icon</description>
+      <range min="8" max="30"/>
+    </key>
+    <key name="network-header-bars" type="b">
+      <default>false</default>
+      <summary>Show Network IO Bar</summary>
+      <description>Show realtime bar of network usage</description>
+    </key>
+    <key name="network-header-io-bars-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>IO Bar Color 1</summary>
+      <description>Main color for storage io bars</description>
+    </key>
+    <key name="network-header-io-bars-color2" type="s">
+      <default>'rgba(214,29,29,1.0)'</default>
+      <summary>IO Bar Color 2</summary>
+      <description>Secondary color for network IO bar</description>
+    </key>
+    <key name="network-header-graph" type="b">
+      <default>true</default>
+      <summary>Show Network IO History Graph</summary>
+      <description>Show a graph of the network IO through time</description>
+    </key>
+    <key name="network-header-io-graph-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>IO Graph Color 1</summary>
+      <description>Main color for network io graph</description>
+    </key>
+    <key name="network-header-io-graph-color2" type="s">
+      <default>'rgba(214,29,29,1.0)'</default>
+      <summary>IO Graph Color 2</summary>
+      <description>Secondary color for network IO graph</description>
+    </key>
+    <key name="network-header-graph-width" type="i">
+      <default>30</default>
+      <summary>Graph Width</summary>
+      <description>The width in pixels of the header history graph</description>
+      <range min="10" max="500"/>
+    </key>
+    <key name="network-header-io" type="b">
+      <default>false</default>
+      <summary>Show Network IO realtime speed</summary>
+      <description>Show the IO speed in realtime as a label</description>
+    </key>
+    <key name="network-header-io-layout" type="s">
+      <default>'vertical'</default>
+      <summary>Network IO speed layout</summary>
+      <description>Show the IO speed in vertical or horizontal layout</description>
+    </key>
+    <key name="network-header-io-figures" type="i">
+      <default>2</default>
+      <summary>Max Number Figures</summary>
+      <description>Max number of figures to show on the IO label</description>
+      <range min="2" max="4"/>
+    </key>
+    <key name="network-header-io-threshold" type="i">
+      <default>0</default>
+      <summary>IO Speed Threshold</summary>
+      <description>Threshold in kB/s to show the IO label</description>
+      <range min="0" max="1000000"/>
+    </key>
+    
+    <key name="network-header-tooltip" type="b">
+      <default>true</default>
+      <summary>Network Header Tooltip</summary>
+      <description>Show the tooltip on the header of the network monitor</description>
+    </key>
+    <key name="network-header-tooltip-io" type="b">
+      <default>true</default>
+      <summary>Show Tooltip IO realtime speed</summary>
+      <description>Show the IO speed on the Tooltip of the network monitor</description>
+    </key>
+    
+    <key name="network-menu-arrow-color1" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>Arrow Color 1</summary>
+      <description>Main color for network IO arrows</description>
+    </key>
+    <key name="network-menu-arrow-color2" type="s">
+      <default>'rgba(214,29,29,1.0)'</default>
+      <summary>Arrow Color 2</summary>
+      <description>Secondary color for network IO arrows</description>
+    </key>
+    
+    <!-- SENSORS -->
+    <key name="sensors-update" type="d">
+      <default>3</default>
+      <summary>Sensors Update Frequency</summary>
+      <description>Seconds between sensors statistics updates</description>
+      <range min="1" max="60"/>
+    </key>
+    <key name="sensors-header-show" type="b">
+      <default>false</default>
+      <summary>Sensors Header</summary>
+      <description>Show the sensors header</description>
+    </key>
+    <key name="sensors-temperature-unit" enum="org.gnome.shell.extensions.astra-monitor.enum.temperature-unit">
+      <default>'celsius'</default>
+      <summary>Sensors Temperature Unit</summary>
+      <description>Temperature Unit of measurement for the sensors</description>
+    </key>
+    <key name="sensors-ignored-regex" type="s">
+      <default>''</default>
+      <summary>Ignored Sensors Regex</summary>
+      <description>A regex to match Sensors to ignore</description>
+    </key>
+    <key name="sensors-ignored-category-regex" type="s">
+      <default>''</default>
+      <summary>Ignored Sensors Category Regex</summary>
+      <description>A regex to match Sensors Category to ignore</description>
+    </key>
+    <key name="sensors-ignored-attribute-regex" type="s">
+      <default>''</default>
+      <summary>Ignored Sensors Attribute Regex</summary>
+      <description>A regex to match Sensors Attribute to ignore</description>
+    </key>
+    <key name="sensors-source" enum="org.gnome.shell.extensions.astra-monitor.enum.source-list4">
+      <default>'auto'</default>
+      <summary>Sensors Source</summary>
+      <description>Source of sensors</description>
+    </key>
+    <key name="sensors-indicators-order" type="s">
+      <default>'""'</default>
+      <summary>Order of the indicators</summary>
+      <description>From left to right, the order of the indicators</description>
+    </key>
+    <key name="sensors-header-icon" type="b">
+      <default>true</default>
+      <summary>Sensors Header Icon</summary>
+      <description>Show the icon on the header of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-icon-custom" type="s">
+      <default>''</default>
+      <summary>Sensors Header Custom Icon</summary>
+      <description>Set a custom icon for the Sensors monitor</description>
+    </key>
+    <key name="sensors-header-icon-color" type="s">
+      <default>''</default>
+      <summary>Sensors Header Icon Color</summary>
+      <description>Set a custom color for the Sensors monitor icon</description>
+    </key>
+    <key name="sensors-header-icon-alert-color" type="s">
+      <default>'rgba(235, 64, 52, 1)'</default>
+      <summary>Icon Alert Color</summary>
+      <description>Color of the alert icon</description>
+    </key>
+    <key name="sensors-header-icon-size" type="i">
+      <default>18</default>
+      <summary>Header Icon Size</summary>
+      <description>Size in pixel of the icon</description>
+      <range min="8" max="30"/>
+    </key>
+    <key name="sensors-header-sensor1-show" type="b">
+      <default>false</default>
+      <summary>Sensors Header Sensor 1</summary>
+      <description>Show the first sensor on the header of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-sensor1" type="s">
+      <default>'""'</default>
+      <summary>Sensors Header Sensor 1</summary>
+      <description>First sensor to show on the header of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-sensor1-digits" type="i">
+      <default>-1</default>
+      <summary>Sensors Header Sensor 1 Digits</summary>
+      <description>First sensor digits to show on the header of the sensors monitor</description>
+      <range min="-1" max="3"/>
+    </key>
+    <key name="sensors-header-sensor2-show" type="b">
+      <default>false</default>
+      <summary>Sensors Header Sensor 2</summary>
+      <description>Show the second sensor on the header of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-sensor2-layout" type="s">
+      <default>'vertical'</default>
+      <summary>Sensors layout</summary>
+      <description>Show the sensors in vertical or horizontal layout</description>
+    </key>
+    <key name="sensors-header-sensor2" type="s">
+      <default>'""'</default>
+      <summary>Sensors Header Sensor 2</summary>
+      <description>Second sensor to show on the header of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-sensor2-digits" type="i">
+      <default>-1</default>
+      <summary>Sensors Header Sensor 2 Digits</summary>
+      <description>Second sensor digits to show on the header of the sensors monitor</description>
+      <range min="-1" max="3"/>
+    </key>
+    
+    <key name="sensors-header-tooltip" type="b">
+      <default>false</default>
+      <summary>Sensors Header Tooltip</summary>
+      <description>Show the tooltip on the header of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor1" type="s">
+      <default>'""'</default>
+      <summary>Sensors Tooltip Sensor 1</summary>
+      <description>First sensor to show on the Tooltip of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor1-name" type="s">
+      <default>''</default>
+      <summary>Sensors Tooltip Sensor 1 Short Name</summary>
+      <description>Short Name for the first sensor on the Tooltip of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor1-digits" type="i">
+      <default>-1</default>
+      <summary>Sensors Tooltip Sensor 1 Digits</summary>
+      <description>First sensor digits to show on the Tooltip of the sensors monitor</description>
+      <range min="-1" max="3"/>
+    </key>
+    <key name="sensors-header-tooltip-sensor2" type="s">
+      <default>'""'</default>
+      <summary>Sensors Tooltip Sensor 2</summary>
+      <description>Second sensor to show on the Tooltip of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor2-name" type="s">
+      <default>''</default>
+      <summary>Sensors Tooltip Sensor 2 Short Name</summary>
+      <description>Short Name for the second sensor on the Tooltip of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor2-digits" type="i">
+      <default>-1</default>
+      <summary>Sensors Tooltip Sensor 2 Digits</summary>
+      <description>Second sensor digits to show on the Tooltip of the sensors monitor</description>
+      <range min="-1" max="3"/>
+    </key>
+    <key name="sensors-header-tooltip-sensor3" type="s">
+      <default>'""'</default>
+      <summary>Sensors Tooltip Sensor 3</summary>
+      <description>Third sensor to show on the Tooltip of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor3-name" type="s">
+      <default>''</default>
+      <summary>Sensors Tooltip Sensor 3 Short Name</summary>
+      <description>Short Name for the third sensor on the Tooltip of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor3-digits" type="i">
+      <default>-1</default>
+      <summary>Sensors Tooltip Sensor 3 Digits</summary>
+      <description>Third sensor digits to show on the Tooltip of the sensors monitor</description>
+      <range min="-1" max="3"/>
+    </key>
+    <key name="sensors-header-tooltip-sensor4" type="s">
+      <default>'""'</default>
+      <summary>Sensors Tooltip Sensor 4</summary>
+      <description>Fourth sensor to show on the Tooltip of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor4-name" type="s">
+      <default>''</default>
+      <summary>Sensors Tooltip Sensor 4 Short Name</summary>
+      <description>Short Name for the fourth sensor on the Tooltip of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor4-digits" type="i">
+      <default>-1</default>
+      <summary>Sensors Tooltip Sensor 4 Digits</summary>
+      <description>Fourth sensor digits to show on the Tooltip of the sensors monitor</description>
+      <range min="-1" max="3"/>
+    </key>
+    <key name="sensors-header-tooltip-sensor5" type="s">
+      <default>'""'</default>
+      <summary>Sensors Tooltip Sensor 5</summary>
+      <description>Fifth sensor to show on the Tooltip of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor5-name" type="s">
+      <default>''</default>
+      <summary>Sensors Tooltip Sensor 5 Short Name</summary>
+      <description>Short Name for the fifth sensor on the Tooltip of the sensors monitor</description>
+    </key>
+    <key name="sensors-header-tooltip-sensor5-digits" type="i">
+      <default>-1</default>
+      <summary>Sensors Tooltip Sensor 5 Digits</summary>
+      <description>Fifth sensor digits to show on the Tooltip of the sensors monitor</description>
+      <range min="-1" max="3"/>
+    </key>
+    
+    <!-- SUBPROCESS -->
+    <key name="legacy-subprocess" type="b">
+      <default>false</default>
+      <summary>Legacy Subprocess</summary>
+      <description>Use the legacy subprocess backend instead of the preferred posix_spawn()</description>
+    </key>
+    
+    <!-- EXPERIMENTAL FEATURES -->
+    <key name="experimental-features" type="s">
+      <default>'[]'</default>
+      <summary>Experimental Features</summary>
+      <description>Experimental features to enable</description>
+    </key>
+    
+    
+    <!-- DEPRECATED KEYS
+    VALUES ARE MOVED TO PROPER NEW KEYS AS SOON AS FIRST RUN
+    KEEP THEM FOR BACKWARD COMPATIBILITY
+    -->
+    <key name="processor-menu-gpu" type="s">
+      <default>'""'</default>
+      <summary>GPU</summary>
+      <description>Show the GPU usage</description>
+    </key>
+    <key name="processor-menu-gpu-color" type="s">
+      <default>'rgba(29,172,214,1.0)'</default>
+      <summary>GPU Bars Color 1</summary>
+      <description>Main color for GPU bars</description>
+    </key>
+    <key name="headers-height" type="i">
+      <default>28</default>
+      <summary>Headers Height</summary>
+      <description>Set the height of the headers</description>
+      <range min="0" max="80"/>
+    </key>
+  </schema>
+</schemalist>

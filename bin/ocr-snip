@@ -1,0 +1,18 @@
+#!/bin/bash
+TMP_IMG=$(mktemp /tmp/snip_ocr_XXXXXX.png)
+
+# Freeze screen and draw selection rectangle
+gnome-screenshot -a -f "$TMP_IMG" 2>/dev/null
+
+if [ -s "$TMP_IMG" ]; then
+    # Extract text with Tesseract
+    TEXT=$(tesseract "$TMP_IMG" stdout --psm 6 2>/dev/null || tesseract "$TMP_IMG" stdout 2>/dev/null)
+    CLEAN_TEXT=$(echo "$TEXT" | xargs)
+    
+    if [ -n "$CLEAN_TEXT" ]; then
+        echo -n "$CLEAN_TEXT" | wl-copy
+        notify-send -i edit-paste "Snip OCR Copied" "$CLEAN_TEXT"
+    fi
+fi
+
+rm -f "$TMP_IMG"

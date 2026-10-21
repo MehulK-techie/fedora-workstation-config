@@ -1,0 +1,8 @@
+*.pem
+*.key
+.ssh/
+.gnupg/
+.cache/
+*.log
+/tmp/
+.config/spotify/

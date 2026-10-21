@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+    <requires lib="gtk" version="4.0" />
+    <requires lib="libadwaita" version="1.0" />
+
+    <object class="GtkStringList" id="overview_navigation_states_model">
+        <items>
+            <item translatable="yes">Cyclic</item>
+            <item translatable="yes">GNOME</item>
+            <item translatable="yes">Overview only</item>
+        </items>
+    </object>
+
+    <object class="GtkStringList" id="workspace_switching_states_model">
+        <items>
+            <item translatable="yes">Default</item>
+            <item translatable="yes">Cyclic</item>
+        </items>
+    </object>
+
+    <object class="AdwPreferencesPage" id="customizations_page">
+        <property name="title">Misc</property>
+        <property name="icon-name">emblem-system-symbolic</property>
+
+        <!-- Customizations -->
+        <child>
+            <object class="AdwPreferencesGroup">
+                <!-- <property name="title">Customizations</property> -->
+
+                <!-- Touchpad swipe speed -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Touchpad swipe speed</property>
+                        <child>
+                            <object class="GtkScale" id="touchpad-speed-scale">
+                                <property name="width-request">100</property>
+                                <property name="hexpand">true</property>
+                                <property name="draw-value">no</property>
+                                <!-- <signal name="value-changed" handler="touchpad_speed_changed" object="touchpadspeed_speed_display_value"/> -->
+                                <property name="adjustment">
+                                    <object class="GtkAdjustment">
+                                        <property name="lower">-3.3219280948873626</property>
+                                        <property name="upper">3.3219280948873626</property>
+                                        <property name="step-increment">0.01</property>
+                                    </object>
+                                </property>
+                                <marks>
+                                    <mark value="-1" position="bottom"></mark>
+                                    <mark value="0" position="bottom"></mark>
+                                    <mark value="1" position="bottom"></mark>
+                                </marks>
+                            </object>
+                        </child>
+
+                        <child>
+                            <object class="GtkEditableLabel" id="touchpad-speed-scale_display-value">
+                                <property name="valign">center</property>
+                                <property name="max_width_chars">5</property>
+                                <property name="editable">False</property>
+                                <property name="can-focus">False</property>
+                                <property name="text">1.00</property>
+                            </object>
+                        </child>
+
+                    </object>
+                </child>
+
+                <!-- Touchpad pinch speed -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Touchpad pinch speed</property>
+                        <child>
+                            <object class="GtkScale" id="touchpad-pinch-speed">
+                                <property name="width-request">100</property>
+                                <property name="hexpand">true</property>
+                                <property name="draw-value">no</property>
+                                <!-- <signal name="value-changed" handler="touchpad_speed_changed" object="touchpadspeed_speed_display_value"/> -->
+                                <property name="adjustment">
+                                    <object class="GtkAdjustment">
+                                        <property name="lower">-3.3219280948873626</property>
+                                        <property name="upper">3.3219280948873626</property>
+                                        <property name="step-increment">0.01</property>
+                                    </object>
+                                </property>
+                                <marks>
+                                    <mark value="-1" position="bottom"></mark>
+                                    <mark value="0" position="bottom"></mark>
+                                    <mark value="1" position="bottom"></mark>
+                                </marks>
+                            </object>
+                        </child>
+
+                        <child>
+                            <object class="GtkEditableLabel" id="touchpad-pinch-speed_display-value">
+                                <property name="valign">center</property>
+                                <property name="max_width_chars">5</property>
+                                <property name="editable">False</property>
+                                <property name="can-focus">False</property>
+                                <property name="text">1.00</property>
+                            </object>
+                        </child>
+
+                    </object>
+                </child>
+
+                <!-- Volume control speed -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Volume control speed</property>
+                        <child>
+                            <object class="GtkScale" id="volume-control-speed">
+                                <property name="width-request">100</property>
+                                <property name="hexpand">true</property>
+                                <property name="draw-value">no</property>
+                                <property name="adjustment">
+                                    <object class="GtkAdjustment">
+                                        <property name="lower">-3.3219280948873626</property>
+                                        <property name="upper">3.3219280948873626</property>
+                                        <property name="step-increment">0.01</property>
+                                    </object>
+                                </property>
+                                <marks>
+                                    <mark value="-1" position="bottom"></mark>
+                                    <mark value="0" position="bottom"></mark>
+                                    <mark value="1" position="bottom"></mark>
+                                </marks>
+                            </object>
+                        </child>
+
+                        <child>
+                            <object class="GtkEditableLabel" id="volume-control-speed_display-value">
+                                <property name="valign">center</property>
+                                <property name="max_width_chars">5</property>
+                                <property name="editable">False</property>
+                                <property name="can-focus">False</property>
+                                <property name="text">1.00</property>
+                            </object>
+                        </child>
+
+                    </object>
+                </child>
+
+                <!-- Brightness control speed -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Brightness control speed</property>
+                        <child>
+                            <object class="GtkScale" id="brightness-control-speed">
+                                <property name="width-request">100</property>
+                                <property name="hexpand">true</property>
+                                <property name="draw-value">no</property>
+                                <property name="adjustment">
+                                    <object class="GtkAdjustment">
+                                        <property name="lower">-3.3219280948873626</property>
+                                        <property name="upper">3.3219280948873626</property>
+                                        <property name="step-increment">0.01</property>
+                                    </object>
+                                </property>
+                                <marks>
+                                    <mark value="-1" position="bottom"></mark>
+                                    <mark value="0" position="bottom"></mark>
+                                    <mark value="1" position="bottom"></mark>
+                                </marks>
+                            </object>
+                        </child>
+
+                        <child>
+                            <object class="GtkEditableLabel" id="brightness-control-speed_display-value">
+                                <property name="valign">center</property>
+                                <property name="max_width_chars">5</property>
+                                <property name="editable">False</property>
+                                <property name="can-focus">False</property>
+                                <property name="text">1.00</property>
+                            </object>
+                        </child>
+
+                    </object>
+                </child>
+
+                <!-- Follow natural swipe -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Follow natural swipe for workspace switching</property>
+                        <child>
+                        <object class="GtkSwitch" id="follow-natural-scroll">
+                            <property name="valign">center</property>
+                            <property name="active">True</property>
+                        </object>
+                        </child>
+                    </object>
+                </child>
+
+                <!-- Revert direction of overview navigation gesture -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Revert direction of overview navigation gesture</property>
+                        <child>
+                            <object class="GtkSwitch" id="default-overview-gesture-direction">
+                                <property name="valign">center</property>
+                                <property name="active">False</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+
+                <!-- Invert volume direction -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Invert volume gesture direction</property>
+                        <child>
+                        <object class="GtkSwitch" id="invert-volume-gesture-direction">
+                            <property name="valign">center</property>
+                            <property name="active">False</property>
+                        </object>
+                        </child>
+                    </object>
+                </child>
+
+                <!-- Invert brightness direction -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Invert brightness gesture direction</property>
+                        <child>
+                        <object class="GtkSwitch" id="invert-brightness-gesture-direction">
+                            <property name="valign">center</property>
+                            <property name="active">False</property>
+                        </object>
+                        </child>
+                    </object>
+                </child>
+
+                <!-- Invert media direction -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Invert media gesture direction</property>
+                        <child>
+                        <object class="GtkSwitch" id="invert-media-gesture-direction">
+                            <property name="valign">center</property>
+                            <property name="active">False</property>
+                        </object>
+                        </child>
+                    </object>
+                </child>
+
+                <!-- Enable vertical swipe for application specific gestures -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Enable vertical swipe for app gestures</property>
+                        <property name="subtitle">[Experimental] Need to disable 3/4-fingers vertical swipe to activate</property>
+                        <child>
+                            <object class="GtkSwitch" id="enable-vertical-app-gesture">
+                                <property name="valign">center</property>
+                                <property name="active">False</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+
+                <!-- Minimize window -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Enable Minimize window for Window Manipulation</property>
+                        <property name="subtitle">Minimize window using vertical swipe. This will disable tiling gesture. Swipe down to activate</property>
+                        <child>
+                            <object class="GtkSwitch" id="allow-minimize-window">
+                                <property name="valign">center</property>
+                                <property name="active">True</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+
+                <!-- Fullscreen window -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Fullscreen window</property>
+                        <property name="subtitle">Fullscreen the window if its already maximized</property>
+                        <child>
+                            <object class="GtkSwitch" id="allow-fullscreen-window">
+                                <property name="valign">center</property>
+                                <property name="active">True</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+
+                <!-- Overview navigation states -->
+                <child>
+                    <object class="AdwComboRow" id="overview-navigation-states">
+                        <property name="title" translatable="yes">Overview navigation states</property>
+                        <property name="model">overview_navigation_states_model</property>
+                    </object>
+                </child>
+
+                <!-- workspace switching states -->
+                <child>
+                    <object class="AdwComboRow" id="workspace-switching-states">
+                        <property name="title" translatable="yes">Workspace switching states</property>
+                        <property name="model">workspace_switching_states_model</property>
+                    </object>
+                </child>
+
+                <!-- Switch windows across all workspaces -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Switch windows across all workspaces</property>
+                        <property name="subtitle">Show windows from all workspaces in the Alt+Tab switcher</property>
+                        <child>
+                            <object class="GtkSwitch" id="alttab-all-workspaces">
+                                <property name="valign">center</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+
+                <!-- Window switcher popup delay (ms) -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Window switcher popup delay (ms)</property>
+                        <child>
+                            <object class="GtkSpinButton" id="alttab-delay">
+                                <property name="valign">center</property>
+                                <property name="adjustment">
+                                    <object class="GtkAdjustment">
+                                        <property name="lower">0</property>
+                                        <property name="upper">5000</property>
+                                        <property name="step-increment">5</property>
+                                    </object>
+                                </property>
+                                <property name="value">150</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+
+                <!-- Duration between hold and swipe (ms) -->
+                <child>
+                    <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Duration between hold and swipe (ms)</property>
+                        <child>
+                            <object class="GtkSpinButton" id="hold-swipe-delay-duration">
+                                <property name="valign">center</property>
+                                <property name="adjustment">
+                                <object class="GtkAdjustment">
+                                    <property name="lower">0</property>
+                                    <property name="upper">5000</property>
+                                    <property name="step-increment">5</property>
+                                </object>
+                                </property>
+                                <property name="value">100</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+
+            </object>
+        </child>
+    </object>
+</interface>

@@ -1,0 +1,136 @@
+/*!
+ * Copyright (C) 2023 Lju
+ *
+ * This file is part of Astra Monitor extension for GNOME Shell.
+ * [https://github.com/AstraExt/astra-monitor]
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+class Signal {
+    static connect(subject, signal, callback) {
+        if (!Signal.connectMap)
+            Signal.connectMap = new Map();
+        const id = subject.connect(signal, callback);
+        if (!Signal.connectMap.has(subject)) {
+            Signal.connectMap.set(subject, []);
+        }
+        Signal.connectMap.get(subject).push({ id, signal });
+        Signal.ensureDestroyHandler(subject);
+        return id;
+    }
+    static connectAfter(subject, signal, callback) {
+        if (!Signal.connectAfterMap)
+            Signal.connectAfterMap = new Map();
+        const id = subject.connect_after(signal, callback);
+        if (!Signal.connectAfterMap.has(subject))
+            Signal.connectAfterMap.set(subject, []);
+        Signal.connectAfterMap.get(subject).push({ id, signal });
+        Signal.ensureDestroyHandler(subject);
+        return id;
+    }
+    static disconnect(subject, signal = null) {
+        if (!Signal.connectMap)
+            return;
+        if (!Signal.connectMap.has(subject))
+            return;
+        const connections = Signal.connectMap.get(subject);
+        const remainingConnections = [];
+        for (const connection of connections) {
+            if (signal && connection.signal !== signal) {
+                remainingConnections.push(connection);
+                continue;
+            }
+            subject.disconnect(connection.id);
+        }
+        if (remainingConnections.length === 0) {
+            Signal.connectMap.delete(subject);
+        }
+        else if (signal) {
+            Signal.connectMap.set(subject, remainingConnections);
+        }
+        Signal.clearDestroyHandler(subject);
+    }
+    static disconnectAfter(subject, signal = null) {
+        if (!Signal.connectAfterMap)
+            return;
+        if (!Signal.connectAfterMap.has(subject))
+            return;
+        const connections = Signal.connectAfterMap.get(subject);
+        const remainingConnections = [];
+        for (const connection of connections) {
+            if (signal && connection.signal !== signal) {
+                remainingConnections.push(connection);
+                continue;
+            }
+            subject.disconnect(connection.id);
+        }
+        if (remainingConnections.length === 0) {
+            Signal.connectAfterMap.delete(subject);
+        }
+        else if (signal) {
+            Signal.connectAfterMap.set(subject, remainingConnections);
+        }
+        Signal.clearDestroyHandler(subject);
+    }
+    static disconnectAll(subject) {
+        Signal.disconnect(subject);
+        Signal.disconnectAfter(subject);
+    }
+    static clear(subject) {
+        Signal.disconnect(subject);
+        Signal.disconnectAfter(subject);
+    }
+    static clearAll() {
+        for (const subject of [...Signal.connectMap.keys()])
+            Signal.clear(subject);
+        for (const subject of [...Signal.connectAfterMap.keys()])
+            Signal.clear(subject);
+    }
+    static ensureDestroyHandler(subject) {
+        if (!Signal.destroyMap)
+            Signal.destroyMap = new Map();
+        if (Signal.destroyMap.has(subject))
+            return;
+        const id = subject.connect('destroy', () => {
+            Signal.destroyingSubjects.add(subject);
+            try {
+                Signal.disconnect(subject);
+                Signal.disconnectAfter(subject);
+            }
+            finally {
+                Signal.destroyingSubjects.delete(subject);
+                Signal.destroyMap.delete(subject);
+            }
+        });
+        Signal.destroyMap.set(subject, id);
+    }
+    static clearDestroyHandler(subject) {
+        if (Signal.destroyingSubjects.has(subject))
+            return;
+        if (Signal.connectMap?.has(subject))
+            return;
+        if (Signal.connectAfterMap?.has(subject))
+            return;
+        const id = Signal.destroyMap?.get(subject);
+        if (id === undefined)
+            return;
+        subject.disconnect(id);
+        Signal.destroyMap.delete(subject);
+    }
+}
+Signal.connectMap = new Map();
+Signal.connectAfterMap = new Map();
+Signal.destroyMap = new Map();
+Signal.destroyingSubjects = new Set();
+export default Signal;

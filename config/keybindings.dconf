@@ -1,0 +1,30 @@
+[/]
+custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom-ocr/']
+next=['AudioNext']
+play=['XF86AudioPlay']
+previous=['AudioPrev']
+rfkill=@as []
+rfkill-bluetooth=@as []
+volume-down=['AudioLowerVolume']
+volume-mute=@as []
+volume-up=['AudioRaiseVolume']
+
+[custom-keybindings/custom-ocr]
+binding='<Super><Shift>t'
+command='__USER_HOME__/.local/bin/ocr-snip'
+name='Snip Text Extraction'
+
+[custom-keybindings/custom0]
+binding='Print'
+command='gnome-screenshot'
+name='Instant Screenshot'
+
+[custom-keybindings/hibernate]
+binding='<Super>z'
+command='systemctl hibernate'
+name='Hibernate'
+
+[custom-keybindings/shutdown]
+binding='<Super>x'
+command='systemctl poweroff'
+name='Shutdown'

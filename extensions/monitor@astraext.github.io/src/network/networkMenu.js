@@ -1,0 +1,2416 @@
+/*!
+ * Copyright (C) 2023 Lju
+ *
+ * This file is part of Astra Monitor extension for GNOME Shell.
+ * [https://github.com/AstraExt/astra-monitor]
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+import GLib from 'gi://GLib';
+import St from 'gi://St';
+import Clutter from 'gi://Clutter';
+import { gettext as _, pgettext } from 'resource:///org/gnome/shell/extensions/extension.js';
+import MenuBase from '../menu.js';
+import NetworkGraph from './networkGraph.js';
+import Grid from '../grid.js';
+import Utils from '../utils/utils.js';
+import AnimationUtils from '../utils/animationUtils.js';
+import Config from '../config.js';
+import Signal from '../signal.js';
+import NetworkMonitor from './networkMonitor.js';
+var RefreshStatus;
+(function (RefreshStatus) {
+    RefreshStatus[RefreshStatus["IDLE"] = 0] = "IDLE";
+    RefreshStatus[RefreshStatus["REFRESHING"] = 1] = "REFRESHING";
+    RefreshStatus[RefreshStatus["DONE"] = 2] = "DONE";
+})(RefreshStatus || (RefreshStatus = {}));
+export default class NetworkMenu extends MenuBase {
+    constructor(sourceActor, arrowAlignment, arrowSide) {
+        super(sourceActor, arrowAlignment, { name: 'Network Menu', arrowSide });
+        this.privilegedTopProcesses = false;
+        this.updateTimer = 0;
+        this.deviceListGeneration = 0;
+        this.addMenuSection(_('Network'));
+        this.createActivitySection();
+        this.createTopProcessesSection();
+        this.createPublicIps();
+        this.createRoutes();
+        this.createDeviceList();
+        this.addUtilityButtons();
+        this.setStyle();
+        Config.connect(this, 'changed::theme-style', this.setStyle.bind(this));
+    }
+    setStyle() {
+        const lightTheme = Utils.themeStyle === 'light';
+        const styleClass = lightTheme ? 'astra-monitor-menu-key-light' : 'astra-monitor-menu-key';
+        this.totalUploadSpeedValueLabel.styleClass = styleClass;
+        this.totalDownloadSpeedValueLabel.styleClass = styleClass;
+        this.publicIPv4.value.styleClass = styleClass;
+        this.publicIpv6.value1.styleClass = styleClass;
+        this.publicIpv6.value2.styleClass = styleClass;
+        this.defaultRouteGateway.styleClass = styleClass;
+    }
+    createActivitySection() {
+        const defaultStyle = '';
+        const hoverButton = new St.Button({
+            reactive: true,
+            trackHover: true,
+            style: defaultStyle,
+        });
+        const grid = new Grid({ styleClass: 'astra-monitor-menu-subgrid' });
+        hoverButton.set_child(grid);
+        this.graph = new NetworkGraph({
+            width: 200 - 2 - 15,
+            mini: false,
+        });
+        grid.addToGrid(this.graph, 2);
+        const totalUploadSpeedLabel = new St.Label({
+            text: _('Global Upload:'),
+            xExpand: true,
+            styleClass: 'astra-monitor-menu-label',
+            style: 'margin-top:0.25em;',
+        });
+        grid.addToGrid(totalUploadSpeedLabel);
+        this.totalUploadSpeedValueLabel = new St.Label({
+            text: '-',
+            xExpand: true,
+        });
+        grid.addToGrid(MenuBase.createLoadingValue(this.totalUploadSpeedValueLabel));
+        const totalDownloadSpeedLabel = new St.Label({
+            text: _('Global Download:'),
+            xExpand: true,
+            styleClass: 'astra-monitor-menu-label',
+        });
+        grid.addToGrid(totalDownloadSpeedLabel);
+        this.totalDownloadSpeedValueLabel = new St.Label({
+            text: '-',
+            xExpand: true,
+        });
+        grid.addToGrid(MenuBase.createLoadingValue(this.totalDownloadSpeedValueLabel));
+        this.createActivityPopup(hoverButton);
+        hoverButton.connect('enter-event', () => {
+            hoverButton.style = defaultStyle + this.selectionStyle;
+            if (this.networkActivityPopup)
+                this.networkActivityPopup.open(AnimationUtils.getMenuParams(true));
+        });
+        hoverButton.connect('leave-event', () => {
+            hoverButton.style = defaultStyle;
+            if (this.networkActivityPopup)
+                this.networkActivityPopup.close(AnimationUtils.getMenuParams(true));
+        });
+        this.addToMenu(hoverButton, 2);
+    }
+    createActivityPopup(sourceActor) {
+        this.networkActivityPopup = new MenuBase(sourceActor, 0.05, { numCols: 2 });
+        this.networkActivityPopup.addMenuSection(_('Upload Activity'));
+        this.networkActivityPopup.addToMenu(new St.Label({
+            text: _('Total'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        }));
+        const totalUploadedValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+        this.networkActivityPopup.addToMenu(totalUploadedValueLabel);
+        this.networkActivityPopup.totalUploadedValueLabel = totalUploadedValueLabel;
+        this.networkActivityPopup.addToMenu(new St.Label({
+            text: _('Packets'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        }));
+        const packetsUploadedValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+        this.networkActivityPopup.addToMenu(packetsUploadedValueLabel);
+        this.networkActivityPopup.packetsUploadedValueLabel = packetsUploadedValueLabel;
+        this.networkActivityPopup.addToMenu(new St.Label({
+            text: _('Errors/Dropped'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        }));
+        const errorsUploadValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+        this.networkActivityPopup.addToMenu(errorsUploadValueLabel);
+        this.networkActivityPopup.errorsUploadValueLabel = errorsUploadValueLabel;
+        this.networkActivityPopup.addMenuSection(_('Download Activity'));
+        this.networkActivityPopup.addToMenu(new St.Label({
+            text: _('Total'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        }));
+        const totalDownloadedValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+        this.networkActivityPopup.addToMenu(totalDownloadedValueLabel);
+        this.networkActivityPopup.totalDownloadedValueLabel = totalDownloadedValueLabel;
+        this.networkActivityPopup.addToMenu(new St.Label({
+            text: _('Packets'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        }));
+        const packetsDownloadedValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+        this.networkActivityPopup.addToMenu(packetsDownloadedValueLabel);
+        this.networkActivityPopup.packetsDownloadedValueLabel = packetsDownloadedValueLabel;
+        this.networkActivityPopup.addToMenu(new St.Label({
+            text: _('Errors/Dropped'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        }));
+        const errorsDownloadValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+        this.networkActivityPopup.addToMenu(errorsDownloadValueLabel);
+        this.networkActivityPopup.errorsDownloadValueLabel = errorsDownloadValueLabel;
+    }
+    createTopProcessesSection() {
+        const container = new Grid({ numCols: 1 });
+        container.hide();
+        const separator = this.addMenuSection(_('Top Processes'), false, false);
+        separator.xExpand = true;
+        separator.style = 'padding-top:0.15em;margin-bottom:0;padding-bottom:0;';
+        const subSeparator = new St.Label({
+            text: _('(click to show)'),
+            styleClass: 'astra-monitor-menu-key-mid-center',
+            xExpand: true,
+        });
+        const separatorGrid = new Grid({
+            numCols: 1,
+            styleClass: 'astra-monitor-menu-subgrid',
+        });
+        separatorGrid.addToGrid(separator);
+        separatorGrid.addToGrid(subSeparator);
+        const btnDefaultStyle = 'margin-top:0.1em;';
+        const separatorButton = new St.Button({
+            reactive: true,
+            trackHover: true,
+            xExpand: true,
+            style: btnDefaultStyle,
+        });
+        separatorButton.set_child(separatorGrid);
+        separatorButton.connect('clicked', () => {
+            if (Utils.nethogsHasCapsCached() !== true) {
+                Utils.networkMonitor.startNethogs(true).catch((e) => {
+                    Utils.error('Error starting NetHogs', e);
+                });
+            }
+        });
+        separatorButton.connect('enter-event', () => {
+            separatorButton.style = btnDefaultStyle + this.selectionStyle;
+        });
+        separatorButton.connect('leave-event', () => {
+            separatorButton.style = btnDefaultStyle;
+        });
+        container.addToGrid(separatorButton);
+        const defaultStyle = '';
+        const hoverButton = new St.Button({
+            reactive: true,
+            trackHover: true,
+            style: defaultStyle,
+        });
+        hoverButton.hide();
+        const grid = new Grid({ numCols: 3, styleClass: 'astra-monitor-menu-subgrid' });
+        const labels = [];
+        const numProcesses = 3;
+        for (let i = 0; i < numProcesses; i++) {
+            const label = new St.Label({
+                text: '-',
+                styleClass: 'astra-monitor-menu-cmd-name',
+                style: 'max-width:85px;',
+                xExpand: true,
+            });
+            grid.addToGrid(MenuBase.createLoadingValue(label));
+            const uploadContainer = new St.Widget({
+                layoutManager: new Clutter.GridLayout({
+                    orientation: Clutter.Orientation.HORIZONTAL,
+                }),
+                style: 'margin-left:0;margin-right:0;width:5.5em;',
+            });
+            const uploadActivityIcon = new St.Icon({
+                gicon: Utils.getLocalIcon('am-up-symbolic'),
+                fallbackIconName: 'go-up-symbolic',
+                styleClass: 'astra-monitor-menu-icon-mini',
+                style: 'color:rgba(255,255,255,0.5);',
+            });
+            uploadContainer.add_child(uploadActivityIcon);
+            const uploadValue = new St.Label({
+                text: '-',
+                styleClass: 'astra-monitor-menu-cmd-usage',
+                xExpand: true,
+            });
+            uploadContainer.add_child(uploadValue);
+            grid.addToGrid(uploadContainer);
+            const downloadContainer = new St.Widget({
+                layoutManager: new Clutter.GridLayout({
+                    orientation: Clutter.Orientation.HORIZONTAL,
+                }),
+                style: 'margin-left:0;margin-right:0;width:5.5em;',
+            });
+            const downloadActivityIcon = new St.Icon({
+                gicon: Utils.getLocalIcon('am-down-symbolic'),
+                fallbackIconName: 'go-down-symbolic',
+                styleClass: 'astra-monitor-menu-icon-mini',
+                style: 'color:rgba(255,255,255,0.5);',
+            });
+            downloadContainer.add_child(downloadActivityIcon);
+            const downloadValue = new St.Label({
+                text: '-',
+                styleClass: 'astra-monitor-menu-cmd-usage',
+                xExpand: true,
+            });
+            downloadContainer.add_child(downloadValue);
+            grid.addToGrid(downloadContainer);
+            labels.push({
+                label,
+                upload: {
+                    container: uploadContainer,
+                    value: uploadValue,
+                    icon: uploadActivityIcon,
+                },
+                download: {
+                    container: downloadContainer,
+                    value: downloadValue,
+                    icon: downloadActivityIcon,
+                },
+            });
+        }
+        hoverButton.set_child(grid);
+        this.createTopProcessesPopup(hoverButton);
+        hoverButton.connect('enter-event', () => {
+            hoverButton.style = defaultStyle + this.selectionStyle;
+            if (this.topProcessesPopup)
+                this.topProcessesPopup.open(AnimationUtils.getMenuParams(true));
+        });
+        hoverButton.connect('leave-event', () => {
+            hoverButton.style = defaultStyle;
+            if (this.topProcessesPopup)
+                this.topProcessesPopup.close(AnimationUtils.getMenuParams(true));
+        });
+        container.addToGrid(hoverButton);
+        this.addToMenu(container, 2);
+        this.topProcesses = {
+            container,
+            subSeparator,
+            labels,
+            hoverButton,
+        };
+        this.refreshNethogsCapsUi();
+    }
+    refreshNethogsCapsUi() {
+        const applyCaps = (hasCaps) => {
+            if (!this.topProcesses)
+                return;
+            if (hasCaps) {
+                this.privilegedTopProcesses = false;
+                this.topProcesses.subSeparator?.hide();
+                this.topProcesses.hoverButton.show();
+                if (Utils.networkMonitor.isListeningFor('topProcesses')) {
+                    Utils.networkMonitor.startNethogs().catch((e) => {
+                        Utils.error('Error starting NetHogs', e);
+                    });
+                }
+            }
+            else if (!this.privilegedTopProcesses) {
+                this.topProcesses.subSeparator?.show();
+                this.topProcesses.hoverButton.hide();
+            }
+        };
+        const cachedCaps = Utils.nethogsHasCapsCached();
+        if (cachedCaps !== undefined)
+            applyCaps(cachedCaps);
+        Utils.nethogsHasCapsAsync()
+            .then(hasCaps => {
+            if (hasCaps !== cachedCaps)
+                applyCaps(hasCaps);
+        })
+            .catch((e) => {
+            Utils.error('Error checking NetHogs capabilities', e);
+        });
+    }
+    refreshNethogsAvailability() {
+        Utils.hasNethogsAsync()
+            .then(hasNethogs => {
+            if (!this.topProcesses)
+                return;
+            if (!hasNethogs) {
+                this.topProcesses.container.hide();
+                return;
+            }
+            this.topProcesses.container.show();
+            this.refreshNethogsCapsUi();
+        })
+            .catch((e) => {
+            Utils.error('Error checking NetHogs availability', e);
+        });
+    }
+    createTopProcessesPopup(sourceActor) {
+        this.topProcessesPopup = new MenuBase(sourceActor, 0.05);
+        this.topProcessesPopup.section = this.topProcessesPopup.addMenuSection(_('Top Processes'));
+        this.topProcessesPopup.section.style = 'min-width:500px;';
+        this.topProcessesPopup.processes = new Map();
+        const grid = new Grid({
+            xExpand: true,
+            xAlign: Clutter.ActorAlign.START,
+            numCols: 2,
+            styleClass: 'astra-monitor-menu-subgrid',
+        });
+        for (let i = 0; i < NetworkMonitor.TOP_PROCESSES_LIMIT; i++) {
+            const uploadContainer = new St.Widget({
+                layoutManager: new Clutter.GridLayout({
+                    orientation: Clutter.Orientation.HORIZONTAL,
+                }),
+                style: 'margin-left:0;margin-right:0;width:6em;',
+            });
+            uploadContainer.hide();
+            const uploadActivityIcon = new St.Icon({
+                gicon: Utils.getLocalIcon('am-up-symbolic'),
+                fallbackIconName: 'go-up-symbolic',
+                styleClass: 'astra-monitor-menu-icon-mini',
+                style: 'color:rgba(255,255,255,0.5);',
+            });
+            uploadContainer.add_child(uploadActivityIcon);
+            const uploadValue = new St.Label({
+                text: '-',
+                styleClass: 'astra-monitor-menu-cmd-usage',
+                xExpand: true,
+            });
+            uploadContainer.add_child(uploadValue);
+            grid.addGrid(uploadContainer, 0, i * 2, 1, 1);
+            const downloadContainer = new St.Widget({
+                layoutManager: new Clutter.GridLayout({
+                    orientation: Clutter.Orientation.HORIZONTAL,
+                }),
+                style: 'margin-left:0;margin-right:0;width:6em;',
+            });
+            downloadContainer.hide();
+            const downloadActivityIcon = new St.Icon({
+                gicon: Utils.getLocalIcon('am-down-symbolic'),
+                fallbackIconName: 'go-down-symbolic',
+                styleClass: 'astra-monitor-menu-icon-mini',
+                style: 'color:rgba(255,255,255,0.5);',
+            });
+            downloadContainer.add_child(downloadActivityIcon);
+            const downloadValue = new St.Label({
+                text: '-',
+                styleClass: 'astra-monitor-menu-cmd-usage',
+                xExpand: true,
+            });
+            downloadContainer.add_child(downloadValue);
+            grid.addGrid(downloadContainer, 0, i * 2 + 1, 1, 1);
+            const label = new St.Label({
+                text: '-',
+                styleClass: 'astra-monitor-menu-cmd-name-full',
+            });
+            grid.addGrid(label, 1, i * 2, 1, 1);
+            label.hide();
+            const description = new St.Label({
+                text: '-',
+                styleClass: 'astra-monitor-menu-cmd-description',
+            });
+            grid.addGrid(description, 1, i * 2 + 1, 1, 1);
+            description.hide();
+            this.topProcessesPopup.processes.set(i, {
+                label,
+                description,
+                upload: {
+                    container: uploadContainer,
+                    value: uploadValue,
+                    icon: uploadActivityIcon,
+                },
+                download: {
+                    container: downloadContainer,
+                    value: downloadValue,
+                    icon: downloadActivityIcon,
+                },
+            });
+        }
+        this.topProcessesPopup.addToMenu(grid, 2);
+    }
+    createPublicIps() {
+        this.publicIPLabel = this.addMenuSection(_('Public IP'));
+        const defaultStyle = '';
+        this.publicIPContainer = new St.Button({
+            reactive: true,
+            trackHover: true,
+            style: defaultStyle,
+        });
+        const grid = new Grid({ styleClass: 'astra-monitor-menu-subgrid' });
+        this.publicIPContainer.set_child(grid);
+        const publicIPv4Label = new St.Label({
+            text: _('Public IPv4:'),
+            xExpand: true,
+            styleClass: 'astra-monitor-menu-label',
+            style: '',
+        });
+        grid.addToGrid(publicIPv4Label);
+        const publicIPv4Value = new St.Label({
+            text: '-',
+            xExpand: true,
+        });
+        grid.addToGrid(MenuBase.createLoadingValue(publicIPv4Value));
+        this.publicIPv4 = {
+            label: publicIPv4Label,
+            value: publicIPv4Value,
+        };
+        const publicIpv6Grid = new Grid({ styleClass: 'astra-monitor-menu-subgrid', numCols: 2 });
+        const publicIpv6Label = new St.Label({
+            text: _('Public IPv6:'),
+            xExpand: true,
+            styleClass: 'astra-monitor-menu-label',
+        });
+        publicIpv6Grid.addGrid(publicIpv6Label, 1, 1, 1, 2);
+        const publicIpv6Value1 = new St.Label({
+            text: '-',
+            xExpand: true,
+            style: 'font-size: 1em;',
+        });
+        publicIpv6Grid.addGrid(MenuBase.createLoadingValue(publicIpv6Value1), 2, 1, 1, 1);
+        const publicIpv6Value2 = new St.Label({
+            text: '-',
+            xExpand: true,
+            style: 'font-size: 1em;',
+        });
+        publicIpv6Grid.addGrid(publicIpv6Value2, 2, 2, 1, 1);
+        grid.addToGrid(publicIpv6Grid, 2);
+        const footerLabel = new St.Label({
+            text: '',
+            styleClass: 'astra-monitor-menu-key-mid-center',
+        });
+        grid.addToGrid(footerLabel, 2);
+        this.publicIpv6 = {
+            label: publicIpv6Label,
+            value1: publicIpv6Value1,
+            value2: publicIpv6Value2,
+            footerLabel: footerLabel,
+            refreshStatus: RefreshStatus.IDLE,
+        };
+        Signal.connect(this.publicIPContainer, 'enter-event', () => {
+            this.publicIPContainer.style = defaultStyle + this.selectionStyle;
+        });
+        Signal.connect(this.publicIPContainer, 'leave-event', () => {
+            this.publicIPContainer.style = defaultStyle;
+        });
+        Signal.connect(this.publicIPContainer, 'clicked', () => {
+            if (this.publicIpv6.refreshStatus !== RefreshStatus.IDLE)
+                return;
+            this.publicIpv6.refreshStatus = RefreshStatus.REFRESHING;
+            this.updateIpsFooterLablel();
+            Utils.networkMonitor.updatePublicIps(true);
+        });
+        this.addToMenu(this.publicIPContainer, 2);
+    }
+    updateIpsFooterLablel() {
+        const seconds = Utils.networkMonitor.secondsSinceLastIpsUpdate;
+        let lastUpdate = _('Updated a long time ago');
+        if (seconds < 15)
+            lastUpdate = _('Updated a few seconds ago');
+        else if (seconds < 45)
+            lastUpdate = _('Updated less than a minute ago');
+        else if (seconds < 90)
+            lastUpdate = _('Updated about a minute ago');
+        else if (seconds < 150)
+            lastUpdate = _('Updated about 2 minutes ago');
+        else if (seconds < 330)
+            lastUpdate = _('Updated about 5 minutes ago');
+        else if (seconds < 600)
+            lastUpdate = _('Updated more than 5 minutes ago');
+        let refreshStatus = _('Click to refresh');
+        if (this.publicIpv6.refreshStatus === RefreshStatus.REFRESHING)
+            refreshStatus = _('Refreshing...');
+        else if (this.publicIpv6.refreshStatus === RefreshStatus.DONE)
+            refreshStatus = _('Done');
+        this.publicIpv6.footerLabel.text = lastUpdate + ' - ' + refreshStatus;
+    }
+    createRoutes() {
+        this.addMenuSection(_('Default Routes'));
+        const defaultStyle = '';
+        const hoverButton = new St.Button({
+            reactive: true,
+            trackHover: true,
+            style: defaultStyle,
+        });
+        const grid = new Grid({ styleClass: 'astra-monitor-menu-subgrid' });
+        hoverButton.set_child(grid);
+        this.defaultRouteDevice = new St.Label({
+            text: '',
+            xExpand: true,
+            styleClass: 'astra-monitor-menu-label',
+            style: 'margin-top:0.25em;',
+        });
+        grid.addToGrid(this.defaultRouteDevice);
+        this.defaultRouteGateway = new St.Label({
+            text: '-',
+            xExpand: true,
+        });
+        grid.addToGrid(MenuBase.createLoadingValue(this.defaultRouteGateway));
+        this.createRoutesPopup(hoverButton);
+        hoverButton.connect('enter-event', () => {
+            hoverButton.style = defaultStyle + this.selectionStyle;
+            if (this.routesPopup)
+                this.routesPopup.open(AnimationUtils.getMenuParams(true));
+        });
+        hoverButton.connect('leave-event', () => {
+            hoverButton.style = defaultStyle;
+            if (this.routesPopup)
+                this.routesPopup.close(AnimationUtils.getMenuParams(true));
+        });
+        this.addToMenu(hoverButton, 2);
+    }
+    createRoutesPopup(sourceActor) {
+        this.routesPopup = new MenuBase(sourceActor, 0.05, { numCols: 2 });
+        this.routesPopup.routes = [];
+        for (let i = 0; i < 5; i++) {
+            const titleLabel = new St.Label({
+                text: _('Route') + ` ${i}`,
+                styleClass: 'astra-monitor-menu-header-centered',
+                xExpand: true,
+            });
+            this.routesPopup.addToMenu(titleLabel, 2);
+            const metricLabel = new St.Label({
+                text: _('Metric'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            this.routesPopup.addToMenu(metricLabel);
+            const metricValue = new St.Label({ text: '', style: 'text-align:left;' });
+            this.routesPopup.addToMenu(metricValue);
+            const deviceLabel = new St.Label({
+                text: _('Device'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            this.routesPopup.addToMenu(deviceLabel);
+            const deviceValue = new St.Label({ text: '', style: 'text-align:left;' });
+            this.routesPopup.addToMenu(deviceValue);
+            const gatewayLabel = new St.Label({
+                text: _('Gateway'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            this.routesPopup.addToMenu(gatewayLabel);
+            const gatewayValue = new St.Label({ text: '', style: 'text-align:left;' });
+            this.routesPopup.addToMenu(gatewayValue);
+            const typeLabel = new St.Label({
+                text: _('Type'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            this.routesPopup.addToMenu(typeLabel);
+            const typeValue = new St.Label({ text: '', style: 'text-align:left;' });
+            this.routesPopup.addToMenu(typeValue);
+            const destinationLabel = new St.Label({
+                text: _('Destination'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            this.routesPopup.addToMenu(destinationLabel);
+            const destinationValue = new St.Label({ text: '', style: 'text-align:left;' });
+            this.routesPopup.addToMenu(destinationValue);
+            const protocolLabel = new St.Label({
+                text: _('Protocol'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            this.routesPopup.addToMenu(protocolLabel);
+            const protocolValue = new St.Label({ text: '', style: 'text-align:left;' });
+            this.routesPopup.addToMenu(protocolValue);
+            const scopeLabel = new St.Label({
+                text: _('Scope'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            this.routesPopup.addToMenu(scopeLabel);
+            const scopeValue = new St.Label({ text: '', style: 'text-align:left;' });
+            this.routesPopup.addToMenu(scopeValue);
+            const flagsLabel = new St.Label({
+                text: _('Flags'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            this.routesPopup.addToMenu(flagsLabel);
+            const flagsValue = new St.Label({ text: '', style: 'text-align:left;' });
+            this.routesPopup.addToMenu(flagsValue);
+            this.routesPopup.routes.push({
+                titleLabel,
+                metricLabel,
+                metricValue,
+                typeLabel,
+                typeValue,
+                deviceLabel,
+                deviceValue,
+                destinationLabel,
+                destinationValue,
+                gatewayLabel,
+                gatewayValue,
+                protocolLabel,
+                protocolValue,
+                scopeLabel,
+                scopeValue,
+                flagsLabel,
+                flagsValue,
+            });
+        }
+    }
+    createDeviceList() {
+        if (this.deviceSection === undefined) {
+            this.addMenuSection(_('Interfaces'));
+            this.deviceSection = new Grid({ styleClass: 'astra-monitor-menu-subgrid' });
+            this.noDevicesLabel = new St.Label({
+                text: _('No network interface found'),
+                styleClass: 'astra-monitor-menu-label-warning',
+                style: 'font-style:italic;',
+            });
+            this.deviceSection.addToGrid(this.noDevicesLabel, 2);
+            this.devices = new Map();
+            this.devicesInfoPopup = new Map();
+            this.devicesAddressesPopup = new Map();
+            this.devicesTotalsPopup = new Map();
+            this.devicesWirelessPopup = new Map();
+            this.addToMenu(this.deviceSection, 2);
+            Config.connect(this, 'changed::network-ignored', this.updateDeviceList.bind(this));
+            Config.connect(this, 'changed::network-ignored-regex', this.updateDeviceList.bind(this));
+        }
+    }
+    async updateDeviceList() {
+        if (!this.isOpen)
+            return;
+        const generation = ++this.deviceListGeneration;
+        const devices = await Utils.getNetworkInterfacesAsync();
+        if (!this.isOpen || generation !== this.deviceListGeneration)
+            return;
+        if (devices.size > 0)
+            this.noDevicesLabel.hide();
+        else
+            this.noDevicesLabel.show();
+        const ignoredDevices = Config.get_json('network-ignored');
+        if (ignoredDevices && Array.isArray(ignoredDevices) && ignoredDevices.length > 0) {
+            for (const id of ignoredDevices) {
+                if (devices.has(id))
+                    devices.delete(id);
+            }
+        }
+        const ignoredRegex = Config.get_string('network-ignored-regex');
+        if (ignoredRegex) {
+            try {
+                const regex = new RegExp(`^${ignoredRegex}$`, 'i');
+                for (const [id, device] of devices.entries()) {
+                    if (regex.test(device.name))
+                        devices.delete(id);
+                }
+            }
+            catch (e) {
+            }
+        }
+        for (const [id, device] of this.devices.entries()) {
+            if (!devices.has(id)) {
+                this.devicesInfoPopup.get(id)?.close(AnimationUtils.getMenuParams(true));
+                this.devicesInfoPopup.get(id)?.destroy();
+                this.devicesInfoPopup.delete(id);
+                this.devicesAddressesPopup.get(id)?.close(AnimationUtils.getMenuParams(true));
+                this.devicesAddressesPopup.get(id)?.destroy();
+                this.devicesAddressesPopup.delete(id);
+                this.devicesTotalsPopup.get(id)?.close(AnimationUtils.getMenuParams(true));
+                this.devicesTotalsPopup.get(id)?.destroy();
+                this.devicesTotalsPopup.delete(id);
+                this.devicesWirelessPopup.get(id)?.close(AnimationUtils.getMenuParams(true));
+                this.devicesWirelessPopup.get(id)?.destroy();
+                this.devicesWirelessPopup.delete(id);
+                device.container.destroy();
+                this.devices.delete(id);
+            }
+        }
+        const idList = Array.from(devices.keys());
+        for (const id of idList) {
+            const deviceData = devices.get(id);
+            let device;
+            let infoPopup;
+            let addressesPopup;
+            let totalsPopup;
+            let wirelessPopup;
+            if (!this.devices.has(id)) {
+                device = this.createInterfaceDevice(id);
+                this.deviceSection.addToGrid(device.container, 2);
+                this.devices.set(id, device);
+            }
+            else {
+                device = this.devices.get(id);
+            }
+            if (!device)
+                continue;
+            if (!this.devicesInfoPopup.has(id)) {
+                infoPopup = this.createDeviceInfoPopup(device.container);
+                this.devicesInfoPopup.set(id, infoPopup);
+            }
+            else {
+                infoPopup = this.devicesInfoPopup.get(id);
+            }
+            if (!infoPopup)
+                continue;
+            if (!this.devicesAddressesPopup.has(id)) {
+                addressesPopup = this.createDeviceAddressesPopup(device.container);
+                this.devicesAddressesPopup.set(id, addressesPopup);
+            }
+            else {
+                addressesPopup = this.devicesAddressesPopup.get(id);
+            }
+            if (!addressesPopup)
+                continue;
+            if (!this.devicesTotalsPopup.has(id)) {
+                totalsPopup = this.createDeviceTotalsPopup(device.container);
+                this.devicesTotalsPopup.set(id, totalsPopup);
+            }
+            else {
+                totalsPopup = this.devicesTotalsPopup.get(id);
+            }
+            if (!totalsPopup)
+                continue;
+            if (!this.devicesWirelessPopup.has(id)) {
+                wirelessPopup = this.createDeviceWirelessPopup(device.container);
+                this.devicesWirelessPopup.set(id, wirelessPopup);
+            }
+            else {
+                wirelessPopup = this.devicesWirelessPopup.get(id);
+            }
+            if (!wirelessPopup)
+                continue;
+            if (!deviceData)
+                continue;
+            try {
+                this.updateInterfaceDevice(device, infoPopup, addressesPopup, totalsPopup, wirelessPopup, deviceData);
+            }
+            catch (e) {
+                Utils.error('Error updating netowrk interface device', e);
+            }
+        }
+    }
+    createInterfaceDevice(id) {
+        const container = new Grid({
+            xExpand: true,
+            styleClass: 'astra-monitor-menu-subgrid',
+            style: 'padding-top:0.3em;margin-bottom:0.3em;',
+        });
+        const headerGrid = new Grid({
+            numCols: 2,
+            styleClass: 'astra-monitor-menu-subgrid',
+        });
+        const nameGrid = new Grid({
+            numCols: 2,
+            styleClass: 'astra-monitor-menu-subgrid',
+            style: 'margin-bottom:0;',
+            yAlign: Clutter.ActorAlign.CENTER,
+        });
+        const nameButton = new St.Button({
+            reactive: true,
+            trackHover: true,
+            xExpand: true,
+            style: '',
+        });
+        nameButton.set_child(nameGrid);
+        nameButton.connect('enter-event', () => {
+            nameButton.style = this.selectionStyle;
+            const popup = this.devicesInfoPopup.get(id);
+            popup?.open(AnimationUtils.getMenuParams(true));
+        });
+        nameButton.connect('leave-event', () => {
+            nameButton.style = '';
+            const popup = this.devicesInfoPopup.get(id);
+            popup?.close(AnimationUtils.getMenuParams(true));
+        });
+        headerGrid.addToGrid(nameButton);
+        const icon = new St.Icon({
+            styleClass: 'astra-monitor-menu-icon',
+            style: 'padding-left:0.25em;',
+            yAlign: Clutter.ActorAlign.CENTER,
+        });
+        nameGrid.addToGrid(icon);
+        const label = new St.Label({
+            text: '',
+            styleClass: 'astra-monitor-menu-label',
+            yAlign: Clutter.ActorAlign.CENTER,
+        });
+        nameGrid.addToGrid(label);
+        const ipButton = new St.Button({
+            reactive: true,
+            trackHover: true,
+            xExpand: true,
+            style: '',
+        });
+        const label2 = new St.Label({
+            text: '',
+            xExpand: true,
+            styleClass: 'astra-monitor-menu-key-mid',
+        });
+        ipButton.set_child(label2);
+        ipButton.connect('enter-event', () => {
+            ipButton.style = this.selectionStyle;
+            const popup = this.devicesAddressesPopup.get(id);
+            if (popup && popup.addresses.length > 0 && popup.addresses[0].labelValue.visible)
+                popup.open(AnimationUtils.getMenuParams(true));
+        });
+        ipButton.connect('leave-event', () => {
+            ipButton.style = '';
+            const popup = this.devicesAddressesPopup.get(id);
+            popup?.close(AnimationUtils.getMenuParams(true));
+        });
+        headerGrid.addToGrid(ipButton);
+        container.addToGrid(headerGrid, 2);
+        const rwButton = new St.Button({
+            reactive: true,
+            trackHover: true,
+            xExpand: true,
+            style: '',
+        });
+        const rwContainer = new St.Widget({
+            layoutManager: new Clutter.GridLayout({ orientation: Clutter.Orientation.HORIZONTAL }),
+            xExpand: true,
+            style: 'margin-left:0;margin-right:0;',
+        });
+        rwButton.set_child(rwContainer);
+        const uploadContainer = new St.Widget({
+            layoutManager: new Clutter.GridLayout({ orientation: Clutter.Orientation.HORIZONTAL }),
+            xExpand: true,
+            style: 'margin-left:0;margin-right:0;',
+        });
+        const uploadLabel = new St.Label({
+            text: pgettext('short for upload', 'U'),
+            styleClass: 'astra-monitor-menu-label',
+            style: 'padding-right:0.15em;',
+        });
+        uploadContainer.add_child(uploadLabel);
+        const uploadActivityIcon = new St.Icon({
+            gicon: Utils.getLocalIcon('am-up-symbolic'),
+            fallbackIconName: 'network-transmit-symbolic',
+            styleClass: 'astra-monitor-menu-icon-mini',
+            style: 'color:rgba(255,255,255,0.5);',
+        });
+        uploadContainer.add_child(uploadActivityIcon);
+        const uploadValueLabel = new St.Label({
+            text: '-',
+            xExpand: true,
+            styleClass: 'astra-monitor-menu-key-mid',
+        });
+        uploadContainer.add_child(uploadValueLabel);
+        uploadContainer.set_width(100);
+        rwContainer.add_child(uploadContainer);
+        const downloadContainer = new St.Widget({
+            layoutManager: new Clutter.GridLayout({ orientation: Clutter.Orientation.HORIZONTAL }),
+            xExpand: true,
+            style: 'margin-left:0;margin-right:0;',
+        });
+        const downloadLabel = new St.Label({
+            text: pgettext('short for download', 'D'),
+            styleClass: 'astra-monitor-menu-label',
+            style: 'padding-right:0.15em;',
+        });
+        downloadContainer.add_child(downloadLabel);
+        const downloadActivityIcon = new St.Icon({
+            gicon: Utils.getLocalIcon('am-down-symbolic'),
+            fallbackIconName: 'network-receive-symbolic',
+            styleClass: 'astra-monitor-menu-icon-mini',
+            style: 'color:rgba(255,255,255,0.5);',
+        });
+        downloadContainer.add_child(downloadActivityIcon);
+        const downloadValueLabel = new St.Label({
+            text: '-',
+            xExpand: true,
+            styleClass: 'astra-monitor-menu-key-mid',
+        });
+        downloadContainer.add_child(downloadValueLabel);
+        downloadContainer.set_width(100);
+        rwContainer.add_child(downloadContainer);
+        rwButton.connect('enter-event', () => {
+            rwButton.style = this.selectionStyle;
+            const popup = this.devicesTotalsPopup.get(id);
+            popup?.open(AnimationUtils.getMenuParams(true));
+        });
+        rwButton.connect('leave-event', () => {
+            rwButton.style = '';
+            const popup = this.devicesTotalsPopup.get(id);
+            popup?.close(AnimationUtils.getMenuParams(true));
+        });
+        container.addToGrid(rwButton, 2);
+        const wirelessButtonStyle = 'margin-bottom:0.5em;';
+        const wirelessButton = new St.Button({
+            reactive: true,
+            trackHover: true,
+            xExpand: true,
+            style: wirelessButtonStyle,
+        });
+        const wirelessLabel = new St.Label({
+            text: '',
+            xExpand: true,
+            styleClass: 'astra-monitor-menu-special',
+            style: 'padding-right:0.15em;',
+        });
+        wirelessButton.set_child(wirelessLabel);
+        wirelessButton.connect('enter-event', () => {
+            wirelessButton.style = wirelessButtonStyle + this.selectionStyle;
+            const popup = this.devicesWirelessPopup.get(id);
+            popup?.open(AnimationUtils.getMenuParams(true));
+        });
+        wirelessButton.connect('leave-event', () => {
+            wirelessButton.style = wirelessButtonStyle;
+            const popup = this.devicesWirelessPopup.get(id);
+            popup?.close(AnimationUtils.getMenuParams(true));
+        });
+        container.addToGrid(wirelessButton, 2);
+        return {
+            data: null,
+            container,
+            icon,
+            label,
+            label2,
+            uploadValueLabel,
+            uploadActivityIcon,
+            downloadValueLabel,
+            downloadActivityIcon,
+            wirelessButton,
+            wirelessLabel,
+        };
+    }
+    createDeviceInfoPopup(sourceActor) {
+        const popup = new MenuBase(sourceActor, 0.05, {
+            numCols: 2,
+        });
+        popup.addMenuSection(_('Info'));
+        {
+            popup.addToMenu(new St.Label({
+                text: _('Name'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            }));
+            const nameLabel = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(nameLabel);
+            popup.nameValue = nameLabel;
+            const altNamesLabel = new St.Label({
+                text: _('Alt Names'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(altNamesLabel);
+            popup.altNamesLabel = altNamesLabel;
+            const altNamesValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(altNamesValue);
+            popup.altNamesValue = altNamesValue;
+            const ifindexLabel = new St.Label({
+                text: _('Interface Index'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(ifindexLabel);
+            popup.ifindexLabel = ifindexLabel;
+            const ifindexValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(ifindexValue);
+            popup.ifindexValue = ifindexValue;
+            const macAddressLabel = new St.Label({
+                text: _('MAC Address'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(macAddressLabel);
+            popup.macAddressLabel = macAddressLabel;
+            const macAddressValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(macAddressValue);
+            popup.macAddressValue = macAddressValue;
+            const groupLabel = new St.Label({
+                text: _('Group'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(groupLabel);
+            popup.groupLabel = groupLabel;
+            const groupValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(groupValue);
+            popup.groupValue = groupValue;
+            const speedLabel = new St.Label({
+                text: _('Speed'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(speedLabel);
+            popup.speedLabel = speedLabel;
+            const speedValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(speedValue);
+            popup.speedValue = speedValue;
+            const duplexLabel = new St.Label({
+                text: _('Duplex'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(duplexLabel);
+            popup.duplexLabel = duplexLabel;
+            const duplexValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(duplexValue);
+            popup.duplexValue = duplexValue;
+            const mtuLabel = new St.Label({
+                text: _('MTU'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(mtuLabel);
+            popup.mtuLabel = mtuLabel;
+            const mtuValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(mtuValue);
+            popup.mtuValue = mtuValue;
+            const txQueueLabel = new St.Label({
+                text: _('Tx Queue Length'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(txQueueLabel);
+            popup.txQueueLabel = txQueueLabel;
+            const txQueueValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(txQueueValue);
+            popup.txQueueValue = txQueueValue;
+            const linkTypeLabel = new St.Label({
+                text: _('Link Type'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(linkTypeLabel);
+            popup.linkTypeLabel = linkTypeLabel;
+            const linkTypeValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(linkTypeValue);
+            popup.linkTypeValue = linkTypeValue;
+            const operativeStateLabel = new St.Label({
+                text: _('Operative State'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(operativeStateLabel);
+            popup.operStateLabel = operativeStateLabel;
+            const operativeStateValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(operativeStateValue);
+            popup.operStateValue = operativeStateValue;
+            const qdiscLabel = new St.Label({
+                text: _('Qdisc'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(qdiscLabel);
+            popup.qdiscLabel = qdiscLabel;
+            const qdiscValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(qdiscValue);
+            popup.qdiscValue = qdiscValue;
+            const parentLabel = new St.Label({
+                text: '',
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(parentLabel);
+            popup.parentLabel = parentLabel;
+            const parentValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(parentValue);
+            popup.parentValue = parentValue;
+        }
+        return popup;
+    }
+    createDeviceAddressesPopup(sourceActor) {
+        const popup = new MenuBase(sourceActor, 0.05, {
+            numCols: 2,
+        });
+        popup.addresses = [];
+        for (let i = 0; i < 10; i++) {
+            const labelValue = new St.Label({
+                text: '',
+                styleClass: 'astra-monitor-menu-header-centered',
+                xExpand: true,
+            });
+            popup.addToMenu(labelValue, 2);
+            const familyLabel = new St.Label({
+                text: _('Family'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(familyLabel);
+            const familyValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(familyValue);
+            const localLabel = new St.Label({
+                text: _('Local'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(localLabel);
+            const localValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(localValue);
+            const prefixlenLabel = new St.Label({
+                text: _('Prefix Length'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(prefixlenLabel);
+            const prefixlenValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(prefixlenValue);
+            const broadcastLabel = new St.Label({
+                text: _('Broadcast'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(broadcastLabel);
+            const broadcastValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(broadcastValue);
+            const scopeLabel = new St.Label({
+                text: _('Scope'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            });
+            popup.addToMenu(scopeLabel);
+            const scopeValue = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(scopeValue);
+            popup.addresses.push({
+                labelValue,
+                familyLabel,
+                familyValue,
+                localLabel,
+                localValue,
+                prefixlenLabel,
+                prefixlenValue,
+                broadcastLabel,
+                broadcastValue,
+                scopeLabel,
+                scopeValue,
+            });
+        }
+        return popup;
+    }
+    createDeviceTotalsPopup(sourceActor) {
+        const popup = new MenuBase(sourceActor, 0.05, {
+            numCols: 2,
+        });
+        popup.addMenuSection(_('Upload'));
+        {
+            popup.addToMenu(new St.Label({
+                text: _('Total'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            }));
+            const totalUploadedValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(totalUploadedValueLabel);
+            popup.totalUploadedValueLabel = totalUploadedValueLabel;
+            popup.addToMenu(new St.Label({
+                text: _('Packets'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            }));
+            const packetsUploadedValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(packetsUploadedValueLabel);
+            popup.packetsUploadedValueLabel = packetsUploadedValueLabel;
+            popup.addToMenu(new St.Label({
+                text: _('Errors/Dropped'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            }));
+            const errorsUploadValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(errorsUploadValueLabel);
+            popup.errorsUploadValueLabel = errorsUploadValueLabel;
+        }
+        popup.addMenuSection(_('Download'));
+        {
+            popup.addToMenu(new St.Label({
+                text: _('Total'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            }));
+            const totalDownloadedValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(totalDownloadedValueLabel);
+            popup.totalDownloadedValueLabel = totalDownloadedValueLabel;
+            popup.addToMenu(new St.Label({
+                text: _('Packets'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            }));
+            const packetsDownloadedValueLabel = new St.Label({
+                text: '',
+                style: 'text-align:left;',
+            });
+            popup.addToMenu(packetsDownloadedValueLabel);
+            popup.packetsDownloadedValueLabel = packetsDownloadedValueLabel;
+            popup.addToMenu(new St.Label({
+                text: _('Errors/Dropped'),
+                styleClass: 'astra-monitor-menu-sub-key',
+            }));
+            const errorsDownloadValueLabel = new St.Label({ text: '', style: 'text-align:left;' });
+            popup.addToMenu(errorsDownloadValueLabel);
+            popup.errorsDownloadValueLabel = errorsDownloadValueLabel;
+        }
+        return popup;
+    }
+    createDeviceWirelessPopup(sourceActor) {
+        const popup = new MenuBase(sourceActor, 0.05, {
+            numCols: 2,
+        });
+        const IEEELabel = new St.Label({
+            text: _('IEEE'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        });
+        popup.addToMenu(IEEELabel);
+        popup.IEEELabel = IEEELabel;
+        const IEEEValue = new St.Label({
+            text: '',
+            style: 'text-align:left;',
+        });
+        popup.addToMenu(IEEEValue);
+        popup.IEEEValue = IEEEValue;
+        const SSIDLabel = new St.Label({
+            text: _('SSID'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        });
+        popup.addToMenu(SSIDLabel);
+        popup.SSIDLabel = SSIDLabel;
+        const SSIDValue = new St.Label({
+            text: '',
+            style: 'text-align:left;',
+        });
+        popup.addToMenu(SSIDValue);
+        popup.SSIDValue = SSIDValue;
+        const modeLabel = new St.Label({
+            text: _('Mode'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        });
+        popup.addToMenu(modeLabel);
+        popup.modeLabel = modeLabel;
+        const modeValue = new St.Label({
+            text: '',
+            style: 'text-align:left;',
+        });
+        popup.addToMenu(modeValue);
+        popup.modeValue = modeValue;
+        const frequencyLabel = new St.Label({
+            text: _('Frequency'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        });
+        popup.addToMenu(frequencyLabel);
+        popup.frequencyLabel = frequencyLabel;
+        const frequencyValue = new St.Label({
+            text: '',
+            style: 'text-align:left;',
+        });
+        popup.addToMenu(frequencyValue);
+        popup.frequencyValue = frequencyValue;
+        const accessPointLabel = new St.Label({
+            text: _('Access Point'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        });
+        popup.addToMenu(accessPointLabel);
+        popup.accessPointLabel = accessPointLabel;
+        const accessPointValue = new St.Label({
+            text: '',
+            style: 'text-align:left;',
+        });
+        popup.addToMenu(accessPointValue);
+        popup.accessPointValue = accessPointValue;
+        const bitRateLabel = new St.Label({
+            text: _('Bit Rate'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        });
+        popup.addToMenu(bitRateLabel);
+        popup.bitRateLabel = bitRateLabel;
+        const bitRateValue = new St.Label({
+            text: '',
+            style: 'text-align:left;',
+        });
+        popup.addToMenu(bitRateValue);
+        popup.bitRateValue = bitRateValue;
+        const txPowerLabel = new St.Label({
+            text: _('TX Power'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        });
+        popup.addToMenu(txPowerLabel);
+        popup.txPowerLabel = txPowerLabel;
+        const txPowerValue = new St.Label({
+            text: '',
+            style: 'text-align:left;',
+        });
+        popup.addToMenu(txPowerValue);
+        popup.txPowerValue = txPowerValue;
+        const linkQualityLabel = new St.Label({
+            text: _('Link Quality'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        });
+        popup.addToMenu(linkQualityLabel);
+        popup.linkQualityLabel = linkQualityLabel;
+        const linkQualityValue = new St.Label({
+            text: '',
+            style: 'text-align:left;',
+        });
+        popup.addToMenu(linkQualityValue);
+        popup.linkQualityValue = linkQualityValue;
+        const signalLevelLabel = new St.Label({
+            text: _('Signal Level'),
+            styleClass: 'astra-monitor-menu-sub-key',
+        });
+        popup.addToMenu(signalLevelLabel);
+        popup.signalLevelLabel = signalLevelLabel;
+        const signalLevelValue = new St.Label({
+            text: '',
+            style: 'text-align:left;',
+        });
+        popup.addToMenu(signalLevelValue);
+        popup.signalLevelValue = signalLevelValue;
+        return popup;
+    }
+    updateInterfaceDevice(device, infoPopup, addressesPopup, _totalsPopup, _wirelessPopup, deviceData) {
+        device.data = deviceData;
+        const icon = {
+            gicon: Utils.getLocalIcon('am-network-symbolic'),
+            fallbackIconName: 'network-wired-symbolic',
+        };
+        if (deviceData.name.startsWith('wlan') || deviceData.name.startsWith('wl')) {
+            icon.gicon = Utils.getLocalIcon('am-wireless-symbolic');
+            icon.fallbackIconName = 'network-wireless-symbolic';
+        }
+        else if (deviceData.name.startsWith('wwan') || deviceData.name.startsWith('ww')) {
+            icon.fallbackIconName = 'network-cellular-symbolic';
+        }
+        else if (deviceData.name.startsWith('tun') || deviceData.name.startsWith('tap')) {
+            icon.gicon = Utils.getLocalIcon('am-vpn-symbolic');
+            icon.fallbackIconName = 'network-vpn-symbolic';
+        }
+        else if (deviceData.name.includes('br')) {
+            icon.gicon = Utils.getLocalIcon('am-bridge-symbolic');
+            icon.fallbackIconName = 'network-wired-symbolic';
+        }
+        if (icon.gicon)
+            device.icon.gicon = icon.gicon;
+        device.icon.fallbackIconName = icon.fallbackIconName;
+        device.label.text = deviceData.name;
+        let label2 = '';
+        if (deviceData.addr_info && deviceData.addr_info.length > 0) {
+            const addr = deviceData.addr_info[0];
+            if (addr.local)
+                label2 = addr.local;
+        }
+        else if (deviceData.altnames && deviceData.altnames.length > 0) {
+            label2 = deviceData.altnames[0];
+        }
+        device.label2.text = label2;
+        if (infoPopup) {
+            if (deviceData.name && infoPopup.nameValue)
+                infoPopup.nameValue.text = deviceData.name;
+            if (deviceData.altnames && deviceData.altnames.length > 0 && infoPopup.altNamesValue) {
+                infoPopup.altNamesLabel?.show();
+                infoPopup.altNamesValue?.show();
+                infoPopup.altNamesValue.text = deviceData.altnames.join(', ');
+            }
+            else {
+                infoPopup.altNamesLabel?.hide();
+                infoPopup.altNamesValue?.hide();
+            }
+            if (deviceData.ifindex && infoPopup.ifindexValue) {
+                infoPopup.ifindexLabel?.show();
+                infoPopup.ifindexValue?.show();
+                infoPopup.ifindexValue.text = deviceData.ifindex.toString();
+            }
+            else {
+                infoPopup.ifindexLabel?.hide();
+                infoPopup.ifindexValue?.hide();
+            }
+            if (deviceData.address && infoPopup.macAddressValue) {
+                infoPopup.macAddressLabel?.show();
+                infoPopup.macAddressValue?.show();
+                infoPopup.macAddressValue.text = deviceData.address;
+            }
+            else {
+                infoPopup.macAddressLabel?.hide();
+                infoPopup.macAddressValue?.hide();
+            }
+            if (deviceData.group && infoPopup.groupValue) {
+                infoPopup.groupLabel?.show();
+                infoPopup.groupValue?.show();
+                infoPopup.groupValue.text = deviceData.group;
+            }
+            else {
+                infoPopup.groupLabel?.hide();
+                infoPopup.groupValue?.hide();
+            }
+            if (deviceData.speed && infoPopup.speedValue) {
+                infoPopup.speedLabel?.show();
+                infoPopup.speedValue?.show();
+                infoPopup.speedValue.text = `${deviceData.speed} Mb/s`;
+            }
+            else {
+                infoPopup.speedLabel?.hide();
+                infoPopup.speedValue?.hide();
+            }
+            if (deviceData.duplex && infoPopup.duplexValue) {
+                infoPopup.duplexLabel?.show();
+                infoPopup.duplexValue?.show();
+                infoPopup.duplexValue.text = deviceData.duplex;
+            }
+            else {
+                infoPopup.duplexLabel?.hide();
+                infoPopup.duplexValue?.hide();
+            }
+            if (deviceData.mtu && infoPopup.mtuValue) {
+                infoPopup.mtuLabel?.show();
+                infoPopup.mtuValue?.show();
+                infoPopup.mtuValue.text = deviceData.mtu.toString();
+            }
+            else {
+                infoPopup.mtuLabel?.hide();
+                infoPopup.mtuValue?.hide();
+            }
+            if (deviceData.txqlen && infoPopup.txQueueValue) {
+                infoPopup.txQueueLabel?.show();
+                infoPopup.txQueueValue?.show();
+                infoPopup.txQueueValue.text = deviceData.txqlen.toString();
+            }
+            else {
+                infoPopup.txQueueLabel?.hide();
+                infoPopup.txQueueValue?.hide();
+            }
+            if (deviceData.link_type && infoPopup.linkTypeValue) {
+                infoPopup.linkTypeLabel?.show();
+                infoPopup.linkTypeValue?.show();
+                infoPopup.linkTypeValue.text = deviceData.link_type;
+            }
+            else {
+                infoPopup.linkTypeLabel?.hide();
+                infoPopup.linkTypeValue?.hide();
+            }
+            if (deviceData.operstate && infoPopup.operStateValue) {
+                infoPopup.operStateLabel?.show();
+                infoPopup.operStateValue?.show();
+                infoPopup.operStateValue.text = deviceData.operstate;
+            }
+            else {
+                infoPopup.operStateLabel?.hide();
+                infoPopup.operStateValue?.hide();
+            }
+            if (deviceData.qdisc && infoPopup.qdiscValue) {
+                infoPopup.qdiscLabel?.show();
+                infoPopup.qdiscValue?.show();
+                infoPopup.qdiscValue.text = deviceData.qdisc;
+            }
+            else {
+                infoPopup.qdiscLabel?.hide();
+                infoPopup.qdiscValue?.hide();
+            }
+            if (deviceData.parentbus &&
+                deviceData.parentdev &&
+                infoPopup.parentLabel &&
+                infoPopup.parentValue) {
+                infoPopup.parentLabel?.show();
+                infoPopup.parentValue?.show();
+                infoPopup.parentLabel.text = deviceData.parentbus;
+                infoPopup.parentValue.text = deviceData.parentdev;
+            }
+            else {
+                infoPopup.parentLabel?.hide();
+                infoPopup.parentValue?.hide();
+            }
+        }
+        if (addressesPopup) {
+            for (let i = 0; i < 10; i++) {
+                const address = addressesPopup.addresses[i];
+                if (address && deviceData.addr_info && deviceData.addr_info[i]) {
+                    const addrInfo = deviceData.addr_info[i];
+                    let label = 'Address ' + (i + 1);
+                    if (addrInfo.label)
+                        label += ` [${addrInfo.label}]`;
+                    address.labelValue.text = label;
+                    if (addrInfo.family) {
+                        address.familyLabel.show();
+                        address.familyValue.show();
+                        address.familyValue.text = addrInfo.family;
+                    }
+                    else {
+                        address.familyLabel.hide();
+                        address.familyValue.hide();
+                    }
+                    if (addrInfo.local) {
+                        address.localLabel.show();
+                        address.localValue.show();
+                        address.localValue.text = addrInfo.local;
+                    }
+                    else {
+                        address.localLabel.hide();
+                        address.localValue.hide();
+                    }
+                    if (addrInfo.prefixlen) {
+                        address.prefixlenLabel.show();
+                        address.prefixlenValue.show();
+                        address.prefixlenValue.text = addrInfo.prefixlen.toString();
+                    }
+                    else {
+                        address.prefixlenLabel.hide();
+                        address.prefixlenValue.hide();
+                    }
+                    if (addrInfo.broadcast) {
+                        address.broadcastLabel.show();
+                        address.broadcastValue.show();
+                        address.broadcastValue.text = addrInfo.broadcast;
+                    }
+                    else {
+                        address.broadcastLabel.hide();
+                        address.broadcastValue.hide();
+                    }
+                    if (addrInfo.scope) {
+                        address.scopeLabel.show();
+                        address.scopeValue.show();
+                        address.scopeValue.text = addrInfo.scope;
+                    }
+                    else {
+                        address.scopeLabel.hide();
+                        address.scopeValue.hide();
+                    }
+                }
+                else {
+                    address.labelValue.hide();
+                    address.familyLabel.hide();
+                    address.familyValue.hide();
+                    address.localLabel.hide();
+                    address.localValue.hide();
+                    address.prefixlenLabel.hide();
+                    address.prefixlenValue.hide();
+                    address.broadcastLabel.hide();
+                    address.broadcastValue.hide();
+                    address.scopeLabel.hide();
+                    address.scopeValue.hide();
+                }
+            }
+        }
+    }
+    addUtilityButtons() {
+        super.addUtilityButtons('network', box => {
+            const button = new St.Button({ styleClass: 'button' });
+            button.child = new St.Icon({
+                gicon: Utils.getLocalIcon('am-network-symbolic'),
+                fallbackIconName: 'network-wired-symbolic',
+            });
+            button.connect('clicked', () => {
+                this.close(AnimationUtils.getMenuParams(true));
+                GLib.spawn_command_line_async('gnome-control-center network');
+            });
+            box.add_child(button);
+        });
+    }
+    async onOpen() {
+        this.updateFreshOrShowLoading(Utils.networkMonitor, 'networkIO', 'networkIO', this.showNetworkIOLoading.bind(this));
+        Utils.networkMonitor.listen(this, 'networkIO', this.update.bind(this, 'networkIO', false));
+        this.updateFreshOrShowLoading(Utils.networkMonitor, 'detailedNetworkIO', 'detailedNetworkIO', this.clear.bind(this, 'devices'));
+        Utils.networkMonitor.listen(this, 'detailedNetworkIO', this.bindOpenUpdate('detailedNetworkIO', this.update.bind(this, 'detailedNetworkIO', false)));
+        this.scheduleTwoSampleOpenUpdate('detailedNetworkIO', Utils.networkMonitor, () => {
+            Utils.networkMonitor.requestUpdate('detailedNetworkIO');
+        });
+        this.updateFreshOrShowLoading(Utils.networkMonitor, 'topProcesses', 'topProcesses', this.clear.bind(this, 'topProcesses'));
+        Utils.networkMonitor.listen(this, 'topProcesses', this.update.bind(this, 'topProcesses', false));
+        Utils.networkMonitor.listen(this, 'topProcessesStop', this.update.bind(this, 'topProcessesStop', false));
+        this.refreshNethogsAvailability();
+        const publicIpsFresh = Utils.networkMonitor.secondsSinceLastIpsUpdate <= 60 * 5 * 3 &&
+            (Utils.networkMonitor.getCurrentValue('publicIpv4Address') ||
+                Utils.networkMonitor.getCurrentValue('publicIpv6Address'));
+        if (publicIpsFresh)
+            this.update('publicIps');
+        else
+            this.showPublicIpsLoading();
+        Utils.networkMonitor.listen(this, 'publicIps', this.update.bind(this, 'publicIps', false));
+        if (!publicIpsFresh && this.publicIpv6.refreshStatus === RefreshStatus.IDLE) {
+            this.scheduleOpenUpdate('publicIps', Utils.networkMonitor, () => {
+                this.publicIpv6.refreshStatus = RefreshStatus.REFRESHING;
+                this.updateIpsFooterLablel();
+                Utils.networkMonitor.updatePublicIps(true);
+            });
+        }
+        const routesFresh = this.updateFreshOrShowLoading(Utils.networkMonitor, 'routes', 'routes', this.showRoutesLoading.bind(this));
+        Utils.networkMonitor.listen(this, 'routes', this.update.bind(this, 'routes', false));
+        if (routesFresh) {
+            this.scheduleOpenUpdate('routes', Utils.networkMonitor, () => {
+                Utils.networkMonitor.requestUpdate('routes');
+            });
+        }
+        else {
+            Utils.networkMonitor.requestUpdate('routes');
+        }
+        if (this.canUseCachedValue(Utils.networkMonitor, 'wireless'))
+            this.update('wireless', true);
+        Utils.networkMonitor.listen(this, 'wireless', this.update.bind(this, 'wireless', false));
+        this.scheduleOpenUpdate('wireless', Utils.networkMonitor, () => {
+            Utils.networkMonitor.requestUpdate('wireless');
+        });
+        this.update('deviceList', true);
+        if (!this.updateTimer) {
+            this.updateTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Utils.networkMonitor.updateFrequency * 1000 * 2, () => {
+                this.update('deviceList', true);
+                return true;
+            });
+        }
+    }
+    onClose() {
+        super.onClose();
+        this.deviceListGeneration++;
+        this.stopPrivilegedTopProcesses();
+        Utils.networkMonitor.unlisten(this, 'networkIO');
+        Utils.networkMonitor.unlisten(this, 'detailedNetworkIO');
+        Utils.networkMonitor.unlisten(this, 'publicIps');
+        Utils.networkMonitor.unlisten(this, 'routes');
+        Utils.networkMonitor.unlisten(this, 'wireless');
+        Utils.networkMonitor.unlisten(this, 'topProcesses');
+        Utils.networkMonitor.unlisten(this, 'topProcessesStop');
+        if (this.updateTimer) {
+            GLib.source_remove(this.updateTimer);
+            this.updateTimer = 0;
+        }
+        if (this.publicIpv6.refreshTimer) {
+            GLib.source_remove(this.publicIpv6.refreshTimer);
+            this.publicIpv6.refreshTimer = 0;
+        }
+        this.publicIpv6.refreshStatus = RefreshStatus.IDLE;
+        this.setLoading(this.publicIPv4.value, false);
+        this.setLoading(this.publicIpv6.value1, false);
+        this.updateIpsFooterLablel();
+    }
+    showNetworkIOLoading() {
+        this.graph.setUsageHistory([]);
+        this.setLoading(this.totalUploadSpeedValueLabel, true);
+        this.setLoading(this.totalDownloadSpeedValueLabel, true);
+    }
+    showPublicIpsLoading() {
+        this.publicIPLabel.show();
+        this.publicIPContainer.show();
+        this.publicIPv4.label.show();
+        this.publicIPv4.value.show();
+        this.publicIpv6.label.show();
+        this.publicIpv6.value1.show();
+        this.publicIpv6.value2.hide();
+        this.setLoading(this.publicIPv4.value, true);
+        this.setLoading(this.publicIpv6.value1, true);
+        this.updateIpsFooterLablel();
+    }
+    showRoutesLoading() {
+        this.defaultRouteDevice.text = '';
+        this.routesPopup?.close(AnimationUtils.getMenuParams(true));
+        for (const popupRoute of this.routesPopup.routes) {
+            popupRoute.titleLabel.hide();
+            popupRoute.metricLabel.hide();
+            popupRoute.metricValue.text = '';
+            popupRoute.metricValue.hide();
+            popupRoute.typeLabel.hide();
+            popupRoute.typeValue.text = '';
+            popupRoute.typeValue.hide();
+            popupRoute.deviceLabel.hide();
+            popupRoute.deviceValue.text = '';
+            popupRoute.deviceValue.hide();
+            popupRoute.destinationLabel.hide();
+            popupRoute.destinationValue.text = '';
+            popupRoute.destinationValue.hide();
+            popupRoute.gatewayLabel.hide();
+            popupRoute.gatewayValue.text = '';
+            popupRoute.gatewayValue.hide();
+            popupRoute.protocolLabel.hide();
+            popupRoute.protocolValue.text = '';
+            popupRoute.protocolValue.hide();
+            popupRoute.scopeLabel.hide();
+            popupRoute.scopeValue.text = '';
+            popupRoute.scopeValue.hide();
+            popupRoute.flagsLabel.hide();
+            popupRoute.flagsValue.text = '';
+            popupRoute.flagsValue.hide();
+        }
+        this.setLoading(this.defaultRouteGateway, true);
+    }
+    update(code, forced = false) {
+        if (!this.needsUpdate(code, forced))
+            return;
+        if (code === 'deviceList') {
+            const generation = ++this.deviceListGeneration;
+            Utils.lowPriorityTask(() => {
+                if (!this.isOpen || generation !== this.deviceListGeneration)
+                    return;
+                this.updateDeviceList();
+            }, GLib.PRIORITY_DEFAULT);
+            return;
+        }
+        if (code === 'networkIO') {
+            const usage = Utils.networkMonitor.getUsageHistory('networkIO');
+            this.graph.setUsageHistory(usage);
+            const current = Utils.networkMonitor.getCurrentValue('networkIO');
+            if (current) {
+                this.setLoading(this.totalUploadSpeedValueLabel, false);
+                this.setLoading(this.totalDownloadSpeedValueLabel, false);
+                const unit = Config.get_string('network-io-unit');
+                if (current.bytesUploadedPerSec)
+                    this.totalUploadSpeedValueLabel.text = Utils.formatBytesPerSec(current.bytesUploadedPerSec, unit, 3);
+                else
+                    this.totalUploadSpeedValueLabel.text = '-';
+                if (current.bytesDownloadedPerSec)
+                    this.totalDownloadSpeedValueLabel.text = Utils.formatBytesPerSec(current.bytesDownloadedPerSec, unit, 3);
+                else
+                    this.totalDownloadSpeedValueLabel.text = '-';
+                if (this.networkActivityPopup) {
+                    if (this.networkActivityPopup.totalUploadedValueLabel) {
+                        if (current.totalBytesUploaded)
+                            this.networkActivityPopup.totalUploadedValueLabel.text =
+                                Utils.formatBytes(current.totalBytesUploaded, 'kB-KB', 3);
+                        else
+                            this.networkActivityPopup.totalUploadedValueLabel.text = '-';
+                    }
+                    if (this.networkActivityPopup.totalDownloadedValueLabel) {
+                        if (current.totalBytesDownloaded)
+                            this.networkActivityPopup.totalDownloadedValueLabel.text =
+                                Utils.formatBytes(current.totalBytesDownloaded, 'kB-KB', 3);
+                        else
+                            this.networkActivityPopup.totalDownloadedValueLabel.text = '-';
+                    }
+                    if (this.networkActivityPopup.packetsUploadedValueLabel) {
+                        if (current.packetsUploaded)
+                            this.networkActivityPopup.packetsUploadedValueLabel.text =
+                                Utils.formatHugeNumber(current.packetsUploaded);
+                        else
+                            this.networkActivityPopup.packetsUploadedValueLabel.text = '-';
+                    }
+                    if (this.networkActivityPopup.packetsDownloadedValueLabel) {
+                        if (current.packetsDownloaded)
+                            this.networkActivityPopup.packetsDownloadedValueLabel.text =
+                                Utils.formatHugeNumber(current.packetsDownloaded);
+                        else
+                            this.networkActivityPopup.packetsDownloadedValueLabel.text = '-';
+                    }
+                    if (this.networkActivityPopup.errorsUploadValueLabel) {
+                        if (current.errorsUpload)
+                            this.networkActivityPopup.errorsUploadValueLabel.text =
+                                Utils.formatHugeNumber(current.errorsUpload);
+                        else
+                            this.networkActivityPopup.errorsUploadValueLabel.text = '-';
+                    }
+                    if (this.networkActivityPopup.errorsDownloadValueLabel) {
+                        if (current.errorsDownload)
+                            this.networkActivityPopup.errorsDownloadValueLabel.text =
+                                Utils.formatHugeNumber(current.errorsDownload);
+                        else
+                            this.networkActivityPopup.errorsDownloadValueLabel.text = '-';
+                    }
+                }
+            }
+            else {
+                this.showNetworkIOLoading();
+                if (this.networkActivityPopup) {
+                    if (this.networkActivityPopup.totalUploadedValueLabel)
+                        this.networkActivityPopup.totalUploadedValueLabel.text = '-';
+                    if (this.networkActivityPopup.totalDownloadedValueLabel)
+                        this.networkActivityPopup.totalDownloadedValueLabel.text = '-';
+                    if (this.networkActivityPopup.packetsUploadedValueLabel)
+                        this.networkActivityPopup.packetsUploadedValueLabel.text = '-';
+                    if (this.networkActivityPopup.packetsDownloadedValueLabel)
+                        this.networkActivityPopup.packetsDownloadedValueLabel.text = '-';
+                    if (this.networkActivityPopup.errorsUploadValueLabel)
+                        this.networkActivityPopup.errorsUploadValueLabel.text = '-';
+                    if (this.networkActivityPopup.errorsDownloadValueLabel)
+                        this.networkActivityPopup.errorsDownloadValueLabel.text = '-';
+                }
+            }
+            return;
+        }
+        if (code === 'detailedNetworkIO') {
+            const current = Utils.networkMonitor.getCurrentValue('detailedNetworkIO');
+            if (current) {
+                for (const [id, device] of this.devices.entries()) {
+                    const data = current.get(id);
+                    if (data) {
+                        const unit = Config.get_string('network-io-unit');
+                        if (data.bytesUploadedPerSec) {
+                            device.uploadValueLabel.text = Utils.formatBytesPerSec(data.bytesUploadedPerSec, unit, 3);
+                            const uploadColor = Config.get_string('network-menu-arrow-color1') ??
+                                'rgba(29,172,214,1.0)';
+                            device.uploadActivityIcon.style = `color:${uploadColor};`;
+                        }
+                        else {
+                            device.uploadValueLabel.text = '-';
+                            device.uploadActivityIcon.style = 'color:rgba(255,255,255,0.5);';
+                        }
+                        if (data.bytesDownloadedPerSec) {
+                            device.downloadValueLabel.text = Utils.formatBytesPerSec(data.bytesDownloadedPerSec, unit, 3);
+                            const downloadColor = Config.get_string('network-menu-arrow-color2') ??
+                                'rgba(214,29,29,1.0)';
+                            device.downloadActivityIcon.style = `color:${downloadColor};`;
+                        }
+                        else {
+                            device.downloadValueLabel.text = '-';
+                            device.downloadActivityIcon.style = 'color:rgba(255,255,255,0.5);';
+                        }
+                        const totalsPopup = this.devicesTotalsPopup.get(id);
+                        if (totalsPopup) {
+                            if (totalsPopup.totalUploadedValueLabel) {
+                                if (data.totalBytesUploaded)
+                                    totalsPopup.totalUploadedValueLabel.text = Utils.formatBytes(data.totalBytesUploaded, 'kB-KB', 3);
+                                else
+                                    totalsPopup.totalUploadedValueLabel.text = '-';
+                            }
+                            if (totalsPopup.totalDownloadedValueLabel) {
+                                if (data.totalBytesDownloaded)
+                                    totalsPopup.totalDownloadedValueLabel.text = Utils.formatBytes(data.totalBytesDownloaded, 'kB-KB', 3);
+                                else
+                                    totalsPopup.totalDownloadedValueLabel.text = '-';
+                            }
+                            if (totalsPopup.packetsUploadedValueLabel) {
+                                if (data.packetsUploaded)
+                                    totalsPopup.packetsUploadedValueLabel.text =
+                                        Utils.formatHugeNumber(data.packetsUploaded);
+                                else
+                                    totalsPopup.packetsUploadedValueLabel.text = '-';
+                            }
+                            if (totalsPopup.packetsDownloadedValueLabel) {
+                                if (data.packetsDownloaded)
+                                    totalsPopup.packetsDownloadedValueLabel.text =
+                                        Utils.formatHugeNumber(data.packetsDownloaded);
+                                else
+                                    totalsPopup.packetsDownloadedValueLabel.text = '-';
+                            }
+                            if (totalsPopup.errorsUploadValueLabel) {
+                                if (data.errorsUpload)
+                                    totalsPopup.errorsUploadValueLabel.text =
+                                        Utils.formatHugeNumber(data.errorsUpload);
+                                else
+                                    totalsPopup.errorsUploadValueLabel.text = '-';
+                            }
+                            if (totalsPopup.errorsDownloadValueLabel) {
+                                if (data.errorsDownload)
+                                    totalsPopup.errorsDownloadValueLabel.text =
+                                        Utils.formatHugeNumber(data.errorsDownload);
+                                else
+                                    totalsPopup.errorsDownloadValueLabel.text = '-';
+                            }
+                        }
+                    }
+                    else {
+                        device.uploadValueLabel.text = '-';
+                        device.uploadActivityIcon.style = 'color:rgba(255,255,255,0.5);';
+                        device.downloadValueLabel.text = '-';
+                        device.downloadActivityIcon.style = 'color:rgba(255,255,255,0.5);';
+                        const totalsPopup = this.devicesTotalsPopup.get(id);
+                        if (totalsPopup) {
+                            if (totalsPopup.totalUploadedValueLabel)
+                                totalsPopup.totalUploadedValueLabel.text = '-';
+                            if (totalsPopup.totalDownloadedValueLabel)
+                                totalsPopup.totalDownloadedValueLabel.text = '-';
+                            if (totalsPopup.packetsUploadedValueLabel)
+                                totalsPopup.packetsUploadedValueLabel.text = '-';
+                            if (totalsPopup.packetsDownloadedValueLabel)
+                                totalsPopup.packetsDownloadedValueLabel.text = '-';
+                            if (totalsPopup.errorsUploadValueLabel)
+                                totalsPopup.errorsUploadValueLabel.text = '-';
+                            if (totalsPopup.errorsDownloadValueLabel)
+                                totalsPopup.errorsDownloadValueLabel.text = '-';
+                        }
+                    }
+                }
+            }
+            return;
+        }
+        if (code === 'topProcessesStop') {
+            this.stopPrivilegedTopProcesses();
+            return;
+        }
+        if (code === 'topProcesses') {
+            const topProcesses = Utils.networkMonitor.getCurrentValue('topProcesses');
+            if (Utils.nethogsHasCapsCached() !== true) {
+                this.startPrivilegedTopProcesses();
+            }
+            const loading = !topProcesses ||
+                !Array.isArray(topProcesses) ||
+                this.isOpenUpdatePending('topProcesses');
+            for (let i = 0; i < NetworkMonitor.TOP_PROCESSES_LIMIT; i++) {
+                if (loading || !topProcesses[i] || !topProcesses[i].process) {
+                    if (i < 3) {
+                        this.setLoading(this.topProcesses.labels[i].label, loading);
+                        this.topProcesses.labels[i].label.text = loading ? '' : '-';
+                        this.topProcesses.labels[i].upload.value.text = '';
+                        this.topProcesses.labels[i].upload.icon.style =
+                            'color:rgba(255,255,255,0.5);';
+                        this.topProcesses.labels[i].download.value.text = '';
+                        this.topProcesses.labels[i].download.icon.style =
+                            'color:rgba(255,255,255,0.5);';
+                    }
+                    if (this.topProcessesPopup && this.topProcessesPopup.processes) {
+                        const popupElement = this.topProcessesPopup.processes.get(i);
+                        if (popupElement) {
+                            popupElement.label.text = '';
+                            popupElement.upload.value.text = '';
+                            popupElement.download.value.text = '';
+                            popupElement.label.hide();
+                            popupElement.description?.hide();
+                            popupElement.upload.container.hide();
+                            popupElement.download.container.hide();
+                        }
+                    }
+                }
+                else {
+                    const unit = 'kB/s';
+                    const topProcess = topProcesses[i];
+                    const process = topProcess.process;
+                    const upload = topProcess.upload;
+                    const download = topProcess.download;
+                    if (i < 3) {
+                        this.setLoading(this.topProcesses.labels[i].label, false);
+                        this.topProcesses.labels[i].label.text = process.exec;
+                        if (upload > 0) {
+                            const uploadColor = Config.get_string('network-menu-arrow-color1') ??
+                                'rgba(29,172,214,1.0)';
+                            this.topProcesses.labels[i].upload.icon.style = `color:${uploadColor};`;
+                            this.topProcesses.labels[i].upload.value.text = Utils.formatBytesPerSec(upload, unit, 3);
+                        }
+                        else {
+                            this.topProcesses.labels[i].upload.icon.style =
+                                'color:rgba(255,255,255,0.5);';
+                            this.topProcesses.labels[i].upload.value.text = '-';
+                        }
+                        if (download > 0) {
+                            const downloadColor = Config.get_string('network-menu-arrow-color2') ??
+                                'rgba(214,29,29,1.0)';
+                            this.topProcesses.labels[i].download.icon.style =
+                                `color:${downloadColor};`;
+                            this.topProcesses.labels[i].download.value.text =
+                                Utils.formatBytesPerSec(download, unit, 3);
+                        }
+                        else {
+                            this.topProcesses.labels[i].download.icon.style =
+                                'color:rgba(255,255,255,0.5);';
+                            this.topProcesses.labels[i].download.value.text = '-';
+                        }
+                    }
+                    if (this.topProcessesPopup && this.topProcessesPopup.processes) {
+                        const popupElement = this.topProcessesPopup.processes.get(i);
+                        if (popupElement) {
+                            popupElement.label.show();
+                            popupElement.label.text = process.exec;
+                            if (popupElement.description) {
+                                popupElement.description.show();
+                                popupElement.description.text = process.cmd;
+                            }
+                            popupElement.upload.container.show();
+                            if (upload > 0) {
+                                const uploadColor = Config.get_string('network-menu-arrow-color1') ??
+                                    'rgba(29,172,214,1.0)';
+                                popupElement.upload.icon.style = `color:${uploadColor};`;
+                                popupElement.upload.value.text = Utils.formatBytesPerSec(upload, unit, 3);
+                            }
+                            else {
+                                popupElement.upload.icon.style = 'color:rgba(255,255,255,0.5);';
+                                popupElement.upload.value.text = '-';
+                            }
+                            popupElement.download.container.show();
+                            if (download > 0) {
+                                const downloadColor = Config.get_string('network-menu-arrow-color2') ??
+                                    'rgba(214,29,29,1.0)';
+                                popupElement.download.icon.style = `color:${downloadColor};`;
+                                popupElement.download.value.text = Utils.formatBytesPerSec(download, unit, 3);
+                            }
+                            else {
+                                popupElement.download.icon.style = 'color:rgba(255,255,255,0.5);';
+                                popupElement.download.value.text = '-';
+                            }
+                        }
+                    }
+                }
+            }
+            return;
+        }
+        if (code === 'publicIps') {
+            this.setLoading(this.publicIPv4.value, false);
+            this.setLoading(this.publicIpv6.value1, false);
+            if (this.publicIpv6.refreshStatus === RefreshStatus.REFRESHING) {
+                this.publicIpv6.refreshStatus = RefreshStatus.DONE;
+                this.updateIpsFooterLablel();
+                this.publicIpv6.refreshTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
+                    this.publicIpv6.refreshStatus = RefreshStatus.IDLE;
+                    this.updateIpsFooterLablel();
+                    return GLib.SOURCE_REMOVE;
+                });
+            }
+            else {
+                this.updateIpsFooterLablel();
+            }
+            const publicIPv4 = Utils.networkMonitor.getCurrentValue('publicIpv4Address');
+            if (publicIPv4) {
+                this.publicIPv4.label.show();
+                this.publicIPv4.value.show();
+                this.publicIPv4.value.text = publicIPv4;
+            }
+            else {
+                this.publicIPv4.label.hide();
+                this.publicIPv4.value.hide();
+            }
+            const publicIpv6 = Utils.networkMonitor.getCurrentValue('publicIpv6Address');
+            if (publicIpv6) {
+                this.publicIpv6.label.show();
+                if (publicIpv6.length >= 20) {
+                    this.publicIpv6.value1.show();
+                    this.publicIpv6.value2.show();
+                    const parts = publicIpv6.split(':');
+                    const mid = Math.floor(parts.length / 2);
+                    const part1 = parts.slice(0, mid).join(':') + ':';
+                    const part2 = parts.slice(mid).join(':');
+                    this.publicIpv6.value1.text = part1;
+                    this.publicIpv6.value2.text = part2;
+                }
+                else {
+                    this.publicIpv6.value1.show();
+                    this.publicIpv6.value2.hide();
+                    this.publicIpv6.value1.text = publicIpv6;
+                }
+            }
+            else {
+                this.publicIpv6.label.hide();
+                this.publicIpv6.value1.hide();
+            }
+            if (!publicIPv4 && !publicIpv6) {
+                this.publicIPLabel.hide();
+                this.publicIPContainer.hide();
+            }
+            else {
+                this.publicIPLabel.show();
+                this.publicIPContainer.show();
+            }
+            return;
+        }
+        if (code === 'routes') {
+            const routes = Utils.networkMonitor.getCurrentValue('routes');
+            if (routes && routes.length > 0) {
+                this.setLoading(this.defaultRouteGateway, false);
+                for (let i = 0; i < 5; i++) {
+                    const route = routes[i];
+                    if (i === 0) {
+                        this.defaultRouteDevice.text = route.device;
+                        this.defaultRouteGateway.text = route.gateway;
+                    }
+                    const popupRoute = this.routesPopup.routes[i];
+                    if (!popupRoute)
+                        break;
+                    if (!route) {
+                        popupRoute.titleLabel.hide();
+                        popupRoute.metricLabel.hide();
+                        popupRoute.metricValue.hide();
+                        popupRoute.typeLabel.hide();
+                        popupRoute.typeValue.hide();
+                        popupRoute.deviceLabel.hide();
+                        popupRoute.deviceValue.hide();
+                        popupRoute.destinationLabel.hide();
+                        popupRoute.destinationValue.hide();
+                        popupRoute.gatewayLabel.hide();
+                        popupRoute.gatewayValue.hide();
+                        popupRoute.protocolLabel.hide();
+                        popupRoute.protocolValue.hide();
+                        popupRoute.scopeLabel.hide();
+                        popupRoute.scopeValue.hide();
+                        popupRoute.flagsLabel.hide();
+                        popupRoute.flagsValue.hide();
+                        continue;
+                    }
+                    popupRoute.titleLabel.show();
+                    popupRoute.metricLabel.show();
+                    popupRoute.metricValue.text = route.metric?.toString() ?? '0';
+                    popupRoute.metricValue.show();
+                    popupRoute.typeLabel.show();
+                    popupRoute.typeValue.text = route.type ?? '-';
+                    popupRoute.typeValue.show();
+                    popupRoute.deviceLabel.show();
+                    popupRoute.deviceValue.text = route.device;
+                    popupRoute.deviceValue.show();
+                    popupRoute.destinationLabel.show();
+                    popupRoute.destinationValue.text = route.destination ?? '-';
+                    popupRoute.destinationValue.show();
+                    popupRoute.gatewayLabel.show();
+                    popupRoute.gatewayValue.text = route.gateway ?? '-';
+                    popupRoute.gatewayValue.show();
+                    popupRoute.protocolLabel.show();
+                    popupRoute.protocolValue.text = route.protocol ?? '-';
+                    popupRoute.protocolValue.show();
+                    popupRoute.scopeLabel.show();
+                    popupRoute.scopeValue.text = route.scope ?? '-';
+                    popupRoute.scopeValue.show();
+                    if (route.flags && route.flags.length > 0) {
+                        popupRoute.flagsLabel.show();
+                        popupRoute.flagsValue.text = route.flags.join(', ');
+                        popupRoute.flagsValue.show();
+                    }
+                    else {
+                        popupRoute.flagsLabel.hide();
+                        popupRoute.flagsValue.hide();
+                    }
+                }
+            }
+            else {
+                this.setLoading(this.defaultRouteGateway, false);
+                this.defaultRouteDevice.text = '-';
+                this.defaultRouteGateway.text = '-';
+                for (const popupRoute of this.routesPopup.routes) {
+                    popupRoute.titleLabel.hide();
+                    popupRoute.metricLabel.hide();
+                    popupRoute.metricValue.text = '';
+                    popupRoute.metricValue.hide();
+                    popupRoute.typeLabel.hide();
+                    popupRoute.typeValue.text = '';
+                    popupRoute.typeValue.hide();
+                    popupRoute.deviceLabel.hide();
+                    popupRoute.deviceValue.text = '';
+                    popupRoute.deviceValue.hide();
+                    popupRoute.destinationLabel.hide();
+                    popupRoute.destinationValue.text = '';
+                    popupRoute.destinationValue.hide();
+                    popupRoute.gatewayLabel.hide();
+                    popupRoute.gatewayValue.text = '';
+                    popupRoute.gatewayValue.hide();
+                    popupRoute.protocolLabel.hide();
+                    popupRoute.protocolValue.text = '';
+                    popupRoute.protocolValue.hide();
+                    popupRoute.scopeLabel.hide();
+                    popupRoute.scopeValue.text = '';
+                    popupRoute.scopeValue.hide();
+                    popupRoute.flagsLabel.hide();
+                    popupRoute.flagsValue.text = '';
+                    popupRoute.flagsValue.hide();
+                }
+            }
+            return;
+        }
+        if (code === 'wireless') {
+            const wirelessDevices = Utils.networkMonitor.getCurrentValue('wireless');
+            if (!wirelessDevices) {
+                for (const info of this.devices.values())
+                    info.wirelessButton.hide();
+            }
+            else {
+                for (const [id, info] of this.devices.entries()) {
+                    const popup = this.devicesWirelessPopup.get(id);
+                    if (!popup) {
+                        info.wirelessButton.hide();
+                    }
+                    else {
+                        const wirelessInfo = wirelessDevices.get(id);
+                        if (!wirelessInfo || !wirelessInfo.EESSID) {
+                            info.wirelessButton.hide();
+                        }
+                        else {
+                            info.wirelessLabel.text = wirelessInfo.EESSID;
+                            info.wirelessButton.show();
+                            if (wirelessInfo.IEEE && popup.IEEEValue) {
+                                popup.IEEELabel?.show();
+                                popup.IEEEValue.show();
+                                popup.IEEEValue.text = wirelessInfo.IEEE;
+                            }
+                            else {
+                                popup.IEEELabel?.hide();
+                                popup.IEEEValue?.hide();
+                            }
+                            if (wirelessInfo.EESSID && popup.SSIDValue) {
+                                popup.SSIDLabel?.show();
+                                popup.SSIDValue.show();
+                                popup.SSIDValue.text = wirelessInfo.EESSID;
+                            }
+                            else {
+                                popup.SSIDLabel?.hide();
+                                popup.SSIDValue?.hide();
+                            }
+                            if (wirelessInfo.mode && popup.modeValue) {
+                                popup.modeLabel?.show();
+                                popup.modeValue.show();
+                                popup.modeValue.text = wirelessInfo.mode;
+                            }
+                            else {
+                                popup.modeLabel?.hide();
+                                popup.modeValue?.hide();
+                            }
+                            if (wirelessInfo.frequency && popup.frequencyValue) {
+                                popup.frequencyLabel?.show();
+                                popup.frequencyValue.show();
+                                popup.frequencyValue.text = wirelessInfo.frequency;
+                            }
+                            else {
+                                popup.frequencyLabel?.hide();
+                                popup.frequencyValue?.hide();
+                            }
+                            if (wirelessInfo.accessPoint && popup.accessPointValue) {
+                                popup.accessPointLabel?.show();
+                                popup.accessPointValue.show();
+                                popup.accessPointValue.text = wirelessInfo.accessPoint;
+                            }
+                            else {
+                                popup.accessPointLabel?.hide();
+                                popup.accessPointValue?.hide();
+                            }
+                            if (wirelessInfo.bitRate && popup.bitRateValue) {
+                                popup.bitRateLabel?.show();
+                                popup.bitRateValue.show();
+                                popup.bitRateValue.text = wirelessInfo.bitRate;
+                            }
+                            else {
+                                popup.bitRateLabel?.hide();
+                                popup.bitRateValue?.hide();
+                            }
+                            if (wirelessInfo.txPower && popup.txPowerValue) {
+                                popup.txPowerLabel?.show();
+                                popup.txPowerValue.show();
+                                popup.txPowerValue.text = wirelessInfo.txPower;
+                            }
+                            else {
+                                popup.txPowerLabel?.hide();
+                                popup.txPowerValue?.hide();
+                            }
+                            if (wirelessInfo.linkQuality && popup.linkQualityValue) {
+                                popup.linkQualityLabel?.show();
+                                popup.linkQualityValue.show();
+                                popup.linkQualityValue.text = wirelessInfo.linkQuality;
+                            }
+                            else {
+                                popup.linkQualityLabel?.hide();
+                                popup.linkQualityValue?.hide();
+                            }
+                            if (wirelessInfo.signalLevel && popup.signalLevelValue) {
+                                popup.signalLevelLabel?.show();
+                                popup.signalLevelValue.show();
+                                popup.signalLevelValue.text = wirelessInfo.signalLevel;
+                            }
+                            else {
+                                popup.signalLevelLabel?.hide();
+                                popup.signalLevelValue?.hide();
+                            }
+                        }
+                    }
+                }
+            }
+            return;
+        }
+    }
+    startPrivilegedTopProcesses() {
+        if (Utils.nethogsHasCapsCached() === true || this.privilegedTopProcesses) {
+            return;
+        }
+        this.privilegedTopProcesses = true;
+        if (this.topProcesses.subSeparator) {
+            this.topProcesses.subSeparator.hide();
+        }
+        this.topProcesses.hoverButton.show();
+    }
+    stopPrivilegedTopProcesses() {
+        if (Utils.nethogsHasCapsCached() === true || !this.privilegedTopProcesses) {
+            return;
+        }
+        this.privilegedTopProcesses = false;
+        Utils.networkMonitor.stopNethogs();
+        if (this.topProcesses.subSeparator) {
+            this.topProcesses.subSeparator.show();
+        }
+        this.topProcesses.hoverButton.hide();
+    }
+    clear(code = 'all') {
+        if (code === 'all' || code === 'networkIO') {
+            this.totalUploadSpeedValueLabel.text = '-';
+            this.totalDownloadSpeedValueLabel.text = '-';
+        }
+        if (code === 'all' || code === 'devices') {
+            for (const [_id, device] of this.devices.entries()) {
+                device.uploadValueLabel.text = '';
+                device.uploadActivityIcon.style = 'color:rgba(255,255,255,0.5);';
+                device.downloadValueLabel.text = '';
+                device.downloadActivityIcon.style = 'color:rgba(255,255,255,0.5);';
+            }
+            for (const [_id, totalsPopup] of this.devicesTotalsPopup.entries()) {
+                if (totalsPopup.totalUploadedValueLabel)
+                    totalsPopup.totalUploadedValueLabel.text = '-';
+                if (totalsPopup.totalDownloadedValueLabel)
+                    totalsPopup.totalDownloadedValueLabel.text = '-';
+                if (totalsPopup.packetsUploadedValueLabel)
+                    totalsPopup.packetsUploadedValueLabel.text = '-';
+                if (totalsPopup.packetsDownloadedValueLabel)
+                    totalsPopup.packetsDownloadedValueLabel.text = '-';
+                if (totalsPopup.errorsUploadValueLabel)
+                    totalsPopup.errorsUploadValueLabel.text = '-';
+                if (totalsPopup.errorsDownloadValueLabel)
+                    totalsPopup.errorsDownloadValueLabel.text = '-';
+            }
+        }
+        if (code === 'all' || code === 'networkActivity') {
+            if (this.networkActivityPopup) {
+                if (this.networkActivityPopup.totalUploadedValueLabel)
+                    this.networkActivityPopup.totalUploadedValueLabel.text = '-';
+                if (this.networkActivityPopup.totalDownloadedValueLabel)
+                    this.networkActivityPopup.totalDownloadedValueLabel.text = '-';
+                if (this.networkActivityPopup.packetsUploadedValueLabel)
+                    this.networkActivityPopup.packetsUploadedValueLabel.text = '-';
+                if (this.networkActivityPopup.packetsDownloadedValueLabel)
+                    this.networkActivityPopup.packetsDownloadedValueLabel.text = '-';
+                if (this.networkActivityPopup.errorsUploadValueLabel)
+                    this.networkActivityPopup.errorsUploadValueLabel.text = '-';
+                if (this.networkActivityPopup.errorsDownloadValueLabel)
+                    this.networkActivityPopup.errorsDownloadValueLabel.text = '-';
+            }
+        }
+        if (code === 'all' || code === 'topProcesses') {
+            if (this.topProcesses) {
+                for (let i = 0; i < NetworkMonitor.TOP_PROCESSES_LIMIT; i++) {
+                    if (this.topProcesses.labels && i < 3) {
+                        this.setLoading(this.topProcesses.labels[i].label, true);
+                        this.topProcesses.labels[i].label.text = '';
+                        this.topProcesses.labels[i].upload.value.text = '';
+                        this.topProcesses.labels[i].upload.icon.style =
+                            'color:rgba(255,255,255,0.5);';
+                        this.topProcesses.labels[i].download.value.text = '';
+                        this.topProcesses.labels[i].download.icon.style =
+                            'color:rgba(255,255,255,0.5);';
+                    }
+                    if (this.topProcessesPopup && this.topProcessesPopup.processes) {
+                        const popupElement = this.topProcessesPopup.processes.get(i);
+                        if (popupElement) {
+                            popupElement.label.text = '';
+                            popupElement.upload.value.text = '';
+                            popupElement.download.value.text = '';
+                            popupElement.label.hide();
+                            popupElement.description?.hide();
+                            popupElement.upload.container.hide();
+                            popupElement.download.container.hide();
+                        }
+                    }
+                }
+            }
+        }
+        if (code === 'all' || code === 'publicIps') {
+            this.publicIPv4.value.text = '';
+            this.publicIpv6.value1.text = '';
+            this.publicIpv6.value2.hide();
+            this.publicIpv6.refreshStatus = RefreshStatus.IDLE;
+            this.updateIpsFooterLablel();
+        }
+        if (code === 'all' || code === 'routes') {
+            this.defaultRouteDevice.text = '';
+            this.defaultRouteGateway.text = '';
+            for (const popupRoute of this.routesPopup.routes) {
+                popupRoute.titleLabel.hide();
+                popupRoute.metricLabel.hide();
+                popupRoute.metricValue.text = '';
+                popupRoute.metricValue.hide();
+                popupRoute.typeLabel.hide();
+                popupRoute.typeValue.text = '';
+                popupRoute.typeValue.hide();
+                popupRoute.deviceLabel.hide();
+                popupRoute.deviceValue.text = '';
+                popupRoute.deviceValue.hide();
+                popupRoute.destinationLabel.hide();
+                popupRoute.destinationValue.text = '';
+                popupRoute.destinationValue.hide();
+                popupRoute.gatewayLabel.hide();
+                popupRoute.gatewayValue.text = '';
+                popupRoute.gatewayValue.hide();
+                popupRoute.protocolLabel.hide();
+                popupRoute.protocolValue.text = '';
+                popupRoute.protocolValue.hide();
+                popupRoute.scopeLabel.hide();
+                popupRoute.scopeValue.text = '';
+                popupRoute.scopeValue.hide();
+                popupRoute.flagsLabel.hide();
+                popupRoute.flagsValue.text = '';
+                popupRoute.flagsValue.hide();
+            }
+        }
+    }
+    destroy() {
+        this.deviceListGeneration++;
+        this.close(AnimationUtils.getMenuParams(false));
+        this.onClose();
+        this.stopPrivilegedTopProcesses();
+        Utils.networkMonitor.unlisten(this, 'topProcessesStop');
+        Config.clear(this);
+        Signal.clear(this.publicIPContainer);
+        this.graph?.destroy();
+        this.graph = undefined;
+        if (this.publicIpv6.refreshTimer) {
+            GLib.source_remove(this.publicIpv6.refreshTimer);
+            this.publicIpv6.refreshTimer = 0;
+        }
+        this.networkActivityPopup?.destroy();
+        this.networkActivityPopup = undefined;
+        this.topProcessesPopup?.destroy();
+        this.topProcessesPopup = undefined;
+        this.topProcesses = undefined;
+        this.routesPopup?.destroy();
+        this.routesPopup = undefined;
+        if (this.devicesInfoPopup) {
+            for (const popup of this.devicesInfoPopup.values()) {
+                popup.destroy();
+            }
+            this.devicesInfoPopup = undefined;
+        }
+        if (this.devicesWirelessPopup) {
+            for (const popup of this.devicesWirelessPopup.values()) {
+                popup.destroy();
+            }
+            this.devicesWirelessPopup = undefined;
+        }
+        if (this.devicesTotalsPopup) {
+            for (const popup of this.devicesTotalsPopup.values()) {
+                popup.destroy();
+            }
+            this.devicesTotalsPopup = undefined;
+        }
+        if (this.devicesAddressesPopup) {
+            for (const popup of this.devicesAddressesPopup.values()) {
+                popup.destroy();
+            }
+            this.devicesAddressesPopup = undefined;
+        }
+        super.destroy();
+    }
+}

@@ -1,0 +1,433 @@
+[/]
+app-picker-layout=[{'org.fedoraproject.MediaWriter.desktop': <{'position': <0>}>, 'org.gnome.Contacts.desktop': <{'position': <1>}>, 'org.gnome.Weather.desktop': <{'position': <2>}>, 'org.gnome.clocks.desktop': <{'position': <3>}>, 'org.gnome.Maps.desktop': <{'position': <4>}>, 'libreoffice-calc.desktop': <{'position': <5>}>, 'org.gnome.SimpleScan.desktop': <{'position': <6>}>, 'org.gnome.Settings.desktop': <{'position': <7>}>, 'org.gnome.Boxes.desktop': <{'position': <8>}>, 'org.gnome.Showtime.desktop': <{'position': <9>}>, 'org.gnome.Snapshot.desktop': <{'position': <10>}>, 'org.gnome.Characters.desktop': <{'position': <11>}>, 'Utilities': <{'position': <12>}>, 'System': <{'position': <13>}>, 'libreoffice-impress.desktop': <{'position': <14>}>, 'org.gnome.Tour.desktop': <{'position': <15>}>, 'org.gnome.Yelp.desktop': <{'position': <16>}>, 'libreoffice-writer.desktop': <{'position': <17>}>, 'org.flameshot.Flameshot.desktop': <{'position': <18>}>, 'org.mozilla.firefox.desktop': <{'position': <19>}>, 'net.lutris.Lutris.desktop': <{'position': <20>}>}, {'org.gnome.Calendar.desktop': <{'position': <0>}>, 'org.gnome.Calculator.desktop': <{'position': <1>}>, 'calf.desktop': <{'position': <2>}>, 'com.github.wwmm.easyeffects.desktop': <{'position': <3>}>, 'com.mattjakeman.ExtensionManager.desktop': <{'position': <4>}>, 'org.gnome.Extensions.desktop': <{'position': <5>}>, 'org.gnome.TextEditor.desktop': <{'position': <6>}>, 'org.gnome.Software.desktop': <{'position': <7>}>, 'hu.irl.cameractrls.desktop': <{'position': <8>}>, 'droidcam.desktop': <{'position': <9>}>, 'guvcview.desktop': <{'position': <10>}>, 'opencascade-draw.desktop': <{'position': <11>}>, 'Aula.desktop': <{'position': <12>}>, 'one.alynx.FlipClock.desktop': <{'position': <13>}>, 'ubuntu.desktop': <{'position': <14>}>, 'com.microsoft.VSCode.desktop': <{'position': <15>}>, 'echomixer.desktop': <{'position': <16>}>, 'envy24control.desktop': <{'position': <17>}>, 'hdajackretask.desktop': <{'position': <18>}>, 'hdspconf.desktop': <{'position': <19>}>, 'hdspmixer.desktop': <{'position': <20>}>, 'hwmixvolume.desktop': <{'position': <21>}>, 'net.sonobus.SonoBus.desktop': <{'position': <22>}>, 'org.gnome.seahorse.Application.desktop': <{'position': <23>}>}, {'org.gnome.Screenshot.desktop': <{'position': <0>}>, 'xonotic.desktop': <{'position': <1>}>}]
+command-history=['f2', 'r']
+disable-extension-version-validation=true
+disable-user-extensions=false
+disabled-extensions=['magnific-launcher@gilsonf', 'custom-osd@neuromorph', 'copyq-clipboard@hluk.github.com', 'Vitals@CoreCoding.com', 'rounded-window-corners@yilozt', 'focuslock@kavinda', 'burn-my-windows@schneegans.github.com', 'caffeine@patapon.info', 'just-perfection-desktop@just-perfection', 'quick-settings-tweaks@qwreey', 'macos-dock@vinnytherobot.github.io', 'appindicatorsupport@rgcjonas.gmail.com', 'background-logo@fedorahosted.org', 'dash-to-panel@jderose9.github.com', 'launch-new-instance@gnome-shell-extensions.gcampax.github.com', 'window-list@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com', 'dash2dock-lite@icedman.github.com', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com']
+enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'monitor@astraext.github.io', 'blur-my-shell@aunetx', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-shell@rinzler69-wastaken.github.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'compiz-windows-effect@hermes83.github.com', 'ding@rastersoft.com', 'tiling-assistant@leleat-on-github']
+favorite-apps=['app.zen_browser.zen.desktop', 'com.spotify.Client.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop', 'com.rtosta.zapzap.desktop']
+last-selected-power-profile='performance'
+welcome-dialog-last-shown-version='50.0'
+
+[app-switcher]
+current-workspace-only=true
+
+[extensions/astra-monitor]
+gpu-indicators-order='["icon","activity bar","activity graph","activity percentage","memory bar","memory graph","memory percentage","memory value"]'
+headers-height=0
+headers-height-override=0
+memory-indicators-order='["icon","bar","graph","percentage","value","free"]'
+monitors-order='["processor","gpu","memory","storage","network","sensors"]'
+network-indicators-order='["icon","IO bar","IO graph","IO speed"]'
+processor-indicators-order='["icon","bar","graph","percentage","frequency"]'
+processor-menu-gpu-color=''
+profiles='{"default":{"panel-margin-left":0,"sensors-header-tooltip-sensor2-digits":-1,"memory-update":3,"gpu-header-memory-graph-color1":"rgba(29,172,214,1.0)","panel-box":"right","memory-header-show":true,"network-header-tooltip-io":true,"processor-header-bars-color2":"rgba(214,29,29,1.0)","processor-header-icon-size":18,"storage-source-storage-io":"auto","sensors-header-tooltip-sensor4-name":"","storage-header-icon-color":"","network-source-public-ipv4":"https://api.ipify.org","storage-header-io-graph-color2":"rgba(214,29,29,1.0)","storage-header-io":false,"processor-menu-top-processes-percentage-core":true,"sensors-header-sensor1":"\\"\\"","processor-header-graph":true,"storage-header-graph-width":30,"network-header-bars":false,"processor-source-load-avg":"auto","network-menu-arrow-color1":"rgba(29,172,214,1.0)","network-source-top-processes":"auto","gpu-header-icon":true,"processor-menu-graph-breakdown":true,"storage-ignored":"\\"[]\\"","sensors-header-icon-custom":"","sensors-header-sensor2":"\\"\\"","network-header-icon-alert-color":"rgba(235, 64, 52, 1)","memory-header-tooltip-free":false,"storage-header-io-figures":2,"network-menu-arrow-color2":"rgba(214,29,29,1.0)","sensors-header-tooltip-sensor3-name":"","network-source-public-ipv6":"https://api6.ipify.org","monitors-order":"\\"\\"","network-header-graph":true,"network-indicators-order":"\\"\\"","memory-header-percentage":false,"gpu-data":"[]","storage-header-bars":true,"processor-header-tooltip":true,"storage-io-unit":"kB/s","memory-header-graph-width":30,"processor-header-graph-color1":"rgba(29,172,214,1.0)","memory-menu-swap-color":"rgba(29,172,214,1.0)","gpu-header-icon-custom":"","gpu-header-icon-size":18,"panel-margin-right":0,"processor-header-frequency":false,"processor-header-graph-breakdown":true,"sensors-header-tooltip-sensor3-digits":-1,"processor-source-cpu-usage":"auto","memory-header-value-figures":3,"compact-mode":false,"processor-header-frequency-mode":"average","panel-box-order":0,"compact-mode-compact-icon-custom":"","network-header-graph-width":30,"gpu-header-tooltip":true,"sensors-header-icon":true,"gpu-header-activity-percentage-icon-alert-threshold":0,"sensors-header-sensor2-digits":-1,"processor-header-graph-color2":"rgba(214,29,29,1.0)","sensors-header-icon-alert-color":"rgba(235, 64, 52, 1)","sensors-header-tooltip-sensor5-digits":-1,"gpu-header-tooltip-memory-value":true,"processor-header-bars":false,"gpu-header-tooltip-memory-percentage":true,"gpu-header-memory-bar-color1":"rgba(29,172,214,1.0)","sensors-header-tooltip-sensor1":"\\"\\"","sensors-header-tooltip-sensor1-digits":-1,"storage-header-free-figures":3,"processor-header-percentage-core":false,"sensors-header-tooltip-sensor2-name":"","network-source-network-io":"auto","memory-header-bars":true,"processor-header-percentage":false,"processor-header-frequency-figures":3,"sensors-update":3,"memory-header-graph-color1":"rgba(29,172,214,1.0)","compact-mode-activation":"both","storage-header-icon-size":18,"sensors-header-tooltip-sensor1-name":"","sensors-header-icon-size":18,"sensors-header-icon-color":"","explicit-zero":false,"sensors-source":"auto","storage-header-io-graph-color1":"rgba(29,172,214,1.0)","storage-header-io-threshold":0,"sensors-header-tooltip-sensor2":"\\"\\"","compact-mode-expanded-icon-custom":"","memory-header-graph-color2":"rgba(29,172,214,0.3)","processor-header-icon-alert-color":"rgba(235, 64, 52, 1)","processor-header-tooltip-percentage":true,"gpu-header-show":false,"network-update":1.5,"sensors-header-tooltip-sensor3":"\\"\\"","sensors-ignored-attribute-regex":"","memory-header-icon-custom":"","storage-header-tooltip-io":true,"storage-header-percentage-icon-alert-threshold":0,"sensors-header-tooltip-sensor4":"\\"\\"","storage-header-percentage":false,"sensors-temperature-unit":"celsius","storage-header-icon-alert-color":"rgba(235, 64, 52, 1)","storage-header-free-icon-alert-threshold":0,"memory-source-top-processes":"auto","storage-header-value-figures":3,"storage-header-io-bars-color1":"rgba(29,172,214,1.0)","storage-menu-arrow-color1":"rgba(29,172,214,1.0)","gpu-header-tooltip-activity-percentage":true,"network-header-icon-custom":"","processor-header-graph-width":30,"network-header-icon":true,"storage-menu-arrow-color2":"rgba(214,29,29,1.0)","sensors-header-sensor2-layout":"vertical","sensors-header-tooltip-sensor5":"\\"\\"","memory-header-bars-breakdown":true,"sensors-header-show":false,"sensors-header-tooltip":false,"storage-header-tooltip":true,"processor-header-bars-core":false,"storage-indicators-order":"\\"\\"","processor-menu-bars-breakdown":true,"storage-header-io-bars-color2":"rgba(214,29,29,1.0)","network-io-unit":"kB/s","storage-header-icon":true,"gpu-header-activity-graph-color1":"rgba(29,172,214,1.0)","memory-unit":"kB-KB","processor-menu-core-bars-breakdown":true,"sensors-header-sensor2-show":false,"network-header-tooltip":true,"storage-header-tooltip-free":true,"storage-header-bars-color1":"rgba(29,172,214,1.0)","theme-style":"dark","storage-source-storage-usage":"auto","network-header-io":false,"storage-header-tooltip-value":false,"storage-main":"[default]","memory-header-tooltip-percentage":true,"memory-indicators-order":"\\"\\"","memory-source-memory-usage":"auto","memory-header-graph-breakdown":false,"memory-header-tooltip-value":true,"memory-menu-graph-breakdown":true,"sensors-indicators-order":"\\"\\"","compact-mode-start-expanded":false,"startup-delay":2,"memory-header-percentage-icon-alert-threshold":0,"sensors-header-sensor1-show":false,"network-ignored-regex":"","storage-update":3,"memory-header-value":false,"network-header-io-graph-color1":"rgba(29,172,214,1.0)","gpu-header-memory-bar":true,"memory-used":"total-free-buffers-cached","memory-header-bars-color1":"rgba(29,172,214,1.0)","gpu-header-memory-graph-width":30,"gpu-header-memory-graph":false,"sensors-ignored-category-regex":"","headers-font-family":"","memory-header-icon":true,"memory-header-bars-color2":"rgba(29,172,214,0.3)","network-header-io-graph-color2":"rgba(214,29,29,1.0)","processor-gpu":true,"network-header-icon-color":"","storage-header-value":false,"gpu-header-icon-alert-color":"rgba(235, 64, 52, 1)","processor-header-icon":true,"headers-font-size":0,"network-header-io-figures":2,"network-header-show":true,"sensors-ignored-regex":"","network-header-io-bars-color1":"rgba(29,172,214,1.0)","processor-update":1.5,"network-source-wireless":"auto","processor-indicators-order":"\\"\\"","storage-header-icon-custom":"","gpu-header-activity-bar":true,"gpu-header-activity-bar-color1":"rgba(29,172,214,1.0)","shell-bar-position":"top","network-ignored":"\\"[]\\"","network-header-io-bars-color2":"rgba(214,29,29,1.0)","memory-header-icon-color":"","sensors-header-sensor1-digits":-1,"storage-header-io-layout":"vertical","memory-header-icon-size":18,"network-header-io-threshold":0,"storage-header-show":true,"sensors-header-tooltip-sensor4-digits":-1,"processor-header-percentage-icon-alert-threshold":0,"memory-header-tooltip":true,"headers-height-override":0,"memory-header-graph":false,"network-header-icon-size":18,"gpu-header-icon-color":"","memory-header-free-figures":3,"processor-header-bars-breakdown":true,"gpu-header-activity-graph":false,"storage-header-io-bars":false,"memory-header-icon-alert-color":"rgba(235, 64, 52, 1)","storage-header-free":false,"processor-header-icon-custom":"","gpu-header-memory-percentage":false,"processor-header-tooltip-percentage-core":false,"processor-source-cpu-cores-usage":"auto","processor-source-top-processes":"auto","processor-header-icon-color":"","sensors-header-tooltip-sensor5-name":"","gpu-header-activity-graph-width":30,"gpu-header-activity-percentage":false,"gpu-indicators-order":"\\"\\"","network-header-io-layout":"vertical","gpu-update":2,"gpu-header-memory-percentage-icon-alert-threshold":0,"processor-header-bars-color1":"rgba(29,172,214,1.0)","processor-header-show":true,"storage-header-graph":false,"memory-header-free-icon-alert-threshold":0,"storage-ignored-regex":"","storage-menu-device-color":"rgba(29,172,214,1.0)","storage-header-tooltip-percentage":true,"memory-header-free":false,"storage-source-top-processes":"auto"}}'
+sensors-indicators-order='["icon","value"]'
+shell-bar-position='top'
+storage-indicators-order='["icon","bar","percentage","value","free","IO bar","IO graph","IO speed"]'
+storage-main='eui.0025388601d0b17d-part9'
+theme-style='dark'
+
+[extensions/blur-my-shell]
+hacks-level=1
+pipelines={'pipeline_default': {'name': <'Default'>, 'effects': <[<{'type': <'dual_kawase_blur'>, 'id': <'effect_73275251689028'>, 'params': <{'unscaled_radius': <17>, 'brightness': <0.75>}>}>]>}, 'pipeline_default_rounded': {'name': <'Default rounded'>, 'effects': <@av []>}, 'pipeline_be948078-d0ce-471b-9ed7-d4aec0f7891d': {'name': <'Liquid glass'>, 'effects': <[<{'type': <'dual_kawase_blur'>, 'id': <'effect_16419184764399'>, 'params': <{'unscaled_radius': <30>, 'brightness': <0.59999999999999998>}>}>, <{'type': <'color'>, 'id': <'effect_28316083119337'>, 'params': <{'color': <(1.0, 1.0, 1.0, 0.18333333730697632)>, 'blend_mode': <0>}>}>, <{'type': <'noise'>, 'id': <'effect_76250281090372'>, 'params': <{'noise': <0.050000000000000003>}>}>]>}, 'pipeline_migrated_dynamic_blur': {'name': <'Migrated dynamic blur'>, 'effects': <[<{'type': <'dual_kawase_blur'>, 'id': <'effect_migrated_dynamic_blur'>, 'params': <{'unscaled_radius': <60>, 'brightness': <0.75>}>}>]>}}
+rounded-blur-found=false
+settings-version=7
+
+[extensions/blur-my-shell/appfolder]
+blur=false
+pipeline='pipeline_default'
+style-dialogs=1
+
+[extensions/blur-my-shell/applications]
+blur=false
+corner-when-maximized=true
+pipeline='pipeline_default'
+static-blur=true
+
+[extensions/blur-my-shell/coverflow-alt-tab]
+pipeline='pipeline_default'
+
+[extensions/blur-my-shell/dash-to-dock]
+blur=false
+override-background=true
+pipeline='pipeline_default'
+static-blur=true
+style-dash-to-dock=2
+
+[extensions/blur-my-shell/dash-to-panel]
+blur-original-panel=false
+
+[extensions/blur-my-shell/hidetopbar]
+compatibility=true
+
+[extensions/blur-my-shell/lockscreen]
+blur=false
+pipeline='pipeline_default'
+
+[extensions/blur-my-shell/osd]
+blur=true
+
+[extensions/blur-my-shell/overview]
+blur=true
+pipeline='pipeline_default'
+style-components=2
+
+[extensions/blur-my-shell/panel]
+blur=false
+brightness=0.84999999999999998
+corner-radius=0
+customize=true
+force-light-text=true
+override-background=true
+override-background-dynamically=false
+pipeline='pipeline_default'
+sigma=30
+static-blur=false
+style-panel=0
+unblur-in-overview=true
+
+[extensions/blur-my-shell/popup]
+blur=false
+override-background=true
+pipeline='pipeline_default'
+preserve-shell-theme=true
+static-blur=true
+
+[extensions/blur-my-shell/popups]
+blur=true
+pipeline='pipeline_default'
+
+[extensions/blur-my-shell/screenshot]
+pipeline='pipeline_default'
+
+[extensions/blur-my-shell/window-list]
+pipeline='pipeline_migrated_dynamic_blur'
+
+[extensions/blur-my-shell/window-switcher]
+blur=true
+
+[extensions/burn-my-windows]
+last-extension-version=49
+
+[extensions/caffeine]
+cli-toggle=false
+countdown-timer=0
+indicator-position-max=5
+restore-state=false
+user-enabled=false
+
+[extensions/clipboard-indicator]
+enable-keybindings=true
+next-history-clear=-1
+toggle-menu=['<Super>v']
+
+[extensions/com/github/hermes83/compiz-windows-effect]
+last-version=33
+preset='R'
+
+[extensions/compiz-alike-magic-lamp-effect]
+speed=200
+
+[extensions/custom-osd]
+active-profile='Default'
+alpha=85.0
+alpha2=85.0
+balpha=80.0
+bcolor=['1.0', '0.64', '0.28', '1.0']
+bg-effect='none'
+bgcolor=['0.0', '0.73', '0.73', '1.0']
+bgcolor2=['0.75', '0.40', '0.95', '1.0']
+border=true
+bradius=100.0
+bthickness=6.0
+clock-osd=['']
+color=['1.0', '1.0', '1.0', '1.0']
+default-font='Sans 12'
+delay=1500.0
+font='Sans 12'
+gradient-direction='horizontal'
+horizontal=49.600000000000001
+hpadding=14.0
+levalpha=85.0
+levcolor=['1.0', '0.64', '0.28', '1.0']
+levthickness=16.0
+monitors='all'
+osd-all={'icon-all': true, 'label-all': true, 'level-all': true, 'numeric-all': true}
+osd-nolabel={'icon-nolabel': true, 'level-nolabel': true, 'numeric-nolabel': true}
+osd-nolevel={'icon-nolevel': true, 'label-nolevel': true}
+ring-gap=100.0
+rotate=false
+shadow=true
+shcolor=['0.14', '0.12', '0.19', '1.0']
+size=20.0
+square-circle=false
+vertical=-42.600000000000001
+vpadding=14.0
+
+[extensions/dash-to-dock]
+animation-time=0.25
+autohide=true
+background-opacity=0.29999999999999999
+click-action='minimize'
+customize-alphas=true
+dash-max-icon-size=48
+disable-overview-on-startup=true
+dock-fixed=false
+dock-position='BOTTOM'
+extend-height=false
+hide-delay=0.17999999999999999
+hide-tooltip=true
+intellihide=true
+intellihide-mode='ALL_WINDOWS'
+pressure-threshold=8.0
+require-pressure-to-show=true
+scroll-action='cycle-windows'
+show-delay=0.050000000000000003
+show-windows-preview=false
+transparency-mode='FIXED'
+
+[extensions/dash2dock-lite]
+animate-icons=true
+animate-icons-unmute=true
+animation-rise-curve=1
+autohide=true
+autohide-dash=true
+autohide-dodge=true
+autohide-speed=0.20000000000000001
+background-color=(0.0, 0.0, 0.0, 0.5)
+blur-background=false
+border-color=(1.0, 1.0, 1.0, 0.4166666567325592)
+border-radius=5.4031413612565444
+border-thickness=1
+bounce-height=0.75
+click-action='minimize'
+clock-icon=false
+customize-label=false
+customize-topbar=false
+debug-visual=false
+dock-location=0
+dock-padding=0.55895196506550215
+downloads-icon=false
+downloads-icon-rotate-labels=false
+edge-distance=0.22093023255813948
+experimental-features=false
+framerate='High'
+icon-effect=0
+icon-effect-color=(0.55555552244186401, 0.74444437026977539, 0.83333331346511841, 0.273333340883255)
+intellihide=true
+label-background-color=(0.05000000074505806, 0.039000000804662704, 0.039000000804662704, 0.53666669130325317)
+label-border-color=(1.0, 1.0, 1.0, 0.40999999642372131)
+label-border-radius=3.9823008849557526
+label-border-thickness=1
+label-foreground-color=(1.0, 1.0, 1.0, 1.0)
+lamp-app-animation=false
+magnification=0.34999999999999998
+mounted-icon=true
+msg-to-ext=''
+open-app-animation=true
+overview-transparent-background=false
+panel-mode=false
+pressure-sense=false
+pressure-sensitivity=0.10000000000000001
+rise=0.25
+rise-curve='Cosine Bell'
+running-indicator-color=(0.42647778987884521, 0.74558728933334351, 0.97666668891906738, 1.0)
+running-indicator-size=0
+running-indicator-style=1
+separator-color=(1.0, 1.0, 1.0, 0.43333333730697632)
+separator-thickness=2
+shrink-icons=true
+spread=0.69999999999999996
+topbar-background-color=(0.0, 0.0, 0.0, 0.25)
+topbar-border-color=(0.0, 0.0, 0.0, 0.0)
+topbar-border-thickness=0
+topbar-foreground-color=(1.0, 1.0, 1.0, 0.90000000000000002)
+trash-icon=false
+
+[extensions/ding]
+check-x11wayland=true
+
+[extensions/just-perfection]
+accent-color-icon=false
+accessibility-menu=true
+activities-button=true
+background-menu=true
+controls-manager-spacing-size=0
+dash=true
+dash-icon-size=0
+double-super-to-appgrid=true
+invert-calendar-column-items=false
+osd=true
+panel=true
+panel-in-overview=true
+ripple-box=true
+search=true
+show-apps-button=true
+startup-status=1
+support-notifier-type=0
+theme=false
+window-demands-attention-focus=false
+window-picker-icon=true
+window-preview-caption=true
+window-preview-close-button=true
+workspace=true
+workspace-background-corner-size=0
+workspace-popup=true
+workspace-wrap-around=false
+workspaces-in-app-grid=true
+
+[extensions/macosdock]
+animation-duration=230
+auto-hide=true
+bounce-on-launch=true
+dock-blur-enabled=true
+dock-border-radius=22
+dock-opacity=70
+dock-position=0
+drag-reorder=true
+enable-keyboard-nav=true
+icon-quality=1
+icon-size=42
+magnification-enabled=true
+magnification-framerate=60
+media-controls=true
+preview-scale=210
+running-indicator-style=1
+show-running-apps=true
+window-previews=false
+
+[extensions/magnific-launcher]
+anim-duration=150
+neighbour-step=0.15000000000000002
+sharp-scaling=true
+zoom-pixels=48
+
+[extensions/ncom/github/hermes83/compiz-alike-magic-lamp-effect]
+duration=500.0
+effect='default'
+x-tiles=15.0
+y-tiles=20.0
+
+[extensions/quick-settings-tweaks]
+dnd-quick-toggle-enabled=false
+dnd-quick-toggle-indicator-position='date-menu'
+media-compact=true
+media-enabled=true
+notifications-compact=true
+system-indicator-layout-enabled=false
+unsafe-quick-toggle-enabled=false
+unsafe-quick-toggle-last-state=false
+volume-mixer-enabled=false
+
+[extensions/search-light]
+animation-speed=100.0
+blur-brightness=0.59999999999999998
+blur-sigma=30.0
+entry-font-size=1
+popup-at-cursor-monitor=false
+preferred-monitor=0
+scale-height=0.10000000000000001
+scale-width=0.10000000000000001
+show-panel-icon=true
+
+[extensions/tiling-assistant]
+activate-layout0=@as []
+activate-layout1=@as []
+activate-layout2=@as []
+activate-layout3=@as []
+auto-tile=@as []
+center-window=@as []
+debugging-free-rects=@as []
+debugging-show-tiled-rects=@as []
+default-move-mode=0
+dynamic-keybinding-behavior=0
+focus-hint=0
+focus-hint-color='rgb(53,132,228)'
+import-layout-examples=false
+last-version-installed=56
+monitor-switch-grace-period=true
+overridden-settings={'org.gnome.mutter.edge-tiling': <true>, 'org.gnome.desktop.wm.keybindings.maximize': <@mb nothing>, 'org.gnome.desktop.wm.keybindings.unmaximize': <@mb nothing>, 'org.gnome.mutter.keybindings.toggle-tiled-left': <@mb nothing>, 'org.gnome.mutter.keybindings.toggle-tiled-right': <@mb nothing>}
+restore-window=['<Super>Down']
+search-popup-layout=@as []
+tile-bottom-half=['<Super>KP_2']
+tile-bottom-half-ignore-ta=@as []
+tile-bottomleft-quarter=['<Super>KP_1']
+tile-bottomleft-quarter-ignore-ta=@as []
+tile-bottomright-quarter=['<Super>KP_3']
+tile-bottomright-quarter-ignore-ta=@as []
+tile-edit-mode=@as []
+tile-left-half=['<Super>Left', '<Super>KP_4']
+tile-left-half-ignore-ta=@as []
+tile-maximize=['<Super>Up', '<Super>KP_5']
+tile-maximize-horizontally=@as []
+tile-maximize-vertically=@as []
+tile-right-half=['<Super>Right', '<Super>KP_6']
+tile-right-half-ignore-ta=@as []
+tile-top-half=['<Super>KP_8']
+tile-top-half-ignore-ta=@as []
+tile-topleft-quarter=['<Super>KP_7']
+tile-topleft-quarter-ignore-ta=@as []
+tile-topright-quarter=['<Super>KP_9']
+tile-topright-quarter-ignore-ta=@as []
+toggle-always-on-top=@as []
+toggle-tiling-popup=@as []
+
+[extensions/touchpad-gesture-customization]
+pinch-3-finger-gesture='VOLUME_CONTROL'
+pinch-4-finger-gesture='SHOW_DESKTOP'
+
+[extensions/vitals]
+fan-colors=@as []
+hide-icons=false
+icon-style=1
+memory-colors=@as []
+menu-centered=false
+position-in-panel=2
+show-fan=false
+temperature-colors=@as []
+use-higher-precision=true
+
+[extensions/wack-lockscreen-clock]
+clock-animation='fade'
+cupertino-always-show-user=false
+date-style='full'
+enable-unblank=true
+esc-to-sleep=true
+lockscreen-mode='wack'
+lockscreen-wallpaper-enable=true
+lockscreen-wallpaper-path='/home/mehulkumar/Pictures/Camera/Screenshot 2025-07-03 212052.png'
+prompt-animation='fade'
+unblank-on-ac-only=true
+
+[extensions/wack-shell]
+desktop-scroll=true
+disable-workspaces-in-app-grid=false
+enable-panel-proximity=false
+enable-vibrancy=false
+logo-click-action=0
+logo-icon-image=2
+logo-middle-click-action=0
+show-app-menu=true
+show-logo-label=true
+show-logo-menu=true
+show-workspace-number=false
+use-custom-logo=true
+vibrancy-blur-mode=3
+vibrancy-style=1
+workspace-widget-type=0
+
+[keybindings]
+screenshot=['Print', '<Super><Shift>s', '<Super>Print', '<Shift>Print']
+show-screenshot-ui=@as []
+toggle-message-tray=@as []
+
+[weather]
+automatic-location=true
+locations=[<(uint32 2, <('Jaipur', 'VIJP', true, [(0.46803913356091015, 1.3229595730117016)], [(0.46978446281290459, 1.3232504670381315)])>)>]
+
+[window-switcher]
+current-workspace-only=false
+
+[world-clocks]
+locations=@av []

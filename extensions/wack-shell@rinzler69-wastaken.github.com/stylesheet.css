@@ -1,0 +1,106 @@
+.menu-button {
+  margin: 1px !important;
+  padding: 0px !important;
+}
+
+.activities-icon {
+  -st-icon-style: symbolic;
+}
+
+.activities-layout {
+  spacing: 6px;
+}
+
+/* Increase horizontal padding of the Logo Menu */
+.wack-logo-button {
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+}
+
+/* Ensure labels inside our custom buttons follow panel text color */
+.wack-logo-button StLabel,
+.wack-workspace-button StLabel,
+.wack-app-menu-button StLabel {
+  color: inherit !important;
+}
+
+/* Styling for light backgrounds (dark text/icons) */
+#panel.light-contrast,
+#panel.light-contrast *,
+#panel.light-contrast .panel-button,
+#panel.light-contrast .panel-button * {
+  color: rgb(20, 20, 20) !important;
+}
+
+#panel.light-contrast .system-status-icon,
+#panel.light-contrast .app-menu-icon,
+#panel.light-contrast .popup-menu-arrow {
+  color: rgb(20, 20, 20) !important;
+}
+
+.workspace-dot {
+  border-radius: 999px;
+  background-color: #ffffff !important;
+}
+
+#panel.light-contrast .workspace-dot {
+  border-radius: 999px;
+  background-color: #222226 !important;
+}
+
+#panel,
+#panel * {
+  transition-duration: 250ms !important;
+}
+
+
+#panel.panel-bigsur {
+  background-color: transparent !important;
+}
+
+/* Shortcut hint styling in Logo Menu */
+.wack-logo-menu-shortcut {
+  font-weight: normal;
+  margin-left: 24px;
+  transition-duration: 100ms;
+}
+
+/* Dark theme default (dimmed translucent white) */
+.wack-logo-menu-shortcut,
+.wack-logo-menu-shortcut.dark-theme {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Light theme default (dimmed translucent dark) */
+.wack-logo-menu-shortcut.light-theme {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+/* Hovered / selected / active states: crisp full-contrast text */
+.popup-menu-item:hover .wack-logo-menu-shortcut,
+.popup-menu-item:active .wack-logo-menu-shortcut,
+.popup-menu-item:selected .wack-logo-menu-shortcut,
+.popup-menu-item:focus .wack-logo-menu-shortcut,
+.wack-logo-menu-shortcut:hover,
+.wack-logo-menu-shortcut:active,
+.wack-logo-menu-shortcut:selected,
+.wack-logo-menu-shortcut.highlighted {
+  color: inherit !important;
+  opacity: 1.0 !important;
+}
+
+.popup-menu-item:hover .wack-logo-menu-shortcut.dark-theme,
+.popup-menu-item:active .wack-logo-menu-shortcut.dark-theme,
+.popup-menu-item:selected .wack-logo-menu-shortcut.dark-theme,
+.wack-logo-menu-shortcut.dark-theme.highlighted {
+  color: #ffffff !important;
+  opacity: 1.0 !important;
+}
+
+.popup-menu-item:hover .wack-logo-menu-shortcut.light-theme,
+.popup-menu-item:active .wack-logo-menu-shortcut.light-theme,
+.popup-menu-item:selected .wack-logo-menu-shortcut.light-theme,
+.wack-logo-menu-shortcut.light-theme.highlighted {
+  color: inherit !important;
+  opacity: 1.0 !important;
+}

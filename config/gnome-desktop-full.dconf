@@ -76,7 +76,7 @@ show-battery-percentage=true
 toolkit-accessibility=false
 
 [notifications]
-application-children=['org-gnome-software', 'org-gnome-nautilus', 'org-gnome-decibels', 'app-zen-browser-zen', 'org-gnome-ptyxis', 'com-spotify-client', 'gnome-about-panel', 'org-gnome-settings', 'org-gnome-showtime', 'com-visualstudio-code', 'org-mozilla-firefox', 'gnome-power-panel', 'com-github-hluk-copyq', 'org-gnome-extensions', 'org-gnome-baobab', 'com-rtosta-zapzap', 'com-microsoft-vscode', 'org-flameshot-flameshot']
+application-children=['org-gnome-software', 'org-gnome-nautilus', 'org-gnome-decibels', 'app-zen-browser-zen', 'org-gnome-ptyxis', 'com-spotify-client', 'gnome-about-panel', 'org-gnome-settings', 'org-gnome-showtime', 'com-visualstudio-code', 'org-mozilla-firefox', 'gnome-power-panel', 'com-github-hluk-copyq', 'org-gnome-extensions', 'org-gnome-baobab', 'com-rtosta-zapzap', 'com-microsoft-vscode', 'org-flameshot-flameshot', 'org-gnome-characters']
 show-banners=false
 
 [notifications/application/app-zen-browser-zen]
@@ -112,6 +112,9 @@ show-banners=false
 
 [notifications/application/org-gnome-baobab]
 application-id='org.gnome.baobab.desktop'
+
+[notifications/application/org-gnome-characters]
+application-id='org.gnome.Characters.desktop'
 
 [notifications/application/org-gnome-decibels]
 application-id='org.gnome.Decibels.desktop'
@@ -174,8 +177,9 @@ primary-color='#000000000000'
 secondary-color='#000000000000'
 
 [search-providers]
-disable-external=true
-sort-order=['org.gnome.Settings.desktop', 'org.gnome.Contacts.desktop', 'org.gnome.Nautilus.desktop']
+disable-external=false
+disabled=@as []
+sort-order=['org.gnome.Settings.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Calculator.desktop']
 
 [session]
 idle-delay=uint32 300

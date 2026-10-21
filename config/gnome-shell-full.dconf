@@ -4,7 +4,7 @@ command-history=['f2', 'r']
 disable-extension-version-validation=true
 disable-user-extensions=false
 disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com', 'CoverflowAltTab@palatis.blogspot.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com']
-enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com', 'monitor@astraext.github.io', 'emoji-copy@felipeftn', 'tiling-assistant@leleat-on-github', 'compiz-windows-effect@hermes83.github.com', 'dash-to-dock@micxgx.gmail.com', 'wack-shell@rinzler69-wastaken.github.com']
+enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com', 'monitor@astraext.github.io', 'emoji-copy@felipeftn', 'tiling-assistant@leleat-on-github', 'dash-to-dock@micxgx.gmail.com', 'wack-shell@rinzler69-wastaken.github.com', 'blur-my-shell@aunetx', 'compiz-windows-effect@hermes83.github.com']
 favorite-apps=['app.zen_browser.zen.desktop', 'com.spotify.Client.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop', 'com.rtosta.zapzap.desktop']
 last-selected-power-profile='performance'
 welcome-dialog-last-shown-version='50.0'
@@ -35,7 +35,7 @@ rounded-blur-found=false
 settings-version=7
 
 [extensions/blur-my-shell/appfolder]
-blur=false
+blur=true
 pipeline='pipeline_default'
 style-dialogs=1
 
@@ -69,7 +69,7 @@ pipeline='pipeline_default'
 blur=true
 
 [extensions/blur-my-shell/overview]
-blur=false
+blur=true
 pipeline='pipeline_default'
 style-components=2
 
@@ -135,7 +135,7 @@ speed=200
 
 [extensions/compiz-windows-effect]
 friction=3.5
-overview-effect=false
+overview-effect=true
 spring-k=0.34999999999999998
 wobbly-resize=false
 x-tiles=6

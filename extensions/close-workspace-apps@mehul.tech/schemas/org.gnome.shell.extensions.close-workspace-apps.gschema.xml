@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<schemalist>
-  <schema id="org.gnome.shell.extensions.close-workspace-apps" path="/org/gnome/shell/extensions/close-workspace-apps/">
-    <key name="close-workspace-shortcut" type="as">
-      <default>['<Super><Shift>c']</default>
-      <summary>Shortcut to close all windows in active workspace</summary>
-    </key>
-  </schema>
-</schemalist>

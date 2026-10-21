@@ -1,9 +1,1 @@
-app.zen_browser.zen
-com.mattjakeman.ExtensionManager
-com.rtosta.zapzap
-com.spotify.Client
-hu.irl.cameractrls
-net.lutris.Lutris
-net.sonobus.SonoBus
-one.alynx.FlipClock
 com.github.tenderowl.frog

@@ -1,5 +1,5 @@
 [/]
-custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom2/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/close-workspace/']
+custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']
 next=['AudioNext']
 play=['XF86AudioPlay']
 previous=['AudioPrev']
@@ -20,9 +20,9 @@ command='/home/mehulkumar/.local/bin/ocr-snip'
 name='Snip Text Extraction'
 
 [custom-keybindings/custom0]
-binding='<Super><Shift>t'
-command='flatpak run com.github.tenderowl.frog'
-name='Frog OCR Text Extractor'
+binding='<Super><Shift>c'
+command='/home/mehulkumar/.local/bin/close-workspace-apps'
+name='Close Workspace Apps'
 
 [custom-keybindings/custom1]
 binding='<Super>period'

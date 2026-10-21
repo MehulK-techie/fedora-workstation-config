@@ -3,8 +3,8 @@ app-picker-layout=[{'org.fedoraproject.MediaWriter.desktop': <{'position': <0>}>
 command-history=['f2', 'r']
 disable-extension-version-validation=true
 disable-user-extensions=false
-disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com', 'CoverflowAltTab@palatis.blogspot.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com', 'compiz-windows-effect@hermes83.github.com']
-enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'wack-shell@rinzler69-wastaken.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com', 'monitor@astraext.github.io', 'emoji-copy@felipeftn', 'blur-my-shell@aunetx', 'tiling-assistant@leleat-on-github']
+disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com', 'CoverflowAltTab@palatis.blogspot.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com']
+enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com', 'monitor@astraext.github.io', 'emoji-copy@felipeftn', 'blur-my-shell@aunetx', 'tiling-assistant@leleat-on-github', 'compiz-windows-effect@hermes83.github.com', 'dash-to-dock@micxgx.gmail.com', 'wack-shell@rinzler69-wastaken.github.com']
 favorite-apps=['app.zen_browser.zen.desktop', 'com.spotify.Client.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop', 'com.rtosta.zapzap.desktop']
 last-selected-power-profile='performance'
 welcome-dialog-last-shown-version='50.0'
@@ -195,12 +195,14 @@ dock-position='BOTTOM'
 extend-height=false
 hide-delay=0.17999999999999999
 hide-tooltip=true
+hot-keys=false
 intellihide=true
 intellihide-mode='ALL_WINDOWS'
 pressure-threshold=8.0
 require-pressure-to-show=true
 scroll-action='cycle-windows'
 show-delay=0.050000000000000003
+show-title=false
 show-windows-preview=false
 transparency-mode='FIXED'
 
@@ -434,6 +436,7 @@ unblank-on-ac-only=true
 [extensions/wack-shell]
 desktop-scroll=true
 disable-workspaces-in-app-grid=false
+enable-bottom-bar=false
 enable-panel-proximity=false
 enable-vibrancy=false
 logo-click-action=0
@@ -442,6 +445,7 @@ logo-middle-click-action=0
 show-app-menu=true
 show-logo-label=true
 show-logo-menu=true
+show-window-title=false
 show-workspace-number=false
 use-custom-logo=true
 vibrancy-blur-mode=3
@@ -459,7 +463,7 @@ automatic-location=true
 locations=[<(uint32 2, <('Jaipur', 'VIJP', true, [(0.46803913356091015, 1.3229595730117016)], [(0.46978446281290459, 1.3232504670381315)])>)>]
 
 [window-switcher]
-current-workspace-only=false
+current-workspace-only=true
 
 [world-clocks]
 locations=@av []

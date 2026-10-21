@@ -24,3 +24,5 @@ tesseract-langpack-eng
 libnotify
 ibus
 gnome-characters
+python3-gobject
+gtk3

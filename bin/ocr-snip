@@ -2,11 +2,8 @@
 TMP_IMG="/tmp/ocr_snip.png"
 rm -f "$TMP_IMG"
 
-if command -v grim >/dev/null 2>&1 && command -v slurp >/dev/null 2>&1; then
-    grim -g "$(slurp)" "$TMP_IMG" 2>/dev/null
-else
-    gnome-screenshot -a -f "$TMP_IMG" 2>/dev/null
-fi
+# Capture area screenshot via native GNOME Wayland tool
+gnome-screenshot -a -f "$TMP_IMG" 2>/dev/null
 
 if [ -s "$TMP_IMG" ]; then
     TEXT=$(tesseract "$TMP_IMG" stdout 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')

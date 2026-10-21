@@ -88,11 +88,11 @@ style-panel=0
 unblur-in-overview=true
 
 [extensions/blur-my-shell/popup]
-blur=false
+blur=true
 override-background=true
 pipeline='pipeline_default'
 preserve-shell-theme=true
-static-blur=true
+static-blur=false
 
 [extensions/blur-my-shell/popups]
 blur=true

@@ -1,3 +1,6 @@
+[a11y/interface]
+high-contrast=false
+
 [a11y/keyboard]
 mousekeys-enable=false
 
@@ -67,7 +70,7 @@ clock-show-weekday=true
 color-scheme='prefer-dark'
 enable-animations=true
 enable-hot-corners=true
-font-antialiasing='rgba'
+font-antialiasing='grayscale'
 font-hinting='slight'
 gtk-key-theme='Default'
 gtk-theme='Adwaita-dark'

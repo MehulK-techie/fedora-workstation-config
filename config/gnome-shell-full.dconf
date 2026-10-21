@@ -3,14 +3,14 @@ app-picker-layout=[{'org.fedoraproject.MediaWriter.desktop': <{'position': <0>}>
 command-history=['f2', 'r']
 disable-extension-version-validation=true
 disable-user-extensions=false
-disabled-extensions=['apps-menu@gnome-shell-extensions.gcampax.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com']
-enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'monitor@astraext.github.io', 'blur-my-shell@aunetx', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-shell@rinzler69-wastaken.github.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'compiz-windows-effect@hermes83.github.com', 'ding@rastersoft.com', 'tiling-assistant@leleat-on-github']
+disabled-extensions=['ding@rastersoft.com']
+enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'monitor@astraext.github.io', 'blur-my-shell@aunetx', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-shell@rinzler69-wastaken.github.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'compiz-windows-effect@hermes83.github.com', 'tiling-assistant@leleat-on-github', 'apps-menu@gnome-shell-extensions.gcampax.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com']
 favorite-apps=['app.zen_browser.zen.desktop', 'com.spotify.Client.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop', 'com.rtosta.zapzap.desktop']
-last-selected-power-profile='performance'
+last-selected-power-profile='power-saver'
 welcome-dialog-last-shown-version='50.0'
 
 [app-switcher]
-current-workspace-only=true
+current-workspace-only=false
 
 [extensions/astra-monitor]
 gpu-indicators-order='["icon","activity bar","activity graph","activity percentage","memory bar","memory graph","memory percentage","memory value"]'

@@ -11,3 +11,4 @@ dash-to-dock@micxgx.gmail.com
 places-menu@gnome-shell-extensions.gcampax.github.com
 text-extractor@imshaaz21.github.com
 emoji-copy@felipeftn
+close-workspace-apps@mehul.tech

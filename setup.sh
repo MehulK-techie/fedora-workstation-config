@@ -1,68 +1,66 @@
-#!/bin/bash
-set +e
-USER_HOME="$HOME"
+#!/usr/bin/env bash
+set -e
 
-echo "=== 1. Enabling Flathub ==="
-flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-echo "=== 2. Installing DNF Packages ==="
-if [ -f ./apps/dnf-packages.txt ]; then
-    sudo dnf install -y $(grep -v '^#' ./apps/dnf-packages.txt | xargs)
+echo -e "${BLUE}=== Starting Fedora Workstation Suite Installation ===${NC}\n"
+
+# 1. System Package Installation
+echo -e "${YELLOW}[1/6] Installing DNF system dependencies...${NC}"
+if [ -f "./apps/dnf-packages.txt" ]; then
+    sudo dnf install -y $(cat ./apps/dnf-packages.txt)
 fi
 
-echo "=== 3. Installing Flatpaks ==="
-if [ -f ./apps/flatpaks.txt ]; then
-    flatpak install -y flathub $(grep -v '^#' ./apps/flatpaks.txt | xargs)
+# 2. Flatpak Dependencies
+echo -e "${YELLOW}[2/6] Setting up Flathub & Flatpak applications...${NC}"
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+if [ -f "./apps/flatpaks.txt" ]; then
+    while read -r pkg; do
+        [ -n "$pkg" ] && flatpak install -y flathub "$pkg" 2>/dev/null || true
+    done < ./apps/flatpaks.txt
 fi
 
-echo "=== 4. Deploying Extension Binaries ==="
-mkdir -p "$USER_HOME/.local/share/gnome-shell/extensions"
-if [ -d ./extensions ]; then
-    cp -r ./extensions/* "$USER_HOME/.local/share/gnome-shell/extensions/" 2>/dev/null || true
+# 3. Deploy Custom Executables & Extensions
+echo -e "${YELLOW}[3/6] Deploying custom binaries & local extension suite...${NC}"
+mkdir -p ~/.local/bin
+if [ -d "./bin" ]; then
+    chmod +x ./bin/* 2>/dev/null || true
+    cp -r ./bin/* ~/.local/bin/
 fi
 
-echo "=== 5. Restoring Interface & Keybindings ==="
-[ -f ./config/gnome-shell-full.dconf ] && dconf load /org/gnome/shell/ < ./config/gnome-shell-full.dconf
-[ -f ./config/gnome-desktop-full.dconf ] && dconf load /org/gnome/desktop/ < ./config/gnome-desktop-full.dconf
-[ -f ./config/gnome-mutter-full.dconf ] && dconf load /org/gnome/mutter/ < ./config/gnome-mutter-full.dconf
-
-if [ -f ./config/keybindings.dconf ]; then
-    sed "s|__USER_HOME__|$USER_HOME|g" ./config/keybindings.dconf | dconf load /org/gnome/settings-daemon/plugins/media-keys/
+mkdir -p ~/.local/share/gnome-shell/extensions
+if [ -d "./extensions" ]; then
+    cp -r ./extensions/* ~/.local/share/gnome-shell/extensions/
+    for ext_dir in ./extensions/*; do
+        if [ -d "$ext_dir/schemas" ]; then
+            glib-compile-schemas "$ext_dir/schemas" 2>/dev/null || true
+        fi
+    done
 fi
 
-echo "=== 6. Activating Extensions ==="
-if [ -f ./config/enabled-extensions.txt ]; then
-    while IFS= read -r ext_id; do
-        gnome-extensions enable "$ext_id" 2>/dev/null || true
+# 4. Unbind System Hotkey Collisions
+echo -e "${YELLOW}[4/6] Clearing default shortcut conflicts...${NC}"
+gsettings set org.freedesktop.ibus.panel.emoji hotkey "@as []" 2>/dev/null || true
+gsettings set org.freedesktop.ibus.panel.emoji unicode-hotkey "@as []" 2>/dev/null || true
+gsettings set org.gnome.desktop.wm.keybindings insert-emoji "[]" 2>/dev/null || true
+
+# 5. Restore dconf System Settings
+echo -e "${YELLOW}[5/6] Restoring GNOME dconf profiles...${NC}"
+[ -f "./config/gnome-shell-full.dconf" ] && dconf load /org/gnome/shell/ < ./config/gnome-shell-full.dconf
+[ -f "./config/gnome-desktop-full.dconf" ] && dconf load /org/gnome/desktop/ < ./config/gnome-desktop-full.dconf
+[ -f "./config/gnome-mutter-full.dconf" ] && dconf load /org/gnome/mutter/ < ./config/gnome-mutter-full.dconf
+
+# 6. Enable Extensions
+echo -e "${YELLOW}[6/6] Activating GNOME Shell extensions...${NC}"
+if [ -f "./config/enabled-extensions.txt" ]; then
+    while read -r ext; do
+        if [ -n "$ext" ]; then
+            gnome-extensions enable "$ext" 2>/dev/null || true
+        fi
     done < ./config/enabled-extensions.txt
 fi
 
-echo "=== 7. Syncing Custom Utilities ==="
-mkdir -p "$USER_HOME/.local/bin"
-if [ -f ./bin/ocr-snip ]; then
-    cp ./bin/ocr-snip "$USER_HOME/.local/bin/ocr-snip"
-    chmod +x "$USER_HOME/.local/bin/ocr-snip"
-fi
-
-echo "=== 8. Applying Hardware & Physics Optimizations ==="
-sudo systemctl enable --now fprintd.service 2>/dev/null || true
-if lsusb | grep -qi -E 'fingerprint|synaptics|goodix|validity'; then
-    echo "Fingerprint reader found. Enabling PAM authentication..."
-    sudo authselect enable-feature with-fingerprint 2>/dev/null || true
-    sudo authselect apply-changes 2>/dev/null || true
-fi
-
-sudo systemctl disable NetworkManager-wait-online.service 2>/dev/null || true
-gsettings set org.gnome.shell.extensions.dash-to-dock animation-time 0.25 2>/dev/null || true
-gsettings set org.gnome.shell.extensions.dash-to-dock show-delay 0.05 2>/dev/null || true
-gsettings set org.gnome.shell.extensions.dash-to-dock hide-delay 0.18 2>/dev/null || true
-
-gsettings set org.gnome.desktop.wm.keybindings switch-windows "['<Alt>Tab']" 2>/dev/null || true
-gsettings set org.gnome.desktop.wm.keybindings switch-applications "[]" 2>/dev/null || true
-gsettings set org.gnome.shell.window-switcher current-workspace-only false 2>/dev/null || true
-
-dconf update 2>/dev/null || true
-
-echo "========================================================"
-echo " Setup Complete! Restart or log out to apply changes.   "
-echo "========================================================"
+echo -e "\n${GREEN}✔ Installation complete! Please log out or restart to apply GNOME Shell extension mappings.${NC}"

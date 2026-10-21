@@ -102,6 +102,8 @@ pipeline='pipeline_default'
 pipeline='pipeline_default'
 
 [extensions/blur-my-shell/window-list]
+blur=true
+brightness=0.59999999999999998
 pipeline='pipeline_migrated_dynamic_blur'
 
 [extensions/blur-my-shell/window-switcher]

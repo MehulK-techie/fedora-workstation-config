@@ -3,10 +3,10 @@ app-picker-layout=[{'org.fedoraproject.MediaWriter.desktop': <{'position': <0>}>
 command-history=['f2', 'r']
 disable-extension-version-validation=true
 disable-user-extensions=false
-disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com']
-enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'monitor@astraext.github.io', 'blur-my-shell@aunetx', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'compiz-windows-effect@hermes83.github.com', 'tiling-assistant@leleat-on-github', 'wack-shell@rinzler69-wastaken.github.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com']
+disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'screenshot-ocr@nbubis.github.com', 'CoverflowAltTab@palatis.blogspot.com']
+enabled-extensions=['vitals@corecoding.com', 'touchpad-gesture-customization@coooolapps.com', 'dash-to-dock@micxgx.gmail.com', 'monitor@astraext.github.io', 'blur-my-shell@aunetx', 'clipboard-indicator@tudmotu.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'compiz-windows-effect@hermes83.github.com', 'tiling-assistant@leleat-on-github', 'wack-shell@rinzler69-wastaken.github.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'text-extractor@imshaaz21.github.com']
 favorite-apps=['app.zen_browser.zen.desktop', 'com.spotify.Client.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop', 'com.rtosta.zapzap.desktop']
-last-selected-power-profile='power-saver'
+last-selected-power-profile='performance'
 welcome-dialog-last-shown-version='50.0'
 
 [app-switcher]
@@ -134,6 +134,12 @@ friction=3.5
 spring-k=50.0
 x-tiles=6
 y-tiles=6
+
+[extensions/coverflowalttab]
+dim-factor=0.98899999999999999
+position='Bottom'
+switcher-background-color=(1.0, 1.0, 1.0)
+switcher-style='Coverflow'
 
 [extensions/custom-osd]
 active-profile='Default'
@@ -336,6 +342,9 @@ preferred-monitor=0
 scale-height=0.10000000000000001
 scale-width=0.10000000000000001
 show-panel-icon=true
+
+[extensions/text-extractor]
+extract-shortcut=['<Shift>t']
 
 [extensions/tiling-assistant]
 activate-layout0=@as []

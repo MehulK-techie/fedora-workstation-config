@@ -3,7 +3,7 @@ center-new-windows=true
 dynamic-workspaces=true
 edge-tiling=false
 experimental-features=['scale-monitor-framebuffer']
-workspaces-only-on-primary=true
+workspaces-only-on-primary=false
 
 [keybindings]
 toggle-tiled-left=@as []

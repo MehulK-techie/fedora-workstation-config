@@ -9,4 +9,4 @@ wack-shell@rinzler69-wastaken.github.com
 apps-menu@gnome-shell-extensions.gcampax.github.com
 dash-to-dock@micxgx.gmail.com
 places-menu@gnome-shell-extensions.gcampax.github.com
-screenshot-ocr@nbubis.github.com
+text-extractor@imshaaz21.github.com

@@ -6,3 +6,4 @@ hu.irl.cameractrls
 net.lutris.Lutris
 net.sonobus.SonoBus
 one.alynx.FlipClock
+com.github.tenderowl.frog

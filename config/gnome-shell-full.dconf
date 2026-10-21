@@ -129,6 +129,12 @@ preset='R'
 [extensions/compiz-alike-magic-lamp-effect]
 speed=200
 
+[extensions/compiz-windows-effect]
+friction=3.5
+spring-k=50.0
+x-tiles=6
+y-tiles=6
+
 [extensions/custom-osd]
 active-profile='Default'
 alpha=85.0
@@ -427,7 +433,7 @@ automatic-location=true
 locations=[<(uint32 2, <('Jaipur', 'VIJP', true, [(0.46803913356091015, 1.3229595730117016)], [(0.46978446281290459, 1.3232504670381315)])>)>]
 
 [window-switcher]
-current-workspace-only=false
+current-workspace-only=true
 
 [world-clocks]
 locations=@av []

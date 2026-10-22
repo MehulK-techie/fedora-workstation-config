@@ -2,5 +2,5 @@
   "uuid": "mk-indicator@mehulk",
   "name": "MK Workstation Indicator",
   "description": "Displays the custom MK Workstation Edition watermark badge on the top status panel.",
-  "shell-version": ["44", "45", "46", "47"]
+  "shell-version": ["44", "45", "46", "47", "48", "49", "50"]
 }

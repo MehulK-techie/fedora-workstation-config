@@ -1,17 +1,41 @@
-#!/bin/bash
-TMP_IMG="/tmp/ocr_snip.png"
-rm -f "$TMP_IMG"
+#!/usr/bin/env bash
+# ==============================================================================
+# MK Workstation: Interactive OCR Snipping Tool
+# ==============================================================================
+set -euo pipefail
 
-# Capture area screenshot via native GNOME Wayland tool
-gnome-screenshot -a -f "$TMP_IMG" 2>/dev/null
+TMP_IMG=$(mktemp /tmp/ocr_snip_XXXXXX.png)
+TMP_TXT=$(mktemp /tmp/ocr_snip_XXXXXX)
+trap 'rm -f "$TMP_IMG" "${TMP_TXT}"*' EXIT
 
-if [ -s "$TMP_IMG" ]; then
-    TEXT=$(tesseract "$TMP_IMG" stdout 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-    if [ -n "$TEXT" ]; then
-        echo -n "$TEXT" | wl-copy
-        notify-send "OCR Text Extractor" "Copied to clipboard:\n$TEXT" -i edit-paste
-    else
-        notify-send "OCR Text Extractor" "No readable text detected." -i dialog-warning
-    fi
+# 1. Select screen region
+if ! slurp_area=$(slurp -b '#00000088' -c '#00ffff' -w 2); then
+    exit 0
 fi
-rm -f "$TMP_IMG"
+
+# 2. Capture area and run OCR
+grim -g "$slurp_area" "$TMP_IMG"
+tesseract "$TMP_IMG" "$TMP_TXT" --oem 1 --psm 6 -l eng 2>/dev/null || tesseract "$TMP_IMG" "$TMP_TXT" -l eng 2>/dev/null
+
+EXTRACTED_TEXT=$(sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//' "${TMP_TXT}.txt" 2>/dev/null || echo "")
+
+if [[ -z "$EXTRACTED_TEXT" ]]; then
+    notify-send -u low -t 2000 "OCR Text Extractor" "No text detected in selection."
+    exit 0
+fi
+
+# 3. Automatically copy all text to clipboard immediately
+printf "%s" "$EXTRACTED_TEXT" | wl-copy
+
+# 4. Open interactive text dialog so specific lines/words can be selected and copied
+MODIFIED_TEXT=$(zenity --text-info \
+    --title="Text Extractor (All Text Copied to Clipboard)" \
+    --width=520 \
+    --height=320 \
+    --editable \
+    --filename="${TMP_TXT}.txt" 2>/dev/null || true)
+
+# If the user edited or chose specific text inside the dialog, update clipboard
+if [[ -n "$MODIFIED_TEXT" ]]; then
+    printf "%s" "$MODIFIED_TEXT" | wl-copy
+fi

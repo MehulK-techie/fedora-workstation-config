@@ -1,194 +1,42 @@
-#!/usr/bin/env python3
-import sys
-import os
-import subprocess
-import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GLib, Pango
+#!/usr/bin/env bash
+# ==============================================================================
+# MK Workstation: Interactive Keyboard Shortcuts HUD
+# ==============================================================================
 
-def run_cmd(cmd):
-    try:
-        return subprocess.check_output(cmd, text=True).strip()
-    except Exception:
-        return ""
+SHORTCUTS_DATA=$(cat << 'LIST'
+KEYBOARD SHORTCUTS REFERENCE:
 
-def get_gsetting(schema, key):
-    val = run_cmd(["gsettings", "get", schema, key])
-    if not val or val == "@as []" or val == "[]":
-        return "Disabled / Unbound"
-    val = val.replace("@as ", "").replace("[", "").replace("]", "").replace("'", "").replace('"', "")
-    val = val.replace("<Super>", "Super + ").replace("<Alt>", "Alt + ").replace("<Shift>", "Shift + ").replace("<Control>", "Ctrl + ")
-    val = val.replace("period", ".").replace("slash", "/").replace("Left", "←").replace("Right", "→").replace("Up", "↑").replace("Down", "↓")
-    return val if val else "Disabled"
+[Window Management]
+  Alt + Tab              Cycle through all windows across all workspaces
+  Super + Q / Alt + F4   Close active application window
+  Super + Arrow Keys     Snap windows (Left / Right / Maximize)
 
-class ShortcutsApp(Gtk.Window):
-    def __init__(self):
-        super().__init__(title="⚡ Dynamic Workstation Shortcuts & Manager")
-        self.set_default_size(660, 700)
-        self.set_position(Gtk.WindowPosition.CENTER)
-        self.set_border_width(12)
+[Screenshots & Captures]
+  Print                  Instant full-screen screenshot (auto-saved)
+  Alt + Print            Instant active window screenshot
+  Shift + Print          Area selection tool
+  Super + Shift + S      Interactive screen snippet
 
-        notebook = Gtk.Notebook()
-        self.add(notebook)
+[Productivity & Utilities]
+  Super + Shift + T      PowerToys OCR Text Extractor (Select & Copy text)
+  Super + .              Emoji & Symbol Palette
+  Super + /              Open this Shortcuts Cheat Sheet
 
-        # TAB 1: LIVE SYSTEM & GESTURE SHORTCUTS
-        tab1_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        tab1_vbox.set_border_width(10)
-        
-        lbl_top = Gtk.Label()
-        lbl_top.set_markup("<span size='large' weight='bold'>🚀 LIVE SYSTEM SHORTCUTS & GESTURES</span>")
-        tab1_vbox.pack_start(lbl_top, False, False, 4)
+[How to Customize]
+  Click 'Open Settings' below or go to Settings -> Keyboard -> Keyboard Shortcuts.
+LIST
+)
 
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        tab1_vbox.pack_start(scrolled, True, True, 0)
+zenity --info \
+    --title="MK Workstation Shortcuts HUD" \
+    --width=540 \
+    --height=420 \
+    --text="$SHORTCUTS_DATA" \
+    --ok-label="Close" \
+    --extra-button="Customize in Settings" 2>/dev/null
 
-        self.shortcuts_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        scrolled.add(self.shortcuts_box)
-        
-        btn_refresh = Gtk.Button(label="🔄 Refresh Live Keybindings")
-        btn_refresh.connect("clicked", lambda w: self.load_live_shortcuts())
-        tab1_vbox.pack_start(btn_refresh, False, False, 0)
+if [[ $? -eq 0 ]] || [[ "${PIPESTATUS[0]}" -eq 0 ]]; then
+    exit 0
+fi
 
-        notebook.append_page(tab1_vbox, Gtk.Label(label="⌨️ Live Shortcuts"))
-
-        # TAB 2: CREATE & SAVE CUSTOM SHORTCUTS
-        tab2_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        tab2_vbox.set_border_width(16)
-
-        lbl_add = Gtk.Label()
-        lbl_add.set_markup("<span size='medium' weight='bold'>➕ Create & Save Custom System Shortcut</span>")
-        tab2_vbox.pack_start(lbl_add, False, False, 4)
-
-        tab2_vbox.pack_start(Gtk.Label(label="Shortcut Name (e.g. Open Terminal):", xalign=0), False, False, 0)
-        self.entry_name = Gtk.Entry(placeholder_text="My Custom Shortcut")
-        tab2_vbox.pack_start(self.entry_name, False, False, 0)
-
-        tab2_vbox.pack_start(Gtk.Label(label="Command to Execute (e.g. ptyxis or gnome-calculator):", xalign=0), False, False, 0)
-        self.entry_cmd = Gtk.Entry(placeholder_text="ptyxis")
-        tab2_vbox.pack_start(self.entry_cmd, False, False, 0)
-
-        tab2_vbox.pack_start(Gtk.Label(label="Keybinding Accelerator (e.g. <Super><Alt>t or <Super>m):", xalign=0), False, False, 0)
-        self.entry_binding = Gtk.Entry(placeholder_text="<Super><Alt>t")
-        tab2_vbox.pack_start(self.entry_binding, False, False, 0)
-
-        btn_save = Gtk.Button(label="💾 Save Hotkey to System & Persistence Profile")
-        btn_save.connect("clicked", self.on_save_custom_shortcut)
-        tab2_vbox.pack_start(btn_save, False, False, 10)
-
-        self.lbl_status = Gtk.Label(label="")
-        tab2_vbox.pack_start(self.lbl_status, False, False, 0)
-
-        notebook.append_page(tab2_vbox, Gtk.Label(label="➕ Add Shortcut"))
-
-        self.load_live_shortcuts()
-
-    def load_live_shortcuts(self):
-        for child in self.shortcuts_box.get_children():
-            self.shortcuts_box.remove(child)
-
-        # Query gsettings live for active desktop settings
-        cat_sys = [
-            ("Global Window Switcher", "org.gnome.desktop.wm.keybindings", "switch-windows"),
-            ("Application Overview / Grid", "org.gnome.shell.keybindings", "toggle-overview"),
-            ("Close Window", "org.gnome.desktop.wm.keybindings", "close"),
-            ("Maximize Window", "org.gnome.desktop.wm.keybindings", "maximize"),
-            ("Unmaximize Window", "org.gnome.desktop.wm.keybindings", "unmaximize"),
-            ("Move Window to Left Workspace", "org.gnome.desktop.wm.keybindings", "move-to-workspace-left"),
-            ("Move Window to Right Workspace", "org.gnome.desktop.wm.keybindings", "move-to-workspace-right"),
-        ]
-
-        # Read custom media keybindings dynamically
-        custom_paths = run_cmd(["gsettings", "get", "org.gnome.settings-daemon.plugins.media-keys", "custom-keybindings"])
-        custom_items = []
-        if custom_paths and custom_paths != "@as []":
-            paths = custom_paths.replace("@as ", "").replace("[", "").replace("]", "").replace("'", "").split(",")
-            for p in paths:
-                p = p.strip()
-                if p:
-                    name = run_cmd(["gsettings", "get", f"org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{p}", "name"]).strip("'\"")
-                    cmd = run_cmd(["gsettings", "get", f"org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{p}", "command"]).strip("'\"")
-                    bind = get_gsetting(f"org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{p}", "binding")
-                    if name and bind:
-                        custom_items.append((f"{name} [{cmd}]", bind))
-
-        # Dynamic Touchpad Gesture Status
-        gesture_items = [
-            ("3-Finger Horizontal Swipe", "Switch Workspaces (Left / Right)"),
-            ("3-Finger Vertical Pinch / Drag", "Wobbly Mesh Effect / Overview"),
-            ("4-Finger Swipe Up / Down", "Workspace Overview Grid Matrix")
-        ]
-
-        self._add_section("🖥️ LIVE SYSTEM KEYBINDINGS", [(desc, get_gsetting(sch, k)) for desc, sch, k in cat_sys])
-        if custom_items:
-            self._add_section("⚙️ ACTIVE USER CUSTOM SHORTCUTS", custom_items)
-        self._add_section("🖱️ TOUCHPAD GESTURES (3 & 4 FINGERS)", gesture_items)
-
-        self.shortcuts_box.show_all()
-
-    def _add_section(self, title, items):
-        frame = Gtk.Frame()
-        frame.set_label(f" {title} ")
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        box.set_border_width(8)
-        frame.add(box)
-
-        for desc, bind in items:
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            lbl_desc = Gtk.Label(label=desc, xalign=0)
-            lbl_bind = Gtk.Label(xalign=1)
-            lbl_bind.set_markup(f"<span background='#2d3139' color='#61afef' weight='bold'> {bind} </span>")
-            row.pack_start(lbl_desc, True, True, 0)
-            row.pack_end(lbl_bind, False, False, 0)
-            box.pack_start(row, False, False, 2)
-
-        self.shortcuts_box.pack_start(frame, False, False, 6)
-
-    def on_save_custom_shortcut(self, widget):
-        name = self.entry_name.get_text().strip()
-        cmd = self.entry_cmd.get_text().strip()
-        bind = self.entry_binding.get_text().strip()
-
-        if not name or not cmd or not bind:
-            self.lbl_status.set_markup("<span color='#e06c75'>⚠️ Please fill in all fields!</span>")
-            return
-
-        # Find next available custom slot in org.gnome.settings-daemon
-        custom_list_str = run_cmd(["gsettings", "get", "org.gnome.settings-daemon.plugins.media-keys", "custom-keybindings"])
-        existing = []
-        if custom_list_str and custom_list_str != "@as []":
-            existing = [x.strip().strip("'\"") for x in custom_list_str.replace("@as ", "").replace("[", "").replace("]", "").split(",") if x.strip()]
-
-        idx = 0
-        while f"/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom{idx}/" in existing:
-            idx += 1
-
-        new_path = f"/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom{idx}/"
-        existing.append(new_path)
-
-        # Set GSettings custom binding
-        schema_path = f"org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:{new_path}"
-        subprocess.run(["gsettings", "set", schema_path, "name", name])
-        subprocess.run(["gsettings", "set", schema_path, "command", cmd])
-        subprocess.run(["gsettings", "set", schema_path, "binding", bind])
-
-        # Register custom path in media-keys list
-        array_val = str(existing).replace("'", '"')
-        subprocess.run(["gsettings", "set", "org.gnome.settings-daemon.plugins.media-keys", "custom-keybindings", array_val])
-
-        # Dump update into local workspace repository
-        repo_path = os.path.expanduser("~/Desktop/Fedora_workspace_MK")
-        if os.path.exists(repo_path):
-            subprocess.run(f"dconf dump /org/gnome/settings-daemon/plugins/media-keys/ > {repo_path}/config/gnome-media-keys.dconf", shell=True)
-            subprocess.run(f"dconf dump /org/gnome/desktop/ > {repo_path}/config/gnome-desktop-full.dconf", shell=True)
-
-        self.lbl_status.set_markup(f"<span color='#98c379'>✔ Saved shortcut '{name}' mapped to {bind}!</span>")
-        self.entry_name.set_text("")
-        self.entry_cmd.set_text("")
-        self.entry_binding.set_text("")
-        self.load_live_shortcuts()
-
-win = ShortcutsApp()
-win.connect("destroy", Gtk.main_quit)
-win.show_all()
-Gtk.main()
+gnome-control-center keyboard &

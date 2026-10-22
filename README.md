@@ -1,48 +1,34 @@
-# Fedora GNOME Workstation Config & Provisioning Suite
+# ⚡ Fedora MK Workstation
 
-![Fedora](https://img.shields.io/badge/Fedora_Linux-41%2F42-blue?logo=fedora)
-![License](https://img.shields.io/badge/License-MIT-green)
-![GNOME](https://img.shields.io/badge/Desktop-GNOME_40%2B-blue?logo=gnome)
-![ShellCheck](https://img.shields.io/badge/Code_Quality-ShellCheck_Passed-brightgreen)
+> An automated, zero-touch Infrastructure-as-Code (IaC) deployment suite for Fedora Linux (GNOME / Wayland). Combines developer-ready system optimization, macOS-grade visual minimalism, and Windows PowerToys-grade ergonomics out of the box.
 
-An automated Infrastructure-as-Code (IaC) suite for Fedora Linux. This repository provides zero-touch system provisioning, low-latency desktop environment keybindings, privacy-safe browser profile synchronization, and local IR facial biometrics.
+[![Fedora](https://img.shields.io/badge/Fedora_Linux-42_|_43_|_44-51A2DA?logo=fedora&logoColor=white)](https://fedoraproject.org)
+[![Desktop](https://img.shields.io/badge/GNOME-Wayland-4A154B?logo=gnome&logoColor=white)](https://www.gnome.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Maintenance](https://img.shields.io/badge/Idempotent-Safe_Rollbacks-success)](#-under-the-hood-for-tech-geeks)
 
 ---
 
-## 🎯 System Architecture & Features
+## 📋 Dual-Boot Pre-Installation Checklist (Windows ➔ Fedora)
 
-| Component | Functionality | Implementation Details |
+If you are setting up Fedora alongside Windows on a shared SSD, complete these three pre-flight steps in Windows to prevent partition corruption or installer crashes:
+
+| Step | Action | How to Do It |
 | :--- | :--- | :--- |
-| **Dual-Boot Onboarding** | Foolproof Windows/Fedora pre-installation safety workflow | BitLocker decryption, Fast Startup removal, BIOS AHCI rules, and Rufus DD-mode flashing guide. |
-| **Automated Provisioning** | One-command system deployment (`setup.sh`) | Native DNF package setup, Flathub Flatpaks, GNOME extension deployment, and GSettings configuration. |
-| **State Synchronization** | Single-command backup (`sync.sh`) | Dumps live `dconf` trees, active extension lists, and custom shortcuts to Git. |
-| **Privacy-Safe Sync** | Non-sensitive browser configuration backup | Backs up Zen Browser CSS (`chrome/`), flags (`user.js`), and keybindings while auto-filtering passwords (`logins.json`) and cookies (`.sqlite`). |
-| **Global Window Navigation** | Low-latency `Alt+Tab` window switching | Disables application grouping; forces single-window cycling across **all** open workspaces. |
-| **Local Biometrics** | IR Camera facial recognition | Local vector-based facial authentication via Howdy and PAM modules (zero cloud uploads). |
+| **1. BitLocker Decryption** | Turn off drive encryption | Open **Control Panel** ➔ **BitLocker Drive Encryption** ➔ Click **Turn off BitLocker**. Wait for decryption to finish. |
+| **2. Fast Startup Removal** | Un-mount Windows partition locks | Open **Control Panel** ➔ **Power Options** ➔ **Choose what the power buttons do** ➔ Click *Change settings that are currently unavailable* ➔ **Uncheck "Turn on fast startup"**. |
+| **3. Partition Allocation** | Carve out clean disk space | Press `Win + X` ➔ Open **Disk Management** (`diskmgmt.msc`) ➔ Right-click your main volume ➔ Select **Shrink Volume** (leave 60–100 GB as **Unallocated Space**; do not format it). |
+| **4. Flashing Live USB** | Create reliable boot media | Download the official **Fedora Workstation Live ISO** (the ~2.5+ GB image). In **Rufus**, select your USB, choose **GPT / UEFI**, and flash in **DD Image Mode** (or use official **Fedora Media Writer**). |
 
 ---
 
-## 📋 Dual-Boot Pre-Installation Checklist (Windows $\rightarrow$ Fedora)
+## 🚀 Quick Start (One-Liner Setup)
 
-To prevent partition corruption or USB boot failures during installation:
-
-1. **BitLocker Decryption:** Disable BitLocker on target drives in Windows (`Control Panel > BitLocker Drive Encryption`).
-2. **Fast Startup:** Deactivate Windows Fast Startup (`Power Options > Choose what the power buttons do`) to un-mount drive locks.
-3. **Partition Allocation:** Create unallocated free space using `diskmgmt.msc`.
-4. **Bootable USB Creation:** 
-   * Download the full **2.7 GB Live ISO** from Fedora (do not select the 365-byte checksum file).
-   * Ensure the ISO is stored on your host drive (`C:`), not inside the target flash drive.
-   * In **Rufus**, select **GPT** partition scheme and flash using **DD Image Mode** (or use **Fedora Media Writer**).
-
----
-
-## 🚀 Quick Start Guide
-
-### Fresh System Setup
-On a clean Fedora installation, clone this repository and run the provisioning engine:
+Open your terminal on a fresh Fedora installation and run:
 
 ```bash
-git clone [https://github.com/MehulK-techie/fedora-workstation-config.git](https://github.com/MehulK-techie/fedora-workstation-config.git) ~/Desktop/Fedora_workspace_MK
-cd ~/Desktop/Fedora_workspace_MK
-chmod +x setup.sh sync.sh
-./setup.sh
+git clone [https://github.com/MehulK-techie/fedora-workstation-config.git](https://github.com/MehulK-techie/fedora-workstation-config.git)
+cd fedora-workstation-config
+chmod +x setup.sh sync-shortcuts.sh register-face.sh
+sudo ./setup.sh
+./sync-shortcuts.sh

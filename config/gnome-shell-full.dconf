@@ -271,7 +271,7 @@ check-x11wayland=true
 [extensions/emoji-copy]
 always-show=false
 emoji-keybind=['<Super>period']
-recently-used=['😂', '😩', '❤️', '😍', '😭', '😊', '😒', '😘', '🤔', '☺️', '👌']
+recently-used=['😭', '😂', '😩', '❤️', '😍', '😊', '😒', '😘', '🤔', '☺️', '👌']
 use-keybind=true
 window-location='top-bar'
 

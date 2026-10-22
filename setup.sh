@@ -88,3 +88,22 @@ sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.shell enabled-extensions 
   'dash-to-dock@micxgx.gmail.com',
   'places-menu@gnome-shell-extensions.gcampax.github.com'
 ]"
+
+# ==============================================================================
+# GNOME Extensions Enabled State (Active 8)
+# ==============================================================================
+echo "Enabling active 8 GNOME extensions..."
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_UID=$(id -u "$REAL_USER")
+DBUS_ENV="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$REAL_UID/bus"
+
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.shell enabled-extensions "[
+  'touchpad-gesture-customization@coooolapps.com',
+  'blur-my-shell@aunetx',
+  'monitor@astraext.github.io',
+  'transparent-top-bar@ftpix.com',
+  'wack-shell@rinzler69-wastaken.github.com',
+  'text-extractor@imshaaz21.github.com',
+  'places-menu@gnome-shell-extensions.gcampax.github.com',
+  'dash-to-dock@micxgx.gmail.com'
+]"

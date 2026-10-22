@@ -167,3 +167,7 @@ cat << 'CSSEOF' >> "$USER_HOME/.config/gnome-shell/gnome-shell.css"
 }
 CSSEOF
 chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.config/gnome-shell"
+
+# Rebind Super+Shift+S for Power-Off by freeing it from Screenshot Tool
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.shell.keybindings show-screenshot-ui "['Print']"
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.settings-daemon.plugins.media-keys power-off "['<Super><Shift>s', '<Super>BackSpace', 'XF86PowerOff']"

@@ -204,7 +204,7 @@ switch-to-workspace-left=['<Super><Alt>Left', '<Control><Alt>Left']
 switch-to-workspace-right=['<Super><Alt>Right', '<Control><Alt>Right']
 switch-to-workspace-up=['<Super>Page_Up']
 switch-windows=['<Alt>Tab']
-switch-windows-backward=['<Alt><Shift>Tab']
+switch-windows-backward=['<Shift><Alt>Tab']
 unmaximize=@as []
 
 [wm/preferences]

@@ -6,3 +6,18 @@
 *.log
 /tmp/
 .config/spotify/
+
+# Zen / Firefox Browser Exclusions
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+logins.json
+key4.db
+secmod.db
+cert9.db
+formhistory.sqlite
+cookies.sqlite
+places.sqlite
+sessionstore*
+storage/
+containers.json

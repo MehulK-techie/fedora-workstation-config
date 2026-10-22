@@ -107,3 +107,63 @@ sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.shell enabled-extensions 
   'places-menu@gnome-shell-extensions.gcampax.github.com',
   'dash-to-dock@micxgx.gmail.com'
 ]"
+
+# ==============================================================================
+# Custom Keybindings & Modern Modal Dialog Aesthetics
+# ==============================================================================
+echo "Configuring Super+Q window close & Shutdown shortcuts..."
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_UID=$(id -u "$REAL_USER")
+DBUS_ENV="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$REAL_UID/bus"
+
+# Super + Q -> Close Window
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.desktop.wm.keybindings close "['<Super>q', '<Alt>F4']"
+
+# Super + Shift + S & Super + Backspace -> Shutdown / Restart Prompt
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.settings-daemon.plugins.media-keys power-off "['<Super><Shift>s', '<Super>BackSpace', 'XF86PowerOff']"
+
+# Enable Frosted Glass Blur on Shutdown & Modal Dialogs
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.shell.extensions.blur-my-shell.modal-dialogs blur true
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.shell.extensions.blur-my-shell.modal-dialogs brightness 0.65
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.shell.extensions.blur-my-shell.modal-dialogs sigma 30
+
+# Apply Custom Modal CSS to user profile
+USER_HOME="/home/$REAL_USER"
+mkdir -p "$USER_HOME/.config/gnome-shell"
+cat << 'CSSEOF' >> "$USER_HOME/.config/gnome-shell/gnome-shell.css"
+
+/* Custom Modern Shutdown & Modal Dialog Styling */
+.modal-dialog {
+  border-radius: 24px !important;
+  background-color: rgba(20, 20, 28, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6) !important;
+  padding: 18px !important;
+}
+
+.end-session-dialog {
+  border-radius: 24px !important;
+}
+
+.modal-dialog-linked-button {
+  border-radius: 12px !important;
+  font-weight: bold !important;
+  padding: 10px 20px !important;
+  margin: 4px !important;
+  transition: all 200ms ease-in-out !important;
+}
+
+.modal-dialog-linked-button:hover {
+  background-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.modal-dialog-linked-button:last-child {
+  background-color: #e64553 !important;
+  color: #ffffff !important;
+}
+
+.modal-dialog-linked-button:last-child:hover {
+  background-color: #f38ba8 !important;
+}
+CSSEOF
+chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.config/gnome-shell"

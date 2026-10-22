@@ -175,3 +175,6 @@ sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.settings-daemon.plugins.m
 # Rebind Super+Shift+S for Power-Off by freeing it from Screenshot Tool
 sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.shell.keybindings show-screenshot-ui "['Print']"
 sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.settings-daemon.plugins.media-keys power-off "['<Super><Shift>s', '<Super>BackSpace', 'XF86PowerOff']"
+
+# Bind Power-Off to Super+Backspace & Super+Shift+X
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.settings-daemon.plugins.media-keys power-off "['<Super>BackSpace', '<Super><Shift>x', '<Control><Alt>Delete', 'XF86PowerOff']"

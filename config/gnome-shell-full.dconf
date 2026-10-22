@@ -467,7 +467,7 @@ automatic-location=true
 locations=[<(uint32 2, <('Jaipur', 'VIJP', true, [(0.46803913356091015, 1.3229595730117016)], [(0.46978446281290459, 1.3232504670381315)])>)>]
 
 [window-switcher]
-current-workspace-only=true
+current-workspace-only=false
 
 [world-clocks]
 locations=@av []

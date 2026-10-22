@@ -1,23 +1,30 @@
-*.pem
-*.key
-.ssh/
-.gnupg/
-.cache/
+# System & Editor junk
 *.log
-/tmp/
-.config/spotify/
+*.bak
+*.tmp
+*~
+.DS_Store
+.vscode/
+.idea/
 
-# Zen / Firefox Browser Exclusions
-*.sqlite
-*.sqlite-wal
-*.sqlite-shm
+# Biometric & Hardware Data (CRITICAL PRIVACY)
+*.dat
+*.dhall
+/var/lib/howdy/
+/var/log/howdy/
+models/
+snapshots/
+
+# User-specific dynamic caches & environment
+.env
+local.env
+*.local
+FEDORA_MK_FULL_CONTEXT.md
+generate_system_context.sh
+
+# Browser credentials & persistent databases
 logins.json
 key4.db
-secmod.db
-cert9.db
-formhistory.sqlite
-cookies.sqlite
-places.sqlite
-sessionstore*
+cookies.sqlite*
+places.sqlite*
 storage/
-containers.json

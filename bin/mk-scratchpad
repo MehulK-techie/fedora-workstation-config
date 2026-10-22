@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# MK Workstation: Quick Notes, To-Do, & Instant Reminder HUD
+# ==============================================================================
+NOTES_FILE="$HOME/.mk_scratchpad.txt"
+[ -f "$NOTES_FILE" ] || echo -e "# MK Quick Workspace Notes & To-Dos\n- [ ] Priority task 1\n- [ ] Follow up on PR" > "$NOTES_FILE"
+
+ACTION=$(zenity --list --title="⚡ MK Workspace Companion" \
+  --width=520 --height=340 \
+  --column="Action" --column="Description" \
+  "Notes" "Open Quick Scratchpad / Sticky Notes" \
+  "Timer" "Set Instant Timer / Break Reminder" \
+  "View"  "Display Current Sticky Note Preview" \
+  2>/dev/null || true)
+
+case "$ACTION" in
+  "Notes")
+    zenity --text-info --title="MK Quick Scratchpad" --filename="$NOTES_FILE" --editable --width=540 --height=400 2>/dev/null > "${NOTES_FILE}.tmp"
+    if [ -s "${NOTES_FILE}.tmp" ]; then
+      mv "${NOTES_FILE}.tmp" "$NOTES_FILE"
+      notify-send -t 2000 "MK Workspace" "Notes saved."
+    fi
+    rm -f "${NOTES_FILE}.tmp"
+    ;;
+  "Timer")
+    MINS=$(zenity --entry --title="Set Reminder Timer" --text="Remind me in how many minutes?" --entry-text="25" 2>/dev/null || echo "")
+    if [[ -n "$MINS" && "$MINS" =~ ^[0-9]+$ ]]; then
+      MSG=$(zenity --entry --title="Timer Label" --text="What is this reminder for?" --entry-text="Standup / Break / Review" 2>/dev/null || echo "Time is up!")
+      (
+        sleep $((MINS * 60))
+        notify-send -u critical -t 10000 "⏰ MK Timer Expired ($MINS min)" "$MSG"
+        canberra-gtk-play -i complete-media-burn 2>/dev/null || true
+      ) &
+      notify-send -t 2500 "Timer Set" "Reminder in $MINS minutes: $MSG"
+    fi
+    ;;
+  "View")
+    zenity --text-info --title="Sticky Notes Preview" --filename="$NOTES_FILE" --width=500 --height=350 2>/dev/null || true
+    ;;
+esac

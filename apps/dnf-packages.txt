@@ -2,3 +2,7 @@ wmctrl
 tesseract
 gnome-characters
 wtype
+gthumb
+kamoso
+v4l-utils
+python3-tkinter

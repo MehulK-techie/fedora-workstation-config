@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+import subprocess
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+def get_video_device():
+    try:
+        out = subprocess.check_output("ls /dev/video* 2>/dev/null", shell=True).decode().split()
+        return out[0] if out else "/dev/video0"
+    except:
+        return "/dev/video0"
+
+DEV = get_video_device()
+
+def set_ctrl(ctrl_name, val):
+    val = int(float(val))
+    subprocess.run(f"v4l2-ctl -d {DEV} --set-ctrl={ctrl_name}={val}", shell=True)
+
+def reset_all():
+    subprocess.run(f"v4l2-ctl -d {DEV} --reset-controls", shell=True)
+    messagebox.showinfo("Camera Controls", "All parameters reset to hardware defaults.")
+    root.destroy()
+
+root = tk.Tk()
+root.title(f"Camera Controls Studio ({DEV})")
+root.geometry("450x580")
+root.configure(bg="#1e1e2e")
+
+style = ttk.Style()
+style.theme_use("clam")
+style.configure("TLabel", background="#1e1e2e", foreground="#cdd6f4", font=("Sans", 10))
+style.configure("Header.TLabel", font=("Sans", 12, "bold"), foreground="#89b4fa")
+
+ttk.Label(root, text="Camera Hardware Tuning", style="Header.TLabel").pack(pady=10)
+frame = tk.Frame(root, bg="#1e1e2e")
+frame.pack(fill="both", expand=True, padx=25, pady=5)
+
+def add_slider(parent, label_text, ctrl_name, from_, to_, default_val):
+    lbl = ttk.Label(parent, text=f"{label_text}:")
+    lbl.pack(anchor="w", pady=(6, 0))
+    scale = tk.Scale(parent, from_=from_, to=to_, orient="horizontal",
+                     bg="#313244", fg="#cdd6f4", highlightthickness=0,
+                     command=lambda val: set_ctrl(ctrl_name, val))
+    scale.set(default_val)
+    scale.pack(fill="x", pady=(0, 6))
+    return scale
+
+# Primary Controls
+add_slider(frame, "Brightness", "brightness", -64, 64, 0)
+add_slider(frame, "Contrast", "contrast", 0, 100, 32)
+add_slider(frame, "Saturation", "saturation", 0, 100, 64)
+
+# Advanced Controls
+ttk.Label(frame, text="Advanced Hardware Controls", style="Header.TLabel").pack(anchor="w", pady=(12, 4))
+add_slider(frame, "Sharpness", "sharpness", 0, 10, 2)
+add_slider(frame, "Gamma", "gamma", 100, 300, 220)
+add_slider(frame, "White Balance Temperature", "white_balance_temperature", 2800, 6500, 4600)
+
+btn_frame = tk.Frame(root, bg="#1e1e2e")
+btn_frame.pack(fill="x", pady=15, padx=25)
+
+tk.Button(btn_frame, text="Reset Defaults", bg="#f38ba8", fg="#11111b",
+          font=("Sans", 10, "bold"), relief="flat", command=reset_all).pack(side="left", expand=True, fill="x", padx=5)
+
+tk.Button(btn_frame, text="Apply & Close", bg="#a6e3a1", fg="#11111b",
+          font=("Sans", 10, "bold"), relief="flat", command=root.destroy).pack(side="right", expand=True, fill="x", padx=5)
+
+root.mainloop()

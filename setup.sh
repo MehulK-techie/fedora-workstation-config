@@ -54,3 +54,37 @@ if command -v getenforce &>/dev/null && [[ "$(getenforce)" == "Enforcing" ]]; th
 fi
 
 echo "✔ System-level setup complete. Next: run ./sync.sh (without sudo) for desktop user setup."
+
+# ==============================================================================
+# GNOME Navigation: Alt+Tab Window Switching
+# ==============================================================================
+echo "Configuring Alt+Tab window switching..."
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_UID=$(id -u "$REAL_USER")
+DBUS_ENV="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$REAL_UID/bus"
+
+# Clear Alt+Tab from App Switching
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.desktop.wm.keybindings switch-applications "['<Super>Tab']"
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.desktop.wm.keybindings switch-applications-backward "['<Shift><Super>Tab']"
+
+# Apply Alt+Tab to Window Switching
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.desktop.wm.keybindings switch-windows "['<Alt>Tab']"
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.desktop.wm.keybindings switch-windows-backward "['<Shift><Alt>Tab']"
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.shell.window-switcher current-workspace-only false
+
+# ==============================================================================
+# GNOME Extensions Enabled State
+# ==============================================================================
+echo "Enabling preferred GNOME extensions..."
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_UID=$(id -u "$REAL_USER")
+DBUS_ENV="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$REAL_UID/bus"
+
+sudo -u "$REAL_USER" $DBUS_ENV gsettings set org.gnome.shell enabled-extensions "[
+  'text-extractor@imshaaz21.github.com',
+  'touchpad-gesture-customization@coooolapps.com',
+  'transparent-top-bar@ftpix.com',
+  'wack-shell@rinzler69-wastaken.github.com',
+  'dash-to-dock@micxgx.gmail.com',
+  'places-menu@gnome-shell-extensions.gcampax.github.com'
+]"

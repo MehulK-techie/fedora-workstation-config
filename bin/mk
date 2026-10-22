@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# MK Workstation Command Line Interface (CLI)
+# ==============================================================================
+set -euo pipefail
+
+REPO_DIR="$HOME/.local/share/fedora-workstation-config"
+[ -d "$REPO_DIR" ] || REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+case "${1:-help}" in
+    update)
+        echo "==> Checking for MK Workstation updates..."
+        cd "$REPO_DIR"
+        git fetch origin main --quiet
+        
+        LOCAL=$(git rev-parse HEAD)
+        REMOTE=$(git rev-parse origin/main)
+        
+        if [ "$LOCAL" = "$REMOTE" ]; then
+            echo "✔ MK Workstation is already up-to-date (Commit: ${LOCAL:0:7})"
+        else
+            echo "⚡ New updates found! Pulling latest optimizations..."
+            git pull origin main
+            chmod +x setup.sh sync-shortcuts.sh register-face.sh bin/*
+            ./sync-shortcuts.sh
+            echo "✔ Workstation updated and synchronized successfully!"
+        fi
+        ;;
+
+    check)
+        cd "$REPO_DIR"
+        git fetch origin main --quiet
+        LOCAL=$(git rev-parse HEAD)
+        REMOTE=$(git rev-parse origin/main)
+        if [ "$LOCAL" != "$REMOTE" ]; then
+            notify-send -i software-update-available "MK Workstation Update" "New performance updates are available. Run 'mk update' to apply."
+        fi
+        ;;
+
+    sync)
+        echo "==> Exporting local desktop settings to repo..."
+        cd "$REPO_DIR"
+        ./sync.sh
+        ;;
+
+    shortcuts|hud)
+        "$HOME/.local/bin/show-shortcuts"
+        ;;
+
+    *)
+        echo "MK Workstation CLI"
+        echo "Usage: mk <command>"
+        echo ""
+        echo "Commands:"
+        echo "  update     Fetch and apply the latest configurations and optimizations"
+        echo "  check      Check if repository updates are available"
+        echo "  sync       Export active GNOME settings back into Git"
+        echo "  shortcuts  Open the interactive keyboard shortcuts cheat sheet"
+        ;;
+esac

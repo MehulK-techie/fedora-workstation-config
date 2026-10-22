@@ -1,88 +1,54 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# MK Workstation: Dynamic Live-Query Shortcuts HUD
-# ==============================================================================
 set -euo pipefail
 
 TMP_HUD=$(mktemp /tmp/mk_hud_XXXXXX.txt)
 trap 'rm -f "$TMP_HUD"' EXIT
 
-# Helper to fetch active keybinding cleanly
 get_key() {
-    local schema="$1"
-    local key="$2"
     local val
-    val=$(gsettings get "$schema" "$key" 2>/dev/null || echo "[]")
+    val=$(gsettings get "$1" "$2" 2>/dev/null || echo "[]")
     val=$(echo "$val" | sed -E "s/@as //;s/[\[\]']//g;s/,/ /g")
-    if [[ -z "$val" ]]; then echo "Disabled"; else echo "$val"; fi
+    echo "${val:-Disabled}"
 }
 
-cat << HEADER > "$TMP_HUD"
+cat << REGISTRY > "$TMP_HUD"
 ==================================================================================
                  ⚡ MK WORKSTATION LIVE SHORTCUT REGISTRY ⚡
                (Values queried dynamically in real-time from GNOME)
 ==================================================================================
 
-[ 🪟 WINDOW NAVIGATION & TILING ]
-  • Universal Window Switcher (Alt+Tab) : $(get_key org.gnome.desktop.wm.keybindings switch-windows)
-  • Close Active Window                 : $(get_key org.gnome.desktop.wm.keybindings close)
-  • Snap Window Left                    : $(get_key org.gnome.mutter.keybindings toggle-tiled-left)
-  • Snap Window Right                   : $(get_key org.gnome.mutter.keybindings toggle-tiled-right)
-  • Maximize Window                     : $(get_key org.gnome.desktop.wm.keybindings maximize)
-  • Restore / Unmaximize                : $(get_key org.gnome.desktop.wm.keybindings unmaximize)
+[ 🪟 WINDOW MANAGEMENT & TILING ]
+  • Alt + Tab              : $(get_key org.gnome.desktop.wm.keybindings switch-windows)
+  • Snap Window Left       : $(get_key org.gnome.mutter.keybindings toggle-tiled-left)
+  • Snap Window Right      : $(get_key org.gnome.mutter.keybindings toggle-tiled-right)
+  • Maximize / Restore     : Super+Up / Super+Down
+  • Close Active Window    : $(get_key org.gnome.desktop.wm.keybindings close)
 
 [ 📸 SCREENSHOT & SNIP SUITE ]
-  • Instant Fullscreen Capture          : $(get_key org.gnome.shell.keybindings screenshot)
-  • Instant Active Window Capture       : $(get_key org.gnome.shell.keybindings screenshot-window)
-  • Interactive Area Selection / Record : $(get_key org.gnome.shell.keybindings show-screenshot-ui)
+  • Instant Fullscreen     : $(get_key org.gnome.shell.keybindings screenshot)
+  • Instant Window         : $(get_key org.gnome.shell.keybindings screenshot-window)
+  • Interactive Area Snip  : $(get_key org.gnome.shell.keybindings show-screenshot-ui)
 
-[ 🚀 WORKSPACE & MULTITASKING ]
-  • Switch to Workspace 1 (Dev)         : $(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-1)
-  • Switch to Workspace 2 (Web)         : $(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-2)
-  • Switch to Workspace 3 (Terminal)    : $(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-3)
-  • Switch to Workspace 4 (Chat)        : $(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-4)
-  • Move Window to Workspace 1..4       : Super + Shift + 1, 2, 3, 4
-  • Zen Browser Internal Workspaces     : Ctrl + Alt + Left / Right (Freed from OS)
+[ 🚀 ERGONOMICS & APPS ]
+  • PowerToys OCR Snip     : Super + Shift + T
+  • Notes & Timers         : Super + N
+  • Camera Controls Studio : Super + C
+  • Shortcuts HUD          : Super + /
+  • Zen Browser Workspaces : Ctrl + Alt + Left / Right
+  • Emoji Board            : Super + .
 
-[ ⚡ CUSTOM DEVELOPER EXTENSIONS ]
-HEADER
-
-# Dynamically enumerate all custom keybinding slots
-CUSTOM_LIST=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null || echo "[]")
-CUSTOM_LIST=$(echo "$CUSTOM_LIST" | sed -E "s/@as //;s/[\[\]']//g;s/,/ /g")
-
-for path in $CUSTOM_LIST; do
-    if [[ -n "$path" ]]; then
-        NAME=$(gsettings get "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$path" name 2>/dev/null || echo "Custom")
-        BIND=$(gsettings get "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$path" binding 2>/dev/null || echo "None")
-        CMD=$(gsettings get "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$path" command 2>/dev/null || echo "")
-        NAME=$(echo "$NAME" | sed "s/'//g")
-        BIND=$(echo "$BIND" | sed "s/'//g")
-        CMD=$(echo "$CMD" | sed "s/'//g")
-        printf "  • %-35s : %-20s (%s)\n" "$NAME" "$BIND" "$CMD" >> "$TMP_HUD"
-    fi
-done
-
-cat << FOOTER >> "$TMP_HUD"
-
-[ 🛠️ TERMINAL CLI UTILITIES ]
-  • mk update       : Pulls latest git commits and recompiles desktop shortcuts
-  • mk check        : Checks if git updates or config upgrades are available
-  • mk sync         : Dumps local desktop dconf configurations into Git
-  • mk shortcuts    : Launches this real-time cheat sheet directly from terminal
-
+[ 🛠️ CLI SUITE ]
+  • mk update    : Pulls git updates and synchronizes environment
+  • mk sync      : Syncs current settings to repo
+  • mk shortcuts : Opens this cheat sheet
 ==================================================================================
-To modify any keybinding: Click 'Open Settings' below.
-==================================================================================
-FOOTER
+REGISTRY
 
 ACTION=$(zenity --text-info \
-    --title="⚡ MK Workstation - Real-Time Shortcuts HUD" \
+    --title="⚡ MK Workstation - Shortcuts HUD" \
     --filename="$TMP_HUD" \
-    --width=760 \
-    --height=560 \
-    --ok-label="Close" \
-    --extra-button="Open Settings" 2>/dev/null || true)
+    --width=720 --height=520 \
+    --ok-label="Close" --extra-button="Open Settings" 2>/dev/null || true)
 
 if [[ "$ACTION" == "Open Settings" ]]; then
     gnome-control-center keyboard &

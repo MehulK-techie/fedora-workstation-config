@@ -1,41 +1,32 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# MK Workstation: Interactive OCR Snipping Tool
-# ==============================================================================
 set -euo pipefail
 
 TMP_IMG=$(mktemp /tmp/ocr_snip_XXXXXX.png)
-TMP_TXT=$(mktemp /tmp/ocr_snip_XXXXXX)
-trap 'rm -f "$TMP_IMG" "${TMP_TXT}"*' EXIT
+TMP_TXT=$(mktemp /tmp/ocr_snip_XXXXXX.txt)
+trap 'rm -f "$TMP_IMG" "$TMP_TXT"' EXIT
 
-# 1. Select screen region
 if ! slurp_area=$(slurp -b '#00000088' -c '#00ffff' -w 2); then
     exit 0
 fi
 
-# 2. Capture area and run OCR
 grim -g "$slurp_area" "$TMP_IMG"
-tesseract "$TMP_IMG" "$TMP_TXT" --oem 1 --psm 6 -l eng 2>/dev/null || tesseract "$TMP_IMG" "$TMP_TXT" -l eng 2>/dev/null
+tesseract "$TMP_IMG" "${TMP_TXT%.txt}" --oem 1 --psm 6 -l eng 2>/dev/null || \
+tesseract "$TMP_IMG" "${TMP_TXT%.txt}" -l eng 2>/dev/null
 
-EXTRACTED_TEXT=$(sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//' "${TMP_TXT}.txt" 2>/dev/null || echo "")
-
-if [[ -z "$EXTRACTED_TEXT" ]]; then
-    notify-send -u low -t 2000 "OCR Text Extractor" "No text detected in selection."
+EXTRACTED=$(sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//' "$TMP_TXT" 2>/dev/null || echo "")
+if [[ -z "$EXTRACTED" ]]; then
+    notify-send -u low -t 2000 "OCR Extractor" "No text detected."
     exit 0
 fi
 
-# 3. Automatically copy all text to clipboard immediately
-printf "%s" "$EXTRACTED_TEXT" | wl-copy
+CHOSEN_TEXT=$(zenity --text-info \
+  --title="OCR Text Extractor (Highlight & Copy)" \
+  --width=580 --height=340 --editable \
+  --filename="$TMP_TXT" \
+  --ok-label="Copy to Clipboard" --cancel-label="Cancel" 2>/dev/null || true)
 
-# 4. Open interactive text dialog so specific lines/words can be selected and copied
-MODIFIED_TEXT=$(zenity --text-info \
-    --title="Text Extractor (All Text Copied to Clipboard)" \
-    --width=520 \
-    --height=320 \
-    --editable \
-    --filename="${TMP_TXT}.txt" 2>/dev/null || true)
-
-# If the user edited or chose specific text inside the dialog, update clipboard
-if [[ -n "$MODIFIED_TEXT" ]]; then
-    printf "%s" "$MODIFIED_TEXT" | wl-copy
+if [[ -n "$CHOSEN_TEXT" ]]; then
+    printf "%s" "$CHOSEN_TEXT" | wl-copy
+    notify-send -i edit-copy -t 2000 "Copied" "$(echo "$CHOSEN_TEXT" | head -n 2 | cut -c 1-50)"
+    canberra-gtk-play -i camera-shutter 2>/dev/null || true
 fi

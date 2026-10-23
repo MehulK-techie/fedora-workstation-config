@@ -405,10 +405,15 @@ class Vault:
 
         slots = []
         task_no = [0]
+        marker = "MKSLOT" + secrets.token_hex(6)  # per render: a note can't guess or fake it
 
         def slot(markup):
             slots.append(markup)
-            return f"MKSLOT{len(slots) - 1}X"
+            return f"{marker}{len(slots) - 1}X"
+
+        def restore(m):
+            index = int(m.group(1))
+            return slots[index] if index < len(slots) else ""
 
         def outside_code(source, fn):
             parts = re.split(r"(^```.*?^```|`[^`\n]*`)", source, flags=re.S | re.M)
@@ -472,9 +477,9 @@ class Vault:
             return TAG.sub(lambda m: f'<a class="tag" href="mktag:{m.group(1)}">#{m.group(1)}</a>', part)
         out = "".join(part if i % 2 else decorate(part) for i, part in enumerate(parts))
         # MK's own HTML back in: blocks first (Markdown wrapped them in <p>), then inline.
-        out = re.sub(r"<p>MKSLOT(\d+)X</p>", lambda m: slots[int(m.group(1))], out)
+        out = re.sub(rf"<p>{marker}(\d+)X</p>", restore, out)
         for _ in range(3):  # slots can hold slots (callouts with links)
-            out = re.sub(r"MKSLOT(\d+)X", lambda m: slots[int(m.group(1))], out)
+            out = re.sub(rf"{marker}(\d+)X", restore, out)
         # Relative image paths (standard Markdown) resolve against the note.
         base = self.path(rel).parent.as_uri() + "/"
         return re.sub(r'<img src="(?!file:|https?:|data:)([^"]+)"',

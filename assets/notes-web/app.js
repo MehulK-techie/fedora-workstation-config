@@ -135,14 +135,20 @@ function privateLAN(url) {
     const u = new URL(url);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
     const h = u.hostname;
-    return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|127\.)/.test(h) || h.endsWith('.local') || h === 'localhost';
+    if (h === 'localhost' || /^[a-z0-9-]+\.local$/i.test(h)) return true;
+    const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (!m) return false;
+    const [a, b] = m.slice(1).map(Number);
+    if (m.slice(1).some(o => +o > 255)) return false;
+    return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254);
   } catch (e) { return false; }
 }
 async function pairChecked(server, key) {
   if (!privateLAN(server)) { toast('That link isn\'t a laptop on your Wi-Fi: not paired'); return false; }
   const same = S.key === key && S.server.replace(/\/?$/, '/') === server.replace(/#.*$/, '').replace(/\/?$/, '/');
   if (same) return true;
-  if (S.key && !confirm(`Pair with ${new URL(server).host}?\n\nThe notes on this phone will sync with that laptop from now on.`)) return false;
+  // A link opened in the Android app can come from anywhere: always ask there.
+  if ((S.key || BUNDLED) && !confirm(`Pair with ${new URL(server).host}?\n\nThe notes on this phone will sync with that laptop from now on.`)) return false;
   if (S.key) {
     // A different laptop: everything here is new to it. Upload notes,
     // forget what the old laptop said, never delete because of it.

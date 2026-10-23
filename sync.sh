@@ -42,6 +42,21 @@ gsettings_append() {
     gsettings set "$schema" "$key" "$current"
 }
 
+# Remove items from a string-array key, keeping everything else.
+gsettings_remove() {
+    local schema=$1 key=$2 item kept=()
+    shift 2
+    while IFS= read -r item; do
+        printf '%s\n' "$@" | grep -qxF -- "$item" || kept+=("'$item'")
+    done < <(gsettings get "$schema" "$key" | grep -oE "'[^']+'" | tr -d "'")
+    if (( ${#kept[@]} )); then
+        local IFS=,
+        gsettings set "$schema" "$key" "[${kept[*]}]"
+    else
+        gsettings set "$schema" "$key" "@as []"
+    fi
+}
+
 # Set a key owned by an extension. User-installed extensions keep their schema
 # in their own folder, which gsettings doesn't search without --schemadir.
 ext_set() {
@@ -228,6 +243,9 @@ gsettings set org.gnome.shell disable-user-extensions false
 # Write the list directly: `gnome-extensions enable` fails on Wayland for
 # extensions the running shell hasn't loaded yet.
 gsettings_append org.gnome.shell enabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR"
+# GNOME's disabled-extensions list overrides enabled-extensions, so an extension
+# switched off once in Extension Manager would otherwise never come back.
+gsettings_remove org.gnome.shell disabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR"
 
 # 3. Window Management & Multitasking (All Workspaces, Zero Lag)
 echo "==> Applying window management keybindings..."

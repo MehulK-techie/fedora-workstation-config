@@ -115,7 +115,7 @@ async function load() {
   const m = location.hash.match(/key=([\w-]+)/), sv = location.hash.match(/server=([^&]+)/);
   if (m) {
     // From the laptop's QR code (browser) or the Android app's mknotes:// link.
-    await pair(sv ? decodeURIComponent(sv[1]) : !BUNDLED ? location.origin + '/' : S.server, m[1]);
+    await pairChecked(sv ? decodeURIComponent(sv[1]) : !BUNDLED ? location.origin + '/' : S.server, m[1]);
     history.replaceState(null, '', location.pathname);
   } else if (!S.server && !BUNDLED) {
     S.server = location.origin + '/';
@@ -125,6 +125,34 @@ async function load() {
   }
   renderList();
   sync();
+}
+
+// Pairing from a link: only a laptop on your own network, and only after you
+// say yes when it would replace an existing pairing. A link can come from
+// anywhere; it must not send your notes elsewhere or wipe them.
+function privateLAN(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    const h = u.hostname;
+    return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|127\.)/.test(h) || h.endsWith('.local') || h === 'localhost';
+  } catch (e) { return false; }
+}
+async function pairChecked(server, key) {
+  if (!privateLAN(server)) { toast('That link isn\'t a laptop on your Wi-Fi: not paired'); return false; }
+  const same = S.key === key && S.server.replace(/\/?$/, '/') === server.replace(/#.*$/, '').replace(/\/?$/, '/');
+  if (same) return true;
+  if (S.key && !confirm(`Pair with ${new URL(server).host}?\n\nThe notes on this phone will sync with that laptop from now on.`)) return false;
+  if (S.key) {
+    // A different laptop: everything here is new to it. Upload notes,
+    // forget what the old laptop said, never delete because of it.
+    for (const rec of [...S.files.values()]) {
+      if (rec.deleted || (rec.kind === 'file' && !rec.blob)) { S.files.delete(rec.path); await DB.del(rec.path); continue; }
+      rec.base = ''; rec.dirty = true; await DB.put(rec);
+    }
+  }
+  await pair(server, key);
+  return true;
 }
 
 async function pair(server, key) {
@@ -167,7 +195,9 @@ function uniquePath(folder, title) {
 async function api(method, path, body) {
   const stamp = String(Math.floor(Date.now() / 1000)) + '', nonce = Math.random().toString(36).slice(2, 8);
   path += (path.includes('?') ? '&' : '?') + 'n=' + nonce;  // two requests in one second still differ
-  const sig = hmacSha1(S.key, `${method} /${path} ${stamp}`);
+  const bytes = body === undefined ? new Uint8Array() : typeof body === 'string' ? new TextEncoder().encode(body)
+    : new Uint8Array(await body.arrayBuffer());
+  const sig = hmacSha1(S.key, `${method} /${path} ${stamp} ${hex(sha1(bytes))}`);
   const res = await fetch(S.server + path, {method, body, headers: {'X-MK-Time': stamp, 'X-MK-Sig': sig}, cache: 'no-store'});
   if (res.status === 401) throw new Error('This phone isn\'t paired: open Settings');
   if (!res.ok && res.status !== 409) throw new Error(`Laptop said ${res.status}`);
@@ -221,7 +251,9 @@ async function sync(quiet = true) {
         S.files.set(path, rec); await DB.put(rec);
       }
     }
-    // 3. deleted on the laptop
+    // 3. deleted on the laptop (an empty laptop is a mistake, not "delete everything")
+    const synced = [...S.files.values()].filter(r => r.base && !r.dirty).length;
+    if (remote.size === 0 && synced > 0) throw new Error('the laptop sent an empty vault; nothing deleted');
     for (const rec of [...S.files.values()]) {
       if (rec.base && !rec.dirty && !remote.has(rec.path)) {
         S.files.delete(rec.path); await DB.del(rec.path);
@@ -614,7 +646,7 @@ $('#settingsBtn').onclick = () => openSheet('settings');
 $('#pairBtn').onclick = async () => {
   const link = $('#pairLink').value.trim(), m = link.match(/key=([\w-]+)/);
   if (!m) { toast('Paste the whole link from the laptop'); return; }
-  await pair(link, m[1]);
+  if (!await pairChecked(link, m[1])) return;
   $('#settings').classList.remove('on');
   sync(false);
 };

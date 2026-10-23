@@ -1348,9 +1348,28 @@ class NotesWindow(Adw.ApplicationWindow):
             self.open_note(rel)
         elif uri.startswith("mktag:"):
             self.search.set_text(f"tag:{uri[6:]}")
-        elif uri.startswith(("http:", "https:", "mailto:", "file:")):
+        elif uri.startswith(("http:", "https:", "mailto:")):
             Gio.AppInfo.launch_default_for_uri(uri, None)
+        elif uri.startswith("file:"):
+            self._open_attachment(Gio.File.new_for_uri(uri))
         return True
+
+    def _open_attachment(self, gfile):
+        """Attachments open in their app; anything that could run (scripts,
+        programs, launchers) is only shown in Files. Nothing outside the vault."""
+        path = Path(gfile.get_path() or "")
+        try:
+            path.resolve().relative_to(self.vault.root)
+        except ValueError:
+            return
+        risky = {".desktop", ".sh", ".bash", ".py", ".pl", ".rb", ".js", ".jar", ".appimage", ".run", ".bin",
+                 ".exe", ".msi", ".bat", ".cmd", ".flatpakref", ".rpm", ".deb"}
+        if path.suffix.lower() in risky or os.access(path, os.X_OK):
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+            bus.call("org.freedesktop.FileManager1", "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1",
+                     "ShowItems", GLib.Variant("(ass)", ([path.as_uri()], "")), None, Gio.DBusCallFlags.NONE, -1, None, None)
+        else:
+            Gio.AppInfo.launch_default_for_uri(path.as_uri(), None)
 
     def _on_web_message(self, _manager, value):
         message = value.to_string()

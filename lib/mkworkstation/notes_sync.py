@@ -6,8 +6,9 @@ in ~/.config/mk-workstation/notes-token (shown as a QR code in MK Notes ›
 Phone). It runs while MK Notes runs with Phone sync on, or with
 `mk-notes --serve`.
 
-Every API request is signed with the key (HMAC-SHA1 of "METHOD PATH TIME" in
-X-MK-Sig, the time in X-MK-Time); the key itself never crosses the network and
+Every API request is signed with the key (HMAC-SHA1 of "METHOD PATH TIME
+BODY-SHA1" in X-MK-Sig, the time in X-MK-Time), so nothing can be changed on
+the way; the key itself never crosses the network and
 a captured request can't be replayed. The notes themselves travel unencrypted
 on your Wi-Fi, so turn Phone sync on at home, not on public Wi-Fi.
 
@@ -121,7 +122,7 @@ class Server:
                 self.end_headers()
                 self.wfile.write(body)
 
-            def _authorised(self):
+            def _authorised(self, body=b""):
                 stamp = self.headers.get("X-MK-Time", "")
                 sig = self.headers.get("X-MK-Sig", "")
                 try:
@@ -129,7 +130,7 @@ class Server:
                         return False
                 except ValueError:
                     return False
-                message = f"{self.command} {self.path} {stamp}".encode()
+                message = f"{self.command} {self.path} {stamp} {hashlib.sha1(body).hexdigest()}".encode()
                 expected = hmac.new(token().encode(), message, hashlib.sha1).hexdigest()
                 if not hmac.compare_digest(sig, expected):
                     return False
@@ -174,8 +175,6 @@ class Server:
                 self._send(404, {"error": "unknown"})
 
             def do_PUT(self):
-                if not self._authorised():
-                    return self._send(401, {"error": "pairing key needed"})
                 url = urlparse(self.path)
                 query = parse_qs(url.query)
                 try:
@@ -185,6 +184,8 @@ class Server:
                 if length < 0 or length > MAX_UPLOAD:
                     return self._send(413, {"error": "too large"})
                 data = self.rfile.read(length)
+                if not self._authorised(data):
+                    return self._send(401, {"error": "pairing key needed"})
                 try:
                     rel = self._target(query)
                 except ValueError as e:

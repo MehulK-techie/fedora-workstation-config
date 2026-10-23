@@ -386,60 +386,95 @@ class Vault:
 
     # ---------- rendering ----------
     def render(self, rel, text, depth=0):
-        """Markdown to HTML for the reading view, PDF export and publishing."""
-        import markdown
+        """Markdown to HTML for the reading view, PDF export and publishing.
 
-        body = re.sub(r"^---\n.*?\n---\n", "", text, count=1, flags=re.S)  # front matter
-        # Raw HTML in a note is shown as text, never run: notes can come from
-        # the phone, a shared vault or a download.
-        pieces = re.split(r"(^```.*?^```|`[^`\n]*`)", body, flags=re.S | re.M)
-        body = "".join(piece if i % 2 else piece.replace("<", "&lt;") for i, piece in enumerate(pieces))
+        Raw HTML in a note is never rendered (Markdown's HTML support is
+        switched off): notes can come from the phone, a shared vault or a
+        download. MK's own HTML (checkboxes, links, embeds, callouts) goes in
+        through placeholders after Markdown has escaped everything else."""
+        import markdown
+        from markdown.extensions import Extension
+
+        class NoRawHTML(Extension):
+            def extendMarkdown(self, md):
+                for name in ("html_block",):
+                    if name in md.preprocessors:
+                        md.preprocessors.deregister(name)
+                if "html" in md.inlinePatterns:
+                    md.inlinePatterns.deregister("html")
+
+        slots = []
         task_no = [0]
+
+        def slot(markup):
+            slots.append(markup)
+            return f"MKSLOT{len(slots) - 1}X"
+
+        def outside_code(source, fn):
+            parts = re.split(r"(^```.*?^```|`[^`\n]*`)", source, flags=re.S | re.M)
+            return "".join(part if i % 2 else fn(part) for i, part in enumerate(parts))
 
         def task(m):
             n = task_no[0]
             task_no[0] += 1
             checked = " checked" if m.group(2).lower() == "x" else ""
-            return f'{m.group(1)}<input type="checkbox" data-task="{n}"{checked}>'
-        body = TASK.sub(task, body)
-        # "#tag" at the start of a line is a tag, not a heading (as in Obsidian).
-        fenced = re.split(r"(^```.*?^```)", body, flags=re.S | re.M)
-        body = "".join(part if i % 2 else re.sub(r"^#(?=[^\s#])", r"\\#", part, flags=re.M)
-                       for i, part in enumerate(fenced))
+            return m.group(1) + slot(f'<input type="checkbox" data-task="{n}"{checked}>')
 
         def wiki(m):
             embed, target, heading, label = m.group(1), m.group(2).strip(), m.group(3) or "", m.group(4)
             dest = self.resolve(target)
             if embed and dest and Path(dest).suffix.lower() in IMAGE_EXT:
                 width = f' width="{html.escape(label)}"' if label and label.isdigit() else ""
-                return f'<img src="{self.path(dest).as_uri()}" alt="{html.escape(target)}"{width}>'
+                return slot(f'<img src="{html.escape(self.path(dest).as_uri())}" alt="{html.escape(target)}"{width}>')
             if embed and dest and dest.endswith(".md") and depth < 1:
                 inner = self.render(dest, self.read(dest), depth + 1)
-                return f'<div class="embed" markdown="0"><div class="embed-title">{html.escape(Path(dest).stem)}</div>{inner}</div>'
+                return "\n\n" + slot(f'<div class="embed"><div class="embed-title">{html.escape(Path(dest).stem)}'
+                                      f'</div>{inner}</div>') + "\n\n"
             if embed and dest:
-                return f'<a class="file" href="{self.path(dest).as_uri()}">📎 {html.escape(Path(dest).name)}</a>'
+                return slot(f'<a class="file" href="{html.escape(self.path(dest).as_uri())}">'
+                            f'📎 {html.escape(Path(dest).name)}</a>')
             cls = "internal" if dest else "internal unresolved"
             href = "mknote:" + (dest or target) + heading
-            return f'<a class="{cls}" href="{html.escape(href)}">{html.escape(label or target + heading)}</a>'
-        body = WIKILINK.sub(wiki, body)
-        body = re.sub(r"==(.+?)==", r"<mark>\1</mark>", body)
+            return slot(f'<a class="{cls}" href="{html.escape(href)}">{html.escape(label or target + heading)}</a>')
 
-        # Obsidian callouts: > [!note] Title
-        def callout(m):
-            kind, title, rest = m.group(1).lower(), m.group(2).strip(), m.group(3)
-            inner = re.sub(r"^> ?", "", rest, flags=re.M)
-            return (f'<div class="callout callout-{kind}" markdown="1"><div class="callout-title">'
-                    f'{html.escape(title or kind.title())}</div>\n\n{inner}\n</div>\n')
-        body = re.sub(r"^> \[!(\w+)\][+-]? ?(.*)\n((?:>.*\n?)*)", callout, body, flags=re.M)
+        def to_html(source):
+            # "#tag" at the start of a line is a tag, not a heading (as in Obsidian).
+            source = outside_code(source, lambda part: re.sub(r"^#(?=[^\s#])", r"\\#", part, flags=re.M))
+            # Nested lists: Obsidian indents by tab or 2 spaces, Markdown wants 4.
+            items = re.findall(r"^( +)(?:[-*+]|\d+\.)[ \t]", source, flags=re.M)
+            unit = 2 if any(len(i) % 4 for i in items) else 4
 
-        out = markdown.markdown(body, extensions=["extra", "sane_lists", "nl2br", "toc"])
-        # Links only to the web, mail, notes and tags: no javascript: and friends.
-        out = re.sub(r'href="(?!https?:|mailto:|mknote:|mktag:|file:|#)[^"]*"', 'href="#"', out)
-        # #tags become links, but not inside code, tags or attributes.
+            def level(indent):
+                return indent.count("\t") + len(indent.replace("\t", "")) // unit
+            source = re.sub(r"^([ \t]+)(?=(?:[-*+]|\d+\.)[ \t])",
+                            lambda m: "    " * level(m.group(1)), source, flags=re.M)
+            # A list right under a paragraph is a list (Markdown wants a blank line).
+            source = outside_code(source, lambda part: re.sub(
+                r"^((?![ \t]*(?:[-*+]|\d+\.)[ \t]).*\S.*)\n(?=[ \t]*(?:[-*+]|\d+\.)[ \t])", r"\1\n\n", part, flags=re.M))
+            source = outside_code(source, lambda part: WIKILINK.sub(wiki, TASK.sub(task, part)))
+
+            def callout(m):  # Obsidian callouts: > [!note] Title
+                kind, title, rest = m.group(1).lower(), m.group(2).strip(), m.group(3)
+                inner = to_html(re.sub(r"^> ?", "", rest, flags=re.M))
+                return "\n\n" + slot(f'<div class="callout callout-{html.escape(kind)}"><div class="callout-title">'
+                                      f'{html.escape(title or kind.title())}</div>{inner}</div>') + "\n\n"
+            source = re.sub(r"^> \[!(\w+)\][+-]? ?(.*)\n?((?:>.*\n?)*)", callout, source, flags=re.M)
+            return markdown.markdown(source, extensions=["extra", "sane_lists", "nl2br", "toc", NoRawHTML()])
+
+        out = to_html(re.sub(r"^---\n.*?\n---\n", "", text, count=1, flags=re.S))  # without front matter
+        # Links only to the web, mail, other notes and tags: no javascript:, no file:.
+        out = re.sub(r'href="(?!https?:|mailto:|mknote:|mktag:|#)[^"]*"', 'href="#"', out)
+        # ==highlights== and #tags, in text only (not code, tags or attributes).
         parts = re.split(r"(<pre.*?</pre>|<code.*?</code>|<a\b.*?</a>|<[^>]+>)", out, flags=re.S)
-        out = "".join(part if i % 2 else TAG.sub(
-            lambda m: f'<a class="tag" href="mktag:{m.group(1)}">#{m.group(1)}</a>', part)
-            for i, part in enumerate(parts))
+
+        def decorate(part):
+            part = re.sub(r"==(.+?)==", r"<mark>\1</mark>", part)
+            return TAG.sub(lambda m: f'<a class="tag" href="mktag:{m.group(1)}">#{m.group(1)}</a>', part)
+        out = "".join(part if i % 2 else decorate(part) for i, part in enumerate(parts))
+        # MK's own HTML back in: blocks first (Markdown wrapped them in <p>), then inline.
+        out = re.sub(r"<p>MKSLOT(\d+)X</p>", lambda m: slots[int(m.group(1))], out)
+        for _ in range(3):  # slots can hold slots (callouts with links)
+            out = re.sub(r"MKSLOT(\d+)X", lambda m: slots[int(m.group(1))], out)
         # Relative image paths (standard Markdown) resolve against the note.
         base = self.path(rel).parent.as_uri() + "/"
         return re.sub(r'<img src="(?!file:|https?:|data:)([^"]+)"',

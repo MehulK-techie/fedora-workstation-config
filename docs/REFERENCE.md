@@ -44,7 +44,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | Tool | Key | Does |
 | :--- | :--- | :--- |
 | `show-shortcuts` | Super+/ | Shortcuts window |
-| `mk-companion [tasks \| note ID]` | Super+Shift+N | Notes, tasks, reminders, timer and Obsidian buttons |
+| `mk-companion [tasks \| note ID]` | Super+Shift+N | Notes, tasks, reminders, timer and MK Notes buttons |
 | `mk-notes [NOTE \| --daily \| --serve]` | Super+N | MK Notes |
 | `mk-timer [DURATION [LABEL]]` | via Companion | Focus timer; `mk-timer 25`, `mk-timer 1:30 "Reading"` start it in the background |
 | `mk-reminders [snooze ID SECONDS]` | timer | Fires due reminders and the morning brief |
@@ -66,9 +66,10 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `config/gtk/files.css` | GTK 4 CSS scoped to `.nautilus-window` | `sync.sh` (marked block in `~/.config/gtk-4.0/gtk.css`) |
 | `assets/icons/*.svg`, `assets/applications/*.desktop` | App icons and launchers (`@BIN@` becomes `~/.local/bin`) | `sync.sh` |
 | `assets/sound/MK Laptop Speakers.json` | EasyEffects output preset | `mk sound` |
-| `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` (`auto` or `#rrggbb`) | mk-indicator, mk-voice |
+| `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` (`auto` or `#rrggbb`), `TASKS` (pinned tasks and next reminder under the greeting) | mk-indicator, mk-voice |
 | `config/theme.conf` | `ACCENT=` (`auto` or `#rrggbb`), `SYSTEM_ACCENT=` (on/off), `CURSOR=` (cursor theme) | mk-indicator (`accent.js`), `mk accent`, `sync.sh` |
-| `config/notes.conf` | `NOTES_DIR=`, `SYNC=` (on/off), `SYNC_PORT=`, `HISTORY=` (on/off) | `mk-notes` |
+| `config/notes.conf` | `NOTES_DIR=`, `SYNC=`, `SYNC_PORT=`, `HISTORY=`; look: `THEME=`, `FONT=`, `FONT_SIZE=`, `WIDTH=`, `SPACING=`, `FORMAT_BAR=`, `OPEN_IN=`, `SORT=` | `mk-notes` (Preferences writes them) |
+| `config/monitor.conf` | `PANEL=` (cpu, mem, temp, net, power), `INTERVAL=` (s) | mk-indicator system monitor |
 | `config/browser/user.js` | Firefox prefs (`user_pref(...)`) | `sync.sh` (marked block in each Firefox / Zen profile's `user.js`) |
 | `assets/notes-web/` | The phone app (HTML, JS, manifest) | `mk-notes` sync server, `scripts/build-apk.sh` |
 | `android/` | Android WebView wrapper for the phone app | `scripts/build-apk.sh` |

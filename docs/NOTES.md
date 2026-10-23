@@ -28,6 +28,24 @@ use both apps on the same notes.
 To use a different folder, set `NOTES_DIR=` in `~/.config/mk-workstation/notes.conf`.
 The defaults are in [`config/notes.conf`](../config/notes.conf).
 
+## Make it yours
+
+Menu › **Preferences** (Ctrl+,):
+
+- style: light, dark, or follow the system
+- font: sans, serif or monospace, and its size
+- line length (narrow, medium, wide, full) and line spacing
+- the formatting bar on or off
+- which view notes open in, and how the list is sorted
+- the notes folder: any folder of Markdown files, an existing Obsidian vault included
+
+## Three ways to look at a note
+
+- **Edit** (Ctrl+E switches with Read): the Markdown, with formatting buttons.
+- **Edit with preview** (Ctrl+\\): writing on the left, the finished note on the right, updating as you type.
+- **Read**: the finished note; tick checkboxes and follow links.
+- **Focus mode** (F11): full screen, nothing but the text.
+
 ## Writing
 
 | What | How |
@@ -68,6 +86,10 @@ The defaults are in [`config/notes.conf`](../config/notes.conf).
   with how many notes use each.
 - **Info pane** (the right-sidebar button) shows the note's outline, its
   backlinks (other notes that link here), its links and its tags.
+- **Tasks** (sidebar, Ctrl+Shift+T) lists every checkbox in every note, open
+  ones first. Tick them off right there, or click to jump to the note.
+- **Calendar** (the calendar button) marks the days that have a daily note.
+  Pick any day to open or start its note.
 - **Graph view** (Ctrl+G) shows every note and link. You can drag it, zoom
   it, and click a note to open it.
 
@@ -154,7 +176,8 @@ same key.
 | :--- | :--- |
 | Ctrl+N · Ctrl+Shift+N | New note · new folder |
 | Ctrl+O · Ctrl+P | Jump to a note · commands |
-| Ctrl+E | Edit / read |
+| Ctrl+E · Ctrl+\\ · F11 | Edit / read · edit with preview · focus mode |
+| Ctrl+, · Ctrl+Shift+T | Preferences · Tasks |
 | Ctrl+F | Search |
 | Ctrl+Shift+D | Today's note (also Super+Alt+N anywhere) |
 | Ctrl+B · Ctrl+I · Ctrl+H · Ctrl+L · Ctrl+K | Bold · italic · heading · checklist · link |
@@ -170,5 +193,4 @@ same key.
 - Encrypted sync, or sync over the internet. Sync works on the same Wi-Fi
   only.
 - Password-locked notes.
-- Obsidian plugins, Canvas and live preview. MK Notes has separate edit and
-  read modes.
+- Plugins and Canvas (a whiteboard of cards).

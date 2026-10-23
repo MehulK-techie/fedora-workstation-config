@@ -76,7 +76,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 **Feels familiar from Windows and macOS, still GNOME**
 - Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps, Super+Ctrl+←/→ desktops, Super+Ctrl+D new desktop, taskbar-style dock (click focuses or minimizes, window thumbnails for apps with several windows)
 - Windows-style multitasking: snap halves and quarters, Snap Assist, Super+Z snap layouts (halves, 66/34, three columns, left + two stacked, quarters, focus centre), always on top
-- macOS habits: trackpad gestures (4 fingers ←/→ switch Spaces, 3 fingers ←/→ switch apps, 3 fingers ↑ Mission Control), an auto-hiding dock with macOS-style magnification whose icons glow softly in each app's own colour (Spotify green, Obsidian purple) and that steps aside in the overview, animations 25% faster, genie minimize into the dock, a soft glide when windows open and close, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
+- macOS habits: trackpad gestures (4 fingers ←/→ switch Spaces, 3 fingers ←/→ switch apps, 3 fingers ↑ Mission Control), an auto-hiding dock with macOS-style magnification whose icons glow softly in each app's own colour (Spotify green, VS Code blue) and that steps aside in the overview, animations 25% faster, genie minimize into the dock, a soft glide when windows open and close, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
 - Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
 - System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
 
@@ -93,7 +93,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - **Fingerprint login** for login and sudo when a reader exists; `mk fingerprint` to enroll
 - Smooth login: the login screen uses your display layout, so there's no flicker between login and desktop
 - **Wallpaper accent:** Alt+Tab, calendar, hover glows, welcome line, timer ring and GNOME's accent take the most vivid colour of your wallpaper and follow it when it changes (`mk accent`)
-- **Speaker tuning:** laptop speakers lose the maker's Windows sound processing (Bang & Olufsen, Dolby); `mk sound on` adds an EQ, bass and limiter profile
+- **Speaker tuning:** laptop speakers often sound thin on Linux because the maker's sound processing only ships for Windows; `mk sound on` adds warmth, bass the speakers can actually play, clearer voices and a limiter
 - `mk device` shows what was found and what MK does about it
 
 **Face unlock** ([details](docs/FACE-UNLOCK.md))
@@ -106,8 +106,8 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - A settings snapshot before every sync, undone with `mk restore`
 - Daily background check that tells you when a new version of this repo is available
 - **Shortcuts window (Super+/):** every shortcut and gesture, live, each marked working, clashing, unset or broken; click to change keys, + to add your own commands, Reset to go back
-- **MK Notes (Super+N):** a notes app for the laptop and phone. It has Obsidian's Markdown vault, links, backlinks, graph, tags, Sync and Publish; Apple Notes' panes, pins, checklists and pasted screenshots; and Samsung Notes' pen drawing with pressure. It also exports to PDF and keeps version history. The phone app (browser or Android) syncs over Wi-Fi. See [docs/NOTES.md](docs/NOTES.md)
-- **Companion (Super+Shift+N):** notes you can pin, reorder and fold away; a task list you tick off and pin; one click to Obsidian or the focus timer
+- **MK Notes (Super+N):** the notes app, for the laptop and the phone. Plain Markdown files with links, backlinks, a graph and tags; three panes, pins, checklists and pasted screenshots; pen drawing with pressure. Edit with a live preview, a Tasks view of every checkbox, a daily-notes calendar, focus mode, your own fonts and layout, PDF export, a website from your notes, version history. The phone app (browser or Android) syncs over Wi-Fi. See [docs/NOTES.md](docs/NOTES.md)
+- **Companion (Super+Shift+N):** notes you can pin, reorder and fold away; a task list you tick off and pin; one click to MK Notes or the focus timer
 - **Reminders:** on any note or task, in 10 min, at 18:00, or every day; they fire even with the Companion closed, with Open and Snooze
 - **Capture from the terminal:** `mk note "idea"`, `mk task "pay rent" 18:00`, `mk remind "stretch" 45m`, `mk list`
 - **Focus mode:** the timer can silence notifications while it counts and puts them back afterwards
@@ -149,7 +149,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 
 | Group | Apps |
 | :--- | :--- |
-| Browsing, notes, office | Zen Browser, Obsidian, Joplin, ONLYOFFICE |
+| Browsing, notes, office | Zen Browser, MK Notes (built in), Joplin, ONLYOFFICE |
 | Desktop tools | Extension Manager, GNOME Tweaks, Sushi (Quick Look), Frog (text from images), Cameractrls, FlipClock, Flameshot |
 | Communication and audio | ZapZap (WhatsApp), Spotify, SonoBus, EasyEffects |
 | Gaming | Lutris, GameMode, Gamescope, MangoHud, vkBasalt |
@@ -157,7 +157,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | Terminal | btop, fastfetch, fzf, ripgrep, zoxide, ncdu, just, chezmoi, 7-Zip, unrar |
 | Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, gThumb, Kamoso, Media Writer |
 
-**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Magic Lamp (genie minimize), Impatience (25% faster animations), AppIndicator (tray icons), Caffeine (keep awake), and the MK top-bar mark.
+**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Magic Lamp (genie minimize), Impatience (25% faster animations), AppIndicator (tray icons), Caffeine (keep awake), and MK's own top-bar extension (system monitor, welcome light, focus timer, Alt+Tab glide, wallpaper accent).
 
 ---
 
@@ -181,7 +181,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk effects full\|lite\|auto` | | Visual effects profile; lite keeps older machines smooth |
 | `mk welcome` | | Welcome light and greeting: on, off, test, edit, title, voice |
 | `mk notes` · `mk notes today` · `mk notes serve` | | MK Notes; today's note; phone sync without the window |
-| `mk sound on\|off` | | Laptop speaker tuning (EasyEffects profile, B&O-style voicing) |
+| `mk sound on\|off` | | Laptop speaker tuning (EasyEffects profile) |
 | `mk icon APP IMAGE` | | Use your own image as an MK app icon |
 | `mk accent auto` | | Accent colour from your wallpaper (or `mk accent #hex`) |
 | `mk rename "Name" TAG` | | Rename MK's windows, notifications and top-bar tag |
@@ -219,7 +219,7 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | | `Super+Shift+A` · `Super+M` | Quick settings · notifications |
 | | `Super+L` · `Super+Backspace` | Lock · shut down / restart |
 | | `Ctrl+Alt+End` · `Ctrl+Alt+Home` | Shut down · restart (both ask first) |
-| **Apps** | `Super+N` · `Super+Alt+N` · `Super+B` | MK Notes · today's note · web browser (Obsidian: `Super+Shift+O`) |
+| **Apps** | `Super+N` · `Super+Alt+N` · `Super+B` | MK Notes · today's note · web browser |
 | **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Shortcuts window · Companion (notes, tasks, timer) · camera controls |
 | **Touchpad** | 4 fingers ←/→ · 3 fingers ←/→ | Switch workspaces (Spaces) · switch windows, on every workspace |
 | | 3 fingers ↑/↓ · 4 fingers ↑/↓ | Overview (Mission Control) · maximize / restore the window |

@@ -64,7 +64,7 @@ the reader itself) and is never part of this repository.
 
 ## Speakers
 
-Laptops tuned by their maker (Bang & Olufsen on HP, Dolby or Waves on others)
+Laptops whose maker tunes the speakers in software (Dolby, Waves, Bang & Olufsen and others)
 sound thinner on Linux because that sound processing only exists in the
 Windows driver. `mk sound on` gives the same kind of processing with
 EasyEffects:

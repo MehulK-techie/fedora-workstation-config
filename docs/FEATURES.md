@@ -38,7 +38,7 @@ Credit for everything in the last two groups belongs to its authors; see
 
 | App | What it does | Open it |
 | :--- | :--- | :--- |
-| **MK Notes** | Notes like Obsidian, Apple Notes and Samsung Notes in one: an Obsidian-compatible Markdown vault (`~/Notes`); folders, pins, colours; `[[links]]`, backlinks, outline, graph view; #tags; checklists, callouts, tables; quick switcher and command palette; daily notes and templates; paste or capture screenshots, drop files; pen, highlighter and eraser with pressure (stylus, finger or mouse) on plain, lined, grid or dotted paper; PDF export; publish the vault as a website; version history; phone app with Wi-Fi sync (browser or Android app) | Super+N, `mk notes`, [docs/NOTES.md](NOTES.md) |
+| **MK Notes** | The notes app, laptop and phone: a folder of Markdown notes (`~/Notes`, opens in other Markdown apps too); edit, edit with live preview, or read; folders, pins, colours; a Tasks view of every checkbox; a daily-notes calendar; focus mode; your own theme, font, size, line length and spacing; `[[links]]`, backlinks, outline, graph view; #tags; checklists, callouts, tables; quick switcher and command palette; daily notes and templates; paste or capture screenshots, drop files; pen, highlighter and eraser with pressure (stylus, finger or mouse) on plain, lined, grid or dotted paper; PDF export; publish the vault as a website; version history; phone app with Wi-Fi sync (browser or Android app) | Super+N, `mk notes`, [docs/NOTES.md](NOTES.md) |
 | **Shortcuts window** | Every shortcut and gesture, live from GNOME; marks each working, clashing, unset or broken; change keys, add commands, reset | Super+/ |
 | **Companion** | Notes you pin, reorder and fold; tasks with progress; reminders (in N min, at a time, daily/weekly) that fire even when closed; morning brief; welcome greeting editor | Super+Shift+N |
 | **Focus timer** | Minutes and seconds; hides into a top-bar countdown; when you step away a screensaver plays over your work, Windows-classic style (Bubbles, Mystify, Starfield) or the full-screen Aurora view, your pick or a surprise; can silence notifications; pixel-robot celebration with fireworks | Companion › Focus timer, `mk focus 25` |
@@ -51,9 +51,10 @@ Credit for everything in the last two groups belongs to its authors; see
 
 | Feature | What you see | Settings |
 | :--- | :--- | :--- |
-| Welcome light | After login, once every extension has loaded: a neon line runs around the screen edges and "Welcome back home, sir." fades in, optionally spoken | Quick Settings › Welcome light, `mk welcome`, `config/welcome.conf` |
+| Welcome light | After login, when the desktop is ready and the processor has calmed down: two comets of light run up the screen edges and meet at the top, the greeting lands with them (optionally spoken), and underneath: the date, your pinned tasks, your next reminder today and a low-battery hint; pinned tasks then get a notification with an Open button | Quick Settings › Welcome light, `mk welcome`, `config/welcome.conf` |
 | Dock magnification | The icon under the pointer grows, neighbours follow in a wave | `config/dock.conf` |
 | App-coloured dock glow | A soft circular tint in each app's own colour on hover | `dockGlow.js` |
+| System monitor | CPU sparkline and your chosen numbers in the top bar; a menu with processor, memory, swap, GPU, disk, temperatures, network, battery draw and time left, and the busiest apps; reads the kernel's counters every 2 s, nothing while locked | `config/monitor.conf` (`systemMonitor.js`) |
 | Timer countdown | Ring + time in the top bar while a focus timer runs; click to open | automatic |
 | Focus screensavers | Bubbles (soap bubbles that bounce off each other), Mystify (glowing polygons with echoes), Starfield (flying through stars over a dimmed desktop), drawn over your windows, gone at the first touch; 60 fps, small actors only | Focus timer › Screensaver, `AMBIENT_STYLE` in `timer.conf` (`focusSaver.js`) |
 | Wallpaper accent | The most vivid colour of your wallpaper tints Alt+Tab, the calendar, top-bar and dock hover, workspace thumbnails, the welcome line, the timer ring and GNOME's own accent (Files, Settings); follows wallpaper changes | `mk accent auto\|#hex\|status`, `config/theme.conf` (`accent.js`, `colour.js`) |
@@ -72,6 +73,7 @@ Outside the shell: **Files** gets matching hover and selection in the accent col
 | :--- | :--- | :--- |
 | WACK Shell | Hundreds of errors per session from `super.vfunc_event()`; dock snapshot errors on every dock move | Patched by `sync.sh` (bundled copy, GPL-3.0) |
 | Magic Lamp | Played its genie even when a gesture already animated the window (stutter) | Patched by `sync.sh` to honour GNOME's skip-effect request |
+| Touchpad Gesture Customization | Finger travel per window in 3-finger Alt+Tab shrank as more windows opened, so small moves skipped windows | Patched by `sync.sh`: the same travel per window, always |
 | Six animation and gesture extensions | Rebuilt at every unlock (a hitch, gestures dead for a moment) | `sync.sh` marks them for the lock screen too ([why it's safe](EXTENSIONS.md#smoother-unlock)) |
 
 ---
@@ -90,7 +92,7 @@ MK changes these GNOME settings; the features themselves are GNOME's.
 - **Housekeeping:** Trash and temp files older than 30 days removed; slow search providers (Boxes, Contacts, Passwords) skipped.
 - **Login screen:** uses your display layout (no flicker between login and desktop).
 - **Firefox and Zen** (`config/browser/user.js`): two-finger swipe back/forward, momentum scrolling with a gentle bounce, pinch zoom, GPU rendering and video decoding.
-- **Speaker tuning:** B&O-style voicing (warm bass the speaker can play, clear voices, smooth treble); EasyEffects starts hidden.
+- **Speaker tuning:** warm bass the speakers can play, clear voices, smooth treble; EasyEffects starts hidden.
 
 ### GNOME extensions (from extensions.gnome.org)
 
@@ -104,7 +106,6 @@ Installed for your GNOME version and restored with MK's settings.
 | [Touchpad Gesture Customization](https://extensions.gnome.org/extension/7850/touchpad-gesture-customization/) | Henry | 3/4-finger gestures for windows, workspaces, overview, volume, desktop |
 | [Clipboard Indicator](https://extensions.gnome.org/extension/779/clipboard-indicator/) | Tudmotu | Clipboard history on Super+V |
 | [OCR Text Extractor](https://extensions.gnome.org/extension/8240/text-extractor/) | imshaaz | Copy text from the screen (Super+Alt+T) |
-| [Astra Monitor](https://extensions.gnome.org/extension/6682/astra-monitor/) | Astra | CPU, memory, network and disk in the top bar |
 | [Caffeine](https://extensions.gnome.org/extension/517/caffeine/) | eon | Keep the screen awake |
 | [Transparent Top Bar](https://extensions.gnome.org/extension/3960/transparent-top-bar-adjustable-transparency/) | Gonzague | Clear top bar when no window touches it |
 | [AppIndicator Support](https://extensions.gnome.org/extension/615/appindicator-support/) | 3v1n0 | Tray icons for apps like Spotify and Zapzap |
@@ -138,7 +139,6 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | App | What for |
 | :--- | :--- |
 | Zen Browser | Web browser (Super+B) |
-| Obsidian | Notes and knowledge base (Super+Shift+O); opens the same `~/Notes` vault as MK Notes |
 | Joplin | Notes with sync |
 | ONLYOFFICE | Office documents |
 | Visual Studio Code | Code editor (Microsoft's repo) |
@@ -270,7 +270,6 @@ them live and lets you change any of them.
 | Web browser | Super+B | App |
 | MK Notes | Super+N | MK tool |
 | MK Notes: today's note | Super+Alt+N | MK tool |
-| Obsidian | Super+Shift+O | App |
 | Emoji board | Super+. | App |
 | Camera controls | Super+C | MK tool |
 

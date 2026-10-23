@@ -100,7 +100,7 @@ Log out and back in afterwards. Run `./setup.sh --help` for the options.
 | Repositories | RPM Fusion free and nonfree; Microsoft's VS Code repo; the `principis/howdy` COPR (face unlock only); Flathub. |
 | Packages | Everything listed in `apps/dnf-packages.txt`, plus `howdy` when a camera is present. |
 | Codecs and video decoding | Replaces `ffmpeg-free` with RPM Fusion's full `ffmpeg`. Detects your graphics chip and installs its hardware video driver: `mesa-va-drivers-freeworld` (AMD), `intel-media-driver` (Intel) or `libva-nvidia-driver` (NVIDIA). The NVIDIA proprietary driver itself is not installed; see [Troubleshooting](#troubleshooting). |
-| Flatpaks | Everything listed in `apps/flatpaks.txt`: Zen Browser, Obsidian, Joplin, ONLYOFFICE, Extension Manager, Frog, Cameractrls, FlipClock, ZapZap, Spotify, SonoBus and Lutris. Then updates all Flatpaks. |
+| Flatpaks | Everything listed in `apps/flatpaks.txt`: Zen Browser, Joplin, ONLYOFFICE, Extension Manager, Frog, Cameractrls, FlipClock, ZapZap, Spotify, SonoBus and Lutris. Then updates all Flatpaks. |
 | SELinux | Turns on `authlogin_camera` so the login screen can use the camera (face unlock only). |
 | Firmware | Checks for firmware updates with `fwupdmgr` and tells you if any exist. It never installs firmware by itself. |
 | Log | Everything setup prints is also saved to `/var/log/mk-workstation-setup.log`. |

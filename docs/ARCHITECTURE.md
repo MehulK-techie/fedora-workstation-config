@@ -99,6 +99,7 @@ test with `journalctl --user -f -o cat /usr/bin/gnome-shell`.
 | `switcher.js` | Pop-in animation for Alt+Tab / Super+Tab |
 | `osdStack.js` | Keeps the workspace dots above the volume/brightness pop-up |
 | `accent.js` | Accent colour from the wallpaper: writes `~/.cache/mk-workstation/accent.css`, loads it over `stylesheet.css`, sets GNOME's accent |
+| `systemMonitor.js` | Top-bar system monitor: samples `/proc` and `/sys` (CPU, memory, hwmon temperatures, network, battery, `gpu_busy_percent`), sparkline and menu |
 | `focusSaver.js` | Focus-timer screensavers over the desktop (Bubbles, Mystify, Starfield): small actors moved per frame, shown when `timer.json` has `ambient` |
 | `colour.js` | RGB/HSV helpers and the dominant-hue histogram (dock glow, accent) |
 | `dockMagnify.js` | macOS-style magnification: magnified icons are clones on the UI layer (Dash to Dock clips its own icons), cosine falloff across neighbours |

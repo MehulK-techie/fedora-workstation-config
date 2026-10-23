@@ -5,6 +5,7 @@ import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { DockGlow } from './dockGlow.js';
+import { Welcome } from './welcome.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -73,6 +74,8 @@ export default class MKIndicatorExtension extends Extension {
         // This extension stays loaded on the lock screen (metadata session-modes),
         // so unlocking doesn't rebuild everything: pause the dock parts while
         // locked and pick them up again after.
+        this._welcome = new Welcome();
+        this._welcome.enable();
         this._sessionId = Main.sessionMode.connect('updated', () => this._onSessionMode());
         this._onSessionMode();
 
@@ -85,6 +88,7 @@ export default class MKIndicatorExtension extends Extension {
                 Main.layoutManager.disconnect(this._startupId);
                 this._startupId = 0;
                 this._scheduleBlurRefresh();
+                this._welcome?.greetSoon();
             });
         }
     }
@@ -142,6 +146,8 @@ export default class MKIndicatorExtension extends Extension {
         }
         this._dockGlow?.disable();
         this._dockGlow = null;
+        this._welcome?.disable();
+        this._welcome = null;
         this._brandMonitor?.cancel();
         this._brandMonitor = null;
         if (this._startupId) {

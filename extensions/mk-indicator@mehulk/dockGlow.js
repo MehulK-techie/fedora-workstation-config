@@ -130,7 +130,9 @@ export class DockGlow {
                 ids.push(box.connect('child-added', () => this._queueScan(dock)));
                 ids.push(box.connect('child-removed', () => this._queueScan(dock)));
             }
+            this._magnify?.attach(dock);
             const destroyId = dock.connect('destroy', () => {
+                this._magnify?.detach(dock);
                 this._docks = this._docks.filter(d => d.actor !== dock);
             });
             this._docks.push({actor: dock, box, ids, destroyId});

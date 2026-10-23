@@ -193,6 +193,37 @@ case "${1:-help}" in
         esac
         ;;
 
+    welcome)
+        # mk welcome [on | off | test | voice on|off | notify on|off | greeting "TEXT"]
+        shift
+        WELCOME_CONF="$HOME/.config/mk-workstation/welcome.conf"
+        set_welcome() {
+            mkdir -p "$(dirname "$WELCOME_CONF")"
+            touch "$WELCOME_CONF"
+            if grep -q "^$1=" "$WELCOME_CONF"; then
+                sed -i "s|^$1=.*|$1=$2|" "$WELCOME_CONF"
+            else
+                echo "$1=$2" >> "$WELCOME_CONF"
+            fi
+        }
+        case "${1:-}" in
+            on|off) set_welcome WELCOME "$1"; echo "✔ Welcome light $1" ;;
+            voice) set_welcome VOICE "${2:-on}"; echo "✔ Spoken greeting ${2:-on}" ;;
+            notify) set_welcome EDGE_NOTIFY "${2:-on}"; echo "✔ Edge light for notifications ${2:-on}" ;;
+            greeting)
+                [[ -n "${2:-}" ]] || { echo "Usage: mk welcome greeting \"Welcome back, {name}.\"" >&2; exit 2; }
+                set_welcome GREETING "${2//|/}"; echo "✔ Greeting: ${2//|/}" ;;
+            test)
+                mkdir -p "$HOME/.cache/mk-workstation"
+                date > "$HOME/.cache/mk-workstation/welcome-test"
+                ;;
+            *)
+                echo "Usage: mk welcome [on | off | test | voice on|off | notify on|off | greeting \"TEXT\"]"
+                grep -hE '^(WELCOME|GREETING|VOICE|EDGE_NOTIFY)=' "$HOME/.local/share/mk-workstation/config/welcome.conf" "$WELCOME_CONF" 2> /dev/null | tail -n 4
+                ;;
+        esac
+        ;;
+
     device)
         PYTHONPATH="$HOME/.local/share/mk-workstation/lib" python3 -m mkworkstation device
         ;;
@@ -347,6 +378,7 @@ case "${1:-help}" in
         echo "  task       Add a task: mk task \"pay rent\" [when]   (when: 30m, 2h, 18:00, tomorrow 9:00)"
         echo "  remind     Same as task, with a reminder: mk remind \"stretch\" 45m"
         echo "  list       Show notes, tasks and their reminders"
+        echo "  welcome    Welcome light after login: on, off, test, voice, notify, greeting"
         echo "  device     What this computer has, and what MK tunes for it"
         echo "  fingerprint  Enroll a finger for login and sudo (list, delete, settings)"
         echo "  focus      Start the focus timer: mk focus 25 \"Writing\" (also 1:30, 90s)"

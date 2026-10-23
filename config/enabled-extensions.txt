@@ -17,3 +17,4 @@ appindicatorsupport@rgcjonas.gmail.com
 compiz-alike-magic-lamp-effect@hermes83.github.com
 impatience@gfxmonk.net
 burn-my-windows@schneegans.github.com
+compiz-windows-effect@hermes83.github.com

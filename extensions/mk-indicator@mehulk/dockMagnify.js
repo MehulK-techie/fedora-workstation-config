@@ -50,6 +50,45 @@ export class DockMagnify {
         this._clones = new Map();   // tile -> {clone, icon}
         this._focus = null;
         this._leaveId = 0;
+        this._docks = [];           // [dock, [signal ids on dock or slider]]
+    }
+
+    // Follow the dock while it slides in or out: the clones live outside it,
+    // so without this they'd stay where the icons were when hovering began.
+    attach(dock) {
+        const slider = dock._slider;
+        const ids = [];
+        if (slider)
+            ids.push([slider, slider.connect('notify::slide-x', () => this._syncSoon())]);
+        ids.push([dock, dock.connect('hiding', () => this.reset(true))]);
+        this._docks.push([dock, ids]);
+    }
+
+    detach(dock) {
+        for (const [d, ids] of this._docks) {
+            if (d === dock)
+                ids.forEach(([obj, id]) => obj.disconnect(id));
+        }
+        this._docks = this._docks.filter(([d]) => d !== dock);
+    }
+
+    // The dock re-lays itself out after slide-x changes: read the icon
+    // positions once that frame's layout is done (an idle callback).
+    _syncSoon() {
+        if (this._syncId || !this._clones.size)
+            return;
+        this._syncId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._syncId = 0;
+            this._sync();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _sync() {
+        for (const {clone, icon} of this._clones.values()) {
+            const [x, y] = icon.get_transformed_position();
+            clone.set_position(x, y);
+        }
     }
 
     get enabled() {
@@ -168,6 +207,13 @@ export class DockMagnify {
     }
 
     destroy() {
+        if (this._syncId) {
+            GLib.source_remove(this._syncId);
+            this._syncId = 0;
+        }
+        for (const [, ids] of this._docks)
+            ids.forEach(([obj, id]) => obj.disconnect(id));
+        this._docks = [];
         if (this._leaveId) {
             GLib.source_remove(this._leaveId);
             this._leaveId = 0;

@@ -1,0 +1,11 @@
+# dconf path: /org/gnome/shell/extensions/com/github/hermes83/compiz-windows-effect/
+[/]
+friction=3.5
+mass=70.0
+maximize-effect=false
+preset='R'
+resize-effect=false
+speedup-factor-divider=12.0
+spring-k=3.8
+x-tiles=6.0
+y-tiles=6.0

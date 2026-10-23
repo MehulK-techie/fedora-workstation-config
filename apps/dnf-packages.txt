@@ -9,6 +9,12 @@ tesseract-langpack-eng
 zenity
 python3-tkinter
 python3-gobject
+# MK Notes: editor, reading view, PDF export, phone pairing QR code
+gtksourceview5
+webkitgtk6.0
+python3-markdown
+python3-weasyprint
+python3-qrcode
 libcanberra-gtk3
 wl-clipboard
 grim

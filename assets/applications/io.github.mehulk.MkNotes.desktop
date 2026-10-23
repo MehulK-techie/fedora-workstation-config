@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=MK Notes
+Comment=Notes with links, drawings, screenshots, PDF export and phone sync
+Exec=@BIN@/mk-notes %U
+Icon=io.github.mehulk.MkNotes
+Categories=Office;Utility;TextEditor;
+Keywords=notes;markdown;obsidian;journal;draw;handwriting;pdf;mk;
+StartupNotify=true
+StartupWMClass=io.github.mehulk.MkNotes
+Actions=new-note;today;
+
+[Desktop Action new-note]
+Name=New note
+Exec=@BIN@/mk-notes Untitled
+
+[Desktop Action today]
+Name=Today's note
+Exec=@BIN@/mk-notes --daily

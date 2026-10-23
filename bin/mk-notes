@@ -1,0 +1,1749 @@
+#!/usr/bin/env python3
+"""MK Notes: notes the way Obsidian, Apple Notes and Samsung Notes do them.
+
+Your notes are Markdown files in ~/Notes (an Obsidian-compatible vault):
+folders, pins and colours, [[links]] with backlinks and a graph, #tags,
+checklists, callouts, paste or capture screenshots, draw and handwrite with a
+pen (pressure-sensitive), export to PDF, publish the vault as a website,
+version history for every note, and sync with your phone over Wi-Fi.
+
+  mk-notes                open the window
+  mk-notes NOTE           open a note (a path inside the vault, or a title)
+  mk-notes --daily        open today's note
+  mk-notes --serve        phone sync only, no window
+"""
+import json
+import math
+import os
+import re
+import sys
+import threading
+import time
+from datetime import datetime
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+gi.require_version("GtkSource", "5")
+gi.require_version("WebKit", "6.0")
+gi.require_foreign("cairo")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk, GtkSource, Pango, WebKit  # noqa: E402
+
+
+def _add_lib_path():
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for candidate in (Path(__file__).resolve().parent.parent / "lib",
+                      Path(data_home) / "mk-workstation/lib"):
+        if (candidate / "mkworkstation").is_dir():
+            sys.path.insert(0, str(candidate))
+            return
+
+
+_add_lib_path()
+from mkworkstation import notes as nv  # noqa: E402
+from mkworkstation import notes_sync  # noqa: E402
+
+APP_ID = "io.github.mehulk.MkNotes"
+COLORS = [("Red", "#ff6b6b"), ("Orange", "#ffa94d"), ("Yellow", "#ffd43b"),
+          ("Green", "#51cf66"), ("Blue", "#4dabf7"), ("Purple", "#b197fc")]
+INK = ["#1d2330", "#ffffff", "#2f80ff", "#ff4d6d", "#2ecc8f", "#ffb020", "#9b6bff"]
+
+CSS = """
+.mk-sidebar { background: alpha(@window_fg_color, 0.03); }
+.mk-sidebar row { border-radius: 8px; margin: 1px 6px; padding: 6px 8px; }
+.mk-list row { border-radius: 10px; margin: 2px 6px; padding: 8px 10px; }
+.mk-list row:selected { background: alpha(@accent_bg_color, 0.22); }
+.mk-row-title { font-weight: 700; }
+.mk-row-meta { font-size: 0.85em; opacity: 0.6; }
+.mk-title { font-size: 1.7em; font-weight: 800; background: none; border: none; box-shadow: none;
+            padding: 0; outline: none; }
+.mk-editor, .mk-editor text { background: transparent; font-size: 1.05em; }
+.mk-formatbar button { min-width: 30px; min-height: 30px; padding: 2px; }
+.mk-info { background: alpha(@window_fg_color, 0.03); }
+.mk-info-head { font-weight: 700; font-size: 0.85em; opacity: 0.65; margin-top: 10px; }
+.mk-dot { min-width: 10px; min-height: 10px; border-radius: 5px; }
+.mk-swatch { min-width: 22px; min-height: 22px; border-radius: 11px; padding: 0; }
+.mk-formatbar .mk-swatch { min-width: 16px; min-height: 16px; border-radius: 8px; margin: 0 2px; }
+.mk-swatch.active { box-shadow: 0 0 0 2px @accent_color; }
+.mk-status { font-size: 0.85em; opacity: 0.55; }
+""" + "".join(f".mk-c{i} {{ background: {c}; }}\n" for i, c in enumerate(c for _n, c in COLORS)) \
+    + "".join(f".mk-ink{i} {{ background: {c}; border: 1px solid alpha(gray, .5); }}\n" for i, c in enumerate(INK))
+
+
+# ======================================================================
+# Small helpers
+# ======================================================================
+def conf_set(key, value):
+    """Set KEY=value in your notes.conf, keeping everything else."""
+    path = nv.CONF_FILES[-1]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = path.read_text().splitlines() if path.exists() else ["# MK Notes (mk-notes)"]
+    lines = [ln for ln in lines if not ln.startswith(f"{key}=")] + [f"{key}={value}"]
+    path.write_text("\n".join(lines) + "\n")
+
+
+def snippet(text):
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith(("#", "---", "```", "![[")):
+            line = re.sub(r"^[-*+>] (\[.\] )?|\*\*|__|==|`|\[\[|\]\]", "", line)
+            return line[:120]
+    return ""
+
+
+def when(ts):
+    dt = datetime.fromtimestamp(ts)
+    now = datetime.now()
+    if dt.date() == now.date():
+        return dt.strftime("%H:%M")
+    if (now - dt).days < 7:
+        return dt.strftime("%A")
+    return dt.strftime("%d/%m/%Y")
+
+
+def take_screenshot(callback):
+    """Interactive capture through the desktop's screenshot portal; calls
+    callback(path or None)."""
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+    except GLib.Error:
+        callback(None)
+        return
+    token = f"mknotes{int(time.time() * 1000)}"
+    sender = bus.get_unique_name()[1:].replace(".", "_")
+    handle = f"/org/freedesktop/portal/desktop/request/{sender}/{token}"
+    sub = [0]
+
+    def on_response(_bus, _sender, _path, _iface, _signal, params):
+        bus.signal_unsubscribe(sub[0])
+        code, results = params.unpack()
+        uri = results.get("uri") if code == 0 else None
+        callback(Gio.File.new_for_uri(uri).get_path() if uri else None)
+
+    sub[0] = bus.signal_subscribe("org.freedesktop.portal.Desktop", "org.freedesktop.portal.Request",
+                                  "Response", handle, None, Gio.DBusSignalFlags.NO_MATCH_RULE, on_response)
+    options = {"handle_token": GLib.Variant("s", token), "interactive": GLib.Variant("b", True)}
+    bus.call("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+             "org.freedesktop.portal.Screenshot", "Screenshot",
+             GLib.Variant("(sa{sv})", ("", options)), GLib.VariantType("(o)"),
+             Gio.DBusCallFlags.NONE, -1, None, None)
+
+
+# ======================================================================
+# Drawing: pen, highlighter and eraser, pressure-sensitive (Samsung Notes)
+# ======================================================================
+def stroke_outline(points, width):
+    """A filled outline for a variable-width stroke: [(x, y)] polygon."""
+    if len(points) == 1:
+        x, y, p = points[0]
+        r = width * (0.35 + 0.8 * p) / 2
+        return [(x + r * math.cos(a), y + r * math.sin(a)) for a in [i * math.pi / 6 for i in range(12)]]
+    left, right = [], []
+    for i, (x, y, p) in enumerate(points):
+        x0, y0 = points[max(0, i - 1)][:2]
+        x1, y1 = points[min(len(points) - 1, i + 1)][:2]
+        dx, dy = x1 - x0, y1 - y0
+        length = math.hypot(dx, dy) or 1
+        nx, ny = -dy / length, dx / length
+        r = width * (0.35 + 0.8 * p) / 2
+        left.append((x + nx * r, y + ny * r))
+        right.append((x - nx * r, y - ny * r))
+    # round caps
+    def cap(cx, cy, r, start):
+        return [(cx + r * math.cos(start + k * math.pi / 6), cy + r * math.sin(start + k * math.pi / 6))
+                for k in range(1, 6)]
+    (xe, ye, pe), (xs, ys, ps) = points[-1], points[0]
+    ae = math.atan2(left[-1][1] - ye, left[-1][0] - xe)
+    as_ = math.atan2(right[0][1] - ys, right[0][0] - xs)
+    return (left + cap(xe, ye, width * (0.35 + 0.8 * pe) / 2, ae) + right[::-1]
+            + cap(xs, ys, width * (0.35 + 0.8 * ps) / 2, as_))
+
+
+def hex_rgb(color):
+    color = color.lstrip("#")
+    return tuple(int(color[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+class DrawingWindow(Adw.Window):
+    W, H = 1400, 900
+
+    def __init__(self, parent, on_save, strokes=None, paper="light", pattern="plain"):
+        super().__init__(transient_for=parent, modal=True, title="Drawing", default_width=1180, default_height=820)
+        self.on_save = on_save
+        self.strokes = strokes or []
+        self.redo = []
+        self.current = None
+        self.tool, self.ink, self.width = "pen", INK[0] if paper == "light" else INK[1], 4.0
+        self.paper, self.pattern = paper, pattern
+
+        view = Adw.ToolbarView()
+        header = Adw.HeaderBar()
+        done = Gtk.Button(label="Insert", css_classes=["suggested-action"])
+        done.connect("clicked", lambda *_: self._finish())
+        header.pack_end(done)
+        for icon, tip, cb in (("edit-undo-symbolic", "Undo (Ctrl+Z)", self.undo),
+                              ("edit-redo-symbolic", "Redo (Ctrl+Shift+Z)", self.redo_last),
+                              ("edit-clear-all-symbolic", "Clear", self.clear)):
+            b = Gtk.Button(icon_name=icon, tooltip_text=tip)
+            b.connect("clicked", lambda *_, f=cb: f())
+            header.pack_start(b)
+        view.add_top_bar(header)
+
+        bar = Gtk.Box(spacing=6, margin_start=10, margin_end=10, margin_top=4, margin_bottom=6)
+        self.tool_buttons = {}
+        group = None
+        for tool, icon, tip in (("pen", "document-edit-symbolic", "Pen"),
+                                ("highlighter", "marker-symbolic", "Highlighter"),
+                                ("eraser", "edit-clear-symbolic", "Eraser (whole strokes)")):
+            b = Gtk.ToggleButton(icon_name=icon, tooltip_text=tip, group=group, active=tool == "pen")
+            group = group or b
+            b.connect("toggled", lambda btn, t=tool: btn.get_active() and setattr(self, "tool", t))
+            self.tool_buttons[tool] = b
+            bar.append(b)
+        bar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+        self.swatches = []
+        for color in INK:
+            sw = Gtk.Button(css_classes=["mk-swatch", f"mk-ink{INK.index(color)}"], tooltip_text=color)
+            sw.connect("clicked", self._pick_color, color)
+            self.swatches.append((sw, color))
+            bar.append(sw)
+        self._mark_swatch()
+        bar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+        size = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 24, 1)
+        size.set_value(self.width)
+        size.set_size_request(140, -1)
+        size.set_tooltip_text("Thickness")
+        size.connect("value-changed", lambda s: setattr(self, "width", s.get_value()))
+        bar.append(size)
+        bar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+        papers = Gtk.DropDown.new_from_strings(["Light paper", "Dark paper"])
+        papers.set_selected(0 if paper == "light" else 1)
+        papers.connect("notify::selected", lambda d, _p: self._set_paper("light" if d.get_selected() == 0 else "dark"))
+        bar.append(papers)
+        patterns = Gtk.DropDown.new_from_strings(["Plain", "Lined", "Grid", "Dots"])
+        patterns.set_selected(["plain", "lined", "grid", "dots"].index(pattern))
+        patterns.connect("notify::selected", lambda d, _p: self._set_pattern(["plain", "lined", "grid", "dots"][d.get_selected()]))
+        bar.append(patterns)
+        view.add_top_bar(bar)
+
+        self.area = Gtk.DrawingArea(content_width=self.W, content_height=self.H)
+        self.area.set_draw_func(self._draw)
+        self.area.set_cursor(Gdk.Cursor.new_from_name("crosshair"))
+        stylus = Gtk.GestureStylus(stylus_only=False)
+        stylus.connect("down", self._down)
+        stylus.connect("motion", self._motion)
+        stylus.connect("up", self._up)
+        self.area.add_controller(stylus)
+        touch = Gtk.GestureDrag(touch_only=True)
+        touch.connect("drag-begin", lambda g, x, y: self._down(g, x, y))
+        touch.connect("drag-update", lambda g, dx, dy: self._motion(g, g.get_start_point()[1] + dx, g.get_start_point()[2] + dy))
+        touch.connect("drag-end", lambda g, dx, dy: self._up(g, 0, 0))
+        self.area.add_controller(touch)
+        scroller = Gtk.ScrolledWindow(child=self.area)
+        view.set_content(scroller)
+        self.set_content(view)
+
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._key)
+        self.add_controller(keys)
+
+    def _key(self, _c, keyval, _code, state):
+        ctrl = state & Gdk.ModifierType.CONTROL_MASK
+        if ctrl and keyval in (Gdk.KEY_z, Gdk.KEY_Z):
+            (self.redo_last if state & Gdk.ModifierType.SHIFT_MASK else self.undo)()
+            return True
+        return False
+
+    def _pick_color(self, _b, color):
+        self.ink = color
+        if self.tool == "eraser":
+            self.tool_buttons["pen"].set_active(True)
+        self._mark_swatch()
+
+    def _mark_swatch(self):
+        for sw, color in self.swatches:
+            (sw.add_css_class if color == self.ink else sw.remove_css_class)("active")
+
+    def _set_paper(self, paper):
+        self.paper = paper
+        self.area.queue_draw()
+
+    def _set_pattern(self, pattern):
+        self.pattern = pattern
+        self.area.queue_draw()
+
+    def _pressure(self, gesture):
+        if isinstance(gesture, Gtk.GestureStylus):
+            ok, value = gesture.get_axis(Gdk.AxisUse.PRESSURE)
+            if ok and value > 0:
+                return min(1.0, value)
+        return 0.5
+
+    def _down(self, gesture, x, y):
+        p = self._pressure(gesture)
+        if self.tool == "eraser":
+            self._erase(x, y)
+            self.current = {"erasing": True}
+            return
+        self.current = {"tool": self.tool, "color": self.ink, "width": self.width, "points": [[x, y, p]]}
+        self.area.queue_draw()
+
+    def _motion(self, gesture, x, y):
+        if not self.current:
+            return
+        if self.current.get("erasing"):
+            self._erase(x, y)
+            return
+        last = self.current["points"][-1]
+        if math.hypot(x - last[0], y - last[1]) < 1.2:
+            return
+        self.current["points"].append([x, y, self._pressure(gesture)])
+        self.area.queue_draw()
+
+    def _up(self, *_):
+        stroke, self.current = self.current, None
+        if stroke and not stroke.get("erasing"):
+            pts = stroke["points"]
+            # light smoothing
+            if len(pts) > 2:
+                pts = [pts[0]] + [[(a[0] + 2 * b[0] + c[0]) / 4, (a[1] + 2 * b[1] + c[1]) / 4, b[2]]
+                                  for a, b, c in zip(pts, pts[1:], pts[2:])] + [pts[-1]]
+            stroke["points"] = [[round(x, 1), round(y, 1), round(p, 2)] for x, y, p in pts]
+            self.strokes.append(stroke)
+            self.redo.clear()
+        self.area.queue_draw()
+
+    def _erase(self, x, y):
+        keep = [s for s in self.strokes
+                if not any(math.hypot(px - x, py - y) < max(10, s["width"]) for px, py, _ in s["points"])]
+        if len(keep) != len(self.strokes):
+            self.redo.clear()
+            self.strokes = keep
+            self.area.queue_draw()
+
+    def undo(self):
+        if self.strokes:
+            self.redo.append(self.strokes.pop())
+            self.area.queue_draw()
+
+    def redo_last(self):
+        if self.redo:
+            self.strokes.append(self.redo.pop())
+            self.area.queue_draw()
+
+    def clear(self):
+        self.redo.extend(reversed(self.strokes))
+        self.strokes = []
+        self.area.queue_draw()
+
+    def _paper_colors(self):
+        return ((0.99, 0.99, 0.98), (0.75, 0.80, 0.88)) if self.paper == "light" else ((0.07, 0.09, 0.13), (0.22, 0.27, 0.36))
+
+    def _draw(self, _area, cr, w, h):
+        bg, line = self._paper_colors()
+        cr.set_source_rgb(*bg)
+        cr.paint()
+        cr.set_source_rgba(*line, 0.6)
+        cr.set_line_width(1)
+        if self.pattern == "lined":
+            for y in range(80, h, 36):
+                cr.move_to(0, y + 0.5)
+                cr.line_to(w, y + 0.5)
+            cr.stroke()
+        elif self.pattern == "grid":
+            for x in range(0, w, 32):
+                cr.move_to(x + 0.5, 0)
+                cr.line_to(x + 0.5, h)
+            for y in range(0, h, 32):
+                cr.move_to(0, y + 0.5)
+                cr.line_to(w, y + 0.5)
+            cr.stroke()
+        elif self.pattern == "dots":
+            for x in range(16, w, 32):
+                for y in range(16, h, 32):
+                    cr.arc(x, y, 1.3, 0, 2 * math.pi)
+                    cr.fill()
+        for stroke in self.strokes + ([self.current] if self.current and "points" in self.current else []):
+            self._paint_stroke(cr, stroke)
+
+    def _paint_stroke(self, cr, stroke):
+        r, g, b = hex_rgb(stroke["color"])
+        if stroke["tool"] == "highlighter":
+            cr.set_source_rgba(r, g, b, 0.35)
+            cr.set_line_width(stroke["width"] * 3.5)
+            cr.set_line_cap(1)  # round
+            cr.set_line_join(1)
+            pts = stroke["points"]
+            cr.move_to(*pts[0][:2])
+            for x, y, _ in pts[1:]:
+                cr.line_to(x, y)
+            cr.stroke()
+            return
+        cr.set_source_rgb(r, g, b)
+        outline = stroke_outline(stroke["points"], stroke["width"])
+        cr.move_to(*outline[0])
+        for x, y in outline[1:]:
+            cr.line_to(x, y)
+        cr.close_path()
+        cr.fill()
+
+    def to_svg(self):
+        bg, line = self._paper_colors()
+        rgb = lambda c: "#%02x%02x%02x" % tuple(int(v * 255) for v in c)  # noqa: E731
+        xs = [p[0] for s in self.strokes for p in s["points"]] or [0]
+        ys = [p[1] for s in self.strokes for p in s["points"]] or [0]
+        # crop to the drawing (with a margin) so it sits nicely in the note
+        x0, y0 = max(0, min(xs) - 30), max(0, min(ys) - 30)
+        x1, y1 = min(self.W, max(xs) + 30), min(self.H, max(ys) + 30)
+        w, h = max(200, x1 - x0), max(120, y1 - y0)
+        parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x0:.0f} {y0:.0f} {w:.0f} {h:.0f}" '
+                 f'width="{w:.0f}" height="{h:.0f}">',
+                 f'<metadata id="mk-drawing">{json.dumps({"strokes": self.strokes, "paper": self.paper, "pattern": self.pattern})}</metadata>',
+                 f'<rect x="{x0:.0f}" y="{y0:.0f}" width="{w:.0f}" height="{h:.0f}" rx="14" fill="{rgb(bg)}"/>']
+        for s in self.strokes:
+            if s["tool"] == "highlighter":
+                d = "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y, _ in s["points"])
+                parts.append(f'<path d="{d}" fill="none" stroke="{s["color"]}" stroke-opacity="0.35" '
+                             f'stroke-width="{s["width"] * 3.5:.1f}" stroke-linecap="round" stroke-linejoin="round"/>')
+            else:
+                d = "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y in stroke_outline(s["points"], s["width"])) + " Z"
+                parts.append(f'<path d="{d}" fill="{s["color"]}"/>')
+        parts.append("</svg>")
+        return "\n".join(parts)
+
+    def _finish(self):
+        if self.strokes:
+            self.on_save(self.to_svg().encode())
+        self.close()
+
+
+def read_drawing(path):
+    try:
+        text = Path(path).read_text()
+        m = re.search(r'<metadata id="mk-drawing">(.*?)</metadata>', text, re.S)
+        return json.loads(m.group(1)) if m else None
+    except (OSError, ValueError):
+        return None
+
+
+# ======================================================================
+# Pickers: quick switcher (Ctrl+O) and command palette (Ctrl+P)
+# ======================================================================
+class Picker(Adw.Dialog):
+    def __init__(self, title, items, on_pick, placeholder, on_create=None):
+        """items: [(label, subtitle, value)]"""
+        super().__init__(title=title, content_width=560, content_height=460)
+        self.items, self.on_pick, self.on_create = items, on_pick, on_create
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=12,
+                      margin_bottom=12, margin_start=12, margin_end=12)
+        self.entry = Gtk.SearchEntry(placeholder_text=placeholder)
+        self.entry.connect("search-changed", lambda *_: self._fill())
+        self.entry.connect("activate", lambda *_: self._activate(self.list.get_row_at_index(0)))
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._key)
+        self.entry.add_controller(keys)
+        box.append(self.entry)
+        self.list = Gtk.ListBox(css_classes=["navigation-sidebar"])
+        self.list.connect("row-activated", lambda _l, row: self._activate(row))
+        box.append(Gtk.ScrolledWindow(child=self.list, vexpand=True))
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        view.set_content(box)
+        self.set_child(view)
+        self._fill()
+        GLib.idle_add(self.entry.grab_focus)
+
+    def _key(self, _c, keyval, *_):
+        if keyval in (Gdk.KEY_Down, Gdk.KEY_Up):
+            row = self.list.get_selected_row() or self.list.get_row_at_index(0)
+            if row:
+                idx = row.get_index() + (1 if keyval == Gdk.KEY_Down else -1)
+                nxt = self.list.get_row_at_index(max(0, idx))
+                if nxt:
+                    self.list.select_row(nxt)
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            self._activate(self.list.get_selected_row() or self.list.get_row_at_index(0))
+            return True
+        return False
+
+    @staticmethod
+    def _score(query, text):
+        """Fuzzy match: every query letter in order; earlier and closer is better."""
+        text, pos, score = text.lower(), -1, 0
+        for ch in query:
+            nxt = text.find(ch, pos + 1)
+            if nxt < 0:
+                return None
+            score += nxt - pos
+            pos = nxt
+        return score
+
+    def _fill(self):
+        while (row := self.list.get_row_at_index(0)) is not None:
+            self.list.remove(row)
+        query = self.entry.get_text().strip().lower()
+        ranked = []
+        for label, sub, value in self.items:
+            score = 0 if not query else self._score(query, label)
+            if score is not None:
+                ranked.append((score, label, sub, value))
+        ranked.sort(key=lambda r: r[0])
+        if query and self.on_create and not any(r[1].lower() == query for r in ranked):
+            ranked.append((10 ** 6, f"Create “{self.entry.get_text().strip()}”", "New note", ("create", self.entry.get_text().strip())))
+        for _s, label, sub, value in ranked[:80]:
+            row = Adw.ActionRow(title=GLib.markup_escape_text(label), subtitle=GLib.markup_escape_text(sub or ""))
+            row.value = value
+            self.list.append(row)
+        first = self.list.get_row_at_index(0)
+        if first:
+            self.list.select_row(first)
+
+    def _activate(self, row):
+        if row is None:
+            return
+        self.close()
+        value = row.value
+        if isinstance(value, tuple) and value and value[0] == "create":
+            self.on_create(value[1])
+        else:
+            self.on_pick(value)
+
+
+# ======================================================================
+# The main window
+# ======================================================================
+class NotesWindow(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="MK Notes", default_width=1280, default_height=820)
+        self.vault = nv.Vault()
+        self.rel = None
+        self.dirty = False
+        self.loading = False
+        self.save_id = 0
+        self.last_written = 0.0
+        self.scope = ("all", None)
+        self.reading = False
+        self.rows = {}
+        self.snippets = {}
+        self.signature = None
+        self.server = None
+        self._quiet_scope = self._quiet_pin = False
+
+        self._build()
+        self._actions()
+        GLib.timeout_add_seconds(3, self._poll)
+        self.connect("close-request", self._on_close)
+        self.refresh()
+        last = self.vault.state.get("last")
+        self.open_note(last if last and self.vault.path(last).exists() else (self._first_note()))
+        if nv.load_conf().get("SYNC", "off") == "on":
+            self.set_sync(True)
+
+    # ---------- layout ----------
+    def _build(self):
+        # Sidebar: places, folders, tags
+        self.sidebar = Gtk.ListBox(css_classes=["navigation-sidebar", "mk-sidebar"])
+        self.sidebar.connect("row-selected", self._on_scope)
+        side_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        side_head = Adw.HeaderBar(show_end_title_buttons=False, title_widget=Adw.WindowTitle(title="MK Notes"))
+        new_folder = Gtk.Button(icon_name="folder-new-symbolic", tooltip_text="New folder")
+        new_folder.connect("clicked", lambda *_: self.new_folder())
+        side_head.pack_end(new_folder)
+        side_box.append(side_head)
+        side_box.append(Gtk.ScrolledWindow(child=self.sidebar, vexpand=True))
+        self.sync_label = Gtk.Label(label="", css_classes=["mk-status"], margin_bottom=8, wrap=True)
+        side_box.append(self.sync_label)
+
+        # Note list
+        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        list_head = Adw.HeaderBar(show_start_title_buttons=False, show_end_title_buttons=False)
+        self.side_toggle = Gtk.ToggleButton(icon_name="sidebar-show-symbolic", active=True,
+                                            tooltip_text="Folders and tags (F9)")
+        list_head.pack_start(self.side_toggle)
+        new_btn = Gtk.Button(icon_name="document-new-symbolic", tooltip_text="New note (Ctrl+N)")
+        new_btn.connect("clicked", lambda *_: self.new_note())
+        list_head.pack_end(new_btn)
+        self.list_title = Adw.WindowTitle(title="All notes")
+        list_head.set_title_widget(self.list_title)
+        list_box.append(list_head)
+        self.search = Gtk.SearchEntry(placeholder_text="Search (tag:x  path:y)", margin_start=8,
+                                      margin_end=8, margin_bottom=6)
+        self.search.connect("search-changed", lambda *_: self.refresh())
+        list_box.append(self.search)
+        self.list = Gtk.ListBox(css_classes=["mk-list"])
+        self.list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.list.connect("row-activated", lambda _l, row: self.open_note(row.rel))
+        self.list.set_placeholder(Gtk.Label(label="No notes here", css_classes=["dim-label"], margin_top=40))
+        list_box.append(Gtk.ScrolledWindow(child=self.list, vexpand=True))
+        self.count_label = Gtk.Label(css_classes=["mk-status"], margin_bottom=8)
+        list_box.append(self.count_label)
+
+        # Note: title, format bar, editor / reader, info pane
+        note_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        note_head = Adw.HeaderBar(show_start_title_buttons=False, title_widget=Gtk.Label())
+        self.mode = Adw.ToggleGroup()
+        self.mode.add(Adw.Toggle(name="edit", icon_name="document-edit-symbolic", tooltip="Edit (Ctrl+E)"))
+        self.mode.add(Adw.Toggle(name="read", icon_name="view-reveal-symbolic", tooltip="Read (Ctrl+E)"))
+        self.mode.set_active_name("edit")
+        self.mode.connect("notify::active-name", lambda *_: self.set_reading(self.mode.get_active_name() == "read"))
+        note_head.pack_start(self.mode)
+        for icon, tip, action in (("camera-photo-symbolic", "Insert screenshot (Ctrl+Shift+S)", "win.screenshot"),
+                                  ("document-edit-symbolic", "Draw or handwrite (Ctrl+Shift+P)", "win.draw"),
+                                  ("insert-image-symbolic", "Insert image or file", "win.attach")):
+            note_head.pack_start(Gtk.Button(icon_name=icon if icon != "document-edit-symbolic" else "applications-graphics-symbolic",
+                                            tooltip_text=tip, action_name=action))
+        menu = Gio.Menu()
+        section = Gio.Menu()
+        for label, action in (("Export to PDF…", "win.pdf"), ("Version history…", "win.history"),
+                              ("Rename (F2)", "win.rename"), ("Delete note", "win.delete")):
+            section.append(label, action)
+        menu.append_section(None, section)
+        section = Gio.Menu()
+        for label, action in (("Graph view", "win.graph"), ("Today's note", "win.daily"),
+                              ("Insert template…", "win.template"), ("Publish vault as website…", "win.publish")):
+            section.append(label, action)
+        menu.append_section(None, section)
+        section = Gio.Menu()
+        for label, action in (("Phone…", "win.phone"), ("Open vault folder", "win.open-folder"),
+                              ("Open in Obsidian", "win.obsidian"), ("Keyboard shortcuts", "win.shortcuts")):
+            section.append(label, action)
+        menu.append_section(None, section)
+        note_head.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, tooltip_text="Menu"))
+        self.info_toggle = Gtk.ToggleButton(icon_name="sidebar-show-right-symbolic", tooltip_text="Outline, backlinks, tags")
+        note_head.pack_end(self.info_toggle)
+        self.pin_btn = Gtk.ToggleButton(icon_name="view-pin-symbolic", tooltip_text="Pin")
+        self.pin_btn.connect("toggled", self._on_pin_toggled)
+        note_head.pack_end(self.pin_btn)
+        note_box.append(note_head)
+
+        self.title = Gtk.Entry(css_classes=["mk-title"], margin_start=40, margin_end=40, margin_top=8,
+                               placeholder_text="Title")
+        self.title.connect("activate", lambda *_: (self._commit_title(), self.view.grab_focus()))
+        focus = Gtk.EventControllerFocus()
+        focus.connect("leave", lambda *_: self._commit_title())
+        self.title.add_controller(focus)
+        note_box.append(self.title)
+        self.meta = Gtk.Label(xalign=0, css_classes=["mk-status"], margin_start=40, margin_bottom=4)
+        note_box.append(self.meta)
+
+        self.formatbar = Gtk.Box(spacing=2, margin_start=36, margin_end=36, margin_bottom=4,
+                                 css_classes=["mk-formatbar"])
+        for icon, tip, cb in (
+                ("format-text-bold-symbolic", "Bold (Ctrl+B)", lambda: self.wrap("**", "**")),
+                ("format-text-italic-symbolic", "Italic (Ctrl+I)", lambda: self.wrap("*", "*")),
+                ("format-text-strikethrough-symbolic", "Strikethrough", lambda: self.wrap("~~", "~~")),
+                ("marker-symbolic", "Highlight", lambda: self.wrap("==", "==")),
+                (None, None, None),
+                ("format-text-larger-symbolic", "Heading (Ctrl+H)", self.cycle_heading),
+                ("view-list-bullet-symbolic", "Bulleted list", lambda: self.line_prefix("- ")),
+                ("view-list-ordered-symbolic", "Numbered list", lambda: self.line_prefix("1. ")),
+                ("checkbox-checked-symbolic", "Checklist (Ctrl+L)", lambda: self.line_prefix("- [ ] ")),
+                ("format-indent-more-symbolic", "Quote", lambda: self.line_prefix("> ")),
+                (None, None, None),
+                ("insert-link-symbolic", "Link to a note (Ctrl+K)", self.insert_link),
+                ("view-grid-symbolic", "Table", self.insert_table),
+                ("utilities-terminal-symbolic", "Code block", lambda: self.wrap("```\n", "\n```")),
+                ("dialog-information-symbolic", "Callout", lambda: self.insert("> [!note] Title\n> ")),
+                ("view-more-horizontal-symbolic", "Divider", lambda: self.insert("\n---\n"))):
+            if icon is None:
+                self.formatbar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=4, margin_end=4))
+                continue
+            b = Gtk.Button(icon_name=icon, tooltip_text=tip, css_classes=["flat"])
+            b.connect("clicked", lambda *_, f=cb: (f(), self.view.grab_focus()))
+            self.formatbar.append(b)
+        self.formatbar.append(Gtk.Box(hexpand=True))
+        self.color_box = Gtk.Box(spacing=4, valign=Gtk.Align.CENTER)
+        for name, color in [("None", "")] + COLORS:
+            sw = Gtk.Button(css_classes=["mk-swatch"], tooltip_text=f"Colour: {name}", valign=Gtk.Align.CENTER)
+            if color:
+                sw.add_css_class(f"mk-c{[c for _n, c in COLORS].index(color)}")
+            else:
+                sw.set_icon_name("window-close-symbolic")
+                sw.add_css_class("flat")
+            sw.connect("clicked", lambda *_, c=color: self.set_color(c))
+            self.color_box.append(sw)
+        self.formatbar.append(self.color_box)
+        note_box.append(self.formatbar)
+
+        GtkSource.init()
+        lang = GtkSource.LanguageManager.get_default().get_language("markdown")
+        self.buffer = GtkSource.Buffer(language=lang, highlight_syntax=True)
+        self._apply_scheme()
+        Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self._apply_scheme())
+        self.view = GtkSource.View(buffer=self.buffer, wrap_mode=Gtk.WrapMode.WORD_CHAR,
+                                   left_margin=40, right_margin=40, top_margin=10, bottom_margin=120,
+                                   pixels_below_lines=4, css_classes=["mk-editor"], auto_indent=True,
+                                   insert_spaces_instead_of_tabs=True, tab_width=4, smart_backspace=True)
+        self.view.connect("paste-clipboard", self._on_paste)
+        self.buffer.connect("changed", self._on_changed)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._on_editor_key)
+        self.view.add_controller(keys)
+        drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        drop.connect("drop", self._on_drop)
+        self.view.add_controller(drop)
+        self.editor_scroll = Gtk.ScrolledWindow(child=self.view, vexpand=True)
+
+        self.web = WebKit.WebView(vexpand=True)
+        settings = self.web.get_settings()
+        settings.set_allow_file_access_from_file_urls(True)
+        settings.set_enable_developer_extras(False)
+        transparent = Gdk.RGBA()
+        transparent.parse("rgba(0,0,0,0)")
+        self.web.set_background_color(transparent)
+        self.web.connect("decide-policy", self._on_policy)
+        manager = self.web.get_user_content_manager()
+        manager.register_script_message_handler("mk", None)
+        manager.connect("script-message-received::mk", self._on_web_message)
+
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=150)
+        self.stack.add_named(self.editor_scroll, "edit")
+        self.stack.add_named(self.web, "read")
+
+        self.info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_start=12, margin_end=12,
+                            margin_top=8, width_request=250)
+        info_scroll = Gtk.ScrolledWindow(child=self.info, css_classes=["mk-info"], hscrollbar_policy=Gtk.PolicyType.NEVER)
+        self.info_revealer = Gtk.Revealer(child=info_scroll, transition_type=Gtk.RevealerTransitionType.SLIDE_LEFT)
+        self.info_toggle.bind_property("active", self.info_revealer, "reveal-child", 0)
+        self.info_toggle.connect("toggled", lambda *_: self._fill_info())
+
+        body = Gtk.Box()
+        self.stack.set_hexpand(True)
+        body.append(self.stack)
+        body.append(self.info_revealer)
+        note_box.append(body)
+
+        self.toast = Adw.ToastOverlay(child=note_box)
+
+        inner = Gtk.Paned(start_child=list_box, end_child=self.toast, position=330,
+                          shrink_start_child=False, resize_start_child=False)
+        self.split = Adw.OverlaySplitView(sidebar=side_box, content=inner, min_sidebar_width=200,
+                                          max_sidebar_width=260)
+        self.side_toggle.bind_property("active", self.split, "show-sidebar", 2)
+        # Narrow window (tablet mode, half screen): the sidebar slides over.
+        bp = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 900sp"))
+        bp.add_setter(self.split, "collapsed", True)
+        self.add_breakpoint(bp)
+        self.set_content(self.split)
+
+    def _apply_scheme(self):
+        dark = Adw.StyleManager.get_default().get_dark()
+        scheme = GtkSource.StyleSchemeManager.get_default().get_scheme("Adwaita-dark" if dark else "Adwaita")
+        if scheme:
+            self.buffer.set_style_scheme(scheme)
+
+    # ---------- actions and shortcuts ----------
+    def _actions(self):
+        table = (
+            ("new", self.new_note, ["<Control>n"]),
+            ("new-folder", self.new_folder, ["<Control><Shift>n"]),
+            ("quick-open", self.quick_open, ["<Control>o"]),
+            ("palette", self.palette, ["<Control>p"]),
+            ("toggle-mode", lambda: self.mode.set_active_name("edit" if self.reading else "read"), ["<Control>e"]),
+            ("find", lambda: self.search.grab_focus(), ["<Control>f"]),
+            ("daily", lambda: self.open_note(self.vault.daily()), ["<Control><Shift>d"]),
+            ("screenshot", self.screenshot, ["<Control><Shift>s"]),
+            ("draw", self.draw, ["<Control><Shift>p"]),
+            ("attach", self.attach, []),
+            ("pdf", self.export_pdf, ["<Control><Shift>e"]),
+            ("history", self.show_history, []),
+            ("rename", lambda: self.title.grab_focus(), ["F2"]),
+            ("delete", self.delete_note, []),
+            ("graph", self.show_graph, ["<Control>g"]),
+            ("template", self.pick_template, ["<Control>t"]),
+            ("publish", self.publish, []),
+            ("phone", self.show_phone, []),
+            ("open-folder", lambda: Gio.AppInfo.launch_default_for_uri(self.vault.root.as_uri(), None), []),
+            ("obsidian", self.open_obsidian, []),
+            ("shortcuts", self.show_shortcuts, ["<Control>question"]),
+            ("toggle-sidebar", lambda: self.side_toggle.set_active(not self.side_toggle.get_active()), ["F9"]),
+            ("bold", lambda: self.wrap("**", "**"), ["<Control>b"]),
+            ("italic", lambda: self.wrap("*", "*"), ["<Control>i"]),
+            ("link", self.insert_link, ["<Control>k"]),
+            ("heading", self.cycle_heading, ["<Control>h"]),
+            ("checklist", lambda: self.line_prefix("- [ ] "), ["<Control>l"]),
+        )
+        app = self.get_application()
+        for name, cb, accels in table:
+            action = Gio.SimpleAction.new(name, None)
+            action.connect("activate", lambda *_a, f=cb: f())
+            self.add_action(action)
+            if accels:
+                app.set_accels_for_action(f"win.{name}", accels)
+        self.commands = [(n.replace("-", " ").capitalize(), ", ".join(a), n) for n, _cb, a in table]
+
+    # ---------- list and sidebar ----------
+    def _first_note(self):
+        notes = self.vault.notes()
+        return notes[0]["rel"] if notes else self.vault.create("", "Untitled")
+
+    def refresh(self, keep_scope=True):
+        self._fill_sidebar()
+        notes = self._scoped_notes()
+        signature = [(n["rel"], n["mtime"]) for n, _s in notes]
+        pinned = self.vault.state["pinned"]
+        if not self.search.get_text().strip():
+            notes.sort(key=lambda ns: (ns[0]["rel"] not in pinned,
+                                       pinned.index(ns[0]["rel"]) if ns[0]["rel"] in pinned else 0,
+                                       -ns[0]["mtime"]))
+        while (row := self.list.get_row_at_index(0)) is not None:
+            self.list.remove(row)
+        self.rows = {}
+        for note, snip in notes:
+            row = self._row(note, snip)
+            self.list.append(row)
+            if note["rel"] == self.rel:
+                self.list.select_row(row)
+        self.count_label.set_text(f"{len(notes)} note{'s' if len(notes) != 1 else ''}")
+        self.signature = signature
+
+    def _scoped_notes(self):
+        query = self.search.get_text().strip()
+        kind, value = self.scope
+        if kind == "tag":
+            query = f"tag:{value} {query}"
+        if query:
+            found = self.vault.search(query)
+        else:
+            found = [(n, None) for n in self.vault.notes()]
+        out = []
+        for note, snip in found:
+            if kind == "pinned" and not self.vault.is_pinned(note["rel"]):
+                continue
+            if kind == "folder" and not (note["folder"] == value or note["folder"].startswith(value + "/")):
+                continue
+            if kind == "daily" and note["folder"] != "Daily":
+                continue
+            out.append((note, snip))
+        return out
+
+    def _row(self, note, snip):
+        rel = note["rel"]
+        key = (rel, note["mtime"])
+        if snip is None:
+            if key not in self.snippets:
+                self.snippets[key] = snippet(self.vault.read(rel))
+            snip = self.snippets[key]
+        row = Gtk.ListBoxRow()
+        row.rel = rel
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        top = Gtk.Box(spacing=6)
+        color = self.vault.color(rel)
+        if color:
+            known = [c for _n, c in COLORS]
+            if color in known:
+                top.append(Gtk.Box(css_classes=["mk-dot", f"mk-c{known.index(color)}"], valign=Gtk.Align.CENTER))
+        title = Gtk.Label(label=note["title"], xalign=0, hexpand=True, ellipsize=Pango.EllipsizeMode.END,
+                          css_classes=["mk-row-title"])
+        top.append(title)
+        if self.vault.is_pinned(rel):
+            top.append(Gtk.Image(icon_name="view-pin-symbolic", opacity=0.6))
+        box.append(top)
+        folder = f"  ·  {note['folder']}" if note["folder"] and self.scope[0] != "folder" else ""
+        meta = Gtk.Label(label=f"{when(note['mtime'])}  {snip or 'No additional text'}{folder}", xalign=0,
+                         ellipsize=Pango.EllipsizeMode.END, css_classes=["mk-row-meta"])
+        box.append(meta)
+        row.set_child(box)
+        row.labels = (title, meta)
+        # right-click / long-press menu
+        click = Gtk.GestureClick(button=3)
+        click.connect("pressed", lambda g, _n, x, y, r=row: self._row_menu(r, x, y))
+        row.add_controller(click)
+        press = Gtk.GestureLongPress()
+        press.connect("pressed", lambda g, x, y, r=row: self._row_menu(r, x, y))
+        row.add_controller(press)
+        self.rows[rel] = row
+        return row
+
+    def _row_menu(self, row, x, y):
+        rel = row.rel
+        menu = Gio.Menu()
+        menu.append("Unpin" if self.vault.is_pinned(rel) else "Pin", f"win.row-pin::{rel}")
+        colors = Gio.Menu()
+        for name, color in [("None", "")] + COLORS:
+            colors.append(name, f"win.row-color::{rel}|{color}")
+        menu.append_submenu("Colour", colors)
+        move = Gio.Menu()
+        move.append("Vault root", f"win.row-move::{rel}|")
+        for folder in self.vault.folders():
+            move.append(folder, f"win.row-move::{rel}|{folder}")
+        menu.append_submenu("Move to", move)
+        menu.append("Export to PDF", f"win.row-pdf::{rel}")
+        menu.append("Delete", f"win.row-delete::{rel}")
+        for name, cb in (("row-pin", lambda r: (self.vault.set_pinned(r, not self.vault.is_pinned(r)), self.refresh())),
+                         ("row-color", lambda v: (self.vault.set_color(*v.split("|", 1)), self.refresh())),
+                         ("row-move", self._move),
+                         ("row-pdf", lambda r: (self.open_note(r), self.export_pdf())),
+                         ("row-delete", lambda r: (self.open_note(r), self.delete_note()))):
+            if not self.lookup_action(name):
+                action = Gio.SimpleAction.new(name, GLib.VariantType("s"))
+                action.connect("activate", lambda _a, p, f=cb: f(p.get_string()))
+                self.add_action(action)
+        pop = Gtk.PopoverMenu.new_from_model(menu)
+        pop.set_parent(row)
+        rect = Gdk.Rectangle()
+        rect.x, rect.y, rect.width, rect.height = int(x), int(y), 1, 1
+        pop.set_pointing_to(rect)
+        pop.connect("closed", lambda p: GLib.idle_add(p.unparent))
+        pop.popup()
+
+    def _move(self, value):
+        rel, folder = value.split("|", 1)
+        self._save_now()
+        new = self.vault.rename(rel, new_folder=folder)
+        if rel == self.rel:
+            self.rel = new
+        self.refresh()
+
+    def _fill_sidebar(self):
+        selected = self.scope
+        self.sidebar.set_selection_mode(Gtk.SelectionMode.NONE)
+        while (row := self.sidebar.get_row_at_index(0)) is not None:
+            self.sidebar.remove(row)
+
+        def add(label, icon, scope, indent=0, count=None):
+            row = Gtk.ListBoxRow()
+            row.scope = scope
+            box = Gtk.Box(spacing=8, margin_start=indent * 14)
+            box.append(Gtk.Image(icon_name=icon))
+            box.append(Gtk.Label(label=label, xalign=0, hexpand=True, ellipsize=Pango.EllipsizeMode.END))
+            if count is not None:
+                box.append(Gtk.Label(label=str(count), css_classes=["dim-label"]))
+            row.set_child(box)
+            self.sidebar.append(row)
+            return row
+
+        def header(text):
+            row = Gtk.ListBoxRow(selectable=False, activatable=False)
+            row.scope = None
+            row.set_child(Gtk.Label(label=text, xalign=0, css_classes=["mk-info-head"], margin_top=8))
+            self.sidebar.append(row)
+
+        rows = [add("All notes", "view-list-symbolic", ("all", None), count=len(self.vault.notes())),
+                add("Pinned", "view-pin-symbolic", ("pinned", None), count=len(self.vault.state["pinned"])),
+                add("Daily notes", "x-office-calendar-symbolic", ("daily", None))]
+        folders = [f for f in self.vault.folders() if f not in ("Daily", "Templates")]
+        if folders:
+            header("FOLDERS")
+            for folder in folders:
+                rows.append(add(folder.split("/")[-1], "folder-symbolic", ("folder", folder), folder.count("/")))
+        tags = self.vault.all_tags()
+        if tags:
+            header("TAGS")
+            for tag, count in tags[:40]:
+                rows.append(add(f"#{tag}", "tag-symbolic", ("tag", tag), count=count))
+        self.sidebar.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        for row in rows:
+            if row.scope == selected:
+                self._quiet_scope = True
+                self.sidebar.select_row(row)
+                self._quiet_scope = False
+
+    def _on_scope(self, _box, row):
+        if row is None or row.scope is None or getattr(self, "_quiet_scope", False):
+            return
+        if row.scope == self.scope:
+            return
+        self.scope = row.scope
+        kind, value = row.scope
+        titles = {"all": "All notes", "pinned": "Pinned", "daily": "Daily notes"}
+        self.list_title.set_title(titles.get(kind) or (f"#{value}" if kind == "tag" else value.split("/")[-1]))
+        GLib.idle_add(self.refresh)
+        if self.split.get_collapsed():
+            self.side_toggle.set_active(False)
+
+    # ---------- open, edit, save ----------
+    def open_note(self, rel):
+        if not rel:
+            return
+        self._save_now()
+        self._commit_title()
+        if not self.vault.path(rel).exists():
+            return
+        self.rel = rel
+        self.loading = True
+        self.buffer.begin_irreversible_action()
+        self.buffer.set_text(self.vault.read(rel))
+        self.buffer.end_irreversible_action()
+        self.buffer.place_cursor(self.buffer.get_start_iter())
+        self.loading = False
+        self.dirty = False
+        self.last_written = self.vault.path(rel).stat().st_mtime
+        self.title.set_text(Path(rel).stem)
+        self._quiet_pin = True
+        self.pin_btn.set_active(self.vault.is_pinned(rel))
+        self._quiet_pin = False
+        self._update_meta()
+        self.vault.state["last"] = rel
+        self.vault.save_state()
+        row = self.rows.get(rel)
+        if row:
+            self.list.select_row(row)
+        if self.reading:
+            self._render()
+        self._fill_info()
+
+    def _update_meta(self):
+        if not self.rel:
+            return
+        text = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), False)
+        words = len(re.findall(r"\w+", text))
+        folder = Path(self.rel).parent.as_posix()
+        folder = "" if folder == "." else f"{folder}  ·  "
+        edited = when(self.vault.path(self.rel).stat().st_mtime) if self.vault.path(self.rel).exists() else ""
+        self.meta.set_text(f"{folder}{words} words  ·  edited {edited}")
+
+    def _on_changed(self, _buf):
+        if self.loading or not self.rel:
+            return
+        self.dirty = True
+        if self.save_id:
+            GLib.source_remove(self.save_id)
+        self.save_id = GLib.timeout_add(600, self._save_now)
+
+    def _save_now(self):
+        if self.save_id:
+            GLib.source_remove(self.save_id)
+            self.save_id = 0
+        if self.dirty and self.rel:
+            text = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), False)
+            lock = self.server.lock if self.server else None
+            if lock:
+                lock.acquire()
+            try:
+                self.vault.write(self.rel, text)
+            finally:
+                if lock:
+                    lock.release()
+            self.last_written = self.vault.path(self.rel).stat().st_mtime
+            self.dirty = False
+            row = self.rows.get(self.rel)
+            if row:
+                row.labels[1].set_text(f"{when(time.time())}  {snippet(text) or 'No additional text'}")
+            self._update_meta()
+        return GLib.SOURCE_REMOVE
+
+    def _commit_title(self):
+        if not self.rel:
+            return
+        new = self.title.get_text().strip()
+        if not new or new == Path(self.rel).stem:
+            return
+        self._save_now()
+        self.rel = self.vault.rename(self.rel, new)
+        self.title.set_text(Path(self.rel).stem)
+        self.refresh()
+
+    def _poll(self):
+        """Notes changed by Obsidian, the phone or another program."""
+        if self.rel and not self.dirty:
+            try:
+                mtime = self.vault.path(self.rel).stat().st_mtime
+                if mtime > self.last_written + 0.01:
+                    cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert()).get_offset()
+                    self.open_note(self.rel)
+                    self.buffer.place_cursor(self.buffer.get_iter_at_offset(cursor))
+            except OSError:
+                self.rel = None
+                self.open_note(self._first_note())
+        current = [(n["rel"], n["mtime"]) for n, _s in self._scoped_notes()]
+        if self.signature is not None and current != self.signature and not self.search.has_focus():
+            if {r for r, _m in current} != {r for r, _m in self.signature}:
+                self.refresh()
+            else:
+                self.signature = current
+        return GLib.SOURCE_CONTINUE
+
+    def new_note(self, title="Untitled", text=""):
+        self._save_now()
+        kind, value = self.scope
+        folder = value if kind == "folder" else ""
+        if kind == "tag" and not text:
+            text = f"\n\n#{value}"
+        rel = self.vault.create(folder, title, text)
+        self.refresh()
+        self.open_note(rel)
+        if self.reading:
+            self.mode.set_active_name("edit")
+        self.title.grab_focus()
+        self.title.select_region(0, -1)
+
+    def new_folder(self):
+        dialog = Adw.AlertDialog(heading="New folder")
+        entry = Gtk.Entry(placeholder_text="Folder name", activates_default=True)
+        dialog.set_extra_child(entry)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("create", "Create")
+        dialog.set_default_response("create")
+        dialog.set_response_appearance("create", Adw.ResponseAppearance.SUGGESTED)
+
+        def done(d, response):
+            if response == "create" and entry.get_text().strip():
+                parent = self.scope[1] if self.scope[0] == "folder" else ""
+                folder = self.vault.create_folder(entry.get_text().strip(), parent)
+                self.scope = ("folder", folder)
+                self.list_title.set_title(folder.split("/")[-1])
+                self.refresh()
+        dialog.connect("response", done)
+        dialog.present(self)
+
+    def delete_note(self):
+        if not self.rel:
+            return
+        rel = self.rel
+        self._save_now()
+        self.vault.delete(rel)
+        self.rel = None
+        self.refresh()
+        self.open_note(self._first_note())
+        toast = Adw.Toast(title=f"“{Path(rel).stem}” moved to the vault's trash", button_label="Undo", timeout=6)
+
+        def undo(*_):
+            trash = self.vault.root / ".trash" / rel
+            if trash.exists():
+                self.vault.path(rel).parent.mkdir(parents=True, exist_ok=True)
+                trash.rename(self.vault.path(rel))
+                self.vault.state["deleted"].pop(rel, None)
+                self.vault.save_state()
+                self.refresh()
+                self.open_note(rel)
+        toast.connect("button-clicked", undo)
+        self.toast.add_toast(toast)
+
+    def _on_pin_toggled(self, btn):
+        if getattr(self, "_quiet_pin", False) or not self.rel:
+            return
+        self.vault.set_pinned(self.rel, btn.get_active())
+        self.refresh()
+
+    def set_color(self, color):
+        if self.rel:
+            self.vault.set_color(self.rel, color)
+            self.refresh()
+
+    # ---------- editing helpers ----------
+    def insert(self, text):
+        self.buffer.delete_selection(True, True)
+        self.buffer.insert_at_cursor(text)
+
+    def wrap(self, before, after):
+        if self.reading:
+            return
+        bounds = self.buffer.get_selection_bounds()
+        if bounds:
+            start, end = bounds
+            text = self.buffer.get_text(start, end, False)
+            self.buffer.begin_user_action()
+            self.buffer.delete(start, end)
+            self.buffer.insert(start, before + text + after)
+            self.buffer.end_user_action()
+        else:
+            self.buffer.insert_at_cursor(before + after)
+            it = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+            it.backward_chars(len(after))
+            self.buffer.place_cursor(it)
+
+    def _selected_lines(self):
+        bounds = self.buffer.get_selection_bounds()
+        if bounds:
+            return bounds[0].get_line(), bounds[1].get_line()
+        line = self.buffer.get_iter_at_mark(self.buffer.get_insert()).get_line()
+        return line, line
+
+    def line_prefix(self, prefix):
+        if self.reading:
+            return
+        first, last = self._selected_lines()
+        self.buffer.begin_user_action()
+        number = 1
+        for line in range(first, last + 1):
+            ok, start = self.buffer.get_iter_at_line(line)
+            end = start.copy()
+            end.forward_to_line_end()
+            text = self.buffer.get_text(start, end, False)
+            stripped = re.sub(r"^(\s*)([-*+] \[.\] |[-*+] |\d+\. |> )", r"\1", text)
+            want = prefix if prefix != "1. " else f"{number}. "
+            if text.lstrip().startswith(want.strip()) and stripped != text and prefix != "1. ":
+                new = stripped
+            else:
+                new = re.match(r"\s*", stripped).group(0) + want + stripped.lstrip()
+            number += 1
+            self.buffer.delete(start, end)
+            self.buffer.insert(start, new)
+        self.buffer.end_user_action()
+
+    def cycle_heading(self):
+        if self.reading:
+            return
+        line = self.buffer.get_iter_at_mark(self.buffer.get_insert()).get_line()
+        ok, start = self.buffer.get_iter_at_line(line)
+        end = start.copy()
+        end.forward_to_line_end()
+        text = self.buffer.get_text(start, end, False)
+        m = re.match(r"^(#{1,6}) ", text)
+        level = len(m.group(1)) if m else 0
+        body = text[m.end():] if m else text
+        new = ("#" * (level + 1) + " " if level < 3 else "") + body
+        self.buffer.begin_user_action()
+        self.buffer.delete(start, end)
+        self.buffer.insert(start, new)
+        self.buffer.end_user_action()
+
+    def insert_link(self):
+        items = [(n["title"], n["folder"], n["rel"]) for n in self.vault.notes()]
+        Picker("Link to a note", items, lambda rel: self.insert(f"[[{Path(rel).stem}]]"),
+               "Type a note name…", on_create=lambda name: self.insert(f"[[{name}]]")).present(self)
+
+    def insert_table(self):
+        self.insert("\n| Column | Column | Column |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |\n")
+
+    def _on_editor_key(self, _c, keyval, _code, state):
+        """Lists continue on Enter, as in Apple Notes and Obsidian."""
+        if keyval not in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) or state & (Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK):
+            return False
+        cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+        ok, start = self.buffer.get_iter_at_line(cursor.get_line())
+        text = self.buffer.get_text(start, cursor, False)
+        m = re.match(r"^(\s*)([-*+] \[[ xX]\] |[-*+] |(\d+)\. |> )(.*)$", text)
+        if not m:
+            return False
+        indent, marker, number, rest = m.group(1), m.group(2), m.group(3), m.group(4)
+        if not rest.strip():
+            # empty item: end the list
+            self.buffer.delete(start, cursor)
+            return False
+        if number:
+            marker = f"{int(number) + 1}. "
+        elif "[" in marker:
+            marker = marker[:2] + "[ ] "
+        self.buffer.insert_at_cursor("\n" + indent + marker)
+        self.view.scroll_mark_onscreen(self.buffer.get_insert())
+        return True
+
+    # ---------- images, screenshots, files, drawings ----------
+    def _insert_attachment(self, rel, image=True):
+        name = Path(rel).name
+        self.insert(f"\n![[{name}]]\n" if image else f"![[{name}]]")
+
+    def _on_paste(self, view):
+        clipboard = self.get_clipboard()
+        formats = clipboard.get_formats()
+        if formats.contain_gtype(Gdk.FileList):
+            view.stop_emission_by_name("paste-clipboard")
+            clipboard.read_value_async(Gdk.FileList, GLib.PRIORITY_DEFAULT, None,
+                                       lambda c, res: self._add_files(c.read_value_finish(res).get_files()))
+        elif formats.contain_gtype(Gdk.Texture) and not formats.contain_mime_type("text/plain"):
+            view.stop_emission_by_name("paste-clipboard")
+
+            def got(c, res):
+                try:
+                    texture = c.read_texture_finish(res)
+                except GLib.Error:
+                    return
+                rel = self.vault.save_attachment(texture.save_to_png_bytes().get_data(), ".png")
+                self._insert_attachment(rel)
+                self.toast.add_toast(Adw.Toast(title="Image pasted", timeout=2))
+            clipboard.read_texture_async(None, got)
+
+    def _on_drop(self, _target, value, _x, _y):
+        self._add_files(value.get_files())
+        return True
+
+    def _add_files(self, files):
+        for f in files:
+            path = Path(f.get_path() or "")
+            if not path.is_file():
+                continue
+            if path.suffix == ".md" and self.vault.root in path.resolve().parents:
+                self.insert(f"[[{path.stem}]]")
+                continue
+            rel = self.vault.save_attachment(path.read_bytes(), path.suffix.lower(), path.stem)
+            self._insert_attachment(rel, path.suffix.lower() in nv.IMAGE_EXT)
+
+    def attach(self):
+        dialog = Gtk.FileDialog(title="Insert image or file")
+
+        def chosen(d, res):
+            try:
+                self._add_files(list(d.open_multiple_finish(res)))
+            except GLib.Error:
+                pass  # cancelled
+        dialog.open_multiple(self, None, chosen)
+
+    def screenshot(self):
+        if self.reading:
+            self.mode.set_active_name("edit")
+
+        def done(path):
+            if not path:
+                return
+            data = Path(path).read_bytes()
+            Path(path).unlink(missing_ok=True)  # the portal saved a copy in Pictures
+            rel = self.vault.save_attachment(data, ".png", f"Screenshot {datetime.now():%Y%m%d%H%M%S}")
+            self._insert_attachment(rel)
+            self.present()
+        self.set_visible(False)  # get out of the way while you pick an area
+        GLib.timeout_add(250, lambda: (take_screenshot(lambda p: (self.set_visible(True), done(p))), False)[1])
+
+    def draw(self):
+        if self.reading:
+            self.mode.set_active_name("edit")
+        # Editing an existing drawing: the cursor is on its ![[...svg]] line.
+        cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+        ok, start = self.buffer.get_iter_at_line(cursor.get_line())
+        end = start.copy()
+        end.forward_to_line_end()
+        line = self.buffer.get_text(start, end, False)
+        m = re.search(r"!\[\[([^\]]+\.svg)\]\]", line)
+        existing = self.vault.resolve(m.group(1)) if m else None
+        data = read_drawing(self.vault.path(existing)) if existing else None
+
+        def save(svg):
+            if existing:
+                self.vault.path(existing).write_bytes(svg)
+                if self.reading:
+                    self._render()
+                self.toast.add_toast(Adw.Toast(title="Drawing updated", timeout=2))
+            else:
+                rel = self.vault.save_attachment(svg, ".svg", f"Drawing {datetime.now():%Y%m%d%H%M%S}")
+                self._insert_attachment(rel)
+        dark = Adw.StyleManager.get_default().get_dark()
+        DrawingWindow(self, save, strokes=(data or {}).get("strokes"),
+                      paper=(data or {}).get("paper", "dark" if dark else "light"),
+                      pattern=(data or {}).get("pattern", "plain")).present()
+
+    # ---------- reading view ----------
+    def set_reading(self, reading):
+        self._save_now()
+        self.reading = reading
+        self.formatbar.set_sensitive(not reading)
+        self.stack.set_visible_child_name("read" if reading else "edit")
+        if reading:
+            self._render()
+        else:
+            self.view.grab_focus()
+
+    def _render(self):
+        if not self.rel:
+            return
+        dark = Adw.StyleManager.get_default().get_dark()
+        text = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), False)
+        self.web.load_html(self.vault.page(self.rel, text, dark=dark), self.vault.path(self.rel).parent.as_uri() + "/")
+
+    def _on_policy(self, _web, decision, kind):
+        if kind != WebKit.PolicyDecisionType.NAVIGATION_ACTION:
+            return False
+        uri = decision.get_navigation_action().get_request().get_uri()
+        if uri.startswith(("about:", "file:")) and decision.get_navigation_action().get_navigation_type() == WebKit.NavigationType.OTHER:
+            return False
+        decision.ignore()
+        if uri.startswith("mknote:"):
+            target = GLib.uri_unescape_string(uri[7:], None).split("#")[0]
+            rel = self.vault.resolve(target)
+            if not rel:
+                rel = self.vault.create("", target)
+                self.refresh()
+            self.open_note(rel)
+        elif uri.startswith("mktag:"):
+            self.search.set_text(f"tag:{uri[6:]}")
+        elif uri.startswith(("http:", "https:", "mailto:", "file:")):
+            Gio.AppInfo.launch_default_for_uri(uri, None)
+        return True
+
+    def _on_web_message(self, _manager, value):
+        message = value.to_string()
+        if message.startswith("task:") and self.rel:
+            self.vault.toggle_task(self.rel, int(message[5:]))
+            self.last_written = self.vault.path(self.rel).stat().st_mtime
+            self.loading = True
+            self.buffer.set_text(self.vault.read(self.rel))
+            self.loading = False
+
+    # ---------- info pane: outline, backlinks, tags ----------
+    def _fill_info(self):
+        if not self.info_toggle.get_active() or not self.rel:
+            return
+        while (child := self.info.get_first_child()) is not None:
+            self.info.remove(child)
+        text = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), False)
+
+        def head(label):
+            self.info.append(Gtk.Label(label=label, xalign=0, css_classes=["mk-info-head"]))
+
+        def link(label, cb, indent=0, sub=None):
+            b = Gtk.Button(css_classes=["flat"], margin_start=indent * 12)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            box.append(Gtk.Label(label=label, xalign=0, ellipsize=Pango.EllipsizeMode.END))
+            if sub:
+                box.append(Gtk.Label(label=sub, xalign=0, ellipsize=Pango.EllipsizeMode.END, css_classes=["mk-row-meta"]))
+            b.set_child(box)
+            b.connect("clicked", lambda *_: cb())
+            self.info.append(b)
+
+        head("OUTLINE")
+        for level, heading in self.vault.outline(text) or [(1, "No headings")]:
+            link(heading, lambda h=heading: self._jump_to_heading(h), level - 1)
+        head("BACKLINKS")
+        backlinks = self.vault.backlinks(self.rel)
+        for rel, line in backlinks:
+            link(Path(rel).stem, lambda r=rel: self.open_note(r), sub=line)
+        if not backlinks:
+            self.info.append(Gtk.Label(label="No other note links here", xalign=0, css_classes=["dim-label"]))
+        head("LINKS")
+        for target in dict.fromkeys(self.vault.links(text)):
+            link(target, lambda t=target: self.open_note(self.vault.resolve(t) or self.vault.create("", t)))
+        head("TAGS")
+        for tag in self.vault.tags(text):
+            link(f"#{tag}", lambda t=tag: self.search.set_text(f"tag:{t}"))
+
+    def _jump_to_heading(self, heading):
+        if self.reading:
+            self.mode.set_active_name("edit")
+        found = self.buffer.get_start_iter().forward_search(heading, Gtk.TextSearchFlags.TEXT_ONLY, None)
+        if found:
+            self.buffer.place_cursor(found[0])
+            self.view.scroll_to_iter(found[0], 0.1, True, 0, 0.1)
+
+    # ---------- PDF, publish, history, graph, templates ----------
+    def export_pdf(self):
+        if not self.rel:
+            return
+        self._save_now()
+        dialog = Gtk.FileDialog(title="Export to PDF", initial_name=f"{Path(self.rel).stem}.pdf")
+
+        def chosen(d, res):
+            try:
+                target = d.save_finish(res)
+            except GLib.Error:
+                return
+            rel = self.rel
+
+            def work():
+                try:
+                    self.vault.pdf(rel, target.get_path())
+                    GLib.idle_add(done, None)
+                except ImportError:
+                    GLib.idle_add(fallback)
+                except Exception as e:  # noqa: BLE001 - report any rendering failure
+                    GLib.idle_add(done, str(e))
+
+            def done(error):
+                if error:
+                    self.toast.add_toast(Adw.Toast(title=f"PDF failed: {error}"))
+                else:
+                    self._last_pdf = target.get_uri()
+                    self.toast.add_toast(Adw.Toast(title=f"Saved {target.get_basename()}", button_label="Open",
+                                                   action_name="win.open-last-pdf", timeout=5))
+
+            def fallback():
+                # Without WeasyPrint: the system print dialog (choose "Print to File").
+                self.mode.set_active_name("read")
+                WebKit.PrintOperation.new(self.web).run_dialog(self)
+                self.toast.add_toast(Adw.Toast(title="For one-click PDFs: sudo dnf install python3-weasyprint"))
+            threading.Thread(target=work, daemon=True).start()
+        if not self.lookup_action("open-last-pdf"):
+            action = Gio.SimpleAction.new("open-last-pdf", None)
+            action.connect("activate", lambda *_: Gio.AppInfo.launch_default_for_uri(self._last_pdf, None))
+            self.add_action(action)
+        dialog.save(self, None, chosen)
+
+    def publish(self):
+        dialog = Gtk.FileDialog(title="Publish to a folder (for GitHub Pages or any web host)")
+
+        def chosen(d, res):
+            try:
+                folder = d.select_folder_finish(res)
+            except GLib.Error:
+                return
+            out = self.vault.publish(Path(folder.get_path()) / "mk-notes-site")
+            Gio.AppInfo.launch_default_for_uri((out / "index.html").as_uri(), None)
+            self.toast.add_toast(Adw.Toast(title=f"Website saved in {out}", timeout=5))
+        dialog.select_folder(self, None, chosen)
+
+    def show_history(self):
+        if not self.rel:
+            return
+        self._save_now()
+        versions = self.vault.history(self.rel)
+        dialog = Adw.Dialog(title=f"History · {Path(self.rel).stem}", content_width=860, content_height=600)
+        view = Adw.ToolbarView()
+        head = Adw.HeaderBar()
+        restore = Gtk.Button(label="Restore this version", css_classes=["suggested-action"], sensitive=False)
+        head.pack_end(restore)
+        view.add_top_bar(head)
+        listbox = Gtk.ListBox(css_classes=["navigation-sidebar"])
+        preview = Gtk.TextView(editable=False, wrap_mode=Gtk.WrapMode.WORD_CHAR, left_margin=16, right_margin=16,
+                               top_margin=12, monospace=True)
+        for stamp, path in versions:
+            row = Adw.ActionRow(title=stamp.strftime("%d %b %Y, %H:%M"))
+            row.path = path
+            listbox.append(row)
+        if not versions:
+            listbox.set_placeholder(Gtk.Label(label="No earlier versions yet.\nOne is kept every few minutes while you edit.",
+                                              css_classes=["dim-label"], margin_top=30, justify=Gtk.Justification.CENTER))
+
+        def selected(_l, row):
+            restore.set_sensitive(row is not None)
+            if row:
+                preview.get_buffer().set_text(row.path.read_text(encoding="utf-8", errors="replace"))
+        listbox.connect("row-selected", selected)
+
+        def do_restore(*_):
+            row = listbox.get_selected_row()
+            if row:
+                self.buffer.set_text(row.path.read_text(encoding="utf-8", errors="replace"))
+                self._save_now()
+                dialog.close()
+                self.toast.add_toast(Adw.Toast(title="Version restored (the previous text is in history too)", timeout=4))
+        restore.connect("clicked", do_restore)
+        paned = Gtk.Paned(start_child=Gtk.ScrolledWindow(child=listbox, width_request=230),
+                          end_child=Gtk.ScrolledWindow(child=preview), position=240)
+        view.set_content(paned)
+        dialog.set_child(view)
+        dialog.present(self)
+
+    def show_graph(self):
+        self._save_now()
+        graph = self.vault.graph()
+        win = Adw.Window(transient_for=self, title="Graph view", default_width=1000, default_height=720)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        web = WebKit.WebView(vexpand=True)
+        rgba = Gdk.RGBA()
+        rgba.parse("rgba(0,0,0,0)")
+        web.set_background_color(rgba)
+        manager = web.get_user_content_manager()
+        manager.register_script_message_handler("mk", None)
+
+        def message(_m, value):
+            rel = value.to_string()
+            win.close()
+            self.open_note(rel)
+        manager.connect("script-message-received::mk", message)
+        dark = Adw.StyleManager.get_default().get_dark()
+        web.load_html(GRAPH_PAGE.replace("@DATA@", json.dumps(graph))
+                      .replace("@CURRENT@", json.dumps(self.rel or ""))
+                      .replace("@SCHEME@", "dark" if dark else "light"), "about:blank")
+        view.set_content(web)
+        win.set_content(view)
+        win.present()
+
+    def pick_template(self):
+        names = self.vault.templates()
+        if not names:
+            self.vault.write("Templates/Meeting.md", "# {{title}}\n\n**Date:** {{date}} {{time}}\n\n## Attendees\n- \n\n## Notes\n\n## Action items\n- [ ] \n")
+            self.vault.write("Templates/Project.md", "# {{title}}\n\n> [!info] Goal\n> \n\n## Tasks\n- [ ] \n\n## Links\n\n#project\n")
+            names = self.vault.templates()
+            self.toast.add_toast(Adw.Toast(title="Added starter templates in Templates/", timeout=3))
+        items = [(n, "Template", n) for n in names]
+        Picker("Insert template", items, lambda n: self.insert(self.vault.template(n, Path(self.rel or "").stem)),
+               "Template name…").present(self)
+
+    def quick_open(self):
+        items = [(n["title"], n["folder"], n["rel"]) for n in self.vault.notes()]
+        Picker("Open a note", items, self.open_note, "Type to find a note…",
+               on_create=lambda name: self.new_note(name)).present(self)
+
+    def palette(self):
+        Picker("Commands", self.commands, lambda name: self.activate_action(f"win.{name}", None),
+               "Type a command…").present(self)
+
+    def open_obsidian(self):
+        uri = f"obsidian://open?path={GLib.uri_escape_string(str(self.vault.path(self.rel or '')), None, False)}"
+        try:
+            Gio.AppInfo.launch_default_for_uri(uri, None)
+        except GLib.Error:
+            self.toast.add_toast(Adw.Toast(title="Obsidian isn't installed (flatpak install md.obsidian.Obsidian)"))
+
+    def show_shortcuts(self):
+        text = "\n".join(f"{keys:<22} {label}" for label, keys, _n in self.commands if keys)
+        dialog = Adw.AlertDialog(heading="Keyboard shortcuts")
+        label = Gtk.Label(label=text, xalign=0, css_classes=["monospace"], selectable=True)
+        dialog.set_extra_child(label)
+        dialog.add_response("ok", "OK")
+        dialog.present(self)
+
+    # ---------- phone ----------
+    def set_sync(self, on):
+        conf_set("SYNC", "on" if on else "off")
+        if on and not self.server:
+            port = nv.load_conf().get("SYNC_PORT", "8765")
+            self.server = notes_sync.Server(self.vault, port, on_change=lambda rel: GLib.idle_add(self._phone_changed, rel))
+            try:
+                self.server.start()
+            except OSError as e:
+                self.server = None
+                self.toast.add_toast(Adw.Toast(title=f"Phone sync couldn't start: {e.strerror}"))
+                return
+        elif not on and self.server:
+            self.server.stop()
+            self.server = None
+        self.sync_label.set_text(f"📱 Phone sync on\n{self.server.url}" if self.server else "")
+
+    def _phone_changed(self, rel):
+        self.refresh()
+        if rel == self.rel and not self.dirty:
+            self.open_note(rel)
+        return False
+
+    def show_phone(self):
+        dialog = Adw.Dialog(title="Phone", content_width=520)
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(description="Your phone and this laptop on the same Wi-Fi. Notes you write "
+                                                 "on the phone are kept on it and sync whenever both are connected.")
+        switch = Adw.SwitchRow(title="Phone sync", subtitle="Runs while MK Notes is open (or: mk-notes --serve)",
+                               active=self.server is not None)
+        group.add(switch)
+        page.add(group)
+        pair = Adw.PreferencesGroup(title="Pair a phone")
+        picture = Gtk.Picture(content_fit=Gtk.ContentFit.CONTAIN, height_request=260, can_shrink=True)
+        url_row = Adw.ActionRow(title="Open on the phone", subtitle_selectable=True)
+        steps = Gtk.Label(wrap=True, xalign=0, css_classes=["dim-label"], margin_top=8, label=(
+            "1. Scan the code with the phone's camera (or open the address).\n"
+            "2. Android: open the MK Notes app and scan the same code; or in Chrome, ⋮ › Add to Home screen.\n"
+            "3. That's it: it keeps a copy on the phone and syncs by itself."))
+        pair.add(picture)
+        pair.add(url_row)
+        pair.add(steps)
+        new_key = Gtk.Button(label="New pairing key (unpairs other phones)", css_classes=["flat"], margin_top=6)
+        pair.add(new_key)
+        page.add(pair)
+
+        def update():
+            on = self.server is not None
+            pair.set_visible(on)
+            if not on:
+                return
+            url = self.server.pairing_url()
+            url_row.set_subtitle(url)
+            png = qr_png(url)
+            if png:
+                picture.set_paintable(Gdk.Texture.new_from_bytes(GLib.Bytes.new(png)))
+            else:
+                picture.set_visible(False)
+                steps.set_label(steps.get_label() + "\n\n(For a QR code: sudo dnf install python3-qrcode)")
+        switch.connect("notify::active", lambda s, _p: (self.set_sync(s.get_active()), update()))
+        new_key.connect("clicked", lambda *_: (notes_sync.new_token(), update()))
+        update()
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        view.set_content(page)
+        dialog.set_child(view)
+        dialog.present(self)
+
+    def _on_close(self, *_):
+        self._save_now()
+        self._commit_title()
+        if self.server:
+            self.server.stop()
+        return False
+
+
+def qr_png(text):
+    try:
+        import io
+
+        import qrcode
+    except ImportError:
+        return None
+    img = qrcode.make(text, box_size=8, border=2)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+GRAPH_PAGE = """<!doctype html><html><head><meta charset="utf-8"><style>
+:root { color-scheme: @SCHEME@; } html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
+font: 12px Inter, Cantarell, sans-serif; } canvas { display: block; }
+#hint { position: fixed; bottom: 10px; left: 0; right: 0; text-align: center; opacity: .5; }
+</style></head><body><canvas id="c"></canvas><div id="hint">Drag to move · scroll or pinch to zoom · click a note to open it</div><script>
+const data = @DATA@, current = @CURRENT@, dark = '@SCHEME@' === 'dark';
+const c = document.getElementById('c'), ctx = c.getContext('2d');
+let W, H, scale = 1, ox = 0, oy = 0;
+function size() { W = c.width = innerWidth * devicePixelRatio; H = c.height = innerHeight * devicePixelRatio; }
+size(); addEventListener('resize', size);
+const accent = getComputedStyle(document.body).getPropertyValue('accent-color') || '#2fa8ff';
+const nodes = data.nodes.map((n, i) => ({...n, x: Math.cos(i) * 200 * Math.random(), y: Math.sin(i) * 200 * Math.random(), vx: 0, vy: 0, deg: 0}));
+const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+const edges = data.edges.filter(e => byId[e.from] && byId[e.to]).map(e => [byId[e.from], byId[e.to]]);
+edges.forEach(([a, b]) => { a.deg++; b.deg++; });
+let hover = null, drag = null, last = null;
+function step() {
+  for (const a of nodes) { a.vx -= a.x * 0.002; a.vy -= a.y * 0.002;
+    for (const b of nodes) { if (a === b) continue; const dx = a.x - b.x, dy = a.y - b.y, d2 = dx*dx + dy*dy + 0.01;
+      if (d2 < 90000) { const f = 900 / d2; a.vx += dx * f; a.vy += dy * f; } } }
+  for (const [a, b] of edges) { const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, f = (d - 90) * 0.01;
+    a.vx += dx / d * f; a.vy += dy / d * f; b.vx -= dx / d * f; b.vy -= dy / d * f; }
+  for (const n of nodes) { if (n === drag) continue; n.vx *= 0.82; n.vy *= 0.82; n.x += n.vx; n.y += n.vy; }
+}
+function toScreen(n) { return [W / 2 + (n.x + ox) * scale * devicePixelRatio, H / 2 + (n.y + oy) * scale * devicePixelRatio]; }
+function draw() {
+  step(); ctx.clearRect(0, 0, W, H);
+  ctx.lineWidth = devicePixelRatio; ctx.strokeStyle = dark ? 'rgba(160,180,210,.25)' : 'rgba(60,80,110,.25)';
+  for (const [a, b] of edges) { const [x1, y1] = toScreen(a), [x2, y2] = toScreen(b); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+  for (const n of nodes) { const [x, y] = toScreen(n), r = (4 + Math.sqrt(n.deg) * 2.2) * devicePixelRatio * Math.sqrt(scale);
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7);
+    ctx.fillStyle = n.id === current ? '#ffb020' : n === hover ? '#7fd0ff' : (dark ? '#4aa8ff' : '#2f80ff');
+    if (n.id === current || n === hover) { ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 14; }
+    ctx.fill(); ctx.shadowBlur = 0;
+    if (scale > 0.6 || n === hover || n.id === current) { ctx.fillStyle = dark ? 'rgba(230,236,245,.85)' : 'rgba(29,35,48,.85)';
+      ctx.font = `${12 * devicePixelRatio}px Inter, sans-serif`; ctx.textAlign = 'center'; ctx.fillText(n.label, x, y + r + 14 * devicePixelRatio); } }
+  requestAnimationFrame(draw);
+}
+function pick(ev) { const x = ev.clientX * devicePixelRatio, y = ev.clientY * devicePixelRatio;
+  return nodes.find(n => { const [nx, ny] = toScreen(n); return Math.hypot(nx - x, ny - y) < 12 * devicePixelRatio; }); }
+c.onmousemove = ev => { hover = pick(ev); c.style.cursor = hover ? 'pointer' : 'grab';
+  if (last && ev.buttons) { const dx = (ev.clientX - last[0]) / scale, dy = (ev.clientY - last[1]) / scale;
+    if (drag) { drag.x += dx; drag.y += dy; } else { ox += dx; oy += dy; } last = [ev.clientX, ev.clientY]; last.moved = true; } };
+c.onmousedown = ev => { drag = pick(ev); last = [ev.clientX, ev.clientY]; };
+c.onmouseup = ev => { if (drag && !(last && last.moved)) window.webkit.messageHandlers.mk.postMessage(drag.id); drag = null; last = null; };
+c.onwheel = ev => { ev.preventDefault(); scale = Math.min(4, Math.max(0.2, scale * Math.exp(-ev.deltaY * 0.0015))); };
+draw();
+</script></body></html>"""
+
+
+class NotesApp(Adw.Application):
+    def __init__(self, target=None):
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self.window = None
+        self.target = target
+
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        provider = Gtk.CssProvider()
+        provider.load_from_string(CSS)
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider,
+                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    def do_command_line(self, command_line):
+        args = command_line.get_arguments()[1:]
+        if self.window is None:
+            self.window = NotesWindow(self)
+        if args:
+            if args[0] == "--daily":
+                self.window.open_note(self.window.vault.daily())
+                self.window.refresh()
+            else:
+                name = " ".join(args)
+                rel = self.window.vault.resolve(name) or self.window.vault.create("", name)
+                self.window.refresh()
+                self.window.open_note(rel)
+        self.window.present()
+        return 0
+
+
+def main():
+    if "--serve" in sys.argv[1:]:
+        notes_sync.serve_forever()
+        return 0
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        print(__doc__.strip())
+        return 0
+    return NotesApp().run(sys.argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

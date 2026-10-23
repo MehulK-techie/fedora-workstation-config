@@ -248,10 +248,10 @@ case "${1:-help}" in
         ;;
 
     icon)
-        # mk icon [APP IMAGE | APP reset | list]   APP: companion timer shortcuts camera ocr
+        # mk icon [APP IMAGE | APP reset | list]   APP: companion notes timer shortcuts camera ocr
         shift
         ICONS="$HOME/.config/mk-workstation/icons"
-        apps="companion timer shortcuts camera ocr"
+        apps="companion notes timer shortcuts camera ocr"
         case "${1:-list}" in
             list)
                 echo "Apps: $apps"
@@ -381,6 +381,17 @@ case "${1:-help}" in
         echo "✔ Renamed to \"$1\" (top bar: ${tag:0:6}). Open windows update the next time they open."
         ;;
 
+    notes)
+        # mk notes [today | serve | NOTE]: MK Notes; serve = phone sync without the window
+        shift
+        case "${1:-}" in
+            "") setsid -f "$HOME/.local/bin/mk-notes" > /dev/null 2>&1 ;;
+            today) setsid -f "$HOME/.local/bin/mk-notes" --daily > /dev/null 2>&1 ;;
+            serve) exec "$HOME/.local/bin/mk-notes" --serve ;;
+            *) setsid -f "$HOME/.local/bin/mk-notes" "$*" > /dev/null 2>&1 ;;
+        esac
+        ;;
+
     accent)
         # mk accent [auto | #rrggbb | status | system on|off]: the desktop's
         # accent colour. auto follows the wallpaper (mk-indicator picks its
@@ -459,7 +470,7 @@ case "${1:-help}" in
         gnome-extensions disable mk-indicator@mehulk &>/dev/null || true
         rm -rf "$HOME/.local/share/gnome-shell/extensions/mk-indicator@mehulk"
         rm -rf "$HOME/.local/share/mk-workstation/lib" "$HOME/.local/share/mk-workstation/config" "$HOME/.local/share/mk-workstation/assets"
-        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-timer mk-reminders mk-power mk-voice mk-sound ocr-snip show-shortcuts \
+        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-notes mk-timer mk-reminders mk-power mk-voice mk-sound ocr-snip show-shortcuts \
             camera-controls fix-alt-tab close-workspace-apps; do
             rm -f "$HOME/.local/bin/$tool"
         done
@@ -497,6 +508,7 @@ case "${1:-help}" in
         echo "  focus      Start the focus timer: mk focus 25 \"Writing\" (also 1:30, 90s)"
         echo "  power      Smart power profiles on laptops: status, on, off"
         echo "  effects    Visual effects: full, lite (smooth on older machines) or auto"
+        echo "  notes      MK Notes: mk notes, mk notes today, mk notes serve (phone sync)"
         echo "  accent     Desktop colour: auto (from your wallpaper), #rrggbb, status"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"

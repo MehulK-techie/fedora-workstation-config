@@ -343,6 +343,14 @@ gsettings set "$MK_SHELL" toggle-application-view "['<Super>a']"  # App grid (GN
 gsettings set "$MK_SHELL" toggle-message-tray "['<Super>m']"      # Notifications; Super+V is clipboard
 gsettings set "$MK_SHELL" focus-active-notification "[]"          # frees Super+N for notes
 gsettings set "$MK_WM" toggle-above "['<Super><Control>t']"         # Always on top (PowerToys)
+gsettings set "$MK_WM" toggle-fullscreen "['<Super><Control>f']"    # Full screen (macOS Ctrl+Cmd+F)
+# Files, Finder-style: expandable folders in list view, folders first,
+# item counts, and "Create Link" / "Delete Permanently" in the menus
+gsettings set org.gnome.nautilus.list-view use-tree-view true
+gsettings set org.gtk.gtk4.Settings.FileChooser sort-directories-first true
+gsettings set org.gnome.nautilus.preferences show-directory-item-counts 'always'
+gsettings set org.gnome.nautilus.preferences show-create-link true
+gsettings set org.gnome.nautilus.preferences show-delete-permanently true
 # Window buttons on the right, new windows centred (macOS), hot corner on
 gsettings set org.gnome.desktop.wm.preferences button-layout "appmenu:minimize,maximize,close"
 gsettings set org.gnome.mutter center-new-windows true
@@ -359,7 +367,9 @@ ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.overview b
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.lockscreen blur false
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel blur true
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel static-blur true
-gsettings_append org.gnome.mutter experimental-features scale-monitor-framebuffer
+# Fractional scaling (e.g. 125%) without blur: native framebuffer scaling, and
+# X11 apps (Steam, many games) rendered at native size instead of upscaled.
+gsettings_append org.gnome.mutter experimental-features scale-monitor-framebuffer xwayland-native-scaling
 
 # Saved extension preferences (config/extension-settings/, written by `mk export`).
 # Loaded after the defaults above, so your own tuned values win.

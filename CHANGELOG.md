@@ -3,7 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
-- **Animated Alt+Tab** (Coverflow Alt-Tab, Timeline style) themed to the desktop: navy tint, cyan highlight, all workspaces with the current one first.
+- **Themed Alt+Tab:** GNOME's flat switcher with live thumbnails of every window on every workspace, styled by mk-indicator's stylesheet (frosted navy panel, cyan selection).
 - **Windows-style multitasking** (Tiling Assistant): snap halves and quarters, Snap Assist, six snap layouts on Super+Z, tile groups, always on top (Super+Ctrl+T), Super+Ctrl+←/→ desktops.
 - **Super+N** Obsidian and **Super+B** default browser; duplicate user shortcuts are folded into the mk-* versions.
 - **`mk update`** updates everything (repo, newly listed apps, settings, extensions, system) with `--check` preview; **`mk save`** captures apps, extensions and settings you added and commits them.

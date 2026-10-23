@@ -9,6 +9,7 @@ import { Welcome } from './welcome.js';
 import { TimerPill } from './timerPill.js';
 import { SwitcherAnimation } from './switcher.js';
 import { OsdStack } from './osdStack.js';
+import { Accent } from './accent.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -77,6 +78,9 @@ export default class MKIndicatorExtension extends Extension {
         // This extension stays loaded on the lock screen (metadata session-modes),
         // so unlocking doesn't rebuild everything: pause the dock parts while
         // locked and pick them up again after.
+        // Accent first: the other parts read its colour.
+        this._accent = new Accent();
+        this._accent.enable(() => this._timerPill?.repaint());
         this._welcome = new Welcome();
         this._welcome.enable();
         this._timerPill = new TimerPill();
@@ -169,6 +173,8 @@ export default class MKIndicatorExtension extends Extension {
         this._switcher = null;
         this._osdStack?.disable();
         this._osdStack = null;
+        this._accent?.disable();
+        this._accent = null;
         this._brandMonitor?.cancel();
         this._brandMonitor = null;
         if (this._startupId) {

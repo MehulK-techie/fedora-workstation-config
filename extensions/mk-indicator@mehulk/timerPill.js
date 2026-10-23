@@ -7,6 +7,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { accentRGB } from './accent.js';
 
 const STATE = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'timer.json']);
 const TIMER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-timer']);
@@ -91,12 +92,17 @@ export class TimerPill {
         this._ring.queue_repaint();
     }
 
+    // The accent changed (new wallpaper).
+    repaint() {
+        this._ring?.queue_repaint();
+    }
+
     _paintRing(area) {
         const cr = area.get_context();
         const [w, h] = area.get_surface_size();
         const total = this._state?.total || 1;
         const frac = Math.min(1, this._left() / total);
-        const [r, g, b] = frac > 0.25 ? [0, 0.82, 1] : frac > 0.1 ? [1, 0.72, 0.2] : [1, 0.36, 0.45];
+        const [r, g, b] = frac > 0.25 ? accentRGB().map(c => c / 255) : frac > 0.1 ? [1, 0.72, 0.2] : [1, 0.36, 0.45];
         const cx = w / 2, cy = h / 2, rad = Math.min(w, h) / 2 - 2;
         cr.setLineWidth(2.5);
         cr.setSourceRGBA(1, 1, 1, 0.18);

@@ -15,6 +15,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import { ExtensionState } from 'resource:///org/gnome/shell/misc/extensionUtils.js';
+import { accentPairUnit } from './accent.js';
 
 const CONFIG_DIR = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation']);
 const USER_CONF = GLib.build_filenamev([CONFIG_DIR, 'welcome.conf']);
@@ -22,7 +23,7 @@ const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-worksta
 const TEST_FILE = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'welcome-test']);
 const DEFAULTS = {
     WELCOME: 'on', GREETING: 'Welcome back home, {title}.', TITLE: 'sir', SUBTITLE: 'on', VOICE: 'off',
-    EDGE_NOTIFY: 'off', COLOR_A: '#00c8ff', COLOR_B: '#7c4dff',
+    EDGE_NOTIFY: 'off', COLOR_A: 'auto', COLOR_B: 'auto',
 };
 
 function readConf(path) {
@@ -60,6 +61,14 @@ function hexToRgb(hex) {
     return Number.isNaN(n) ? [0, 0.78, 1] : [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
 }
 
+// The line's two gradient colours: the wallpaper accent and its neighbour on
+// the colour wheel when set to auto, otherwise the colours you chose.
+function accentPair(conf) {
+    const [a, b] = accentPairUnit();
+    return [conf.COLOR_A === 'auto' ? a : hexToRgb(conf.COLOR_A),
+        conf.COLOR_B === 'auto' ? b : hexToRgb(conf.COLOR_B)];
+}
+
 const ease = t => 1 - (1 - t) ** 3;
 
 // Path around the screen edge, starting at the bottom centre and going one way.
@@ -90,52 +99,55 @@ export class EdgeLight {
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
             return;
-        const [a, b] = [hexToRgb(conf.COLOR_A), hexToRgb(conf.COLOR_B)];
-        const area = new St.DrawingArea({
-            reactive: false, x: monitor.x, y: monitor.y, width: monitor.width, height: monitor.height,
-        });
-        Main.layoutManager.uiGroup.add_child(area);
-        this._area = area;
+        const [a, b] = accentPair(conf);
+        // Four thin strips along the edges instead of one full-screen canvas:
+        // about an eighth of the pixels to repaint each frame, which matters
+        // right after login while everything else is starting too.
+        const W = monitor.width, H = monitor.height, T = 40;
+        const strips = [[0, 0, W, T], [0, H - T, W, T], [0, T, T, H - 2 * T], [W - T, T, T, H - 2 * T]];
         let progress = 0;
-        area.connect('repaint', actor => {
-            const cr = actor.get_context();
-            const [w, h] = actor.get_surface_size();
+        const paint = (cr, ox, oy) => {
             const travel = ease(Math.min(1, progress / 0.55));
             const glowPhase = Math.max(0, (progress - 0.55) / 0.45);
             const alpha = glowPhase > 0 ? Math.max(0, 1 - glowPhase) : 1;
-            const half = w + h; // approx. length of each side's path
+            const half = W + H; // approx. length of each side's path
             const segment = Math.max(120, half * 0.28);
             const head = travel * half;
-            if (glowPhase === 0 && head < 1) {
-                cr.$dispose();
+            if (glowPhase === 0 && head < 1)
                 return;
-            }
-            const gradient = new Cairo.LinearGradient(0, h, w, 0);
-            gradient.addColorStopRGBA(0, ...a, alpha);
-            gradient.addColorStopRGBA(1, ...b, alpha);
+            cr.translate(-ox, -oy);
+            cr.setLineCap(Cairo.LineCap.ROUND);
             for (const clockwise of [true, false]) {
                 for (const [width, layerAlpha] of [[26, 0.12], [12, 0.30], [4, 1]]) {
-                    edgePath(cr, w, h, 5, 20, clockwise);
+                    const gradient = new Cairo.LinearGradient(0, H, W, 0);
+                    gradient.addColorStopRGBA(0, ...a, alpha * layerAlpha);
+                    gradient.addColorStopRGBA(1, ...b, alpha * layerAlpha);
+                    edgePath(cr, W, H, 5, 20, clockwise);
                     cr.setSource(gradient);
                     cr.setLineWidth(width);
-                    cr.setLineCap(Cairo.LineCap.ROUND);
-                    if (glowPhase > 0) {
+                    if (glowPhase > 0)
                         cr.setDash([], 0);
-                    } else {
+                    else
                         cr.setDash([Math.min(segment, head), half * 2], -Math.max(0, head - segment));
-                    }
-                    cr.pushGroup();
                     cr.stroke();
-                    cr.popGroupToSource();
-                    cr.paintWithAlpha(layerAlpha);
                 }
             }
-            cr.$dispose();
+        };
+        this._areas = strips.map(([x, y, w, h]) => {
+            const strip = new St.DrawingArea({reactive: false, x: monitor.x + x, y: monitor.y + y, width: w, height: h});
+            strip.connect('repaint', actor => {
+                const cr = actor.get_context();
+                paint(cr, x, y);
+                cr.$dispose();
+            });
+            Main.layoutManager.uiGroup.add_child(strip);
+            return strip;
         });
+        const area = this._areas[0];
         const timeline = new Clutter.Timeline({actor: area, duration});
         timeline.connect('new-frame', () => {
             progress = timeline.get_progress();
-            area.queue_repaint();
+            this._areas?.forEach(strip => strip.queue_repaint());
         });
         timeline.connect('completed', () => this.stop());
         this._timeline = timeline;
@@ -193,8 +205,8 @@ export class EdgeLight {
     stop() {
         this._timeline?.stop();
         this._timeline = null;
-        this._area?.destroy();
-        this._area = null;
+        this._areas?.forEach(strip => strip.destroy());
+        this._areas = null;
     }
 
     destroy() {

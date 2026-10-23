@@ -98,6 +98,8 @@ test with `journalctl --user -f -o cat /usr/bin/gnome-shell`.
 | `timerPill.js` | Focus timer countdown in the top bar, from `~/.cache/mk-workstation/timer.json` |
 | `switcher.js` | Pop-in animation for Alt+Tab / Super+Tab |
 | `osdStack.js` | Keeps the workspace dots above the volume/brightness pop-up |
+| `accent.js` | Accent colour from the wallpaper: writes `~/.cache/mk-workstation/accent.css`, loads it over `stylesheet.css`, sets GNOME's accent |
+| `colour.js` | RGB/HSV helpers and the dominant-hue histogram (dock glow, accent) |
 | `dockMagnify.js` | macOS-style magnification: magnified icons are clones on the UI layer (Dash to Dock clips its own icons), cosine falloff across neighbours |
 | `stylesheet.css` | Alt+Tab, hover transitions, overview captions, workspace thumbnails |
 

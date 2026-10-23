@@ -54,8 +54,9 @@ Credit for everything in the last two groups belongs to its authors; see
 | Dock magnification | The icon under the pointer grows, neighbours follow in a wave | `config/dock.conf` |
 | App-coloured dock glow | A soft circular tint in each app's own colour on hover | `dockGlow.js` |
 | Timer countdown | Ring + time in the top bar while a focus timer runs; click to open | automatic |
-| Alt+Tab, redesigned | Frosted navy card; the selected window gets a bright cyan ring while the others shrink and dim; selection glides when you scrub with the keyboard or a 3-finger swipe; pops in on both | automatic (`switcher.js`, `stylesheet.css`) |
-| Calendar styling | Round day cells with cyan hover glow, glowing today, softer other-month days | `stylesheet.css` |
+| Wallpaper accent | The most vivid colour of your wallpaper tints Alt+Tab, the calendar, top-bar and dock hover, workspace thumbnails, the welcome line, the timer ring and GNOME's own accent (Files, Settings); follows wallpaper changes | `mk accent auto\|#hex\|status`, `config/theme.conf` (`accent.js`, `colour.js`) |
+| Alt+Tab, redesigned | Frosted card; the selected window gets a bright ring in the accent colour while the others shrink and dim; selection glides when you scrub with the keyboard or a 3-finger swipe (keeps up with fast swipes: no start delay, 90 ms glide); pops in on both | automatic (`switcher.js`, `stylesheet.css`) |
+| Calendar styling | Round day cells with an accent-coloured hover glow, glowing today, softer other-month days | `stylesheet.css` |
 | Pop-ups that don't collide | Workspace dots glide above the volume/brightness pop-up when both show | `osdStack.js` |
 | Dock out of the way | Hidden in the overview so window titles stay readable | automatic |
 | Blur fix | Rebuilds the top-bar blur once after login so it always shows | automatic |
@@ -175,6 +176,7 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | `mk effects [full\|lite\|auto]` | Visual effects profile |
 | `mk sound on\|off\|status` | Laptop speaker tuning |
 | `mk icon APP IMAGE\|reset` · `mk icon list` | Your own app icons |
+| `mk accent auto\|#hex\|status` | Accent colour from the wallpaper, or fixed |
 | `mk rename "Name" TAG` | Rename it |
 | `mk uninstall` | Remove MK from your account |
 | `just setup \| sync \| face \| export \| update \| save \| check \| overview \| screenshots` | The same for contributors |

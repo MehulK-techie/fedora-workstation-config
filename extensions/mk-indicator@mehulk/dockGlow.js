@@ -7,6 +7,7 @@ import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { DockMagnify } from './dockMagnify.js';
+import { dominantHue, hsvToRgb } from './colour.js';
 
 const SAMPLE = 24;
 const colourCache = new Map();
@@ -30,30 +31,6 @@ function iconPixbuf(app) {
     return null;
 }
 
-function rgbToHsv(r, g, b) {
-    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-    let h = 0;
-    if (d) {
-        if (max === r)
-            h = ((g - b) / d) % 6;
-        else if (max === g)
-            h = (b - r) / d + 2;
-        else
-            h = (r - g) / d + 4;
-        h *= 60;
-        if (h < 0)
-            h += 360;
-    }
-    return [h, max ? d / max : 0, max];
-}
-
-function hsvToRgb(h, s, v) {
-    const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
-    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
-        : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
-    return [r + m, g + m, b + m].map(n => Math.round(n * 255));
-}
-
 // The icon's dominant vivid colour: a hue histogram weighted by saturation
 // and opacity, so Spotify's green wins over its black background.
 export function appColour(app) {
@@ -63,26 +40,10 @@ export function appColour(app) {
     let colour = null;
     const big = iconPixbuf(app);
     if (big) {
-        const pb = big.scale_simple(SAMPLE, SAMPLE, GdkPixbuf.InterpType.BILINEAR);
-        const pixels = pb.get_pixels(), stride = pb.get_rowstride(), n = pb.get_n_channels();
-        const buckets = new Array(36).fill(0).map(() => ({w: 0, h: 0}));
-        for (let y = 0; y < SAMPLE; y++) {
-            for (let x = 0; x < SAMPLE; x++) {
-                const i = y * stride + x * n;
-                const a = n === 4 ? pixels[i + 3] / 255 : 1;
-                const [h, s, v] = rgbToHsv(pixels[i] / 255, pixels[i + 1] / 255, pixels[i + 2] / 255);
-                const weight = a * s * s * v;
-                if (weight < 0.02)
-                    continue;
-                const bucket = buckets[Math.floor(h / 10) % 36];
-                bucket.w += weight;
-                bucket.h += h * weight;
-            }
-        }
-        const best = buckets.reduce((a, b) => (b.w > a.w ? b : a));
-        // Grey or monochrome icons get no colour: the default cyan applies.
-        if (best.w > 0.5)
-            colour = hsvToRgb(best.h / best.w, 0.72, 0.95);
+        const hue = dominantHue(big.scale_simple(SAMPLE, SAMPLE, GdkPixbuf.InterpType.BILINEAR));
+        // Grey or monochrome icons get no colour: the accent hover applies.
+        if (hue !== null)
+            colour = hsvToRgb(hue, 0.72, 0.95);
     }
     colourCache.set(id, colour);
     return colour;

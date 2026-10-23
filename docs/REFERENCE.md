@@ -28,6 +28,7 @@ Every command, file and format. How the parts fit together is in
 | `mk focus [DURATION] ["LABEL"]` | Start the focus timer in the background (`25`, `1:30`, `90s`) |
 | `mk power [status\|on\|off]` | Smart power profiles on laptops |
 | `mk effects [full\|lite\|auto]` | Show or set the visual effects profile |
+| `mk accent [auto \| #rrggbb \| system on\|off \| status]` | Accent colour: from the wallpaper, or fixed; also sets GNOME's accent |
 | `mk rename "NAME" [TAG]` | Rename MK's windows, notifications and top-bar tag |
 | `mk check` | Notify if a new version of the repo is available (run daily by a timer) |
 | `mk uninstall` | Remove MK's tools, shortcuts, timers and top-bar extension from your account |
@@ -63,7 +64,8 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `config/gtk/files.css` | GTK 4 CSS scoped to `.nautilus-window` | `sync.sh` (marked block in `~/.config/gtk-4.0/gtk.css`) |
 | `assets/icons/*.svg`, `assets/applications/*.desktop` | App icons and launchers (`@BIN@` becomes `~/.local/bin`) | `sync.sh` |
 | `assets/sound/MK Laptop Speakers.json` | EasyEffects output preset | `mk sound` |
-| `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` | mk-indicator, mk-voice |
+| `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` (`auto` or `#rrggbb`) | mk-indicator, mk-voice |
+| `config/theme.conf` | `ACCENT=` (`auto` or `#rrggbb`), `SYSTEM_ACCENT=` (on/off) | mk-indicator (`accent.js`), `mk accent` |
 | `config/dock.conf` | `MAGNIFY=`, `MAGNIFY_SPREAD=`, `MAGNIFY_MS=` | mk-indicator (dock magnification) |
 | `config/power.conf` | `ON_AC=`, `ON_BATTERY=`, `LOW_BATTERY=`, `LOW_PERCENT=` | `mk-power` |
 | `config/effects.conf` | `HEAVY=` UUIDs, `AUTO_LITE_BELOW_GB=` | `sync.sh` |

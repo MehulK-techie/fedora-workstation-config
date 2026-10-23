@@ -381,6 +381,49 @@ case "${1:-help}" in
         echo "✔ Renamed to \"$1\" (top bar: ${tag:0:6}). Open windows update the next time they open."
         ;;
 
+    accent)
+        # mk accent [auto | #rrggbb | status | system on|off]: the desktop's
+        # accent colour. auto follows the wallpaper (mk-indicator picks its
+        # most vivid colour and updates when the wallpaper changes).
+        shift
+        conf="$HOME/.config/mk-workstation/theme.conf"
+        set_key() {
+            mkdir -p "$(dirname "$conf")"
+            touch "$conf"
+            if grep -q "^$1=" "$conf"; then
+                sed -i "s|^$1=.*|$1=$2|" "$conf"
+            else
+                echo "$1=$2" >> "$conf"
+            fi
+        }
+        case "${1:-status}" in
+            auto)
+                set_key ACCENT auto
+                echo "✔ Accent follows your wallpaper."
+                ;;
+            \#[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])
+                set_key ACCENT "$1"
+                echo "✔ Accent set to $1. 'mk accent auto' follows the wallpaper again."
+                ;;
+            system)
+                [[ "${2:-}" == on || "${2:-}" == off ]] || { echo "Usage: mk accent system on|off" >&2; exit 2; }
+                set_key SYSTEM_ACCENT "$2"
+                echo "✔ GNOME's own accent (Files, Settings, apps) follows: $2."
+                ;;
+            status)
+                mode=$(sed -n 's/^ACCENT=//p' "$conf" 2> /dev/null | tail -1)
+                css="$HOME/.cache/mk-workstation/accent.css"
+                echo "Accent: ${mode:-auto}"
+                [[ -f "$css" ]] && echo "Colour now: rgb($(grep -om1 'rgba([0-9]*,[0-9]*,[0-9]*' "$css" | sed 's/rgba(//'))"
+                echo "GNOME accent: $(gsettings get org.gnome.desktop.interface accent-color | tr -d "'")"
+                ;;
+            *)
+                echo "Usage: mk accent [auto | #rrggbb | system on|off | status]" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+
     uninstall)
         # Remove everything MK added to your account. Settings snapshots in
         # ~/.config/mk-workstation/backups are kept so you can still restore.
@@ -454,6 +497,7 @@ case "${1:-help}" in
         echo "  focus      Start the focus timer: mk focus 25 \"Writing\" (also 1:30, 90s)"
         echo "  power      Smart power profiles on laptops: status, on, off"
         echo "  effects    Visual effects: full, lite (smooth on older machines) or auto"
+        echo "  accent     Desktop colour: auto (from your wallpaper), #rrggbb, status"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"
         ;;

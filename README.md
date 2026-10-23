@@ -92,6 +92,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Detects the machine and tunes for it: fingerprint reader, IR or regular webcam, Intel/AMD/NVIDIA video, 2-in-1 sensors, battery
 - **Fingerprint login** for login and sudo when a reader exists; `mk fingerprint` to enroll
 - Smooth login: the login screen uses your display layout, so there's no flicker between login and desktop
+- **Wallpaper accent:** Alt+Tab, calendar, hover glows, welcome line, timer ring and GNOME's accent take the most vivid colour of your wallpaper and follow it when it changes (`mk accent`)
 - **Speaker tuning:** laptop speakers lose the maker's Windows sound processing (Bang & Olufsen, Dolby); `mk sound on` adds an EQ, bass and limiter profile
 - `mk device` shows what was found and what MK does about it
 
@@ -180,6 +181,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk welcome` | | Welcome light and greeting: on, off, test, edit, title, voice |
 | `mk sound on\|off` | | Laptop speaker tuning (EasyEffects profile) |
 | `mk icon APP IMAGE` | | Use your own image as an MK app icon |
+| `mk accent auto` | | Accent colour from your wallpaper (or `mk accent #hex`) |
 | `mk rename "Name" TAG` | | Rename MK's windows, notifications and top-bar tag |
 | `mk uninstall` | | Remove MK's tools, shortcuts and helpers from your account |
 | | `just setup` | Full system setup (`sudo ./setup.sh`) |

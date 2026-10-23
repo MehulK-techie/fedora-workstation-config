@@ -29,6 +29,10 @@
 - **Calendar and Files styling** matching the workstation; workspace dots no longer overlap the volume pop-up.
 - Fixed: `sync.sh` aborting when `bin/` contained a `__pycache__` folder (found by a fresh-account test).
 - **Alt+Tab redesign:** frosted card, bright cyan ring on the selection, others shrink and dim, selection glides; smooth with 3-finger swipes too (switcher appears after 60 ms instead of 150 ms).
+- **Wallpaper accent** (`mk accent`, `config/theme.conf`): the most vivid wallpaper colour tints Alt+Tab, the calendar, hover glows, workspace thumbnails, the welcome line, the timer ring and GNOME's accent; updates when the wallpaper changes. Files and the Companion follow GNOME's accent.
+- **Faster touchpad Alt+Tab:** no delay before the switcher takes the swipe (was 60 ms, inputs were dropped), 90 ms glide.
+- **Smoother welcome line:** drawn as four thin edge strips instead of a full-screen canvas.
+- Fixed: EasyEffects' window opening at login with `mk sound on`; it now starts hidden as a background service.
 - **docs/ARCHITECTURE.md** (how it works, how to extend it) and **docs/REFERENCE.md** (every command, file, format, timer).
 - **Rename it:** `mk rename "Name" TAG` or Companion › Rename; the top-bar tag follows live. Forks set the default in `config/brand.conf`.
 - **docs/CUSTOMIZING.md:** how to make it yours or fork it without editing scripts.

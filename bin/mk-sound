@@ -35,12 +35,13 @@ case "${1:-status}" in
 Type=Application
 Name=Laptop speaker tuning
 Comment=EasyEffects with the MK Laptop Speakers profile (mk sound)
-Exec=sh -c 'easyeffects --service-mode & sleep 4; easyeffects -l "$PRESET"'
+Exec=sh -c 'easyeffects --service-mode --hide-window & sleep 5; pgrep -x easyeffects > /dev/null && easyeffects --hide-window -l "$PRESET"'
 X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=8
 NoDisplay=true
 DESKTOP
-        running || { setsid -f easyeffects --service-mode > /dev/null 2>&1; sleep 4; }
-        easyeffects -l "$PRESET"
+        running || { setsid -f easyeffects --service-mode --hide-window > /dev/null 2>&1; sleep 4; }
+        easyeffects --hide-window -l "$PRESET"
         easyeffects -b 2 > /dev/null 2>&1 || true   # make sure global bypass is off
         echo "✔ Speaker tuning on ($PRESET). Fine-tune it in the EasyEffects app."
         ;;

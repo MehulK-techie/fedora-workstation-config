@@ -13,7 +13,8 @@ CUSTOM_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
 pretty() {
     sed -E -e "s/@as //; s/[][]//g; s/', '/  \/  /g; s/'//g" \
         -e 's/></+/g; s/>/+/g; s/<//g; s/\+([a-z])( |$)/+\U\1\2/g' \
-        -e 's/Control/Ctrl/g; s/period/./g; s/slash/\//g; s/Escape/Esc/g; s/BackSpace/Backspace/g' <<< "$1"
+        -e 's/Control/Ctrl/g; s/period/./g; s/slash/\//g; s/Escape/Esc/g; s/BackSpace/Backspace/g; s/Page_Up/PageUp/g; s/Page_Down/PageDown/g' \
+        -e 's#  /  [^/]*KP_[0-9]##g' <<< "$1"
 }
 get_key() {
     local val
@@ -24,6 +25,14 @@ get_key() {
 get_custom() {
     local val
     val=$(gsettings get "$MEDIA_KEYS.custom-keybinding:$CUSTOM_PATH/mk-$1/" binding 2>/dev/null || echo "''")
+    val=$(pretty "$val")
+    echo "${val:-—}"
+}
+# Tiling Assistant keeps its keys in its own schema.
+TA_DIR="$HOME/.local/share/gnome-shell/extensions/tiling-assistant@leleat-on-github/schemas"
+get_ta() {
+    local val
+    val=$(gsettings --schemadir "$TA_DIR" get org.gnome.shell.extensions.tiling-assistant "$1" 2>/dev/null || echo "[]")
     val=$(pretty "$val")
     echo "${val:-—}"
 }
@@ -41,13 +50,22 @@ echo ""
 echo "WINDOWS & WORKSPACES"
 row "Switch windows (all spaces)" "$(get_key org.gnome.desktop.wm.keybindings switch-windows)"
 row "Switch apps"                 "$(get_key org.gnome.desktop.wm.keybindings switch-applications)"
-row "Snap left / right"           "$(get_key org.gnome.mutter.keybindings toggle-tiled-left)  ·  $(get_key org.gnome.mutter.keybindings toggle-tiled-right)"
-row "Maximize / restore"          "$(get_key org.gnome.desktop.wm.keybindings maximize)  ·  $(get_key org.gnome.desktop.wm.keybindings unmaximize)"
+if [[ -d "$TA_DIR" ]] && gnome-extensions info tiling-assistant@leleat-on-github 2>/dev/null | grep -q 'State: ACTIVE'; then
+    row "Snap left / right half"  "$(get_ta tile-left-half)  ·  $(get_ta tile-right-half)"
+    row "Quarter (Windows style)" "Snap left/right, then Super+Up / Super+Down"
+    row "Maximize / restore"      "$(get_ta tile-maximize)  ·  $(get_ta restore-window)"
+    row "Snap layouts"            "$(get_ta search-popup-layout)"
+    row "Centre window"           "$(get_ta center-window)"
+else
+    row "Snap left / right"       "$(get_key org.gnome.mutter.keybindings toggle-tiled-left)  ·  $(get_key org.gnome.mutter.keybindings toggle-tiled-right)"
+    row "Maximize / restore"      "$(get_key org.gnome.desktop.wm.keybindings maximize)  ·  $(get_key org.gnome.desktop.wm.keybindings unmaximize)"
+fi
+row "Always on top"               "$(get_key org.gnome.desktop.wm.keybindings toggle-above)"
 row "Minimize / close"            "$(get_key org.gnome.desktop.wm.keybindings minimize)  ·  $(get_key org.gnome.desktop.wm.keybindings close)"
 row "Show desktop"                "$(get_key org.gnome.desktop.wm.keybindings show-desktop)"
 row "Workspace left / right"      "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-left)"
-row "Go to workspace 1…4"         "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-1) … 4"
-row "Open dock app 1…9"           "$(get_key org.gnome.shell.keybindings switch-to-application-1) … 9"
+row "Go to workspace 1-4"         "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-1) to 4"
+row "Open dock app 1-9"           "$(get_key org.gnome.shell.keybindings switch-to-application-1) to 9"
 
 echo ""
 echo "SCREENSHOTS  (saved to ~/Pictures/Screenshots and copied)"
@@ -72,6 +90,10 @@ row "Lock screen"                 "$(get_key $MEDIA_KEYS screensaver)"
 row "Shut down / restart"         "$(get_key $MEDIA_KEYS shutdown)"
 
 echo ""
+echo "APPS"
+row "Notes (Obsidian)"            "$(get_custom obsidian)"
+row "Web browser"                 "$(get_custom browser)"
+echo ""
 echo "MK TOOLS"
 row "Emoji board"                 "$(get_custom emoji)"
 row "Notes & focus timer"         "$(get_custom notes)"
@@ -82,7 +104,7 @@ echo ""
 echo "TIPS"
 echo "  • In Files, select a file and press Space to preview it (Quick Look)."
 echo "  • Ctrl+Alt+←/→ is left free for Zen Browser workspaces."
-echo "  • Terminal: mk doctor (health check) · mk sync (re-apply) · mk export (save)"
+echo "  • Terminal: mk update (update everything) · mk save (keep what you added) · mk doctor"
 echo "════════════════════════════════════════════════════════════════════════════"
 } > "$TMP_HUD"
 

@@ -129,8 +129,11 @@ echo "    [+] Settings snapshot saved (undo with: mk restore)"
 
 # 1. Deploy local CLI tools and remember where the repo lives (used by `mk`)
 mkdir -p "$HOME/.local/bin" "$HOME/.config/mk-workstation"
-cp -f "$SCRIPT_DIR/bin/"* "$HOME/.local/bin/"
-chmod +x "$HOME/.local/bin/"*
+# Files only: a stray folder (e.g. Python's __pycache__) must not stop the sync.
+find "$SCRIPT_DIR/bin" -maxdepth 1 -type f -exec cp -f {} "$HOME/.local/bin/" \;
+find "$SCRIPT_DIR/bin" -maxdepth 1 -type f -printf '%f\n' | while read -r tool; do
+    chmod +x "$HOME/.local/bin/$tool"
+done
 # The tools' shared Python library and the defaults it reads (shortcuts, brand)
 MK_SHARE="$HOME/.local/share/mk-workstation"
 mkdir -p "$MK_SHARE"

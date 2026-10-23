@@ -213,11 +213,20 @@ gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-up "[]"
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-down "[]"
 gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-left "['<Super><Shift>Page_Up', '<Super><Shift><Alt>Left']"
 gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-right "['<Super><Shift>Page_Down', '<Super><Shift><Alt>Right']"
+# Super+1-9 opens dock apps (Windows taskbar style); workspaces use Super+Alt+N,
+# matching Super+Alt+arrows, so the two never fight over the same keys.
+for n in 1 2 3 4; do
+    gsettings set org.gnome.desktop.wm.keybindings "switch-to-workspace-$n" "['<Super><Alt>$n']"
+    gsettings set org.gnome.desktop.wm.keybindings "move-to-workspace-$n" "['<Super><Shift><Alt>$n']"
+done
 
 # 5. Instant Screenshot & Power Keybindings
-gsettings set org.gnome.shell.keybindings screenshot "['Print']"
+# Print (Fn+PrtSc on laptops) = instant full screen; area selection on Shift+Print,
+# Super+Shift+S (Windows) and Super+Shift+4 (macOS); Super+Shift+3 = macOS full screen.
+# Every capture is saved to ~/Pictures/Screenshots and copied to the clipboard.
+gsettings set org.gnome.shell.keybindings screenshot "['Print', '<Super><Shift>3']"
 gsettings set org.gnome.shell.keybindings screenshot-window "['<Alt>Print']"
-gsettings set org.gnome.shell.keybindings show-screenshot-ui "['<Shift>Print', '<Super><Shift>s']"
+gsettings set org.gnome.shell.keybindings show-screenshot-ui "['<Shift>Print', '<Super><Shift>s', '<Super><Shift>4']"
 # GNOME 50 renamed power-off to shutdown; Ctrl+Alt+Delete stays on GNOME's logout.
 if gsettings list-keys "$MEDIA_KEYS" | grep -qx shutdown; then
     gsettings set "$MEDIA_KEYS" shutdown "['<Super>BackSpace', '<Super><Shift>x']"
@@ -229,6 +238,30 @@ fi
 gsettings set org.gnome.desktop.calendar show-weekdate false
 gsettings set org.gnome.shell.world-clocks locations "[]"
 gsettings set org.gnome.shell.weather locations "[]"
+
+# 6b. Windows & macOS conveniences (GNOME stays GNOME: Super still opens the overview)
+echo "==> Applying Windows & macOS conveniences..."
+MK_WM="org.gnome.desktop.wm.keybindings"
+MK_SHELL="org.gnome.shell.keybindings"
+gsettings set "$MEDIA_KEYS" home "['<Super>e']"                   # Files (Win+E)
+gsettings set "$MEDIA_KEYS" control-center "['<Super>i']"         # Settings (Win+I)
+gsettings set "$MK_WM" show-desktop "['<Super>d']"                # Show desktop (Win+D)
+gsettings set "$MK_WM" panel-run-dialog "['<Alt>F2', '<Super>r']" # Run a command (Win+R)
+gsettings set "$MK_SHELL" toggle-overview "['<Super>s']"          # Search (Win+S)
+gsettings set "$MK_SHELL" toggle-quick-settings "['<Super><Shift>a']" # Quick settings
+gsettings set "$MK_SHELL" toggle-application-view "['<Super>a']"  # App grid (GNOME/Launchpad)
+gsettings set "$MK_SHELL" toggle-message-tray "['<Super>m']"      # Notifications; Super+V is clipboard
+gsettings set "$MK_SHELL" focus-active-notification "[]"          # frees Super+N for your own shortcut
+# Window buttons on the right, new windows centred (macOS), hot corner on
+gsettings set org.gnome.desktop.wm.preferences button-layout "appmenu:minimize,maximize,close"
+gsettings set org.gnome.mutter center-new-windows true
+gsettings set org.gnome.desktop.interface enable-hot-corners true
+# Laptop comfort: tap to click, natural scrolling, battery %, weekday, Night Light
+gsettings set org.gnome.desktop.peripherals.touchpad tap-to-click true
+gsettings set org.gnome.desktop.peripherals.touchpad natural-scroll true
+gsettings set org.gnome.desktop.interface show-battery-percentage true
+gsettings set org.gnome.desktop.interface clock-show-weekday true
+gsettings set org.gnome.settings-daemon.plugins.color night-light-enabled true
 
 # 7. Smooth Animation Performance Tweaks
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.overview blur false
@@ -299,8 +332,16 @@ remove_legacy_shortcuts
 add_shortcut ocr     "OCR Text Extractor"        "$HOME/.local/bin/ocr-snip"        "<Super><Shift>t"
 add_shortcut emoji   "Emoji Board"               "gnome-characters"                 "<Super>period"
 add_shortcut hud     "Workstation Shortcuts HUD" "$HOME/.local/bin/show-shortcuts"  "<Super>slash"
-add_shortcut notes   "Quick Notes & Timer"       "$HOME/.local/bin/mk-scratchpad"   "<Super>n"
+add_shortcut notes   "Quick Notes & Timer"       "$HOME/.local/bin/mk-scratchpad"   "<Super><Shift>n"
 add_shortcut camera  "Camera Studio Controls"    "$HOME/.local/bin/camera-controls" "<Super>c"
+add_shortcut taskmgr "System Monitor"            "gnome-system-monitor"             "<Control><Shift>Escape"
+# Ctrl+Alt+T opens a terminal: Fedora's Ptyxis, or whichever is installed
+for term in ptyxis kgx gnome-terminal; do
+    if command -v "$term" &>/dev/null; then
+        add_shortcut terminal "Terminal" "$term" "<Control><Alt>t"
+        break
+    fi
+done
 
 echo "✔ Workstation configurations synchronized."
 if (( NEW_EXTENSIONS )); then

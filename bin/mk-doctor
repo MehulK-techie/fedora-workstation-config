@@ -71,6 +71,32 @@ while IFS= read -r uuid; do
     esac
 done < <(gnome-extensions list --enabled 2>/dev/null)
 
+section "Keyboard shortcuts"
+# Every binding across GNOME's shortcut lists, so two actions on one key show up.
+all_bindings() {
+    local schema key val path
+    for schema in org.gnome.desktop.wm.keybindings org.gnome.shell.keybindings \
+        org.gnome.mutter.keybindings org.gnome.mutter.wayland.keybindings \
+        org.gnome.settings-daemon.plugins.media-keys; do
+        gsettings list-recursively "$schema" 2>/dev/null | while read -r _ key val; do
+            [[ "$key" == *-static ]] && continue   # hardware-key duplicates by design
+            grep -oE "'[^']+'" <<< "$val" | tr -d "'" | grep -v '^$' | sed "s|\$| $key|" || true
+        done
+    done
+    for path in $(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null | grep -oE "'[^']+'" | tr -d "'"); do
+        val=$(gsettings get "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$path" binding 2>/dev/null | tr -d "'")
+        [[ -n "$val" ]] && echo "$val custom:$(basename "$path")"
+    done
+}
+mapfile -t clashes < <(all_bindings | awk '{ k = tolower($1); n[k]++; who[k] = who[k] " " $2 } END { for (k in n) if (n[k] > 1) print k ":" who[k] }' | sort)
+if (( ${#clashes[@]} )); then
+    for clash in "${clashes[@]}"; do
+        warn "Two actions share ${clash%%:*}:${clash#*:}" "Change one in Settings › Keyboard › View and Customize Shortcuts, or run: mk sync"
+    done
+else
+    ok "No shortcut conflicts"
+fi
+
 section "Face unlock"
 if ! command -v howdy &>/dev/null; then
     warn "Howdy isn't installed" "Run: sudo ./setup.sh"

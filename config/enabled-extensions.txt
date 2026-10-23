@@ -10,3 +10,5 @@ wack-shell@rinzler69-wastaken.github.com
 text-extractor@imshaaz21.github.com
 places-menu@gnome-shell-extensions.gcampax.github.com
 dash-to-dock@micxgx.gmail.com
+appindicatorsupport@rgcjonas.gmail.com
+caffeine@patapon.info

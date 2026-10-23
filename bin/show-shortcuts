@@ -1,55 +1,98 @@
 #!/usr/bin/env bash
+# MK Workstation shortcut cheat sheet (Super+/). Every value is read live from
+# GNOME, so it always matches what your keyboard actually does.
 set -euo pipefail
 
 TMP_HUD=$(mktemp /tmp/mk_hud_XXXXXX.txt)
 trap 'rm -f "$TMP_HUD"' EXIT
 
+MEDIA_KEYS="org.gnome.settings-daemon.plugins.media-keys"
+CUSTOM_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
+
+# "['<Super><Shift>s', 'Print']" -> "Super+Shift+S  /  Print"
+pretty() {
+    sed -E -e "s/@as //; s/[][]//g; s/', '/  \/  /g; s/'//g" \
+        -e 's/></+/g; s/>/+/g; s/<//g; s/\+([a-z])( |$)/+\U\1\2/g' \
+        -e 's/Control/Ctrl/g; s/period/./g; s/slash/\//g; s/Escape/Esc/g; s/BackSpace/Backspace/g' <<< "$1"
+}
 get_key() {
     local val
     val=$(gsettings get "$1" "$2" 2>/dev/null || echo "[]")
-    val=$(echo "$val" | sed -E "s/@as //;s/[\[\]']//g;s/,/ /g")
-    echo "${val:-Disabled}"
+    val=$(pretty "$val")
+    echo "${val:-—}"
 }
+get_custom() {
+    local val
+    val=$(gsettings get "$MEDIA_KEYS.custom-keybinding:$CUSTOM_PATH/mk-$1/" binding 2>/dev/null || echo "''")
+    val=$(pretty "$val")
+    echo "${val:-—}"
+}
+row() { printf '  %-30s %s\n' "$1" "$2"; }
 
-cat << REGISTRY > "$TMP_HUD"
-==================================================================================
-                 ⚡ MK WORKSTATION LIVE SHORTCUT REGISTRY ⚡
-               (Values queried dynamically in real-time from GNOME)
-==================================================================================
+{
+cat << 'HEADER'
+════════════════════════════════════════════════════════════════════════════
+                    MK WORKSTATION · KEYBOARD SHORTCUTS
+                (read live from GNOME: always what your keys do)
+════════════════════════════════════════════════════════════════════════════
+HEADER
 
-[ 🪟 WINDOW MANAGEMENT & TILING ]
-  • Alt + Tab              : $(get_key org.gnome.desktop.wm.keybindings switch-windows)
-  • Snap Window Left       : $(get_key org.gnome.mutter.keybindings toggle-tiled-left)
-  • Snap Window Right      : $(get_key org.gnome.mutter.keybindings toggle-tiled-right)
-  • Maximize / Restore     : Super+Up / Super+Down
-  • Close Active Window    : $(get_key org.gnome.desktop.wm.keybindings close)
+echo ""
+echo "WINDOWS & WORKSPACES"
+row "Switch windows (all spaces)" "$(get_key org.gnome.desktop.wm.keybindings switch-windows)"
+row "Switch apps"                 "$(get_key org.gnome.desktop.wm.keybindings switch-applications)"
+row "Snap left / right"           "$(get_key org.gnome.mutter.keybindings toggle-tiled-left)  ·  $(get_key org.gnome.mutter.keybindings toggle-tiled-right)"
+row "Maximize / restore"          "$(get_key org.gnome.desktop.wm.keybindings maximize)  ·  $(get_key org.gnome.desktop.wm.keybindings unmaximize)"
+row "Minimize / close"            "$(get_key org.gnome.desktop.wm.keybindings minimize)  ·  $(get_key org.gnome.desktop.wm.keybindings close)"
+row "Show desktop"                "$(get_key org.gnome.desktop.wm.keybindings show-desktop)"
+row "Workspace left / right"      "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-left)"
+row "Go to workspace 1…4"         "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-1) … 4"
+row "Open dock app 1…9"           "$(get_key org.gnome.shell.keybindings switch-to-application-1) … 9"
 
-[ 📸 SCREENSHOT & SNIP SUITE ]
-  • Instant Fullscreen     : $(get_key org.gnome.shell.keybindings screenshot)
-  • Instant Window         : $(get_key org.gnome.shell.keybindings screenshot-window)
-  • Interactive Area Snip  : $(get_key org.gnome.shell.keybindings show-screenshot-ui)
+echo ""
+echo "SCREENSHOTS  (saved to ~/Pictures/Screenshots and copied)"
+row "Full screen, instantly"      "$(get_key org.gnome.shell.keybindings screenshot)"
+row "Pick an area / window"       "$(get_key org.gnome.shell.keybindings show-screenshot-ui)"
+row "Current window"              "$(get_key org.gnome.shell.keybindings screenshot-window)"
+row "Copy text from screen (OCR)" "$(get_custom ocr)"
 
-[ 🚀 ERGONOMICS & APPS ]
-  • PowerToys OCR Snip     : Super + Shift + T
-  • Notes & Timers         : Super + N
-  • Camera Controls Studio : Super + C
-  • Shortcuts HUD          : Super + /
-  • Zen Browser Workspaces : Ctrl + Alt + Left / Right
-  • Emoji Board            : Super + .
+echo ""
+echo "SYSTEM"
+row "Search / overview"           "Super  ·  $(get_key org.gnome.shell.keybindings toggle-overview)"
+row "All apps"                    "$(get_key org.gnome.shell.keybindings toggle-application-view)"
+row "Files"                       "$(get_key $MEDIA_KEYS home)"
+row "Settings"                    "$(get_key $MEDIA_KEYS control-center)"
+row "Quick settings"              "$(get_key org.gnome.shell.keybindings toggle-quick-settings)"
+row "Notifications"               "$(get_key org.gnome.shell.keybindings toggle-message-tray)"
+row "Clipboard history"           "Super+V"
+row "Run a command"               "$(get_key org.gnome.desktop.wm.keybindings panel-run-dialog)"
+row "Terminal"                    "$(get_custom terminal)"
+row "System Monitor"              "$(get_custom taskmgr)"
+row "Lock screen"                 "$(get_key $MEDIA_KEYS screensaver)"
+row "Shut down / restart"         "$(get_key $MEDIA_KEYS shutdown)"
 
-[ 🛠️ CLI SUITE ]
-  • mk update    : Pulls git updates and synchronizes environment
-  • mk sync      : Syncs current settings to repo
-  • mk shortcuts : Opens this cheat sheet
-==================================================================================
-REGISTRY
+echo ""
+echo "MK TOOLS"
+row "Emoji board"                 "$(get_custom emoji)"
+row "Notes & focus timer"         "$(get_custom notes)"
+row "Camera controls"             "$(get_custom camera)"
+row "This cheat sheet"            "$(get_custom hud)"
+
+echo ""
+echo "TIPS"
+echo "  • In Files, select a file and press Space to preview it (Quick Look)."
+echo "  • Ctrl+Alt+←/→ is left free for Zen Browser workspaces."
+echo "  • Terminal: mk doctor (health check) · mk sync (re-apply) · mk export (save)"
+echo "════════════════════════════════════════════════════════════════════════════"
+} > "$TMP_HUD"
 
 ACTION=$(zenity --text-info \
-    --title="⚡ MK Workstation - Shortcuts HUD" \
+    --title="MK Workstation · Keyboard Shortcuts" \
     --filename="$TMP_HUD" \
-    --width=720 --height=520 \
-    --ok-label="Close" --extra-button="Open Settings" 2>/dev/null || true)
+    --font="monospace 10" \
+    --width=820 --height=760 \
+    --ok-label="Close" --extra-button="Open Keyboard Settings" 2>/dev/null || true)
 
-if [[ "$ACTION" == "Open Settings" ]]; then
+if [[ "$ACTION" == "Open Keyboard Settings" ]]; then
     gnome-control-center keyboard &
 fi

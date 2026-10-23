@@ -1,0 +1,29 @@
+/* Files (Nautilus), MK Workstation style: soft cyan hover on rows and icons,
+   a cyan bar on the selected row, matching sidebar. Scoped to the Files
+   window only, so other apps are untouched. */
+.nautilus-window columnview > listview > row,
+.nautilus-window gridview > child,
+.nautilus-window .navigation-sidebar > row {
+  transition: background-color 160ms ease-out, box-shadow 160ms ease-out;
+  border-radius: 10px;
+}
+
+.nautilus-window columnview > listview > row:hover,
+.nautilus-window gridview > child:hover,
+.nautilus-window .navigation-sidebar > row:hover {
+  background-color: alpha(#00c8ff, 0.08);
+}
+
+.nautilus-window columnview > listview > row:selected,
+.nautilus-window gridview > child:selected {
+  background-color: alpha(#00c8ff, 0.18);
+  box-shadow: inset 3px 0 0 #00c8ff;
+}
+
+.nautilus-window .navigation-sidebar > row:selected {
+  background-color: alpha(#00c8ff, 0.16);
+}
+
+.nautilus-window gridview > child:selected {
+  box-shadow: inset 0 0 0 2px alpha(#00c8ff, 0.7);
+}

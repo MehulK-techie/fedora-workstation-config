@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Camera Controls
+Comment=Brightness, focus and exposure of your webcam
+Exec=@BIN@/camera-controls
+Icon=io.github.mehulk.MkCamera
+Categories=AudioVideo;Video;Settings;
+Keywords=webcam;camera;mk;
+StartupNotify=true
+StartupWMClass=io.github.mehulk.MkCamera

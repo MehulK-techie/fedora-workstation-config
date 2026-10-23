@@ -242,6 +242,48 @@ case "${1:-help}" in
         esac
         ;;
 
+    icon)
+        # mk icon [APP IMAGE | APP reset | list]   APP: companion timer shortcuts camera ocr
+        shift
+        ICONS="$HOME/.config/mk-workstation/icons"
+        apps="companion timer shortcuts camera ocr"
+        case "${1:-list}" in
+            list)
+                echo "Apps: $apps"
+                for a in $apps; do
+                    custom="MK icon"
+                    for ext in svg png; do
+                        [[ -f "$ICONS/$a.$ext" ]] && custom="$ICONS/$a.$ext"
+                    done
+                    echo "  $a: $custom"
+                done
+                echo "Change one: mk icon companion ~/Pictures/my-icon.png   (SVG or PNG, square works best)"
+                ;;
+            *)
+                if [[ " $apps " != *" $1 "* ]]; then
+                    echo "[-] Unknown app '$1'. Apps: $apps" >&2
+                    exit 2
+                fi
+                mkdir -p "$ICONS"
+                rm -f "$ICONS/$1.svg" "$ICONS/$1.png"
+                if [[ "${2:-}" == reset ]]; then
+                    echo "✔ $1 is back to the MK icon"
+                elif [[ -f "${2:-}" ]]; then
+                    case "${2,,}" in
+                        *.svg) cp "$2" "$ICONS/$1.svg" ;;
+                        *.png) cp "$2" "$ICONS/$1.png" ;;
+                        *) echo "[-] Use an SVG or PNG image" >&2; exit 2 ;;
+                    esac
+                    echo "✔ New icon for $1"
+                else
+                    echo "Usage: mk icon $1 IMAGE.png|IMAGE.svg   or   mk icon $1 reset" >&2
+                    exit 2
+                fi
+                "$REPO_DIR/sync.sh" > /dev/null && echo "  Applied (the dock may need a moment to refresh)."
+                ;;
+        esac
+        ;;
+
     device)
         PYTHONPATH="$HOME/.local/share/mk-workstation/lib" python3 -m mkworkstation device
         ;;
@@ -344,6 +386,9 @@ case "${1:-help}" in
 
         systemctl --user disable --now mk-update-check.timer mk-reminders.timer mk-power.service &>/dev/null || true
         rm -f "$HOME/.config/systemd/user/mk-power.service"
+        rm -f "$HOME"/.local/share/applications/io.github.mehulk.Mk*.desktop \
+            "$HOME"/.local/share/icons/hicolor/*/apps/io.github.mehulk.Mk*
+        [[ -f "$HOME/.config/gtk-4.0/gtk.css" ]] && python3 -c 'import re,sys; p=sys.argv[1]; t=open(p).read(); open(p,"w").write(re.sub(r"\n*/\* >>> MK Workstation.*?/\* <<< MK Workstation \*/\n?", "\n", t, flags=re.S).lstrip("\n"))' "$HOME/.config/gtk-4.0/gtk.css"
         rm -f "$HOME/.config/systemd/user/"mk-update-check.{service,timer} "$HOME/.config/systemd/user/"mk-reminders.{service,timer}
         systemctl --user daemon-reload &>/dev/null || true
         rm -f "$HOME/.config/burn-my-windows/profiles/mk-glide.conf"
@@ -397,6 +442,7 @@ case "${1:-help}" in
         echo "  remind     Same as task, with a reminder: mk remind \"stretch\" 45m"
         echo "  list       Show notes, tasks and their reminders"
         echo "  welcome    Welcome after login: on, off, test, edit, title, greeting, voice (install), notify"
+        echo "  icon       Use your own image as an MK app icon: mk icon companion ~/me.png"
         echo "  device     What this computer has, and what MK tunes for it"
         echo "  fingerprint  Enroll a finger for login and sudo (list, delete, settings)"
         echo "  focus      Start the focus timer: mk focus 25 \"Writing\" (also 1:30, 90s)"

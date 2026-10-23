@@ -89,3 +89,72 @@
   border-radius: 10px;
   transition-duration: 200ms;
 }
+
+/* Calendar (click the clock): round day cells that light up on hover, today
+   in a glowing cyan circle, softer other-month days, smooth buttons. */
+.calendar .calendar-day {
+  border-radius: 999px;
+  transition-duration: 180ms;
+}
+
+.calendar .calendar-day:hover {
+  background-color: rgba(0, 200, 255, 0.16);
+  box-shadow: 0 0 10px 0 rgba(0, 210, 255, 0.22);
+  color: #ffffff;
+}
+
+.calendar .calendar-day:active,
+.calendar .calendar-day:selected {
+  background-color: rgba(0, 200, 255, 0.28);
+}
+
+.calendar .calendar-today,
+.calendar .calendar-today:selected {
+  background-color: #0aa5d8;
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 0 14px 1px rgba(0, 210, 255, 0.55);
+}
+
+.calendar .calendar-today:hover {
+  background-color: #19b8ec;
+}
+
+.calendar .calendar-other-month {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.calendar .calendar-day-with-events {
+  color: #8fe3ff;
+  font-weight: 800;
+}
+
+.calendar .pager-button,
+.calendar .calendar-month-label {
+  border-radius: 999px;
+  transition-duration: 180ms;
+}
+
+.calendar .pager-button:hover,
+.calendar .calendar-month-label:hover {
+  background-color: rgba(0, 200, 255, 0.18);
+  color: #ffffff;
+}
+
+.datemenu-today-button .day-label {
+  color: #4fd3ff;
+}
+
+.events-button,
+.world-clocks-button,
+.weather-button {
+  border-radius: 16px;
+  transition-duration: 180ms;
+}
+
+.events-button:hover,
+.world-clocks-button:hover,
+.weather-button:hover {
+  background-color: rgba(0, 200, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(0, 210, 255, 0.30);
+}

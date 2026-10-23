@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Copy Text from Screen
+Comment=Select part of the screen and copy its text
+Exec=@BIN@/ocr-snip
+Icon=io.github.mehulk.MkOcr
+Categories=Utility;
+Keywords=ocr;text;screenshot;mk;
+StartupNotify=true
+StartupWMClass=io.github.mehulk.MkOcr

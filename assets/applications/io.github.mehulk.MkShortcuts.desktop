@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Keyboard Shortcuts
+Comment=See, change and add keyboard shortcuts
+Exec=@BIN@/show-shortcuts
+Icon=io.github.mehulk.MkShortcuts
+Categories=Settings;Utility;
+Keywords=keys;keyboard;hotkeys;mk;
+StartupNotify=true
+StartupWMClass=io.github.mehulk.MkShortcuts

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Companion
+Comment=Notes, tasks and reminders
+Exec=@BIN@/mk-companion
+Icon=io.github.mehulk.MkCompanion
+Categories=Utility;Office;
+Keywords=notes;tasks;todo;reminder;mk;
+StartupNotify=true
+StartupWMClass=io.github.mehulk.MkCompanion

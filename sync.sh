@@ -136,6 +136,45 @@ MK_SHARE="$HOME/.local/share/mk-workstation"
 mkdir -p "$MK_SHARE"
 rm -rf "${MK_SHARE:?}/lib" "${MK_SHARE:?}/config"
 cp -r "$SCRIPT_DIR/lib" "$SCRIPT_DIR/config" "$MK_SHARE/"
+
+# MK's apps in the app grid, dock and Alt+Tab, with their icons. Your own image
+# wins: ~/.config/mk-workstation/icons/<name>.svg or .png (see `mk icon`).
+ICON_DIR="$HOME/.local/share/icons/hicolor"
+APP_DIR="$HOME/.local/share/applications"
+CUSTOM_ICONS="$HOME/.config/mk-workstation/icons"
+mkdir -p "$ICON_DIR/scalable/apps" "$ICON_DIR/256x256/apps" "$APP_DIR"
+declare -A ICON_NAMES=([companion]=MkCompanion [timer]=MkTimer [shortcuts]=MkShortcuts
+                       [camera]=MkCamera [ocr]=MkOcr)
+for short in "${!ICON_NAMES[@]}"; do
+    id="io.github.mehulk.${ICON_NAMES[$short]}"
+    rm -f "$ICON_DIR/scalable/apps/$id.svg" "$ICON_DIR/256x256/apps/$id.png"
+    if [[ -f "$CUSTOM_ICONS/$short.svg" ]]; then
+        cp -f "$CUSTOM_ICONS/$short.svg" "$ICON_DIR/scalable/apps/$id.svg"
+    elif [[ -f "$CUSTOM_ICONS/$short.png" ]]; then
+        cp -f "$CUSTOM_ICONS/$short.png" "$ICON_DIR/256x256/apps/$id.png"
+    else
+        cp -f "$SCRIPT_DIR/assets/icons/$id.svg" "$ICON_DIR/scalable/apps/$id.svg"
+    fi
+    sed "s|@BIN@|$HOME/.local/bin|" "$SCRIPT_DIR/assets/applications/$id.desktop" > "$APP_DIR/$id.desktop"
+done
+touch "$ICON_DIR"
+gtk-update-icon-cache -q -t "$ICON_DIR" 2>/dev/null || true
+update-desktop-database -q "$APP_DIR" 2>/dev/null || true
+
+# Files styling (config/gtk/files.css) kept in a marked block of your GTK 4
+# stylesheet; anything else you have there is left alone.
+GTK_CSS="$HOME/.config/gtk-4.0/gtk.css"
+mkdir -p "$(dirname "$GTK_CSS")"
+touch "$GTK_CSS"
+python3 - "$GTK_CSS" "$SCRIPT_DIR/config/gtk/files.css" << 'PY'
+import re, sys
+path, source = sys.argv[1:]
+text = open(path).read()
+text = re.sub(r"/\* >>> MK Workstation.*?/\* <<< MK Workstation \*/\n?", "", text, flags=re.S).rstrip("\n")
+block = ("/* >>> MK Workstation (managed by sync.sh; edit config/gtk/files.css) */\n"
+         + open(source).read() + "/* <<< MK Workstation */\n")
+open(path, "w").write((text + "\n\n" if text else "") + block)
+PY
 printf '%s\n' "$SCRIPT_DIR" > "$HOME/.config/mk-workstation/repo-path"
 
 # Daily, low-priority check for repo updates (shows a notification via `mk check`)

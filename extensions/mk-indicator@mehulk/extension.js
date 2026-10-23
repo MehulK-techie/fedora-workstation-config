@@ -8,6 +8,7 @@ import { DockGlow } from './dockGlow.js';
 import { Welcome } from './welcome.js';
 import { TimerPill } from './timerPill.js';
 import { SwitcherAnimation } from './switcher.js';
+import { OsdStack } from './osdStack.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -82,6 +83,8 @@ export default class MKIndicatorExtension extends Extension {
         this._timerPill.enable();
         this._switcher = new SwitcherAnimation();
         this._switcher.enable();
+        this._osdStack = new OsdStack();
+        this._osdStack.enable();
         this._sessionId = Main.sessionMode.connect('updated', () => this._onSessionMode());
         this._onSessionMode();
 
@@ -163,6 +166,8 @@ export default class MKIndicatorExtension extends Extension {
         this._timerPill = null;
         this._switcher?.disable();
         this._switcher = null;
+        this._osdStack?.disable();
+        this._osdStack = null;
         this._brandMonitor?.cancel();
         this._brandMonitor = null;
         if (this._startupId) {

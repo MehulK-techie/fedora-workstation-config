@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Focus Timer
+Comment=Countdown with a calm focus screen
+Exec=@BIN@/mk-timer
+Icon=io.github.mehulk.MkTimer
+Categories=Utility;Clock;
+Keywords=pomodoro;focus;timer;mk;
+StartupNotify=true
+StartupWMClass=io.github.mehulk.MkTimer

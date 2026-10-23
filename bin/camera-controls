@@ -51,7 +51,7 @@ def main():
     def set_ctrl(name, val):
         subprocess.run(["v4l2-ctl", "-d", dev, f"--set-ctrl={name}={int(float(val))}"])
 
-    root = tk.Tk()
+    root = tk.Tk(className="io.github.mehulk.MkCamera")  # matches its .desktop file and icon
     root.title(f"Camera Controls Studio ({dev})")
     root.geometry("450x580")
     root.configure(bg="#1e1e2e")

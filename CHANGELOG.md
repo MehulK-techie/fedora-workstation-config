@@ -3,7 +3,8 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
-- **macOS feel:** genie minimize (Magic Lamp), auto-hiding top bar (Hide Top Bar, bundled for when extensions.gnome.org is unreachable), Super+Ctrl+F full screen, Finder-style Files, sharp X11 apps at fractional scaling.
+- **macOS feel:** Spaces-style touchpad gestures, 25% faster animations (Impatience), genie minimize (Magic Lamp), Super+Ctrl+F full screen, Finder-style Files, sharp X11 apps at fractional scaling.
+- **`mk uninstall`**, a permanent pre-MK settings snapshot, SECURITY.md, CODE_OF_CONDUCT.md, THIRD_PARTY.md, issue and PR templates, .editorconfig.
 - **Themed Alt+Tab:** GNOME's flat switcher with live thumbnails of every window on every workspace, styled by mk-indicator's stylesheet (frosted navy panel, cyan selection).
 - **Windows-style multitasking** (Tiling Assistant): snap halves and quarters, Snap Assist, six snap layouts on Super+Z, tile groups, always on top (Super+Ctrl+T), Super+Ctrl+←/→ desktops.
 - **Super+N** Obsidian and **Super+B** default browser; duplicate user shortcuts are folded into the mk-* versions.
@@ -22,6 +23,8 @@
 - Docs: `docs/GUIDE.md`, `docs/FACE-UNLOCK.md`, `docs/EXTENSIONS.md`, `docs/BUGS.md` (full audit), `CONTRIBUTING.md`.
 
 ### Changed
+- Third-party extensions are no longer bundled (licensing); `extensions/` keeps only mk-indicator and WACK Shell.
+- Removed: the broken RPM spec, `close-workspace-apps`, `fix-alt-tab`.
 - `sync.sh` is the single source of desktop settings; `setup.sh` runs it as the desktop user.
 - Custom shortcuts use named `mk-*` slots; your own shortcuts and extensions are kept.
 - `setup.sh` refuses non-Fedora and Fedora Atomic systems, takes `--no-face`, and skips Howdy when there's no camera.

@@ -190,7 +190,7 @@ From the repo folder you can use short commands instead of script names:
 | `sync-shortcuts.sh` | Compatibility shim that runs `sync.sh`. |
 | `bin/` | Desktop tools copied to `~/.local/bin`, including `mk` and `mk-doctor`. |
 | `apps/` | Package and Flatpak lists read by `setup.sh`. |
-| `extensions/` | This project's own `mk-indicator@mehulk`, plus offline copies used only when extensions.gnome.org can't provide a build. |
+| `extensions/` | This project's own `mk-indicator@mehulk`, plus WACK Shell, which extensions.gnome.org has no GNOME 50 build of (see [THIRD_PARTY.md](../THIRD_PARTY.md)). Every other extension is downloaded. |
 | `config/enabled-extensions.txt`, `config/extension-settings/` | Which extensions to enable and their saved settings. Written by `mk export`, applied by `sync.sh`. |
 | `config/*.dconf` | Full GNOME settings snapshots written by `mk export`, for reference. No script applies them. |
 | `docs/` | This guide, [FACE-UNLOCK.md](FACE-UNLOCK.md), [EXTENSIONS.md](EXTENSIONS.md), [BUGS.md](BUGS.md). |
@@ -276,12 +276,15 @@ gsettings reset-recursively org.gnome.mutter.keybindings
 
 **Turn off the daily update check:** `systemctl --user disable --now mk-update-check.timer`
 
-**Remove the desktop tools:**
+**Remove MK from your account:** `mk uninstall`. It asks first, then removes the MK tools, the daily update check, the login helper, the `mk-*` shortcuts and the MK extension. Your own shortcuts and extensions stay.
+
+**Get your desktop back exactly as it was before MK** (all GNOME settings):
 
 ```bash
-rm -f ~/.local/bin/{mk,mk-doctor,ocr-snip,show-shortcuts,mk-scratchpad,camera-controls,close-workspace-apps,fix-alt-tab}
-rm -rf ~/.config/mk-workstation
+dconf reset -f / && dconf load / < ~/.config/mk-workstation/backups/original-dconf.ini
 ```
+
+Then log out and back in.
 
 Installed apps and repositories stay. Remove them with `sudo dnf remove <package>` or `flatpak uninstall <app-id>`.
 

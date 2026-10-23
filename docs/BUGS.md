@@ -8,14 +8,14 @@
 | **Updated** | 2026-10-23: second pass added B25–B28 and S5, found on the live system and by the automated security review. |
 | **Method** | Read every script and document; ran `bash -n` and ShellCheck; ran `sync.sh` against a throwaway dconf database; checked every package name with `dnf repoquery` and every Flatpak ID with `flatpak remote-info`; checked GNOME 50 schemas with `gsettings`. |
 
-**Summary:** 48 findings. 39 are fixed on the branch and 9 are still open.
+**Summary:** 49 findings. 44 are fixed on the branch and 5 are still open.
 
 | Category | Found | Fixed | Open |
 | :--- | :---: | :---: | :---: |
-| [Bugs](#1-bugs) | 32 | 26 | 6 |
-| [Duplicated code](#2-duplicated-code) | 5 | 4 | 1 |
+| [Bugs](#1-bugs) | 32 | 29 | 3 |
+| [Duplicated code](#2-duplicated-code) | 5 | 5 | 0 |
 | [Hallucinations and false claims](#3-hallucinations-and-false-claims) | 6 | 5 | 1 |
-| [Security and privacy](#4-security-and-privacy) | 5 | 4 | 1 |
+| [Security and privacy](#4-security-and-privacy) | 6 | 5 | 1 |
 
 Severity: **Critical** = the script aborts or does the wrong thing for everyone · **High** = a headline feature is broken or user data is lost · **Medium** = wrong in some setups, or silently degraded · **Low** = cosmetic, or risk only in edge cases.
 
@@ -58,10 +58,10 @@ Severity: **Critical** = the script aborts or does the wrong thing for everyone 
 
 | # | Severity | Where | Problem | Suggested fix |
 | :--- | :--- | :--- | :--- | :--- |
-| B20 | Medium | `fedora-workstation-config.spec` | The package can't work. It copies a `zen-config/` folder that doesn't exist, and installs `setup.sh` as `/usr/bin/fedora-workstation-setup`, where `SCRIPT_DIR/apps` doesn't exist. It also `Requires: python3-pip`, which nothing uses. | Install the repo to `%{_datadir}/%{name}` and make the `/usr/bin` entry a wrapper that runs `%{_datadir}/%{name}/setup.sh`. Or remove the spec until packaging is a goal. |
-| B21 | Medium | `bin/close-workspace-apps` | Sends Alt+F4 through `wtype` or `xdotool`. GNOME supports neither virtual-keyboard input on Wayland nor `xdotool` for native windows, and no shortcut is bound to it. | Remove it, or rewrite it with a GNOME Shell extension or a D-Bus call. |
+| B20 | Medium | `fedora-workstation-config.spec` | The package can't work. It copies a `zen-config/` folder that doesn't exist, and installs `setup.sh` as `/usr/bin/fedora-workstation-setup`, where `SCRIPT_DIR/apps` doesn't exist. It also `Requires: python3-pip`, which nothing uses. | **Fixed `4d9c387`:** spec removed; a proper package is on the roadmap. |
+| B21 | Medium | `bin/close-workspace-apps` | Sends Alt+F4 through `wtype` or `xdotool`. GNOME supports neither virtual-keyboard input on Wayland nor `xdotool` for native windows, and no shortcut is bound to it. | **Fixed `4d9c387`:** tool removed. |
 | B22 | Low | `extensions/mk-indicator@mehulk/extension.js` | Inserts into `Main.panel._rightBox`, a private API that can change between GNOME releases. | Use `Main.panel.addToStatusArea(this.uuid, button)` with a `PanelMenu.Button`. |
-| B23 | Low | `extensions/` | **Partly fixed `26b41e3`:** `sync.sh` now downloads extensions from extensions.gnome.org and `mk export` no longer bundles them; the remaining copies are an offline fallback (wack-shell has no GNOME 50 build on the site). Originally: 14 MB of bundled extensions. `quick-settings-tweaks` (GNOME 48 only) and `screenshot-ocr` (49 only) can't load on GNOME 50. blur-my-shell is also packaged by Fedora. | Bundle only `mk-indicator` and install the rest from extensions.gnome.org or Fedora packages. |
+| B23 | Low | `extensions/` | **Partly fixed `26b41e3`:** `sync.sh` now downloads extensions from extensions.gnome.org and `mk export` no longer bundles them; the remaining copies are an offline fallback (wack-shell has no GNOME 50 build on the site). Originally: 14 MB of bundled extensions. `quick-settings-tweaks` (GNOME 48 only) and `screenshot-ocr` (49 only) can't load on GNOME 50. blur-my-shell is also packaged by Fedora. | **Fixed `c807fd4`:** only mk-indicator and WACK Shell are bundled (14 MB to 1.5 MB); everything else comes from extensions.gnome.org. |
 | B28 | Medium | Reference machine (not the repo) | Two swap units fail at every boot: `swap-swapfile.swap` (`/swap/swapfile`) and `swapfile.swap` (`/swapfile`). Probably stale `/etc/fstab` entries or a swap file not created for Btrfs. `mk doctor` reports it. | Check with `systemctl status swapfile.swap`. Fedora already uses zram swap, so removing the stale fstab lines is usually enough. |
 | B24 | Low | `sync.sh` | Writes `~/.config/gnome-shell/gnome-shell.css`. That isn't a documented GNOME Shell styling mechanism, and it wasn't confirmed to take effect. | Check that the styling appears. If it doesn't, ship it as a user theme or a small extension stylesheet. |
 
@@ -75,7 +75,7 @@ Severity: **Critical** = the script aborts or does the wrong thing for everyone 
 | D2 | `setup.sh` | `REAL_USER`/`REAL_UID`/`DBUS_ENV` were defined four times; `enabled-extensions` was set twice (the first was dead code); `show-screenshot-ui` and `power-off` were set four times, with two blocks copy-pasted verbatim. | Fixed `cce59cf`. |
 | D3 | `README.md`, `AI_PROMPT_TEMPLATE.md` | The second half of the AI template was a stale copy of an older README, including `[cite: 5]` leftovers. | Fixed `1dba92b`. |
 | D4 | `config/gnome-media-keys.dconf`, `config/keybindings.dconf` | Two dumps of the same dconf subtree that contradict each other. Nothing applies either one. | Fixed `26b41e3`: stale `gnome-media-keys.dconf` removed. |
-| D5 | `extensions/blur-my-shell@aunetx`, `apps/dnf-packages.txt` | blur-my-shell is both bundled and installed from Fedora. | Open: see B23. (`sync.sh` already prefers the installed copy.) |
+| D5 | `extensions/blur-my-shell@aunetx`, `apps/dnf-packages.txt` | blur-my-shell is both bundled and installed from Fedora. | Fixed `c807fd4`: the bundled copy is gone; Fedora's package or extensions.gnome.org is used. |
 
 ---
 
@@ -102,6 +102,7 @@ These are statements in the repo that the code or the real system contradicts.
 | S2 | Medium | Face unlock on an RGB-only camera can be fooled by a photo, and nothing warned the user. | Fixed `cce59cf`: `register-face.sh` prefers IR and warns when only RGB is available. |
 | S3 | Low | The committed dumps in `config/` contain the home path, wallpaper and lock-screen photo filenames, Run-dialog command history, and recently used emojis. | Fixed `1a0d1fe`, `26b41e3`, `62dc7c6`: `mk export` removes history, home paths and machine disk IDs, and the committed dumps were re-exported clean. |
 | S5 | Medium | The new face wizard (`84b93a1`) loosened Howdy's `certainty` to 4.0 on RGB webcams and enabled face unlock for `sudo` without asking. Declining later didn't remove an earlier `sudo` entry. Found by the automated security review. | Fixed `537a310`, `2eecf02`: matching stays at 3.5 everywhere; on RGB, `sudo` is opt-in and "no" removes it. |
+| S6 | High | The MIT-labelled repo redistributed 16 third-party GNOME extensions, mostly GPL, several without their license text. | Fixed `c807fd4`: no longer bundled except WACK Shell (GPL-3.0, licence included), documented with its patch in THIRD_PARTY.md. |
 | S4 | Low | `config/gnome-desktop-full.dconf` records `[file-sharing] require-password='never'`. If Public-folder sharing is ever turned on, anyone on the network can read that folder. | Open: set `require-password='always'` if you use file sharing. |
 
 ---

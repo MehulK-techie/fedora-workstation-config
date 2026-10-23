@@ -59,7 +59,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 **Feels familiar from Windows and macOS, still GNOME**
 - Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps, Super+Ctrl+←/→ desktops
 - Windows-style multitasking: snap halves and quarters, Snap Assist, Super+Z snap layouts (halves, 66/34, three columns, left + two stacked, quarters, focus centre), always on top
-- macOS habits: genie minimize into the dock, a top bar that hides while a window covers it, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
+- macOS habits: Spaces-style gestures (3 fingers ←/→ switch workspaces, 3 fingers ↑ overview), animations 25% faster, genie minimize into the dock, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
 - Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
 - System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
 
@@ -112,7 +112,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | Terminal | btop, fastfetch, fzf, ripgrep, zoxide, ncdu, just, chezmoi, 7-Zip, unrar |
 | Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, gThumb, Kamoso, Media Writer |
 
-**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Hide Top Bar, Magic Lamp (genie minimize), AppIndicator (tray icons), Caffeine (keep awake), and the MK top-bar mark.
+**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Magic Lamp (genie minimize), Impatience (25% faster animations), AppIndicator (tray icons), Caffeine (keep awake), and the MK top-bar mark.
 
 ---
 
@@ -128,6 +128,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk save` | `just save` | Add apps you installed yourself to the lists, save extensions and settings, and commit |
 | `mk face` | `just face` | Face unlock wizard (`--models N`, `--user NAME`, `--tune-only`) |
 | `mk shortcuts` | | Open the shortcut cheat sheet |
+| `mk uninstall` | | Remove MK's tools, shortcuts and helpers from your account |
 | | `just setup` | Full system setup (`sudo ./setup.sh`) |
 | | `just check` | Lint every script (same as CI) |
 
@@ -162,7 +163,8 @@ Press **Super+/** for a live cheat sheet that always matches your keyboard.
 | | `Super+L` · `Super+Backspace` | Lock · shut down / restart |
 | **Apps** | `Super+N` · `Super+B` | Notes (Obsidian) · web browser |
 | **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Cheat sheet · quick notes & focus timer · camera controls |
-| **Touchpad** | 3-finger pinch · 4-finger pinch | Volume · show desktop |
+| **Touchpad** | 3 fingers ←/→ · 3 fingers ↑ · 4 fingers ←/→ | Switch workspaces · overview · switch windows (macOS Spaces style) |
+| | 3-finger pinch · 4-finger pinch | Volume · show desktop |
 
 Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboard. `Ctrl+Alt+←/→` is left free for Zen Browser.
 
@@ -178,15 +180,15 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 ├── sync-shortcuts.sh     Compatibility shim for older installs; runs sync.sh
 ├── justfile              just setup | sync | face | export | update | check
 ├── apps/                 dnf-packages.txt, flatpaks.txt
-├── bin/                  mk, mk-doctor, ocr-snip, show-shortcuts, mk-scratchpad, camera-controls …
+├── bin/                  mk, mk-apps, mk-doctor, mk-session, ocr-snip, show-shortcuts, mk-scratchpad, camera-controls
 ├── config/
 │   ├── enabled-extensions.txt   Extensions sync.sh installs and enables
 │   ├── extension-settings/      One saved .dconf per extension
 │   └── *.dconf                  Reference snapshots written by mk export
-├── extensions/           mk-indicator plus offline fallback copies
+├── extensions/           mk-indicator (ours) + WACK Shell (GPL, no GNOME 50 build online)
 ├── scripts/              update-repo.sh (mk export), lint.sh
 ├── docs/                 GUIDE, FACE-UNLOCK, EXTENSIONS, BUGS, AI_PROMPT_TEMPLATE
-└── .github/workflows/    ShellCheck CI
+└── .github/              ShellCheck CI, issue and pull request templates
 ```
 
 ## Documentation
@@ -197,7 +199,9 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 | [docs/FACE-UNLOCK.md](docs/FACE-UNLOCK.md) | Face unlock in three steps, multiple faces, lighting, and security |
 | [docs/EXTENSIONS.md](docs/EXTENSIONS.md) | What each extension does and how to adjust it, with clicks or with commands |
 | [docs/BUGS.md](docs/BUGS.md) | Full audit: bugs, duplicated code, false claims, and how this compares to similar projects |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Rules and checks for changes |
+| [CONTRIBUTING.md](CONTRIBUTING.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Rules and checks for changes; community standards |
+| [SECURITY.md](SECURITY.md) | How to report security problems; every security-relevant change MK makes |
+| [THIRD_PARTY.md](THIRD_PARTY.md) | Bundled third-party code, its license and our patch |
 | [CHANGELOG.md](CHANGELOG.md) | What changed between versions |
 
 ---
@@ -206,7 +210,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 
 **Does it work on other distributions, Silverblue or KDE?** No. `setup.sh` checks for Fedora Workstation with GNOME and stops before changing anything on anything else.
 
-**Will it delete my settings?** No. Lists such as enabled extensions and custom shortcuts are added to, not replaced. System files get a `.bak` copy before their first change. See [Undo and uninstall](docs/GUIDE.md#undo-and-uninstall).
+**Will it delete my settings?** No. Lists such as enabled extensions and custom shortcuts are added to, not replaced. System files get a `.bak` copy before their first change, every sync saves a snapshot (`mk restore`), and your pre-MK desktop is kept for good. `mk uninstall` removes MK from your account. See [Undo and uninstall](docs/GUIDE.md#undo-and-uninstall).
 
 **Is face unlock safe?** With an IR camera (the Windows Hello kind), it's much harder to fool than a webcam, though Howdy itself warns it is less secure than a password. With a regular webcam a printed photo may pass, so the wizard keeps matching strict and only adds face unlock to `sudo` if you say yes. Your password always works.
 
@@ -220,7 +224,8 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 
 - Interactive section picker (`gum`/`dialog`), inspired by fedorable and Linutil
 - Btrfs snapshot before system changes, once a safe Snapper default is in place
-- Package the suite properly (the current `.spec` is broken; see [audit](docs/BUGS.md))
+- A proper package (RPM/COPR) once the layout is stable
+- Container-based CI that runs `sync.sh` against a headless GNOME session
 
 ## Contributing
 

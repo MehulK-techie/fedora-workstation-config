@@ -2,6 +2,9 @@
 // (like the OnePlus edge light) and a greeting fades in: "Welcome back home,
 // sir." Optionally the same edge light flashes for notifications.
 //
+// Under the greeting: the date, your pinned tasks, the next reminder today and
+// a low-battery hint; pinned tasks also get a notification with an Open button.
+//
 // Settings: config/welcome.conf, yours in ~/.config/mk-workstation/welcome.conf
 // (also the "Welcome light" switch in Quick Settings and `mk welcome`).
 import Cairo from 'cairo';
@@ -12,6 +15,7 @@ import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import { ExtensionState } from 'resource:///org/gnome/shell/misc/extensionUtils.js';
@@ -23,8 +27,9 @@ const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-worksta
 const TEST_FILE = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'welcome-test']);
 const DEFAULTS = {
     WELCOME: 'on', GREETING: 'Welcome back home, {title}.', TITLE: 'sir', SUBTITLE: 'on', VOICE: 'off',
-    EDGE_NOTIFY: 'off', COLOR_A: 'auto', COLOR_B: 'auto',
+    EDGE_NOTIFY: 'off', COLOR_A: 'auto', COLOR_B: 'auto', TASKS: 'on',
 };
+const COMPANION = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'companion.json']);
 
 function readConf(path) {
     const conf = {};
@@ -70,6 +75,47 @@ function accentPair(conf) {
 }
 
 const ease = t => 1 - (1 - t) ** 3;
+const easeInOut = t => t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
+
+// What's waiting for you: pinned open tasks and the next reminder today.
+export function agenda() {
+    let data = {};
+    try {
+        const [ok, bytes] = GLib.file_get_contents(COMPANION);
+        data = ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+    } catch (e) {
+        data = {};
+    }
+    const tasks = (data.tasks || []).filter(t => !t.done);
+    const pinned = tasks.filter(t => t.pinned).map(t => t.text);
+    const now = Date.now() / 1000, midnight = new Date().setHours(24, 0, 0, 0) / 1000;
+    const upcoming = [...(data.tasks || []).filter(t => !t.done), ...(data.notes || [])]
+        .filter(i => i.remind_at && i.remind_at > now && i.remind_at < midnight)
+        .sort((x, y) => x.remind_at - y.remind_at);
+    const next = upcoming[0];
+    return {
+        pinned,
+        open: tasks.length,
+        next: next ? {at: GLib.DateTime.new_from_unix_local(Math.round(next.remind_at)).format('%H:%M'),
+            text: next.text || next.title || 'Reminder'} : null,
+    };
+}
+
+function batteryHint() {
+    for (const bat of ['BAT0', 'BAT1', 'BAT2']) {
+        try {
+            const [ok, cap] = GLib.file_get_contents(`/sys/class/power_supply/${bat}/capacity`);
+            const [, st] = GLib.file_get_contents(`/sys/class/power_supply/${bat}/status`);
+            const level = ok ? parseInt(new TextDecoder().decode(cap), 10) : NaN;
+            if (level <= 25 && new TextDecoder().decode(st).trim() === 'Discharging')
+                return `Battery at ${level}%: plug in soon`;
+            return null;
+        } catch (e) {
+            // try the next name
+        }
+    }
+    return null;
+}
 
 // Path around the screen edge, starting at the bottom centre and going one way.
 function edgePath(cr, w, h, inset, r, clockwise) {
@@ -93,7 +139,7 @@ function edgePath(cr, w, h, inset, r, clockwise) {
 
 export class EdgeLight {
     // full: run both lines from the bottom to the top, then glow and fade.
-    play({greeting = null, subtitle = false, duration = 2600} = {}) {
+    play({greeting = null, subtitle = false, duration = 2600, extra = []} = {}) {
         this.stop();
         const conf = welcomeConf();
         const monitor = Main.layoutManager.primaryMonitor;
@@ -106,31 +152,56 @@ export class EdgeLight {
         const W = monitor.width, H = monitor.height, T = 40;
         const strips = [[0, 0, W, T], [0, H - T, W, T], [0, T, T, H - 2 * T], [W - T, T, T, H - 2 * T]];
         let progress = 0;
+        // Two comets leave the bottom centre, run up the sides and meet at the
+        // top, where they bloom; then the whole frame glows once and fades.
+        const TRAVEL = 0.5;
         const paint = (cr, ox, oy) => {
-            const travel = ease(Math.min(1, progress / 0.55));
-            const glowPhase = Math.max(0, (progress - 0.55) / 0.45);
-            const alpha = glowPhase > 0 ? Math.max(0, 1 - glowPhase) : 1;
+            const travel = easeInOut(Math.min(1, progress / TRAVEL));
+            const after = Math.max(0, (progress - TRAVEL) / (1 - TRAVEL));
             const half = W + H; // approx. length of each side's path
-            const segment = Math.max(120, half * 0.28);
             const head = travel * half;
-            if (glowPhase === 0 && head < 1)
+            if (after === 0 && head < 1)
                 return;
             cr.translate(-ox, -oy);
             cr.setLineCap(Cairo.LineCap.ROUND);
+            const stroke = (clockwise, width, alpha, dash, offset) => {
+                const gradient = new Cairo.LinearGradient(0, H, W, 0);
+                gradient.addColorStopRGBA(0, ...a, alpha);
+                gradient.addColorStopRGBA(1, ...b, alpha);
+                edgePath(cr, W, H, 5, 20, clockwise);
+                cr.setSource(gradient);
+                cr.setLineWidth(width);
+                cr.setDash(dash, offset);
+                cr.stroke();
+            };
             for (const clockwise of [true, false]) {
-                for (const [width, layerAlpha] of [[26, 0.12], [12, 0.30], [4, 1]]) {
-                    const gradient = new Cairo.LinearGradient(0, H, W, 0);
-                    gradient.addColorStopRGBA(0, ...a, alpha * layerAlpha);
-                    gradient.addColorStopRGBA(1, ...b, alpha * layerAlpha);
-                    edgePath(cr, W, H, 5, 20, clockwise);
-                    cr.setSource(gradient);
-                    cr.setLineWidth(width);
-                    if (glowPhase > 0)
-                        cr.setDash([], 0);
-                    else
-                        cr.setDash([Math.min(segment, head), half * 2], -Math.max(0, head - segment));
-                    cr.stroke();
+                if (after === 0) {
+                    // the tail fades in steps behind a bright head
+                    const tail = Math.max(160, half * 0.32) * (0.6 + 0.4 * travel);
+                    for (let k = 5; k >= 0; k--) {
+                        const len = Math.min(head, tail * (k + 1) / 6);
+                        const fade = 1 - k / 6;
+                        for (const [width, layer] of [[24, 0.10], [10, 0.28], [3.5, 1]])
+                            stroke(clockwise, width, layer * fade, [len, half * 2], -Math.max(0, head - len));
+                    }
+                    stroke(clockwise, 7, 0.9, [1, half * 2], -Math.max(0, head - 1));  // the head
+                } else {
+                    // the full frame breathes out
+                    const glow = Math.sin(Math.min(1, after * 1.6) * Math.PI / 2) * (1 - after) ** 1.5;
+                    for (const [width, layer] of [[28, 0.12], [12, 0.32], [3.5, 1]])
+                        stroke(clockwise, width, layer * glow, [], 0);
                 }
+            }
+            if (oy === 0 && progress > TRAVEL * 0.9 && after < 0.7) {
+                // the bloom where the comets meet, at the top centre
+                const k = Math.min(1, (progress - TRAVEL * 0.9) / (TRAVEL * 0.15)) * (1 - after / 0.7);
+                const bloom = new Cairo.RadialGradient(W / 2, 5, 0, W / 2, 5, 220);
+                bloom.addColorStopRGBA(0, 1, 1, 1, 0.9 * k);
+                bloom.addColorStopRGBA(0.15, ...a, 0.5 * k);
+                bloom.addColorStopRGBA(1, ...b, 0);
+                cr.setSource(bloom);
+                cr.rectangle(W / 2 - 240, 0, 480, T);
+                cr.fill();
             }
         };
         this._areas = strips.map(([x, y, w, h]) => {
@@ -154,10 +225,10 @@ export class EdgeLight {
         timeline.start();
 
         if (greeting)
-            this._showGreeting(greeting, subtitle, duration, monitor, a);
+            this._showGreeting(greeting, subtitle, duration + 400 * extra.length, monitor, a, extra);
     }
 
-    _showGreeting(text, subtitle, duration, monitor, [r, g, b]) {
+    _showGreeting(text, subtitle, duration, monitor, [r, g, b], extra = []) {
         const glow = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},0.85)`;
         // Full monitor width with centred text, so nothing gets ellipsized.
         const box = new St.BoxLayout({
@@ -171,23 +242,30 @@ export class EdgeLight {
         });
         title.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         box.add_child(title);
-        if (subtitle) {
-            const now = GLib.DateTime.new_now_local();
+        const lines = [];
+        if (subtitle)
+            lines.push(GLib.DateTime.new_now_local().format('%A, %e %B · %H:%M').replace(/\s+/g, ' '));
+        for (const line of extra)
+            lines.push(line);
+        lines.forEach((line, i) => {
             const sub = new St.Label({
-                text: now.format('%A, %e %B · %H:%M').replace(/\s+/g, ' '),
-                style: 'font-size: 16px; color: rgba(230,244,255,0.75); margin-top: 10px;',
+                text: line,
+                style: i === 0 && subtitle
+                    ? 'font-size: 16px; color: rgba(230,244,255,0.78); margin-top: 10px;'
+                    : 'font-size: 15px; color: rgba(230,244,255,0.70); margin-top: 6px;',
                 x_align: Clutter.ActorAlign.CENTER,
             });
             sub.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
             box.add_child(sub);
-        }
+        });
         Main.layoutManager.uiGroup.add_child(box);
         this._greeting = box;
         box.set_position(monitor.x, monitor.y + Math.round(monitor.height * 0.33));
         box.set_pivot_point(0.5, 0.5);
         box.set_scale(0.96, 0.96);
         box.ease({
-            opacity: 255, scale_x: 1, scale_y: 1, delay: 120, duration: 450,
+            // in as the comets meet at the top: light and words land together
+            opacity: 255, scale_x: 1, scale_y: 1, delay: Math.round(duration * 0.32), duration: 520,
             mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
             onComplete: () => box.ease({
                 opacity: 0, delay: Math.max(600, duration - 1300), duration: 700,
@@ -321,11 +399,26 @@ export class Welcome {
     // At login: wait until every enabled extension has finished loading and
     // nothing has changed for a moment, so the welcome plays on a settled,
     // fully drawn desktop instead of competing with extensions starting up.
-    whenSettled(callback, {quietMs = 150, maxMs = 2500} = {}) {
+    whenSettled(callback, {quietMs = 150, maxMs = 3000} = {}) {
         const pending = [ExtensionState.INITIALIZED, ExtensionState.ACTIVATING, ExtensionState.DOWNLOADING];
         const shell = new Gio.Settings({schema_id: 'org.gnome.shell'});
         const started = GLib.get_monotonic_time();
         let lastChange = started;
+        // Apps starting at login keep the processor busy for a moment; light
+        // drawn then would stutter. Wait for a calm reading (or give up at maxMs).
+        let lastCpu = null;
+        const cpuQuiet = () => {
+            try {
+                const [, bytes] = GLib.file_get_contents('/proc/stat');
+                const f = new TextDecoder().decode(bytes).match(/^cpu\s+(.*)$/m)[1].split(/\s+/).map(Number);
+                const total = f.slice(0, 8).reduce((x, y) => x + y, 0), idle = f[3] + f[4];
+                const prev = lastCpu;
+                lastCpu = {total, idle};
+                return prev ? 1 - (idle - prev.idle) / Math.max(1, total - prev.total) < 0.6 : false;
+            } catch (e) {
+                return true;
+            }
+        };
         this._stateId = Main.extensionManager.connect('extension-state-changed', () => {
             lastChange = GLib.get_monotonic_time();
         });
@@ -335,7 +428,7 @@ export class Welcome {
                 const ext = Main.extensionManager.lookup(uuid);
                 return ext && pending.includes(ext.state);
             });
-            const settled = !busy && (now - lastChange) / 1000 >= quietMs;
+            const settled = !busy && (now - lastChange) / 1000 >= quietMs && cpuQuiet();
             if (!settled && (now - started) / 1000 < maxMs)
                 return GLib.SOURCE_CONTINUE;
             this._loginId = 0;
@@ -351,9 +444,47 @@ export class Welcome {
         if (!force && conf.WELCOME === 'off')
             return;
         const greeting = greetingText(conf);
-        this._light.play({greeting, subtitle: conf.SUBTITLE !== 'off', duration: 3400});
-        if (conf.VOICE === 'on')
-            run([`${BIN}/mk-voice`, 'say']);
+        const extra = [];
+        const todo = conf.TASKS !== 'off' ? agenda() : {pinned: [], next: null};
+        if (todo.pinned.length) {
+            const shown = todo.pinned.slice(0, 2).join(' · ');
+            extra.push(`📌 ${shown}${todo.pinned.length > 2 ? `  +${todo.pinned.length - 2} more` : ''}`);
+        }
+        if (todo.next)
+            extra.push(`⏰ ${todo.next.at}  ${todo.next.text}`);
+        const battery = batteryHint();
+        if (battery)
+            extra.push(`🔋 ${battery}`);
+        const duration = 3600;
+        this._light.play({greeting, subtitle: conf.SUBTITLE !== 'off', duration, extra});
+        if (conf.VOICE === 'on') {
+            // spoken as the words appear, not before
+            this._voiceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.round(duration * 0.28), () => {
+                this._voiceId = 0;
+                run([`${BIN}/mk-voice`, 'say']);
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        if (todo.pinned.length && !force) {
+            this._remindId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, duration + 1200, () => {
+                this._remindId = 0;
+                this._remindPinned(todo.pinned);
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+    }
+
+    // After the welcome: your pinned tasks, one click from the Companion.
+    _remindPinned(pinned) {
+        const source = MessageTray.getSystemSource();
+        const notification = new MessageTray.Notification({
+            source,
+            title: pinned.length === 1 ? 'Pinned task' : `${pinned.length} pinned tasks`,
+            body: pinned.slice(0, 5).map(t => `• ${t}`).join('\n'),
+            gicon: new Gio.ThemedIcon({name: 'view-pin-symbolic'}),
+        });
+        notification.addAction('Open', () => run([`${BIN}/mk-companion`, 'tasks']));
+        source.addNotification(notification);
     }
 
     _onNotification() {
@@ -364,6 +495,11 @@ export class Welcome {
     }
 
     disable() {
+        for (const id of ['_voiceId', '_remindId']) {
+            if (this[id])
+                GLib.source_remove(this[id]);
+            this[id] = 0;
+        }
         if (this._loginId) {
             GLib.source_remove(this._loginId);
             this._loginId = 0;

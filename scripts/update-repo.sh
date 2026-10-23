@@ -6,12 +6,15 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_DIR="$REPO_DIR/config"
 EXT_SETTINGS_DIR="$CONFIG_DIR/extension-settings"
 
-# Personal home paths become __USER_HOME__ so dumps work for any account;
-# usage history (Run dialog commands, recent emojis) and machine-specific
-# disk IDs (Astra Monitor's storage-main) are left out of the repo.
+# Personal home paths become __USER_HOME__ so dumps work for any account.
+# Left out of the repo: usage history (Run dialog commands, recent emojis),
+# machine-specific disk IDs (Astra Monitor's storage-main), and runtime state
+# that must not be restored elsewhere (Tiling Assistant's backup of GNOME's own
+# keys and version marker, Caffeine's current on/off state).
 dump() {
     dconf dump "$1" \
-        | sed -E -e "s|$HOME|__USER_HOME__|g" -e '/^(command-history|recently-used|storage-main)=/d'
+        | sed -E -e "s|$HOME|__USER_HOME__|g" \
+            -e '/^(command-history|recently-used|storage-main|overridden-settings|last-version-installed|user-enabled)=/d'
 }
 
 # dconf folder holding an extension's settings: from the settings-schema in its

@@ -1,11 +1,14 @@
 [/]
-custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom-obsidian/']
+control-center=['<Super>i']
+custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/mk-ocr/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/mk-emoji/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/mk-hud/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/mk-notes/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/mk-camera/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/mk-taskmgr/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/mk-terminal/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/mk-obsidian/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/mk-browser/']
+home=['<Super>e']
 next=['AudioNext']
 play=['XF86AudioPlay']
 previous=['AudioPrev']
 rfkill=@as []
 rfkill-bluetooth=@as []
 screensaver=['<Super>l']
+shutdown=['<Super>BackSpace', '<Super><Shift>x']
 volume-down=['AudioLowerVolume']
 volume-mute=@as []
 volume-up=['AudioRaiseVolume']
@@ -54,6 +57,51 @@ name='Camera Studio Controls'
 binding='<Super>z'
 command='systemctl hibernate'
 name='Hibernate'
+
+[custom-keybindings/mk-browser]
+binding='<Super>b'
+command='gtk-launch app.zen_browser.zen'
+name='Web Browser'
+
+[custom-keybindings/mk-camera]
+binding='<Super>c'
+command='__USER_HOME__/.local/bin/camera-controls'
+name='Camera Studio Controls'
+
+[custom-keybindings/mk-emoji]
+binding='<Super>period'
+command='gnome-characters'
+name='Emoji Board'
+
+[custom-keybindings/mk-hud]
+binding='<Super>slash'
+command='__USER_HOME__/.local/bin/show-shortcuts'
+name='Workstation Shortcuts HUD'
+
+[custom-keybindings/mk-notes]
+binding='<Super><Shift>n'
+command='__USER_HOME__/.local/bin/mk-scratchpad'
+name='Quick Notes & Timer'
+
+[custom-keybindings/mk-obsidian]
+binding='<Super>n'
+command='flatpak run md.obsidian.Obsidian'
+name='Notes (Obsidian)'
+
+[custom-keybindings/mk-ocr]
+binding='<Super><Shift>t'
+command='__USER_HOME__/.local/bin/ocr-snip'
+name='OCR Text Extractor'
+
+[custom-keybindings/mk-taskmgr]
+binding='<Control><Shift>Escape'
+command='gnome-system-monitor'
+name='System Monitor'
+
+[custom-keybindings/mk-terminal]
+binding='<Control><Alt>t'
+command='ptyxis'
+name='Terminal'
 
 [custom-keybindings/shutdown]
 binding='<Super>x'

@@ -1,0 +1,6 @@
+# dconf path: /org/gnome/shell/extensions/caffeine/
+[/]
+cli-toggle=false
+countdown-timer=900
+indicator-position-max=4
+restore-state=false

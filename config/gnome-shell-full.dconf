@@ -2,8 +2,8 @@
 app-picker-layout=[{'org.fedoraproject.MediaWriter.desktop': <{'position': <0>}>, 'org.gnome.Contacts.desktop': <{'position': <1>}>, 'org.gnome.Weather.desktop': <{'position': <2>}>, 'org.gnome.clocks.desktop': <{'position': <3>}>, 'org.gnome.Maps.desktop': <{'position': <4>}>, 'libreoffice-calc.desktop': <{'position': <5>}>, 'org.gnome.SimpleScan.desktop': <{'position': <6>}>, 'org.gnome.Settings.desktop': <{'position': <7>}>, 'org.gnome.Boxes.desktop': <{'position': <8>}>, 'org.gnome.Showtime.desktop': <{'position': <9>}>, 'org.gnome.Snapshot.desktop': <{'position': <10>}>, 'org.gnome.Characters.desktop': <{'position': <11>}>, 'Utilities': <{'position': <12>}>, 'System': <{'position': <13>}>, 'libreoffice-impress.desktop': <{'position': <14>}>, 'org.gnome.Tour.desktop': <{'position': <15>}>, 'org.gnome.Yelp.desktop': <{'position': <16>}>, 'libreoffice-writer.desktop': <{'position': <17>}>, 'org.flameshot.Flameshot.desktop': <{'position': <18>}>, 'org.mozilla.firefox.desktop': <{'position': <19>}>, 'net.lutris.Lutris.desktop': <{'position': <20>}>}, {'org.gnome.Calendar.desktop': <{'position': <0>}>, 'org.gnome.Calculator.desktop': <{'position': <1>}>, 'calf.desktop': <{'position': <2>}>, 'com.github.wwmm.easyeffects.desktop': <{'position': <3>}>, 'com.mattjakeman.ExtensionManager.desktop': <{'position': <4>}>, 'org.gnome.Extensions.desktop': <{'position': <5>}>, 'org.gnome.TextEditor.desktop': <{'position': <6>}>, 'org.gnome.Software.desktop': <{'position': <7>}>, 'hu.irl.cameractrls.desktop': <{'position': <8>}>, 'droidcam.desktop': <{'position': <9>}>, 'guvcview.desktop': <{'position': <10>}>, 'opencascade-draw.desktop': <{'position': <11>}>, 'Aula.desktop': <{'position': <12>}>, 'one.alynx.FlipClock.desktop': <{'position': <13>}>, 'ubuntu.desktop': <{'position': <14>}>, 'com.microsoft.VSCode.desktop': <{'position': <15>}>, 'echomixer.desktop': <{'position': <16>}>, 'envy24control.desktop': <{'position': <17>}>, 'hdajackretask.desktop': <{'position': <18>}>, 'hdspconf.desktop': <{'position': <19>}>, 'hdspmixer.desktop': <{'position': <20>}>, 'hwmixvolume.desktop': <{'position': <21>}>, 'net.sonobus.SonoBus.desktop': <{'position': <22>}>, 'org.gnome.seahorse.Application.desktop': <{'position': <23>}>}, {'org.gnome.Screenshot.desktop': <{'position': <0>}>, 'xonotic.desktop': <{'position': <1>}>, 'com.github.tenderowl.frog.desktop': <{'position': <2>}>, 'org.gnome.tweaks.desktop': <{'position': <3>}>}]
 disable-extension-version-validation=true
 disable-user-extensions=false
-disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'CoverflowAltTab@palatis.blogspot.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com', 'burn-my-windows@schneegans.github.com', 'caffeine@patapon.info', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'compiz-windows-effect@hermes83.github.com', 'ding@rastersoft.com', 'just-perfection-desktop@just-perfection', 'macos-dock@vinnytherobot.github.io', 'quick-settings-tweaks@qwreey', 'mk-indicator@mehulk']
-enabled-extensions=['touchpad-gesture-customization@coooolapps.com', 'blur-my-shell@aunetx', 'monitor@astraext.github.io', 'wack-shell@rinzler69-wastaken.github.com', 'text-extractor@imshaaz21.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'dash-to-dock@micxgx.gmail.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'screenshot-ocr@nbubis.github.com', 'clipboard-indicator@tudmotu.com']
+disabled-extensions=['window-list@gnome-shell-extensions.gcampax.github.com', 'CoverflowAltTab@palatis.blogspot.com', 'apps-menu@gnome-shell-extensions.gcampax.github.com', 'burn-my-windows@schneegans.github.com', 'compiz-alike-magic-lamp-effect@hermes83.github.com', 'compiz-windows-effect@hermes83.github.com', 'ding@rastersoft.com', 'just-perfection-desktop@just-perfection', 'macos-dock@vinnytherobot.github.io', 'quick-settings-tweaks@qwreey']
+enabled-extensions=['touchpad-gesture-customization@coooolapps.com', 'monitor@astraext.github.io', 'wack-shell@rinzler69-wastaken.github.com', 'text-extractor@imshaaz21.github.com', 'places-menu@gnome-shell-extensions.gcampax.github.com', 'dash-to-dock@micxgx.gmail.com', 'transparent-top-bar@ftpix.com', 'wack-lockscreen-clock@rinzler69-wastaken.github.com', 'screenshot-ocr@nbubis.github.com', 'clipboard-indicator@tudmotu.com', 'appindicatorsupport@rgcjonas.gmail.com', 'caffeine@patapon.info', 'mk-indicator@mehulk', 'tiling-assistant@leleat-on-github', 'blur-my-shell@aunetx']
 favorite-apps=['app.zen_browser.zen.desktop', 'com.spotify.Client.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop', 'com.rtosta.zapzap.desktop']
 last-selected-power-profile='performance'
 welcome-dialog-last-shown-version='50.0'
@@ -24,7 +24,6 @@ profiles='{"default":{"panel-margin-left":0,"sensors-header-tooltip-sensor2-digi
 sensors-indicators-order='["icon","value"]'
 shell-bar-position='top'
 storage-indicators-order='["icon","bar","percentage","value","free","IO bar","IO graph","IO speed"]'
-storage-main='eui.0025388601d0b17d-part9'
 theme-style='dark'
 
 [extensions/blur-my-shell]
@@ -120,7 +119,6 @@ cli-toggle=false
 countdown-timer=900
 indicator-position-max=4
 restore-state=false
-user-enabled=false
 
 [extensions/clipboard-indicator]
 enable-keybindings=true
@@ -362,7 +360,7 @@ scale-width=0.10000000000000001
 show-panel-icon=true
 
 [extensions/text-extractor]
-extract-shortcut=['<Shift>t']
+extract-shortcut=['<Super><Alt>t']
 show-indicator=false
 
 [extensions/tiling-assistant]
@@ -372,11 +370,13 @@ activate-layout2=@as []
 activate-layout3=@as []
 animation-time=150
 auto-tile=@as []
-center-window=@as []
+center-window=['<Super><Control>c']
 debugging-free-rects=@as []
 debugging-show-tiled-rects=@as []
 default-move-mode=0
-dynamic-keybinding-behavior=0
+dynamic-keybinding-behavior=3
+enable-layout-picker=true
+enable-raise-tile-group=true
 enable-snap-assist=true
 enable-snap-assistant=true
 enable-tile-animations=false
@@ -384,11 +384,10 @@ enable-tiling-popup=true
 focus-hint=0
 focus-hint-color='rgb(53,132,228)'
 import-layout-examples=false
-last-version-installed=56
 monitor-switch-grace-period=true
 popup-all-workspace-windows=false
 restore-window=['<Super>Down']
-search-popup-layout=@as []
+search-popup-layout=['<Super>z']
 tile-bottom-half=['<Super>KP_2']
 tile-bottom-half-ignore-ta=@as []
 tile-bottomleft-quarter=['<Super>KP_1']
@@ -460,18 +459,21 @@ vibrancy-style=1
 workspace-widget-type=0
 
 [keybindings]
-screenshot=['Print']
+focus-active-notification=@as []
+screenshot=['Print', '<Super><Shift>3']
 screenshot-window=['<Alt>Print']
-show-screenshot-ui=['<Super><Shift>s', 'Print']
-toggle-message-tray=@as []
-toggle-overview=['<Super>s', '<Super>Tab']
+show-screenshot-ui=['<Shift>Print', '<Super><Shift>s', '<Super><Shift>4']
+toggle-application-view=['<Super>a']
+toggle-message-tray=['<Super>m']
+toggle-overview=['<Super>s']
+toggle-quick-settings=['<Super><Shift>a']
 
 [weather]
 automatic-location=true
 locations=@av []
 
 [window-switcher]
-current-workspace-only=true
+current-workspace-only=false
 
 [world-clocks]
 locations=@av []

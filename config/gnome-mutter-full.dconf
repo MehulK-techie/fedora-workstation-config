@@ -1,6 +1,11 @@
 [/]
 center-new-windows=true
+check-alive-timeout=uint32 20000
 dynamic-workspaces=true
-edge-tiling=true
+edge-tiling=false
 experimental-features=['scale-monitor-framebuffer']
 workspaces-only-on-primary=false
+
+[keybindings]
+toggle-tiled-left=@as []
+toggle-tiled-right=@as []

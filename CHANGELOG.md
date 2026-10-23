@@ -8,6 +8,11 @@
 - **Shortcuts window (Super+/, GTK4):** every shortcut and touchpad gesture read live from GNOME, each marked working, clashing (with what), unset or broken; click to change keys, + to add command shortcuts, per-shortcut and full reset. All defaults now live in `config/shortcuts.conf`; your changes in `~/.config/mk-workstation/shortcuts.conf` survive `mk sync`.
 - **Companion (Super+Shift+N, GTK4):** multiple notes you can pin (always open, on top), reorder and fold away; a task list with checkboxes, pins, a progress bar, a Done section and undo; buttons for the focus timer and Obsidian. Imports the old `~/.mk_scratchpad.md` once.
 - **Focus timer (`mk-timer`):** minutes and seconds, presets, a glowing ring that turns amber then red, pause / +1 min. It hides while counting (not in Alt+Tab), then the pixel-robot celebration fills the screen instead of an alarm sound.
+- **Reminders** on notes and tasks (in N minutes, at a time, daily or weekly) that fire even with the Companion closed (`mk-reminders.timer`), with Open and Snooze; `mk note`, `mk task`, `mk remind`, `mk list` from a terminal, merged live into an open Companion.
+- **Focus mode:** the timer can silence notifications while it counts, and always restores them.
+- **Dock glow in each app's colour** (Spotify green, Obsidian purple…), worked out from the app icon; running-app dots match.
+- **`mk effects full | lite | auto`:** heavy effects off on weak machines (auto: under 4 GiB RAM, ≤2 cores or software graphics); list in `config/effects.conf`.
+- **docs/ARCHITECTURE.md** (how it works, how to extend it) and **docs/REFERENCE.md** (every command, file, format, timer).
 - **Rename it:** `mk rename "Name" TAG` or Companion › Rename; the top-bar tag follows live. Forks set the default in `config/brand.conf`.
 - **docs/CUSTOMIZING.md:** how to make it yours or fork it without editing scripts.
 - **Livelier desktop:** soft cyan hover glow on top-bar buttons, dock icons and overview windows; touchpad gestures in the Super+/ cheat sheet.

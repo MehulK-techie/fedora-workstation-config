@@ -22,6 +22,9 @@ There are two ways to customize:
 | Extensions and their settings | Extension Manager, then `mk save` | `config/enabled-extensions.txt`, `config/extension-settings/` |
 | Snap layouts (Super+Z) | `~/.config/tiling-assistant/layouts.json` | `config/tiling-layouts.json` |
 | Window open/close effect | Burn My Windows settings (make your own profile) | `config/burn-my-windows-profile.conf` |
+| Heavy effects on or off | `mk effects full`, `lite` or `auto` | `config/effects.conf` (which effects count as heavy, and the auto threshold) |
+| Focus timer silencing notifications | The switch in the timer | default in `bin/mk-timer` (`SILENCE`) |
+| Dock hover colours | Automatic from each app's icon | `extensions/mk-indicator@mehulk/dockGlow.js` (glow strength in `_hover`) |
 | Alt+Tab, dock and hover colours | — | `extensions/mk-indicator@mehulk/stylesheet.css` |
 
 ## Rename it
@@ -97,12 +100,22 @@ You can also edit the lists by hand: one Flatpak ID or dnf package name per
 line, and one extension UUID per line in `config/enabled-extensions.txt`.
 `mk update` installs anything newly added.
 
+## Effects and performance
+
+`mk effects` shows the current profile. `lite` keeps blur, window open/close
+effects and the genie minimize installed but switched off, which keeps older
+laptops and virtual machines smooth; `full` turns them on; `auto` (the
+default) chooses lite when the computer has less than 4 GiB of RAM, two CPU
+cores or fewer, or no GPU rendering. Change which effects count as heavy, or
+the RAM threshold, in `config/effects.conf`.
+
 ## Colours and look
 
 `extensions/mk-indicator@mehulk/stylesheet.css` styles the Alt+Tab switcher,
 the dock's hover glow, overview window titles and the top-bar buttons. Change
 the `rgba(0, 200, 255, …)` cyan to your colour, run `mk sync`, then log out and
-back in.
+back in. Dock icons don't use the cyan when they can help it: each glows in
+its app's own colour, worked out from the icon (`dockGlow.js`).
 
 The Companion and Focus Timer set their accent colour in the `CSS` block at
 the top of `bin/mk-companion` and `bin/mk-timer`.

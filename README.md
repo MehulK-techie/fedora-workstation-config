@@ -59,7 +59,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 **Feels familiar from Windows and macOS, still GNOME**
 - Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps, Super+Ctrl+←/→ desktops, Super+Ctrl+D new desktop, taskbar-style dock (click focuses or minimizes, window thumbnails for apps with several windows)
 - Windows-style multitasking: snap halves and quarters, Snap Assist, Super+Z snap layouts (halves, 66/34, three columns, left + two stacked, quarters, focus centre), always on top
-- macOS habits: trackpad gestures (4 fingers ←/→ switch Spaces, 3 fingers ←/→ switch apps, 3 fingers ↑ Mission Control), an auto-hiding dock that also steps aside in the overview, animations 25% faster, genie minimize into the dock, a soft glide when windows open and close, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
+- macOS habits: trackpad gestures (4 fingers ←/→ switch Spaces, 3 fingers ←/→ switch apps, 3 fingers ↑ Mission Control), an auto-hiding dock whose icons glow in each app's own colour (Spotify green, Obsidian purple) and that steps aside in the overview, animations 25% faster, genie minimize into the dock, a soft glide when windows open and close, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
 - Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
 - System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
 
@@ -74,8 +74,12 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Daily background check that tells you when a new version of this repo is available
 - **Shortcuts window (Super+/):** every shortcut and gesture, live, each marked working, clashing, unset or broken; click to change keys, + to add your own commands, Reset to go back
 - **Companion (Super+Shift+N):** notes you can pin, reorder and fold away; a task list you tick off and pin; one click to Obsidian or the focus timer
+- **Reminders:** on any note or task, in 10 min, at 18:00, or every day; they fire even with the Companion closed, with Open and Snooze
+- **Capture from the terminal:** `mk note "idea"`, `mk task "pay rent" 18:00`, `mk remind "stretch" 45m`, `mk list`
+- **Focus mode:** the timer can silence notifications while it counts and puts them back afterwards
+- **Smooth on any machine:** `mk effects lite` (or `auto` on weak hardware) turns off blur and window effects; `full` brings them back
 - **Focus timer:** minutes and seconds, hides while it counts, then a full-screen pixel celebration instead of an alarm
-- **Make it yours:** rename it (`mk rename`), change any shortcut without touching code; see [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md)
+- **Make it yours:** rename it (`mk rename`), change any shortcut, app, extension or colour without touching code; see [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md). Hackers: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/REFERENCE.md](docs/REFERENCE.md)
 - OCR text-from-screen and webcam controls
 - `just` recipes and GitHub Actions ShellCheck on every push
 
@@ -132,6 +136,8 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk save` | `just save` | Add apps you installed yourself to the lists, save extensions and settings, and commit |
 | `mk face` | `just face` | Face unlock wizard (`--models N`, `--user NAME`, `--tune-only`) |
 | `mk shortcuts` | | Shortcuts window: see, change, add or reset shortcuts (also Super+/) |
+| `mk note` · `mk task` · `mk remind` · `mk list` | | Add notes and tasks (with reminders) from a terminal; list them |
+| `mk effects full\|lite\|auto` | | Visual effects profile; lite keeps older machines smooth |
 | `mk rename "Name" TAG` | | Rename MK's windows, notifications and top-bar tag |
 | `mk uninstall` | | Remove MK's tools, shortcuts and helpers from your account |
 | | `just setup` | Full system setup (`sudo ./setup.sh`) |
@@ -186,17 +192,18 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 ├── sync-shortcuts.sh     Compatibility shim for older installs; runs sync.sh
 ├── justfile              just setup | sync | face | export | update | check
 ├── apps/                 dnf-packages.txt, flatpaks.txt
-├── bin/                  mk, mk-apps, mk-doctor, ocr-snip, show-shortcuts, mk-companion, mk-timer, camera-controls
-├── lib/mkworkstation/    Shared Python: branding, shortcut catalogue, applying it to GNOME
+├── bin/                  mk, mk-apps, mk-doctor, ocr-snip, show-shortcuts, mk-companion, mk-timer, mk-reminders, camera-controls
+├── lib/mkworkstation/    Shared Python: branding, shortcut catalogue, notes/tasks/reminders
 ├── config/
 │   ├── shortcuts.conf           Every keyboard shortcut (group | label | target | keys)
 │   ├── brand.conf               The name shown in MK's windows and top bar
+│   ├── effects.conf             Which effects `mk effects lite` turns off
 │   ├── enabled-extensions.txt   Extensions sync.sh installs and enables
 │   ├── extension-settings/      One saved .dconf per extension
 │   └── *.dconf                  Reference snapshots written by mk export
-├── extensions/           mk-indicator (ours) + WACK Shell (GPL, no GNOME 50 build online)
+├── extensions/           mk-indicator (ours: top-bar tag, dock glow, Alt+Tab theme) + WACK Shell (GPL, no GNOME 50 build online)
 ├── scripts/              update-repo.sh (mk export), lint.sh
-├── docs/                 GUIDE, CUSTOMIZING, FACE-UNLOCK, EXTENSIONS, BUGS, AI_PROMPT_TEMPLATE
+├── docs/                 GUIDE, CUSTOMIZING, ARCHITECTURE, REFERENCE, FACE-UNLOCK, EXTENSIONS, BUGS, AI_PROMPT_TEMPLATE
 └── .github/              ShellCheck CI, issue and pull request templates
 ```
 
@@ -206,6 +213,8 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 | :--- | :--- |
 | [docs/GUIDE.md](docs/GUIDE.md) | Installing and using it: beginners, everyday users, and contributors. Includes undo and troubleshooting. |
 | [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md) | Making it yours or forking it: rename, shortcuts, apps, extensions, colours, without touching the scripts |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit: setup, sync, the shared library, the apps, the shell extension, and how to add things |
+| [docs/REFERENCE.md](docs/REFERENCE.md) | Every `mk` command, tool, file, format, timer and path |
 | [docs/FACE-UNLOCK.md](docs/FACE-UNLOCK.md) | Face unlock in three steps, multiple faces, lighting, and security |
 | [docs/EXTENSIONS.md](docs/EXTENSIONS.md) | What each extension does and how to adjust it, with clicks or with commands |
 | [docs/BUGS.md](docs/BUGS.md) | Full audit: bugs, duplicated code, false claims, and how this compares to similar projects |

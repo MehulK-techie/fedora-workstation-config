@@ -31,14 +31,18 @@ DCONF_PROFILE=/tmp/mktest.profile dconf reset -f /
 
 ## Where things go
 
+Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the pieces fit.
+
 | Change | File |
 | :--- | :--- |
 | A package or Flatpak | `apps/dnf-packages.txt` or `apps/flatpaks.txt` (check the name with `dnf repoquery` / `flatpak remote-info flathub <id>`) |
-| A GNOME setting or shortcut | `sync.sh` |
+| A keyboard shortcut | One line in `config/shortcuts.conf` |
+| A GNOME setting | `sync.sh` |
 | An extension or its settings | Enable and tune it, then `mk export` (writes `config/`) |
 | A system-level step | `setup.sh` |
 | Face unlock | `register-face.sh` |
-| A desktop tool | `bin/` (plus `scripts/lint.sh` if it's a shell script) |
+| A desktop tool | `bin/`, plus `scripts/lint.sh`; shared Python logic goes in `lib/mkworkstation` |
+| Something in the top bar, dock or Alt+Tab | `extensions/mk-indicator@mehulk/` |
 
 ## Commits and pull requests
 

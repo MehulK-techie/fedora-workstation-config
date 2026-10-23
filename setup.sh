@@ -8,8 +8,9 @@ usage() {
     cat << 'EOF'
 Usage: sudo ./setup.sh [--no-face]
 
-Installs packages, repositories and Flatpaks, then applies the MK desktop
-settings (sync.sh) for the user who ran sudo. Safe to run more than once.
+Installs packages, repositories, codecs and Flatpaks, then applies the MK
+desktop settings (sync.sh) for the user who ran sudo. Safe to run more than
+once. A log of every run is kept in /var/log/mk-workstation-setup.log.
 
   --no-face   Skip Howdy face unlock (it is also skipped when no camera exists)
   -h, --help  Show this help
@@ -42,6 +43,10 @@ if [[ -e /run/ostree-booted ]]; then
     exit 1
 fi
 
+LOG_FILE="/var/log/mk-workstation-setup.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "[+] $(date -Is) MK Workstation setup started (log: $LOG_FILE)"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REAL_USER="${SUDO_USER:-$USER}"
 REAL_UID=$(id -u "$REAL_USER")
@@ -59,6 +64,16 @@ as_user() {
         "$@"
 }
 
+# Install packages only if missing, recording failures instead of aborting.
+ensure_pkgs() {
+    local missing=() pkg
+    for pkg in "$@"; do
+        rpm -q "$pkg" &>/dev/null || missing+=("$pkg")
+    done
+    (( ${#missing[@]} )) || return 0
+    dnf install -y "${missing[@]}" || WARNINGS+=("Could not install: ${missing[*]}")
+}
+
 echo "[+] Initializing System Provisioning..."
 
 # 1. Deduplicate & optimize DNF
@@ -71,13 +86,26 @@ if [[ -f "$DNF_CONF" ]]; then
     sed -i '/^\[main\]/a max_parallel_downloads=10\nfastestmirror=True\ndefaultyes=True' "$DNF_CONF"
 fi
 
-# 2. RPM Fusion
+# 2. Repositories: RPM Fusion and Microsoft's VS Code repo
 echo "==> Verifying repositories..."
 FEDORA_VER=$(rpm -E %fedora)
 if ! rpm -q rpmfusion-free-release rpmfusion-nonfree-release >/dev/null 2>&1; then
     dnf install -y \
         "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${FEDORA_VER}.noarch.rpm" \
         "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${FEDORA_VER}.noarch.rpm"
+fi
+if [[ ! -f /etc/yum.repos.d/vscode.repo ]]; then
+    rpm --import https://packages.microsoft.com/keys/microsoft.asc
+    cat > /etc/yum.repos.d/vscode.repo << 'EOF'
+[code]
+name=Visual Studio Code
+baseurl=https://packages.microsoft.com/yumrepos/vscode
+enabled=1
+autorefresh=1
+type=rpm-md
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+EOF
 fi
 
 # 3. Howdy face unlock (optional; needs a camera)
@@ -103,23 +131,60 @@ if [[ -f "$SCRIPT_DIR/apps/dnf-packages.txt" ]]; then
     done
 fi
 
-# 5. Flathub Core Runtime
+# 5. Multimedia codecs & hardware video decoding (RPM Fusion)
+echo "==> Enabling full multimedia codecs..."
+if rpm -q ffmpeg-free &>/dev/null && ! rpm -q ffmpeg &>/dev/null; then
+    dnf swap -y ffmpeg-free ffmpeg --allowerasing || WARNINGS+=("Could not replace ffmpeg-free with the full ffmpeg")
+fi
+
+GPU_INFO=$(lspci 2>/dev/null | grep -iE 'vga|3d|display' || true)
+if grep -qwE 'AMD|ATI' <<< "$GPU_INFO" && ! rpm -q mesa-va-drivers-freeworld &>/dev/null; then
+    echo "==> AMD graphics: enabling hardware video decoding..."
+    if rpm -q mesa-va-drivers &>/dev/null; then
+        dnf swap -y mesa-va-drivers mesa-va-drivers-freeworld --allowerasing \
+            || WARNINGS+=("Could not install mesa-va-drivers-freeworld (AMD video decoding)")
+    else
+        ensure_pkgs mesa-va-drivers-freeworld
+    fi
+fi
+if grep -qw Intel <<< "$GPU_INFO"; then
+    echo "==> Intel graphics: enabling hardware video decoding..."
+    ensure_pkgs intel-media-driver
+fi
+if grep -qiw nvidia <<< "$GPU_INFO"; then
+    ensure_pkgs libva-nvidia-driver
+    if ! rpm -q akmod-nvidia &>/dev/null; then
+        WARNINGS+=("NVIDIA GPU found: the proprietary driver isn't installed automatically (Secure Boot needs key enrollment); see GUIDE.md")
+    fi
+fi
+
+# 6. Flathub Core Runtime
 echo "==> Configuring Flathub..."
 flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 if [[ -f "$SCRIPT_DIR/apps/flatpaks.txt" ]]; then
     while IFS= read -r app || [[ -n "$app" ]]; do
         [[ -z "$app" || "$app" =~ ^# ]] && continue
-        flatpak install --system -y flathub "$app" || WARNINGS+=("Flatpak failed to install: $app")
+        flatpak install --system -y --noninteractive flathub "$app" || WARNINGS+=("Flatpak failed to install: $app")
     done < "$SCRIPT_DIR/apps/flatpaks.txt"
 fi
+flatpak update --system -y --noninteractive || WARNINGS+=("Flatpak update failed")
 
-# 6. Hardware / SELinux Permissions
+# 7. Hardware / SELinux Permissions
 if (( INSTALL_FACE )) && command -v getenforce &>/dev/null && [[ "$(getenforce)" == "Enforcing" ]]; then
     echo "==> Configuring SELinux biometric camera rule..."
     setsebool -P authlogin_camera 1 || WARNINGS+=("Could not set SELinux boolean authlogin_camera")
 fi
 
-# 7. Desktop settings, applied as the desktop user (sync.sh is the single source)
+# 8. Firmware: report available updates, never flash automatically
+if command -v fwupdmgr &>/dev/null; then
+    echo "==> Checking for firmware updates..."
+    fwupdmgr refresh --force &>/dev/null || true
+    if fwupdmgr get-updates --no-unreported-check --no-metadata-check < /dev/null &>/dev/null; then
+        WARNINGS+=("Firmware updates are available: review and apply them with 'fwupdmgr update'")
+    fi
+fi
+
+# 9. Desktop settings, applied as the desktop user (sync.sh is the single source)
 if [[ "$REAL_USER" == "root" ]]; then
     WARNINGS+=("Run via sudo from your desktop user to apply GNOME settings")
 elif [[ ! -S "$USER_RUNTIME/bus" ]]; then

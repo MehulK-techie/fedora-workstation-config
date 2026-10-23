@@ -125,10 +125,16 @@ for uuid in "${ACTIVE_EXTENSIONS[@]}"; do
         NEW_EXTENSIONS=1
     fi
 done
+# This project's own top-bar watermark: always refresh it so repo updates land.
+MK_INDICATOR="mk-indicator@mehulk"
+[[ -d "$USER_EXT_DIR/$MK_INDICATOR" ]] || NEW_EXTENSIONS=1
+rm -rf "${USER_EXT_DIR:?}/$MK_INDICATOR"
+cp -r "$SCRIPT_DIR/extensions/$MK_INDICATOR" "$USER_EXT_DIR/"
+
 gsettings set org.gnome.shell disable-user-extensions false
 # Write the list directly: `gnome-extensions enable` fails on Wayland for
 # extensions the running shell hasn't loaded yet.
-gsettings_append org.gnome.shell enabled-extensions "${ACTIVE_EXTENSIONS[@]}"
+gsettings_append org.gnome.shell enabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR"
 
 # 3. Window Management & Multitasking (All Workspaces, Zero Lag)
 echo "==> Applying window management keybindings..."

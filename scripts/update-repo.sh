@@ -6,9 +6,12 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_DIR="$REPO_DIR/config"
 USER_EXT_DIR="$HOME/.local/share/gnome-shell/extensions"
 
-# Personal home paths become __USER_HOME__ so dumps work for any account.
+# Personal home paths become __USER_HOME__ so dumps work for any account, and
+# usage history (Run dialog commands, recent emojis) is left out of the repo.
 dump() {
-    dconf dump "$1" | sed "s|$HOME|__USER_HOME__|g" > "$CONFIG_DIR/$2"
+    dconf dump "$1" \
+        | sed -E -e "s|$HOME|__USER_HOME__|g" -e '/^(command-history|recently-used)=/d' \
+        > "$CONFIG_DIR/$2"
 }
 
 echo "=== Syncing Local Settings to Repo ==="

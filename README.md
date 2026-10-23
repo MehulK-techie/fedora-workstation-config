@@ -9,13 +9,27 @@
 [![ShellCheck](https://github.com/MehulK-techie/fedora-workstation-config/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/MehulK-techie/fedora-workstation-config/actions/workflows/shellcheck.yml)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-[Quick start](#quick-start) · [Guide](docs/GUIDE.md) · [Face unlock](docs/FACE-UNLOCK.md) · [Extensions](docs/EXTENSIONS.md) · [Audit](docs/BUGS.md)
+[Quick start](#quick-start) · [Overview (PDF)](docs/MK-Workstation-Overview.pdf) · [Guide](docs/GUIDE.md) · [Hardware](docs/HARDWARE.md) · [Customize](docs/CUSTOMIZING.md) · [Reference](docs/REFERENCE.md)
 
-<img src="docs/assets/desktop.jpg" alt="MK Workstation desktop: GNOME overview with blurred top bar, live system monitor, search, and a floating dock" width="900">
+<img src="docs/assets/screens/overview.jpg" alt="MK Workstation: GNOME overview with the Companion notes app, workspaces and a blurred top bar" width="900">
 
-<sub>GNOME 50 overview with Blur my Shell, Astra Monitor, WACK Shell and Dash to Dock. Wallpaper art by its respective creator.</sub>
+<sub>The overview on an HP ENVY x360 13 running MK Workstation. Wallpaper: Fedora 44 default (CC BY-SA 4.0).</sub>
+
+**New here? [The 12-slide overview (PDF)](docs/MK-Workstation-Overview.pdf) explains stock Fedora and what this adds.**
 
 </div>
+
+---
+
+## A look around
+
+| | |
+| :---: | :---: |
+| <img src="docs/assets/screens/shortcuts-window.jpg" width="420"><br><sub>Super+/ · every shortcut, live, editable</sub> | <img src="docs/assets/screens/companion-tasks.jpg" width="420"><br><sub>Super+Shift+N · notes, tasks, reminders</sub> |
+| <img src="docs/assets/screens/focus-timer.jpg" width="420"><br><sub>Focus timer</sub> | <img src="docs/assets/screens/timer-celebration.jpg" width="420"><br><sub>…and the celebration when time is up</sub> |
+| <img src="docs/assets/screens/snap-layouts.jpg" width="420"><br><sub>Super+Z · snap layouts</sub> | <img src="docs/assets/screens/mk-device.jpg" width="420"><br><sub>mk device · what MK found on this laptop</sub> |
+
+<p align="center"><img src="docs/assets/screens/dock-magnify.jpg" width="640"><br><sub>Dock magnification and app-coloured glow</sub></p>
 
 ---
 
@@ -59,9 +73,15 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 **Feels familiar from Windows and macOS, still GNOME**
 - Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps, Super+Ctrl+←/→ desktops, Super+Ctrl+D new desktop, taskbar-style dock (click focuses or minimizes, window thumbnails for apps with several windows)
 - Windows-style multitasking: snap halves and quarters, Snap Assist, Super+Z snap layouts (halves, 66/34, three columns, left + two stacked, quarters, focus centre), always on top
-- macOS habits: trackpad gestures (4 fingers ←/→ switch Spaces, 3 fingers ←/→ switch apps, 3 fingers ↑ Mission Control), an auto-hiding dock whose icons glow in each app's own colour (Spotify green, Obsidian purple) and that steps aside in the overview, animations 25% faster, genie minimize into the dock, a soft glide when windows open and close, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
+- macOS habits: trackpad gestures (4 fingers ←/→ switch Spaces, 3 fingers ←/→ switch apps, 3 fingers ↑ Mission Control), an auto-hiding dock with macOS-style magnification whose icons glow softly in each app's own colour (Spotify green, Obsidian purple) and that steps aside in the overview, animations 25% faster, genie minimize into the dock, a soft glide when windows open and close, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
 - Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
 - System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
+
+**Made for your hardware** ([details](docs/HARDWARE.md))
+- Detects the machine and tunes for it: fingerprint reader, IR or regular webcam, Intel/AMD/NVIDIA video, 2-in-1 sensors, battery
+- **Fingerprint login** for login and sudo when a reader exists; `mk fingerprint` to enroll
+- Smooth login: the login screen uses your display layout, so there's no flicker between login and desktop
+- `mk device` shows what was found and what MK does about it
 
 **Face unlock** ([details](docs/FACE-UNLOCK.md))
 - A guided wizard records face models in normal, dim and bright light, so unlock keeps working as the room changes
@@ -142,6 +162,8 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk note` · `mk task` · `mk remind` · `mk list` | | Add notes and tasks (with reminders) from a terminal; list them |
 | `mk focus 25 "Label"` | | Start the focus timer in the background |
 | `mk power` | | Smart power profiles: status, on, off |
+| `mk device` | | What this computer has and what MK tunes for it |
+| `mk fingerprint` | | Enroll a finger for login and sudo (`list`, `delete`) |
 | `mk effects full\|lite\|auto` | | Visual effects profile; lite keeps older machines smooth |
 | `mk rename "Name" TAG` | | Rename MK's windows, notifications and top-bar tag |
 | `mk uninstall` | | Remove MK's tools, shortcuts and helpers from your account |
@@ -203,12 +225,15 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 │   ├── shortcuts.conf           Every keyboard shortcut (group | label | target | keys)
 │   ├── brand.conf               The name shown in MK's windows and top bar
 │   ├── effects.conf             Which effects `mk effects lite` turns off
+│   ├── dock.conf · power.conf   Dock magnification; smart power thresholds
 │   ├── enabled-extensions.txt   Extensions sync.sh installs and enables
 │   ├── extension-settings/      One saved .dconf per extension
 │   └── *.dconf                  Reference snapshots written by mk export
 ├── extensions/           mk-indicator (ours: top-bar tag, dock glow, Alt+Tab theme) + WACK Shell (GPL, no GNOME 50 build online)
 ├── scripts/              update-repo.sh (mk export), lint.sh
-├── docs/                 GUIDE, CUSTOMIZING, ARCHITECTURE, REFERENCE, FACE-UNLOCK, EXTENSIONS, BUGS, AI_PROMPT_TEMPLATE
+├── docs/                 GUIDE, HARDWARE, CUSTOMIZING, ARCHITECTURE, REFERENCE, FACE-UNLOCK, EXTENSIONS, BUGS
+│   ├── MK-Workstation-Overview.pdf   12-slide overview; overview/ rebuilds it
+│   └── assets/screens/           Screenshots (Fedora wallpaper)
 └── .github/              ShellCheck CI, issue and pull request templates
 ```
 
@@ -218,6 +243,8 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 | :--- | :--- |
 | [docs/GUIDE.md](docs/GUIDE.md) | Installing and using it: beginners, everyday users, and contributors. Includes undo and troubleshooting. |
 | [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md) | Making it yours or forking it: rename, shortcuts, apps, extensions, colours, without touching the scripts |
+| [docs/MK-Workstation-Overview.pdf](docs/MK-Workstation-Overview.pdf) | 12 slides to show someone: stock Fedora, what MK adds, screenshots (rebuild: `just overview`) |
+| [docs/HARDWARE.md](docs/HARDWARE.md) | What gets detected and tuned: fingerprint, cameras, GPUs, 2-in-1s, power, login screen; tested machines |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit: setup, sync, the shared library, the apps, the shell extension, and how to add things |
 | [docs/REFERENCE.md](docs/REFERENCE.md) | Every `mk` command, tool, file, format, timer and path |
 | [docs/FACE-UNLOCK.md](docs/FACE-UNLOCK.md) | Face unlock in three steps, multiple faces, lighting, and security |

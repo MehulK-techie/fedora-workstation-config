@@ -15,6 +15,11 @@
 - **Smart power profiles (laptops, `mk-power`):** performance on AC, balanced on battery, power-saver when low; only switches on changes, so manual choices stick; `config/power.conf`, `mk power`.
 - **Morning brief**, **`mk focus`**, automatic Trash/temp cleanup after 30 days, and slow search providers (Boxes, Contacts, Passwords) skipped.
 - Dock glow is now a subtle circular tint.
+- **Dock magnification** (macOS-style wave, `config/dock.conf`), tested in a headless GNOME Shell.
+- **Fingerprint login:** setup turns it on when a reader exists (authselect with PAM backup); `mk fingerprint` enrolls; `mk doctor` reports it.
+- **Hardware detection** (`mk device`, docs/HARDWARE.md): CPU driver, GPU decoding, touch, 2-in-1 sensors, readers, cameras; 2-in-1s get iio-sensor-proxy.
+- **Smoother login and unlock:** the login screen uses your monitor layout; mk-indicator stays loaded across the lock screen and no longer re-applies the top-bar blur after each unlock.
+- **docs/MK-Workstation-Overview.pdf** (12 slides) with its builder and screenshot script in docs/overview/; README gallery; screenshots now use Fedora's wallpaper.
 - **docs/ARCHITECTURE.md** (how it works, how to extend it) and **docs/REFERENCE.md** (every command, file, format, timer).
 - **Rename it:** `mk rename "Name" TAG` or Companion › Rename; the top-bar tag follows live. Forks set the default in `config/brand.conf`.
 - **docs/CUSTOMIZING.md:** how to make it yours or fork it without editing scripts.

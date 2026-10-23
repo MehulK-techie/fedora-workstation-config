@@ -20,6 +20,8 @@ Every command, file and format. How the parts fit together is in
 | `mk task "TEXT" [WHEN]` | Add a Companion task |
 | `mk remind "TEXT" WHEN` | Add a task with a reminder |
 | `mk list` | Print notes, tasks and reminders |
+| `mk device` | What this computer has and what MK tunes for it ([HARDWARE.md](HARDWARE.md)) |
+| `mk fingerprint [enroll [FINGER]\|list\|delete\|settings]` | Fingerprint enrollment for login and sudo |
 | `mk focus [DURATION] ["LABEL"]` | Start the focus timer in the background (`25`, `1:30`, `90s`) |
 | `mk power [status\|on\|off]` | Smart power profiles on laptops |
 | `mk effects [full\|lite\|auto]` | Show or set the visual effects profile |
@@ -53,6 +55,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | :--- | :--- | :--- |
 | `config/shortcuts.conf` | `group \| label \| target \| keys` (see below) | `sync.sh`, Shortcuts window |
 | `config/brand.conf` | `NAME=`, `SHORT=` | every MK window, top-bar tag, `mk` |
+| `config/dock.conf` | `MAGNIFY=`, `MAGNIFY_SPREAD=`, `MAGNIFY_MS=` | mk-indicator (dock magnification) |
 | `config/power.conf` | `ON_AC=`, `ON_BATTERY=`, `LOW_BATTERY=`, `LOW_PERCENT=` | `mk-power` |
 | `config/effects.conf` | `HEAVY=` UUIDs, `AUTO_LITE_BELOW_GB=` | `sync.sh` |
 | `config/enabled-extensions.txt` | one UUID per line | `sync.sh` |
@@ -85,6 +88,7 @@ empty means none. Group `-` applies but hides the line.
 | `~/.config/mk-workstation/brand.conf` | Your name for it | Yes: back to the default name |
 | `~/.config/mk-workstation/effects` | `full`, `lite` or `auto` | Yes: auto |
 | `~/.config/mk-workstation/timer.conf` | Focus timer preferences | Yes |
+| `~/.config/mk-workstation/dock.conf` | Your dock magnification values | Yes |
 | `~/.config/mk-workstation/power.conf` | Your power profile choices (same keys as `config/power.conf`) | Yes |
 | `~/.config/mk-workstation/power-off` | Present after `mk power off` | Yes: `mk power on` |
 | `~/.config/mk-workstation/backups/` | Settings snapshots; `original-dconf.ini` is your pre-MK desktop | Keep `original-dconf.ini` |

@@ -30,3 +30,11 @@ save:
 # Syntax-check and lint every script
 check:
     ./scripts/lint.sh
+
+# Rebuild docs/MK-Workstation-Overview.pdf from docs/assets/screens
+overview:
+    python3 docs/overview/build.py
+
+# Retake the screenshots on this desktop (drives it for ~90 s; see the script's header)
+screenshots:
+    python3 docs/overview/capture.py

@@ -238,6 +238,10 @@ Everything else, including multiple faces, lighting, security and troubleshootin
 
 ---
 
+## Fingerprint login
+
+If your laptop has a fingerprint reader, `sudo ./setup.sh` turns on fingerprint login for the login screen and `sudo`. Enroll a finger with `mk fingerprint` (touch the sensor 8–12 times), then lock the screen and try it. `mk device` shows whether a reader was found; [HARDWARE.md](HARDWARE.md) has the details.
+
 ## Undo and uninstall
 
 **Undo the last desktop sync:** `mk restore`. It puts back the settings snapshot `sync.sh` saved just before it ran, then you log out and back in. Snapshots are in `~/.config/mk-workstation/backups/`.

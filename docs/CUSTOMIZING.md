@@ -25,6 +25,7 @@ There are two ways to customize:
 | Power profiles (laptops) | `~/.config/mk-workstation/power.conf`, or `mk power off` | `config/power.conf` |
 | Heavy effects on or off | `mk effects full`, `lite` or `auto` | `config/effects.conf` (which effects count as heavy, and the auto threshold) |
 | Focus timer silencing notifications | The switch in the timer | default in `bin/mk-timer` (`SILENCE`) |
+| Dock magnification | `~/.config/mk-workstation/dock.conf` (`MAGNIFY=1` turns it off) | `config/dock.conf` |
 | Dock hover colours | Automatic from each app's icon | `extensions/mk-indicator@mehulk/dockGlow.js` (glow strength in `_hover`) |
 | Alt+Tab, dock and hover colours | — | `extensions/mk-indicator@mehulk/stylesheet.css` |
 

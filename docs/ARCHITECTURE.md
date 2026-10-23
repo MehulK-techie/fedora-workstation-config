@@ -49,6 +49,7 @@ the GTK apps.
 | :--- | :--- |
 | `__init__.py` | Branding (`brand()`, `set_brand()`); the shortcut catalogue: parse `shortcuts.conf`, merge your overrides, apply to GNOME (`apply`, `apply_all`), read live keys, check commands and extensions |
 | `companion.py` | Notes and tasks storage, time parsing (`30m`, `18:00`, `tomorrow 9:00`), reminder checks and notifications |
+| `device.py` | Hardware detection for `mk device` |
 | `__main__.py` | `python3 -m mkworkstation apply-shortcuts / brand / note / task / list` |
 
 Apps find the library next to themselves when run from the repo
@@ -93,9 +94,25 @@ test with `journalctl --user -f -o cat /usr/bin/gnome-shell`.
 | :--- | :--- |
 | `extension.js` | Top-bar tag (follows `brand.conf` live), hides the dock in the overview, rebuilds Blur my Shell's panel blur after startup |
 | `dockGlow.js` | Per-app hover colour for dock icons: saturation-weighted hue histogram of the app icon, cached per app |
+| `dockMagnify.js` | macOS-style magnification: magnified icons are clones on the UI layer (Dash to Dock clips its own icons), cosine falloff across neighbours |
 | `stylesheet.css` | Alt+Tab, hover transitions, overview captions, workspace thumbnails |
 
 Changes to extension code load only after logging out and back in (Wayland).
+It declares `session-modes: user, unlock-dialog`, so it stays loaded on the
+lock screen and pauses its dock work while locked instead of being rebuilt on
+every unlock.
+
+To test shell code without logging out, run a headless GNOME Shell with a
+throwaway home and D-Bus session:
+
+```bash
+RUN=$(mktemp -d /tmp/mkhs.XXXX)   # short path: Wayland socket names are limited to 108 bytes
+env -i HOME=/tmp/mk-home XDG_RUNTIME_DIR=$RUN PATH=/usr/bin:/bin \
+  dbus-run-session -- gnome-shell --headless --wayland --no-x11 --virtual-monitor 1920x1080
+```
+
+Copy the extension (and Dash to Dock if needed) into that home, enable them
+with `gsettings` inside the same session, and read the shell log for errors.
 
 ## Third-party patches
 

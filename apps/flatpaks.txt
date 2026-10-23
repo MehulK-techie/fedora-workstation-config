@@ -3,7 +3,6 @@
 
 # --- Browsing, notes and office ------------------------------------------------
 app.zen_browser.zen
-md.obsidian.Obsidian
 net.cozic.joplin_desktop
 org.onlyoffice.desktopeditors
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Companion (Super+Shift+N): notes, tasks, the focus timer and Obsidian.
+"""Companion (Super+Shift+N): notes, tasks, the focus timer and MK Notes.
 
 Notes: add as many as you like, pin the important ones (they stay open at the
 top), reorder them, and the rest fold away until you open them.
@@ -44,7 +44,6 @@ from mkworkstation import welcome as wconf  # noqa: E402
 APP_ID = "io.github.mehulk.MkCompanion"
 STORE = cstore.STORE
 OLD_SCRATCHPAD = Path.home() / ".mk_scratchpad.md"
-OBSIDIAN = "md.obsidian.Obsidian"
 
 CSS = b"""
 .mk-note-text { background: transparent; font-size: 1.02em; }
@@ -283,7 +282,7 @@ class CompanionWindow(Adw.ApplicationWindow):
         launchers = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER, margin_top=8, margin_bottom=12)
         for icon, label, tooltip, cb in (
             ("alarm-symbolic", "Focus timer", "Countdown with a celebration", self.open_timer),
-            ("accessories-text-editor-symbolic", "Obsidian", "Full notes app (Super+N)", self.open_obsidian),
+            ("accessories-text-editor-symbolic", "MK Notes", "Full notes app (Super+N)", self.open_notes),
         ):
             content = Adw.ButtonContent(icon_name=icon, label=label)
             button = Gtk.Button(child=content, tooltip_text=tooltip)
@@ -360,13 +359,9 @@ class CompanionWindow(Adw.ApplicationWindow):
         if not launch([str(Path.home() / ".local/bin/mk-timer")]):
             self.toast("Focus timer isn't installed: run mk sync")
 
-    def open_obsidian(self):
-        user_app = Path.home() / ".local/share/flatpak/app" / OBSIDIAN
-        if (user_app.exists() or Path("/var/lib/flatpak/app", OBSIDIAN).exists()) and \
-                launch(["flatpak", "run", OBSIDIAN]):
-            return
-        if not launch(["obsidian"]):
-            self.toast("Obsidian isn't installed: flatpak install flathub " + OBSIDIAN)
+    def open_notes(self):
+        if not launch([str(Path.home() / ".local/bin/mk-notes")]):
+            self.toast("MK Notes isn't installed: run mk sync")
 
     def welcome_dialog(self, *_):
         """What the welcome after login says, and how it sounds."""

@@ -297,9 +297,17 @@ def remove_custom(custom_id):
 
 def apply_all(verbose=False):
     skipped = []
-    for shortcut in load_shortcuts():
+    shortcuts = load_shortcuts()
+    for shortcut in shortcuts:
         if not apply(shortcut):
             skipped.append(shortcut.label)
+    # Command shortcuts MK used to set and no longer lists (e.g. Obsidian, now
+    # MK Notes): remove their slots so the keys don't keep an old action.
+    wanted = {s.custom_id for s in shortcuts if s.kind == "custom"}
+    media = Gio.Settings.new(MEDIA_KEYS)
+    for path in media.get_strv("custom-keybindings"):
+        if path.startswith(f"{CUSTOM_BASE}mk-") and path[len(CUSTOM_BASE) + 3:].rstrip("/") not in wanted:
+            remove_custom(path[len(CUSTOM_BASE) + 3:].rstrip("/"))
     Gio.Settings.sync()
     if verbose and skipped:
         print("    [*] Skipped (app or extension not installed): " + ", ".join(skipped))

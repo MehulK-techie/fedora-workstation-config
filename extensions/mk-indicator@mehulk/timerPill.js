@@ -8,6 +8,7 @@ import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { accentRGB } from './accent.js';
+import { FocusSaver } from './focusSaver.js';
 
 const STATE = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'timer.json']);
 const TIMER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-timer']);
@@ -22,6 +23,7 @@ function fmt(seconds) {
 export class TimerPill {
     enable() {
         this._state = null;
+        this._saver = new FocusSaver();
         this._button = new St.Button({
             style_class: 'panel-button', reactive: true, can_focus: true, visible: false,
             y_align: Clutter.ActorAlign.CENTER,
@@ -73,6 +75,11 @@ export class TimerPill {
             GLib.source_remove(this._tickId);
             this._tickId = 0;
         }
+        // mk-timer saw you step away: play its screensaver over your work.
+        if (running && this._state.ambient)
+            this._saver.show(this._state.ambient, () => `${this._state?.label ?? 'Focus'}  ·  ${fmt(this._left())} left`);
+        else
+            this._saver.hide();
         this._update();
     }
 
@@ -118,6 +125,8 @@ export class TimerPill {
     }
 
     setLocked(locked) {
+        if (locked)
+            this._saver?.hide(true);
         if (this._button)
             this._button.visible = !locked && Boolean(this._state?.running);
     }
@@ -129,6 +138,7 @@ export class TimerPill {
         }
         this._monitor?.cancel();
         this._monitor = null;
+        this._saver?.hide(true);
         this._button = this._label = this._ring = null;
     }
 

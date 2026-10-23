@@ -282,7 +282,7 @@ class CompanionWindow(Adw.ApplicationWindow):
         launchers = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER, margin_top=8, margin_bottom=12)
         for icon, label, tooltip, cb in (
             ("alarm-symbolic", "Focus timer", "Countdown with a celebration", self.open_timer),
-            ("accessories-text-editor-symbolic", "MK Notes", "Full notes app (Super+N)", self.open_notes),
+            ("accessories-text-editor-symbolic", "MK Notes", "Full notes app (Super+N)", self.launch_notes),
         ):
             content = Adw.ButtonContent(icon_name=icon, label=label)
             button = Gtk.Button(child=content, tooltip_text=tooltip)
@@ -359,7 +359,7 @@ class CompanionWindow(Adw.ApplicationWindow):
         if not launch([str(Path.home() / ".local/bin/mk-timer")]):
             self.toast("Focus timer isn't installed: run mk sync")
 
-    def open_notes(self):
+    def launch_notes(self):
         if not launch([str(Path.home() / ".local/bin/mk-notes")]):
             self.toast("MK Notes isn't installed: run mk sync")
 

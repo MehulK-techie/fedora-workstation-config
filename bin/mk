@@ -51,6 +51,11 @@ case "${1:-help}" in
         "$REPO_DIR/scripts/update-repo.sh"
         ;;
 
+    face)
+        shift
+        sudo "$REPO_DIR/register-face.sh" "$@"
+        ;;
+
     shortcuts|hud)
         "$HOME/.local/bin/show-shortcuts"
         ;;
@@ -64,6 +69,7 @@ case "${1:-help}" in
         echo "  check      Show a notification if updates are available"
         echo "  sync       Re-apply MK desktop settings (shortcuts, extensions, tweaks)"
         echo "  export     Save this machine's GNOME settings into the repo (for your fork)"
+        echo "  face       Set up face unlock (add --models N or --user NAME)"
         echo "  shortcuts  Open the interactive keyboard shortcuts cheat sheet"
         ;;
 esac

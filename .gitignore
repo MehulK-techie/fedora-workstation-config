@@ -32,3 +32,5 @@ sessionstore.jsonlz4
 recovery.jsonlz4
 places.sqlite*
 storage/
+HANDOFF.md
+.claude/settings.local.json

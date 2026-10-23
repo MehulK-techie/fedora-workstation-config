@@ -6,11 +6,12 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_DIR="$REPO_DIR/config"
 EXT_SETTINGS_DIR="$CONFIG_DIR/extension-settings"
 
-# Personal home paths become __USER_HOME__ so dumps work for any account, and
-# usage history (Run dialog commands, recent emojis) is left out of the repo.
+# Personal home paths become __USER_HOME__ so dumps work for any account;
+# usage history (Run dialog commands, recent emojis) and machine-specific
+# disk IDs (Astra Monitor's storage-main) are left out of the repo.
 dump() {
     dconf dump "$1" \
-        | sed -E -e "s|$HOME|__USER_HOME__|g" -e '/^(command-history|recently-used)=/d'
+        | sed -E -e "s|$HOME|__USER_HOME__|g" -e '/^(command-history|recently-used|storage-main)=/d'
 }
 
 # dconf folder holding an extension's settings: from the settings-schema in its

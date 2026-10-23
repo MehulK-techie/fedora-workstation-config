@@ -1,4 +1,4 @@
 # dconf path: /org/gnome/shell/extensions/text-extractor/
 [/]
-extract-shortcut=['<Shift>t']
+extract-shortcut=['<Super><Alt>t']
 show-indicator=false

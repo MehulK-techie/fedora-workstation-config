@@ -12,5 +12,4 @@ profiles='{"default":{"panel-margin-left":0,"sensors-header-tooltip-sensor2-digi
 sensors-indicators-order='["icon","value"]'
 shell-bar-position='top'
 storage-indicators-order='["icon","bar","percentage","value","free","IO bar","IO graph","IO speed"]'
-storage-main='eui.0025388601d0b17d-part9'
 theme-style='dark'

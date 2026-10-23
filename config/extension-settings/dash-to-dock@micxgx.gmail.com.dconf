@@ -1,0 +1,27 @@
+# dconf path: /org/gnome/shell/extensions/dash-to-dock/
+[/]
+animation-time=0.25
+autohide=true
+background-opacity=0.29999999999999999
+click-action='minimize'
+custom-theme-shrink=true
+customize-alphas=true
+dash-max-icon-size=38
+disable-overview-on-startup=true
+dock-fixed=false
+dock-position='BOTTOM'
+extend-height=false
+hide-delay=0.17999999999999999
+hide-tooltip=true
+hot-keys=false
+intellihide=true
+intellihide-mode='ALL_WINDOWS'
+isolate-monitors=true
+isolate-workspaces=true
+pressure-threshold=8.0
+require-pressure-to-show=true
+scroll-action='cycle-windows'
+show-delay=0.050000000000000003
+show-title=false
+show-windows-preview=false
+transparency-mode='FIXED'

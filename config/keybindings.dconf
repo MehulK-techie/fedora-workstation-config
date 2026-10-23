@@ -1,13 +1,24 @@
 [/]
-custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom-ocr/']
+custom-keybindings=['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom-obsidian/']
 next=['AudioNext']
 play=['XF86AudioPlay']
 previous=['AudioPrev']
 rfkill=@as []
 rfkill-bluetooth=@as []
+screensaver=['<Super>l']
 volume-down=['AudioLowerVolume']
 volume-mute=@as []
 volume-up=['AudioRaiseVolume']
+
+[custom-keybindings/close-workspace]
+binding='<Super><Shift>c'
+command='__USER_HOME__/.local/bin/close-workspace-apps'
+name='Close Workspace Apps'
+
+[custom-keybindings/custom-obsidian]
+binding='<Super>n'
+command='flatpak run md.obsidian.Obsidian'
+name='Launch Obsidian'
 
 [custom-keybindings/custom-ocr]
 binding='<Super><Shift>t'
@@ -15,9 +26,29 @@ command='__USER_HOME__/.local/bin/ocr-snip'
 name='Snip Text Extraction'
 
 [custom-keybindings/custom0]
-binding='Print'
-command='gnome-screenshot'
-name='Instant Screenshot'
+binding='<Super><Shift>t'
+command='__USER_HOME__/.local/bin/ocr-snip'
+name='Windows OCR Extractor'
+
+[custom-keybindings/custom1]
+binding='<Super>period'
+command='gnome-characters'
+name='Emoji Board'
+
+[custom-keybindings/custom2]
+binding='<Super>slash'
+command='__USER_HOME__/.local/bin/show-shortcuts'
+name='Workstation Shortcuts HUD'
+
+[custom-keybindings/custom3]
+binding='<Super>n'
+command='__USER_HOME__/.local/bin/mk-scratchpad'
+name='MK Quick Notes & Timer'
+
+[custom-keybindings/custom4]
+binding='<Super>c'
+command='__USER_HOME__/.local/bin/camera-controls'
+name='Camera Studio Controls'
 
 [custom-keybindings/hibernate]
 binding='<Super>z'
@@ -28,3 +59,8 @@ name='Hibernate'
 binding='<Super>x'
 command='systemctl poweroff'
 name='Shutdown'
+
+[custom-keybindings/system-lock]
+binding='<Super>l'
+command='loginctl lock-session'
+name='System Lock Screen'

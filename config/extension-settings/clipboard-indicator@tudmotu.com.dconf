@@ -1,0 +1,5 @@
+# dconf path: /org/gnome/shell/extensions/clipboard-indicator/
+[/]
+enable-keybindings=true
+next-history-clear=-1
+toggle-menu=['<Super>v']

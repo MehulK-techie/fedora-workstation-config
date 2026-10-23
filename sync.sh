@@ -57,6 +57,24 @@ ext_set() {
     fi
 }
 
+gnome_version() {
+    gnome-shell --version | grep -oE '[0-9]+' | head -n 1
+}
+
+# Download the build of an extension that matches this GNOME version.
+ego_install() {
+    local uuid=$1 url zip rc=0
+    command -v curl &>/dev/null || return 1
+    url=$(curl -fs --max-time 20 \
+        "https://extensions.gnome.org/extension-info/?uuid=${uuid}&shell_version=$(gnome_version)" \
+        | python3 -c 'import json, sys; print(json.load(sys.stdin)["download_url"])' 2>/dev/null) || return 1
+    zip=$(mktemp --suffix=.zip)
+    curl -fsSL --max-time 120 -o "$zip" "https://extensions.gnome.org${url}" \
+        && gnome-extensions install --force "$zip" || rc=1
+    rm -f "$zip"
+    return "$rc"
+}
+
 # Custom shortcuts live in named mk-* slots and are appended to the list, so
 # the user's own custom shortcuts (custom0, custom1, ...) are never touched.
 add_shortcut() {
@@ -102,27 +120,30 @@ cp -f "$SCRIPT_DIR/bin/"* "$HOME/.local/bin/"
 chmod +x "$HOME/.local/bin/"*
 printf '%s\n' "$SCRIPT_DIR" > "$HOME/.config/mk-workstation/repo-path"
 
-# 2. GNOME Extensions (Active 8)
+# 2. GNOME Extensions (list in config/enabled-extensions.txt, written by `mk export`)
 echo "==> Installing and enabling GNOME extensions..."
-ACTIVE_EXTENSIONS=(
-    touchpad-gesture-customization@coooolapps.com
-    blur-my-shell@aunetx
-    monitor@astraext.github.io
-    transparent-top-bar@ftpix.com
-    wack-shell@rinzler69-wastaken.github.com
-    text-extractor@imshaaz21.github.com
-    places-menu@gnome-shell-extensions.gcampax.github.com
-    dash-to-dock@micxgx.gmail.com
-)
+mapfile -t ACTIVE_EXTENSIONS < <(grep -vE '^\s*(#|$)' "$SCRIPT_DIR/config/enabled-extensions.txt" || true)
 mkdir -p "$USER_EXT_DIR"
 NEW_EXTENSIONS=0
 for uuid in "${ACTIVE_EXTENSIONS[@]}"; do
-    # Bundled copies fill gaps only; never replace a version that is already installed.
-    if [[ ! -d "$USER_EXT_DIR/$uuid" && ! -d "/usr/share/gnome-shell/extensions/$uuid" \
-        && -d "$SCRIPT_DIR/extensions/$uuid" ]]; then
+    # Never replace a version that is already installed.
+    if [[ -d "$USER_EXT_DIR/$uuid" || -d "/usr/share/gnome-shell/extensions/$uuid" ]]; then
+        continue
+    fi
+    if ego_install "$uuid"; then
+        echo "    [+] Installed $uuid from extensions.gnome.org"
+    elif [[ -d "$SCRIPT_DIR/extensions/$uuid" ]]; then
         cp -r "$SCRIPT_DIR/extensions/$uuid" "$USER_EXT_DIR/"
-        echo "    [+] Installed $uuid from repo"
-        NEW_EXTENSIONS=1
+        echo "    [+] Installed $uuid from the repo's offline copy"
+    else
+        echo "    [*] Couldn't install $uuid (offline, or no version for GNOME $(gnome_version))"
+        continue
+    fi
+    NEW_EXTENSIONS=1
+    # Extensions that ship only schema sources need them compiled for gsettings.
+    schemas="$USER_EXT_DIR/$uuid/schemas"
+    if [[ -d "$schemas" && ! -f "$schemas/gschemas.compiled" ]]; then
+        glib-compile-schemas "$schemas" || true
     fi
 done
 # This project's own top-bar watermark: always refresh it so repo updates land.
@@ -183,10 +204,20 @@ ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.overview b
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.lockscreen blur false
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel blur true
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel static-blur true
-ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.modal-dialogs blur true
-ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.modal-dialogs brightness 0.65
-ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.modal-dialogs sigma 30
 gsettings_append org.gnome.mutter experimental-features scale-monitor-framebuffer
+
+# Saved extension preferences (config/extension-settings/, written by `mk export`).
+# Loaded after the defaults above, so your own tuned values win.
+echo "==> Restoring saved extension settings..."
+for settings in "$SCRIPT_DIR"/config/extension-settings/*.dconf; do
+    [[ -e "$settings" ]] || continue
+    path=$(sed -n '1s/^# dconf path: //p' "$settings")
+    if [[ "$path" != /org/gnome/shell/extensions/*/ ]]; then
+        echo "    [*] Skipped $(basename "$settings") (missing '# dconf path:' header)"
+        continue
+    fi
+    sed "s|__USER_HOME__|$HOME|g" "$settings" | dconf load "$path"
+done
 
 # 8. Modern Modal Dialog Styling (written once; re-runs don't append again)
 SHELL_CSS="$HOME/.config/gnome-shell/gnome-shell.css"

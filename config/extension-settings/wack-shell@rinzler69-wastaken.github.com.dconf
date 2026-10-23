@@ -1,0 +1,19 @@
+# dconf path: /org/gnome/shell/extensions/wack-shell/
+[/]
+desktop-scroll=true
+disable-workspaces-in-app-grid=false
+enable-bottom-bar=false
+enable-panel-proximity=false
+enable-vibrancy=false
+logo-click-action=0
+logo-icon-image=2
+logo-middle-click-action=0
+show-app-menu=true
+show-logo-label=true
+show-logo-menu=true
+show-window-title=false
+show-workspace-number=false
+use-custom-logo=true
+vibrancy-blur-mode=3
+vibrancy-style=1
+workspace-widget-type=0

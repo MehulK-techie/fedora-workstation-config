@@ -1,13 +1,12 @@
+# Extensions sync.sh installs and enables. Written by 'mk export'; edit freely.
+# Missing ones are downloaded from extensions.gnome.org for your GNOME version.
 touchpad-gesture-customization@coooolapps.com
 blur-my-shell@aunetx
-tiling-assistant@leleat-on-github
 monitor@astraext.github.io
 clipboard-indicator@tudmotu.com
-compiz-windows-effect@hermes83.github.com
 transparent-top-bar@ftpix.com
 wack-lockscreen-clock@rinzler69-wastaken.github.com
 wack-shell@rinzler69-wastaken.github.com
 text-extractor@imshaaz21.github.com
-emoji-copy@felipeftn
 places-menu@gnome-shell-extensions.gcampax.github.com
 dash-to-dock@micxgx.gmail.com

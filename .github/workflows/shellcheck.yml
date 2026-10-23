@@ -1,0 +1,13 @@
+name: ShellCheck
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint all scripts
+        run: ./scripts/lint.sh

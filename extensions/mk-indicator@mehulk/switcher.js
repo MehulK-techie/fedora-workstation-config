@@ -14,7 +14,7 @@ const popupProto = SwitcherPopup.SwitcherPopup.prototype;
 const listProto = SwitcherPopup.SwitcherList.prototype;
 // The selected item keeps full size (scaling it up would be clipped by the
 // strip); the others shrink and dim, so the selection reads as lifted.
-const LIFT = 1.0, REST = 0.92, REST_OPACITY = 190, MS = 150;
+const LIFT = 1.0, REST = 0.92, REST_OPACITY = 190, MS = 90;
 
 function popIn(popup) {
     const list = popup._switcherList;

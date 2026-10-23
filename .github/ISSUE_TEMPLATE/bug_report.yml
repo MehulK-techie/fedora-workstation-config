@@ -1,0 +1,31 @@
+name: Bug report
+description: Something in MK Workstation doesn't work as described
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you run or press, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `mk doctor`
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Fedora and GNOME version
+      placeholder: Fedora 44, GNOME 50.6
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Relevant log
+      description: For setup problems, the end of /var/log/mk-workstation-setup.log. For desktop problems, `journalctl --user -b | grep -i "JS ERROR"`.
+      render: text

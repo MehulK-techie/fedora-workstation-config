@@ -404,6 +404,16 @@ data["session-modes"] = modes + ["unlock-dialog"]
 json.dump(data, open(path, "w"), indent=2)
 PY
 done
+# 3-finger Alt+Tab: the extension spreads one fixed swipe across all your
+# windows, so the more windows are open, the less finger travel each one gets
+# (with ten windows a small twitch skips two). Make it the same travel per
+# window whatever is open: steady and predictable, like scrolling a list.
+GESTURE_ALTTAB="$USER_EXT_DIR/touchpad-gesture-customization@coooolapps.com/src/altTab.js"
+if [[ -f "$GESTURE_ALTTAB" ]] && ! grep -q 'MK: same travel per window' "$GESTURE_ALTTAB" &&
+    grep -q 'this._progress = Math.clamp(this._progress + delta / distance, 0, 1);' "$GESTURE_ALTTAB"; then
+    sed -i 's#this._progress = Math.clamp(this._progress + delta / distance, 0, 1);#this._progress = Math.clamp(this._progress + delta / distance * 6 / Math.max(3, (this._switcher?._items.length ?? 4) + 2 * dummyWinCount), 0, 1); // MK: same travel per window#' "$GESTURE_ALTTAB"
+    echo "    [+] Patched 3-finger Alt+Tab for even finger travel per window (after logging in again)"
+fi
 # Burn My Windows: a short, subtle "Glide" when windows open and close. The MK
 # profile is high priority, so it wins over the default profile (Fire).
 BMW_PROFILE="$HOME/.config/burn-my-windows/profiles/mk-glide.conf"

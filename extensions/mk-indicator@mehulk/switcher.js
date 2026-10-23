@@ -23,11 +23,17 @@ const listProto = SwitcherPopup.SwitcherList.prototype;
 // strip); the others shrink and dim, so the selection reads as lifted.
 const LIFT = 1.0, REST = 0.92, REST_OPACITY = 190, MS = 90;
 
+// Touchpad Gesture Customization marks its switcher with this class.
+const isGesture = popup => popup._switcherList?.has_style_class_name('gie-alttab-quick-transition');
+
 function popIn(popup) {
     const list = popup._switcherList;
     if (!list || popup._mkPopped)
         return;
     popup._mkPopped = true;
+    // A swipe is already moving: appear at once, no entrance to wait for.
+    if (isGesture(popup))
+        return;
     list.set_pivot_point(0.5, 0.5);
     list.opacity = 0;
     list.set_scale(0.94, 0.94);
@@ -38,9 +44,21 @@ function popIn(popup) {
 }
 
 function settle(list, index) {
+    // Only the window that lost the selection and the one that got it change;
+    // the first time, set every item up.
+    const previous = list._mkSelected;
+    list._mkSelected = index;
     list._items.forEach((item, i) => {
+        if (previous !== undefined && i !== index && i !== previous)
+            return;
         const selected = i === index;
         item.set_pivot_point(0.5, 0.5);
+        if (previous === undefined) {
+            // first look: no animations to start, just the resting state
+            item.set_scale(selected ? LIFT : REST, selected ? LIFT : REST);
+            item.opacity = selected ? 255 : REST_OPACITY;
+            return;
+        }
         item.remove_transition('scale-x');
         item.remove_transition('scale-y');
         item.remove_transition('opacity');
@@ -54,9 +72,9 @@ function settle(list, index) {
     });
 }
 
-// How quickly the ring catches up: higher is snappier. 24/s settles in
-// about 120 ms, quick enough to keep up with a fast swipe without jumping.
-const FOLLOW = 24, PAD = 3;
+// How quickly the ring catches up: higher is snappier. 45/s settles in
+// about 65 ms: it stays glued to your fingers but never teleports.
+const FOLLOW = 45, PAD = 3;
 
 // The sliding ring, added above the popup and placed in stage coordinates,
 // so it can move freely across the strip (and while the strip scrolls).
@@ -64,7 +82,6 @@ function addGlide(popup) {
     const list = popup._switcherList;
     if (!list || popup._mkGlide)
         return;
-    list.add_style_class_name('mk-glide');
     const c = accentRGB().join(',');
     const ring = new St.Widget({
         reactive: false, opacity: 0,
@@ -116,8 +133,15 @@ export class SwitcherAnimation {
 
         popupProto.show = function (...args) {
             const shown = show.apply(this, args);
-            if (shown)
-                addGlide(this);
+            // The ring isn't needed for the very first frame: build it right
+            // after, so the switcher appears as fast as GNOME's own.
+            if (shown) {
+                GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                    if (this._switcherList?.get_stage())
+                        addGlide(this);
+                    return GLib.SOURCE_REMOVE;
+                });
+            }
             if (this.opacity > 0) {
                 popIn(this);
             } else {

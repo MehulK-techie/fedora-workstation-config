@@ -5,90 +5,42 @@
 ---
 
 ### ARCHITECTURAL CONTEXT
-- **Operating System:** Fedora Workstation (GNOME Shell on Wayland)
+- **Operating System:** Fedora Workstation 44 (GNOME 50 on Wayland)
 - **Repository:** https://github.com/MehulK-techie/fedora-workstation-config (Branch: `main`)
-- **Local Path:** `~/Desktop/Fedora_workspace_MK`
+- **Local Path:** wherever the repo was cloned (the `mk` CLI records it in `~/.config/mk-workstation/repo-path`)
+- **Script roles:** `setup.sh` (root: DNF, RPM Fusion, Flatpaks, Howdy) → runs `sync.sh` as the user (the single source of all GNOME settings); `register-face.sh` (Howdy enrollment + PAM); `mk export` dumps settings into `config/`
 
-### ACTIVE EXTENSIONS (13 TOTAL)
-1. Astra Monitor (`monitor@astraext.github.io`)
+### ACTIVE EXTENSIONS (8, set in `sync.sh`)
+1. Touchpad Gesture Customization (`touchpad-gesture-customization@coooolapps.com`)
 2. Blur my Shell (`blur-my-shell@aunetx`)
-3. Clipboard Indicator (`clipboard-indicator@tudmotu.com`)
-4. Compiz Windows Effect (`compiz-windows-effect@hermes83.github.com`)
-5. Tiling Assistant (`tiling-assistant@leleat-on-github`)
-6. Touchpad Gesture Customization (`touchpad-gesture-customization@coooolapps.com`)
-7. Transparent Top Bar (`transparent-top-bar@ftpix.com`)
-8. WACK Shell (`wack-shell@rinzler69-wastaken.github.com`)
-9. Apps Menu (`apps-menu@gnome-shell-extensions.gcampax.github.com`)
-10. Dash to Dock (`dash-to-dock@micxgx.gmail.com`)
-11. Places Status Indicator (`places-menu@gnome-shell-extensions.gcampax.github.com`)
-12. Text Extractor (`text-extractor@imshaaz21.github.com`)
-13. Emoji Copy (`emoji-copy@felipeftn`)
+3. Astra Monitor (`monitor@astraext.github.io`)
+4. Transparent Top Bar (`transparent-top-bar@ftpix.com`)
+5. WACK Shell (`wack-shell@rinzler69-wastaken.github.com`)
+6. Text Extractor (`text-extractor@imshaaz21.github.com`)
+7. Places Status Indicator (`places-menu@gnome-shell-extensions.gcampax.github.com`)
+8. Dash to Dock (`dash-to-dock@micxgx.gmail.com`)
 
 ### KEYBINDING & UTILITY MATRIX
-- `Super + Shift + T` : OCR Screen Snip Extractor
-- `Super + .` : Searchable Emoji Copy Overlay
-- `Super + /` : Dynamic Shortcuts & Custom Command Manager
-- `Super + Shift + C` : Close Workspace Applications
-- `Alt + Tab` : Global Multi-Workspace Window Switcher
-- Font Antialiasing : Grayscale rendering
+- `Super + Shift + T` : OCR Screen Snip Extractor (`ocr-snip`, via the screenshot portal)
+- `Super + .` : Emoji Board (GNOME Characters)
+- `Super + /` : Live Shortcuts HUD
+- `Super + N` : Quick Notes & Focus Timer
+- `Super + C` : Camera Controls Studio
+- `Alt + Tab` / `Super + Tab` : Window switcher across all workspaces / app switcher
+- `Super + Backspace` / `Super + Shift + X` : Shut down dialog
+- `Ctrl + Alt + ←/→` : left free for Zen Browser workspaces
+- Face unlock: Howdy (`pam_howdy.so`) on GDM and sudo
 
 ---
 
 ### COLLABORATION GUIDELINES
-Use this context as background knowledge. Feel free to adapt flexibly to any request, creative workflow, optimization, or troubleshooting intent with full creative freedom.
+Use this context as background knowledge. Feel free to adapt flexibly to any request, creative workflow, optimization, or troubleshooting intent with full creative freedom. Scripts must stay idempotent, back up system files before editing, and route root-run gsettings through `as_user()` (see `CLAUDE.md`).
 
 ---
 
 ### MY TASK / QUESTION:
 [Insert your question or request here]
 
-
-# 🚀 Fedora GNOME Workstation Setup & Configuration Suite
-
-Low-latency Fedora GNOME Workstation configuration repository featuring automated keybinding persistence, modular package management, floating translucent dock, instant fingerprint unlock, multi-workspace navigation, and custom utilities.[cite: 5]
-
 ---
 
-## 📋 1. Pre-Installation Setup (Windows Preparation)
-
-Before installing Fedora Workstation alongside or over Windows, complete these mandatory preparation steps:
-
-### A. Disable BitLocker & Decrypt Storage
-1. Open **Control Panel** (or **Settings** > **Privacy & Security** > **Device Encryption**).
-2. Open **BitLocker Drive Encryption**.
-3. Click **Turn off BitLocker** / **Turn off Encryption**.
-4. **Crucial:** Wait until drive decryption reaches **100%** before resizing partitions or booting the Linux installer (prevents locked partitions and installer crashes).
-
-### B. Disable Windows Fast Startup
-1. Open **Control Panel** > **Hardware and Sound** > **Power Options**.
-2. Click **Choose what the power buttons do** in the left sidebar.
-3. Click **Change settings that are currently unavailable**.
-4. Uncheck **Turn on fast startup (recommended)** and click **Save changes** (prevents Windows from leaving drive controllers in a locked hibernation state).
-
-### C. Create Bootable USB Media via Rufus
-1. Download the latest **Fedora Workstation ISO** and launch **Rufus** on Windows.
-2. Select your USB flash drive (8GB+ required).
-3. Set **Partition scheme** to `GPT`.
-4. Set **Target system** to `UEFI (non CSM)`.
-5. Click **START**.
-6. When Rufus prompts for image writing mode, select **Write in DD Image mode** to ensure clean UEFI installer boot media.
-
----
-
-## ⚙️ 2. BIOS / UEFI Configurations
-
-1. Restart your PC and tap the BIOS setup key (`F2`, `F12`, or `Del`).
-2. Set **SATA Controller Mode** to **AHCI** (disable Intel VMD / RST if enabled).
-3. Ensure **UEFI Boot Mode** is active and **Secure Boot** is configured according to your driver needs.
-
----
-
-## 💻 3. Post-Install Workspace Synchronization
-
-Once booted into Fedora Workstation, open a terminal to clone your repository and sync your environment[cite: 5]:
-
-```bash
-git clone https://github.com/MehulK-techie/fedora-workstation-config.git
-cd fedora-workstation-config
-chmod +x sync.sh
-./sync.sh "init: workstation configuration active"
+For installation and dual-boot preparation steps, see [GUIDE.md](GUIDE.md).

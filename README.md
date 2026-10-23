@@ -52,14 +52,14 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Hardware video decoding: detects your GPU and installs the right VA-API driver, so video plays on the GPU instead of the CPU
 
 **Desktop, kept in sync**
-- 16 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
+- 17 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
 - `mk export` saves your current extensions and their settings into the repo; `mk sync` puts them back on any machine
 - Alt+Tab across all workspaces, window snapping, screenshot and power keys, blur and dock styling
 
 **Feels familiar from Windows and macOS, still GNOME**
 - Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps, Super+Ctrl+←/→ desktops, Super+Ctrl+D new desktop, taskbar-style dock (click focuses or minimizes, window thumbnails for apps with several windows)
 - Windows-style multitasking: snap halves and quarters, Snap Assist, Super+Z snap layouts (halves, 66/34, three columns, left + two stacked, quarters, focus centre), always on top
-- macOS habits: trackpad gestures (4 fingers ←/→ switch Spaces, 3 fingers ←/→ switch apps, 3 fingers ↑ Mission Control), a dock that windows never cover, animations 25% faster, genie minimize into the dock, a soft glide when windows open and close, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
+- macOS habits: trackpad gestures (4 fingers ←/→ switch Spaces, 3 fingers ←/→ switch apps, 3 fingers ↑ Mission Control), an auto-hiding dock that also steps aside in the overview, named workspace pills in the top bar (click, scroll, drag, Super+W to rename), animations 25% faster, genie minimize into the dock, a soft glide when windows open and close, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
 - Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
 - System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
 
@@ -145,6 +145,7 @@ Press **Super+/** for a live cheat sheet that always matches your keyboard.
 | | `Super+↑` · `Super+↓` | Maximize · restore |
 | | `Super+Ctrl+T` · `Super+Ctrl+C` · `Super+Ctrl+F` | Always on top · centre window · full screen |
 | | `Super+Ctrl+←/→` · `Super+Ctrl+D` | Previous / next desktop · new desktop (add `Shift` to take the window along) |
+| | `Super+W` · `Ctrl+Alt+Super+←/→` | Workspace menu and rename · reorder the current workspace |
 | | `Super+D` · `Super+E` · `Super+I` | Show desktop · Files · Settings |
 | | `Super+S` · `Super+R` | Search · run a command |
 | | `Super+1…9` | Open the 1st…9th dock app |

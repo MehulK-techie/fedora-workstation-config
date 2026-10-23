@@ -1,7 +1,7 @@
 {
   "uuid": "mk-indicator@mehulk",
   "name": "MK Workstation Indicator",
-  "description": "Displays the custom MK Workstation Edition watermark badge on the top status panel.",
+  "description": "MK Workstation: top-bar watermark, themed Alt+Tab and hover effects, and hides the dock in the overview.",
   "shell-version": [
     "45",
     "46",

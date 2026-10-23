@@ -67,6 +67,8 @@ row "Show desktop"                "$(get_key org.gnome.desktop.wm.keybindings sh
 row "Workspace left / right"      "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-left)"
 row "Go to workspace 1-4"         "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-1) to 4"
 row "New desktop"                 "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-last)  (add Shift to take the window)"
+row "Workspace menu (rename)"     "Super+W  ·  or right-click a workspace in the top bar"
+row "Reorder current workspace"   "Ctrl+Alt+Super+Left / Right"
 row "Open dock app 1-9"           "$(get_key org.gnome.shell.keybindings switch-to-application-1) to 9"
 
 echo ""

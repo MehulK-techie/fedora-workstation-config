@@ -1,0 +1,24 @@
+# dconf path: /org/gnome/shell/extensions/space-bar/
+[behavior]
+always-show-numbers=true
+indicator-style='workspaces-bar'
+position='left'
+scroll-wheel='panel'
+show-empty-workspaces=true
+smart-workspace-names=true
+toggle-overview=true
+
+[appearance]
+active-workspace-background-color='rgba(0,200,255,0.22)'
+active-workspace-border-color='rgba(0,210,255,0.85)'
+active-workspace-border-radius=10
+active-workspace-border-width=1
+active-workspace-padding-h=10
+active-workspace-text-color='rgba(230,244,255,1)'
+empty-workspace-text-color='rgba(255,255,255,0.35)'
+empty-workspace-border-radius=10
+inactive-workspace-background-color='rgba(255,255,255,0.06)'
+inactive-workspace-border-radius=10
+inactive-workspace-padding-h=10
+inactive-workspace-text-color='rgba(255,255,255,0.75)'
+workspace-margin=3

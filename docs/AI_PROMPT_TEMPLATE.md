@@ -10,8 +10,8 @@
 - **Local Path:** wherever the repo was cloned (the `mk` CLI records it in `~/.config/mk-workstation/repo-path`)
 - **Script roles:** `setup.sh` (root: DNF, RPM Fusion, Flatpaks, Howdy) → runs `sync.sh` as the user (the single source of all GNOME settings); `register-face.sh` (face unlock wizard + PAM); `mk export` saves settings and extensions into `config/`
 
-### ACTIVE EXTENSIONS (16, listed in `config/enabled-extensions.txt`, settings in `config/extension-settings/`)
-Touchpad Gesture Customization, Blur my Shell, Astra Monitor, Clipboard Indicator, Transparent Top Bar, WACK Lockscreen Clock, WACK Shell, Text Extractor, Places Status Indicator, Dash to Dock, AppIndicator, Caffeine, Tiling Assistant, Magic Lamp, Impatience, Burn My Windows, plus the project's own `mk-indicator@mehulk`.
+### ACTIVE EXTENSIONS (17, listed in `config/enabled-extensions.txt`, settings in `config/extension-settings/`)
+Touchpad Gesture Customization, Blur my Shell, Astra Monitor, Clipboard Indicator, Transparent Top Bar, WACK Lockscreen Clock, WACK Shell, Text Extractor, Places Status Indicator, Dash to Dock, AppIndicator, Caffeine, Tiling Assistant, Magic Lamp, Impatience, Burn My Windows, Space Bar, plus the project's own `mk-indicator@mehulk`.
 
 ### KEYBINDING & UTILITY MATRIX
 - `Super + Shift + T` / `Super + Alt + T` : OCR (`ocr-snip` via the screenshot portal / Text Extractor)

@@ -10,11 +10,11 @@ EXT_SETTINGS_DIR="$CONFIG_DIR/extension-settings"
 # Left out of the repo: usage history (Run dialog commands, recent emojis),
 # machine-specific disk IDs (Astra Monitor's storage-main), and runtime state
 # that must not be restored elsewhere (Tiling Assistant's backup of GNOME's own
-# keys and version marker, Caffeine's current on/off state).
+# keys and version marker, Caffeine's current on/off state, Space Bar's workspace names).
 dump() {
     dconf dump "$1" \
         | sed -E -e "s|$HOME|__USER_HOME__|g" \
-            -e '/^(command-history|recently-used|storage-main|overridden-settings|last-version-installed|user-enabled)=/d'
+            -e '/^(command-history|recently-used|storage-main|overridden-settings|last-version-installed|user-enabled|workspace-names-map)=/d'
 }
 
 # dconf folder holding an extension's settings: from the settings-schema in its

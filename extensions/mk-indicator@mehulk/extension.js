@@ -32,9 +32,45 @@ export default class MKIndicatorExtension extends Extension {
         });
 
         Main.panel._rightBox.insert_child_at_index(this._indicator, 0);
+
+        // The dock auto-hides on the desktop, but Dash to Dock always shows it
+        // in the overview, on top of window titles. Fade it out there too.
+        this._overviewIds = [
+            Main.overview.connect('showing', () => this._setDocksShown(false)),
+            Main.overview.connect('hiding', () => this._setDocksShown(true)),
+        ];
+    }
+
+    _setDocksShown(shown) {
+        for (const dock of Main.uiGroup.get_children()) {
+            if (dock.name !== 'dashtodockContainer')
+                continue;
+            dock.remove_transition('opacity');
+            if (shown)
+                dock.show();
+            dock.ease({
+                opacity: shown ? 255 : 0,
+                duration: 150,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                onComplete: () => {
+                    if (!shown)
+                        dock.hide();
+                },
+            });
+        }
     }
 
     disable() {
+        this._overviewIds?.forEach(id => Main.overview.disconnect(id));
+        this._overviewIds = null;
+        for (const dock of Main.uiGroup.get_children()) {
+            if (dock.name === 'dashtodockContainer') {
+                dock.remove_transition('opacity');
+                dock.opacity = 255;
+                dock.show();
+            }
+        }
+
         if (this._indicator) {
             this._indicator.destroy();
             this._indicator = null;

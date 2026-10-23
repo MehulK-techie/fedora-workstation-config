@@ -1,9 +1,0 @@
-# dconf path: /org/gnome/shell/extensions/hidetopbar/
-[/]
-animation-time-autohide=0.2
-enable-active-window=true
-enable-intellihide=true
-keep-round-corners=true
-mouse-sensitive=true
-mouse-sensitive-fullscreen-window=true
-show-in-overview=true

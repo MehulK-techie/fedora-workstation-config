@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **macOS feel:** genie minimize (Magic Lamp), auto-hiding top bar (Hide Top Bar, bundled for when extensions.gnome.org is unreachable), Super+Ctrl+F full screen, Finder-style Files, sharp X11 apps at fractional scaling.
 - **Themed Alt+Tab:** GNOME's flat switcher with live thumbnails of every window on every workspace, styled by mk-indicator's stylesheet (frosted navy panel, cyan selection).
 - **Windows-style multitasking** (Tiling Assistant): snap halves and quarters, Snap Assist, six snap layouts on Super+Z, tile groups, always on top (Super+Ctrl+T), Super+Ctrl+←/→ desktops.
 - **Super+N** Obsidian and **Super+B** default browser; duplicate user shortcuts are folded into the mk-* versions.

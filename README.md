@@ -52,14 +52,14 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Hardware video decoding: detects your GPU and installs the right VA-API driver, so video plays on the GPU instead of the CPU
 
 **Desktop, kept in sync**
-- 13 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
+- 15 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
 - `mk export` saves your current extensions and their settings into the repo; `mk sync` puts them back on any machine
 - Alt+Tab across all workspaces, window snapping, screenshot and power keys, blur and dock styling
 
 **Feels familiar from Windows and macOS, still GNOME**
 - Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps, Super+Ctrl+←/→ desktops
 - Windows-style multitasking: snap halves and quarters, Snap Assist, Super+Z snap layouts (halves, 66/34, three columns, left + two stacked, quarters, focus centre), always on top
-- macOS habits: Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), centred new windows, Super+Q / Super+H
+- macOS habits: genie minimize into the dock, a top bar that hides while a window covers it, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
 - Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
 - System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
 
@@ -112,7 +112,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | Terminal | btop, fastfetch, fzf, ripgrep, zoxide, ncdu, just, chezmoi, 7-Zip, unrar |
 | Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, gThumb, Kamoso, Media Writer |
 
-**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), AppIndicator (tray icons), Caffeine (keep awake), and the MK top-bar mark.
+**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Hide Top Bar, Magic Lamp (genie minimize), AppIndicator (tray icons), Caffeine (keep awake), and the MK top-bar mark.
 
 ---
 
@@ -142,7 +142,7 @@ Press **Super+/** for a live cheat sheet that always matches your keyboard.
 | | `Super+←` then `Super+↑/↓` | Snap to a quarter |
 | | `Super+Z` | Snap layouts (pick a layout, then a window for each part) |
 | | `Super+↑` · `Super+↓` | Maximize · restore |
-| | `Super+Ctrl+T` · `Super+Ctrl+C` | Always on top · centre window |
+| | `Super+Ctrl+T` · `Super+Ctrl+C` · `Super+Ctrl+F` | Always on top · centre window · full screen |
 | | `Super+Ctrl+←/→` | Previous / next desktop |
 | | `Super+D` · `Super+E` · `Super+I` | Show desktop · Files · Settings |
 | | `Super+S` · `Super+R` | Search · run a command |

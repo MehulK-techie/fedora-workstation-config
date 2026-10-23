@@ -61,6 +61,7 @@ else
     row "Maximize / restore"      "$(get_key org.gnome.desktop.wm.keybindings maximize)  ·  $(get_key org.gnome.desktop.wm.keybindings unmaximize)"
 fi
 row "Always on top"               "$(get_key org.gnome.desktop.wm.keybindings toggle-above)"
+row "Full screen"                 "$(get_key org.gnome.desktop.wm.keybindings toggle-fullscreen)"
 row "Minimize / close"            "$(get_key org.gnome.desktop.wm.keybindings minimize)  ·  $(get_key org.gnome.desktop.wm.keybindings close)"
 row "Show desktop"                "$(get_key org.gnome.desktop.wm.keybindings show-desktop)"
 row "Workspace left / right"      "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-left)"

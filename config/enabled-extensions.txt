@@ -3,7 +3,6 @@
 touchpad-gesture-customization@coooolapps.com
 blur-my-shell@aunetx
 tiling-assistant@leleat-on-github
-monitor@astraext.github.io
 clipboard-indicator@tudmotu.com
 caffeine@patapon.info
 transparent-top-bar@ftpix.com

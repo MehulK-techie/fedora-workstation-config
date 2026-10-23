@@ -10,6 +10,7 @@ import { TimerPill } from './timerPill.js';
 import { SwitcherAnimation } from './switcher.js';
 import { OsdStack } from './osdStack.js';
 import { Accent } from './accent.js';
+import { SystemMonitor } from './systemMonitor.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -89,6 +90,8 @@ export default class MKIndicatorExtension extends Extension {
         this._switcher.enable();
         this._osdStack = new OsdStack();
         this._osdStack.enable();
+        this._sysMonitor = new SystemMonitor();
+        this._sysMonitor.enable();
         this._sessionId = Main.sessionMode.connect('updated', () => this._onSessionMode());
         this._onSessionMode();
 
@@ -119,6 +122,7 @@ export default class MKIndicatorExtension extends Extension {
         const locked = Main.sessionMode.isLocked;
         this._indicator.visible = !locked;
         this._timerPill?.setLocked(locked);
+        this._sysMonitor?.setLocked(locked);
         if (locked && this._dockGlow) {
             this._dockGlow.disable();
             this._dockGlow = null;
@@ -173,6 +177,8 @@ export default class MKIndicatorExtension extends Extension {
         this._switcher = null;
         this._osdStack?.disable();
         this._osdStack = null;
+        this._sysMonitor?.disable();
+        this._sysMonitor = null;
         this._accent?.disable();
         this._accent = null;
         this._brandMonitor?.cancel();

@@ -461,6 +461,8 @@ gsettings_remove org.gnome.shell disabled-extensions "${ACTIVE_EXTENSIONS[@]}" "
 # Extensions an earlier MK version enabled and later dropped: switch them off.
 # Space Bar duplicated GNOME's own workspace dots in the top bar.
 gsettings_remove org.gnome.shell enabled-extensions space-bar@luchrioh
+# Astra Monitor: replaced by mk-indicator's own lighter system monitor.
+gsettings_remove org.gnome.shell enabled-extensions monitor@astraext.github.io
 
 # 3. Window Management & Multitasking (All Workspaces, Zero Lag)
 # Every keyboard shortcut lives in config/shortcuts.conf (applied in step 9).

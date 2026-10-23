@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
+# Re-applies the MK Alt+Tab bindings at login, in case an extension resets them
+# while loading. Values must match sync.sh, which owns all desktop settings.
 sleep 2
-dconf write /org/gnome/desktop/wm/keybindings/switch-applications "@as []"
-dconf write /org/gnome/desktop/wm/keybindings/switch-applications-backward "@as []"
-dconf write /org/gnome/desktop/wm/keybindings/switch-windows "['<Alt>Tab']"
-dconf write /org/gnome/desktop/wm/keybindings/switch-windows-backward "['<Alt><Shift>Tab']"
-dconf write /org/gnome/shell/window-switcher/current-workspace-only false
-dconf write /org/gnome/shell/app-switcher/current-workspace-only false
-dconf write /org/gnome/desktop/wm/keybindings/switch-to-workspace-left "['<Super><Alt>Left', '<Control><Alt>Left']"
-dconf write /org/gnome/desktop/wm/keybindings/switch-to-workspace-right "['<Super><Alt>Right', '<Control><Alt>Right']"
-dconf write /org/gnome/settings-daemon/plugins/media-keys/screensaver "['<Super>l']"
-dconf write /org/gnome/shell/extensions/tiling-assistant/enable-tiling-popup true
-dconf write /org/gnome/shell/extensions/tiling-assistant/enable-snap-assistant true
-dconf write /org/gnome/shell/extensions/tiling-assistant/popup-all-workspace-windows false
-dconf write /org/gnome/shell/extensions/tiling-assistant/enable-tile-animations false
+gsettings set org.gnome.desktop.wm.keybindings switch-applications "['<Super>Tab']"
+gsettings set org.gnome.desktop.wm.keybindings switch-applications-backward "['<Shift><Super>Tab']"
+gsettings set org.gnome.desktop.wm.keybindings switch-windows "['<Alt>Tab']"
+gsettings set org.gnome.desktop.wm.keybindings switch-windows-backward "['<Shift><Alt>Tab']"
+gsettings set org.gnome.shell.window-switcher current-workspace-only false
+gsettings set org.gnome.shell.app-switcher current-workspace-only false

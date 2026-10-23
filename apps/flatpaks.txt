@@ -1,2 +1,3 @@
 io.github.zen_browser.zen
 com.visualstudio.code
+com.mattjakeman.ExtensionManager

@@ -4,43 +4,51 @@
 # ==============================================================================
 set -euo pipefail
 
-REPO_DIR="$HOME/.local/share/fedora-workstation-config"
-[ -d "$REPO_DIR" ] || REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# sync.sh records the clone location here; fall back to the repo this file is in.
+REPO_DIR=""
+[[ -f "$HOME/.config/mk-workstation/repo-path" ]] && REPO_DIR=$(< "$HOME/.config/mk-workstation/repo-path")
+[[ -d "$REPO_DIR/.git" ]] || REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ ! -d "$REPO_DIR/.git" ]]; then
+    echo "[-] Error: Can't find the MK Workstation repo. Run ./sync.sh from your clone once." >&2
+    exit 1
+fi
+
+updates_available() {
+    if ! git -C "$REPO_DIR" rev-parse --abbrev-ref '@{u}' &>/dev/null; then
+        echo "[-] The repo's current branch doesn't track a remote branch; can't check for updates." >&2
+        exit 1
+    fi
+    git -C "$REPO_DIR" fetch --quiet
+    [[ "$(git -C "$REPO_DIR" rev-parse HEAD)" != "$(git -C "$REPO_DIR" rev-parse '@{u}')" ]]
+}
 
 case "${1:-help}" in
     update)
         echo "==> Checking for MK Workstation updates..."
-        cd "$REPO_DIR"
-        git fetch origin main --quiet
-        
-        LOCAL=$(git rev-parse HEAD)
-        REMOTE=$(git rev-parse origin/main)
-        
-        if [ "$LOCAL" = "$REMOTE" ]; then
-            echo "✔ MK Workstation is already up-to-date (Commit: ${LOCAL:0:7})"
+        if ! updates_available; then
+            echo "✔ MK Workstation is already up-to-date (Commit: $(git -C "$REPO_DIR" rev-parse --short HEAD))"
         else
             echo "⚡ New updates found! Pulling latest optimizations..."
-            git pull origin main
-            chmod +x setup.sh sync-shortcuts.sh register-face.sh bin/*
-            ./sync-shortcuts.sh
+            git -C "$REPO_DIR" pull --ff-only
+            "$REPO_DIR/sync.sh"
             echo "✔ Workstation updated and synchronized successfully!"
         fi
         ;;
 
     check)
-        cd "$REPO_DIR"
-        git fetch origin main --quiet
-        LOCAL=$(git rev-parse HEAD)
-        REMOTE=$(git rev-parse origin/main)
-        if [ "$LOCAL" != "$REMOTE" ]; then
+        if updates_available; then
             notify-send -i software-update-available "MK Workstation Update" "New performance updates are available. Run 'mk update' to apply."
         fi
         ;;
 
-    sync)
-        echo "==> Exporting local desktop settings to repo..."
-        cd "$REPO_DIR"
-        ./sync.sh
+    sync|apply)
+        echo "==> Applying MK desktop settings..."
+        "$REPO_DIR/sync.sh"
+        ;;
+
+    export)
+        echo "==> Exporting this machine's GNOME settings into the repo..."
+        "$REPO_DIR/scripts/update-repo.sh"
         ;;
 
     shortcuts|hud)
@@ -52,9 +60,10 @@ case "${1:-help}" in
         echo "Usage: mk <command>"
         echo ""
         echo "Commands:"
-        echo "  update     Fetch and apply the latest configurations and optimizations"
-        echo "  check      Check if repository updates are available"
-        echo "  sync       Export active GNOME settings back into Git"
+        echo "  update     Pull the latest version and re-apply desktop settings"
+        echo "  check      Show a notification if updates are available"
+        echo "  sync       Re-apply MK desktop settings (shortcuts, extensions, tweaks)"
+        echo "  export     Save this machine's GNOME settings into the repo (for your fork)"
         echo "  shortcuts  Open the interactive keyboard shortcuts cheat sheet"
         ;;
 esac

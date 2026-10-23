@@ -13,3 +13,6 @@ fastfetch
 zoxide
 fzf
 ripgrep
+gnome-shell-extension-dash-to-dock
+gnome-shell-extension-places-menu
+python3-gobject

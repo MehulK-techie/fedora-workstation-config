@@ -3,6 +3,10 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Windows-style multitasking** (Tiling Assistant): snap halves and quarters, Snap Assist, six snap layouts on Super+Z, tile groups, always on top (Super+Ctrl+T), Super+Ctrl+←/→ desktops.
+- **Super+N** Obsidian and **Super+B** default browser; duplicate user shortcuts are folded into the mk-* versions.
+- **`mk update`** updates everything (repo, newly listed apps, settings, extensions, system) with `--check` preview; **`mk save`** captures apps, extensions and settings you added and commits them.
+- Login helper `mk-session` that makes Blur my Shell reliable after login.
 - **Windows & macOS conveniences** with one conflict-free keymap (Super+E/I/D/R/S, Ctrl+Shift+Esc, Super+1–9, Super+Shift+3/4, Ctrl+Alt+T, Quick Look), AppIndicator tray icons and Caffeine.
 - **Settings snapshot before every sync** and `mk restore`.
 - **Shortcut conflict check** in `mk doctor`; live, grouped cheat sheet on Super+/.
@@ -23,6 +27,9 @@
 - Docs moved to `docs/`.
 
 ### Fixed
+- Blur my Shell missing after login (only appeared after lock/unlock); old autostart hacks retired.
+- Extensions on GNOME's disabled list never loading even when enabled.
+- 500 WACK Shell JS errors per session on GNOME 50.
 - GNOME settings not reaching the session under sudo (DBus scope).
 - Setup aborting on GNOME 50 (`blur-my-shell.modal-dialogs`, `power-off` keys don't exist).
 - OCR shortcut never working on GNOME (grim unsupported; now uses the screenshot portal).

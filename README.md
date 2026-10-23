@@ -31,7 +31,8 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 | System files (`dnf.conf`, PAM) | Edited in place | Backed up once to `.bak` before the first change |
 | Codecs and video | `ffmpeg` swap at best | Full codecs **plus** GPU video decoding for AMD, Intel or NVIDIA |
 | Face unlock | Not offered, or one quick scan | Guided wizard: up to 5 face models across lighting conditions, several people, IR-aware security |
-| After setup | You're on your own | `mk doctor` health check, daily update notifications, `mk sync` to restore |
+| After setup | You're on your own | `mk update` installs anything newly added and updates the system; `mk save` captures apps and settings you added; `mk doctor` health check; daily update notifications |
+| Split screen | GNOME's left/right halves only | Windows-style snapping with quarters, Snap Assist and six snap layouts on Super+Z |
 | Keyboard shortcuts | Added on top of whatever is there, clashes and all | One conflict-free keymap with Windows and macOS habits built in; `mk doctor` flags any key bound twice |
 | Changed your mind | Reinstall | `mk restore` puts back the settings snapshot taken before every sync |
 | Failures | Hidden or fatal | Listed at the end with what to do; full log in `/var/log` |
@@ -51,12 +52,13 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Hardware video decoding: detects your GPU and installs the right VA-API driver, so video plays on the GPU instead of the CPU
 
 **Desktop, kept in sync**
-- 12 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
+- 13 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
 - `mk export` saves your current extensions and their settings into the repo; `mk sync` puts them back on any machine
 - Alt+Tab across all workspaces, window snapping, screenshot and power keys, blur and dock styling
 
 **Feels familiar from Windows and macOS, still GNOME**
-- Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps
+- Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps, Super+Ctrl+←/→ desktops
+- Windows-style multitasking: snap halves and quarters, Snap Assist, Super+Z snap layouts (halves, 66/34, three columns, left + two stacked, quarters, focus centre), always on top
 - macOS habits: Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), centred new windows, Super+Q / Super+H
 - Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
 - System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
@@ -110,7 +112,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | Terminal | btop, fastfetch, fzf, ripgrep, zoxide, ncdu, just, chezmoi, 7-Zip, unrar |
 | Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, gThumb, Kamoso, Media Writer |
 
-**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, AppIndicator (tray icons), Caffeine (keep awake), and the MK top-bar mark.
+**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), AppIndicator (tray icons), Caffeine (keep awake), and the MK top-bar mark.
 
 ---
 
@@ -122,7 +124,8 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk sync` | `just sync` | Re-apply desktop settings and saved extension settings |
 | `mk export` | `just export` | Save your current settings and extensions into the repo |
 | `mk restore` | | Undo the last sync from its settings snapshot |
-| `mk update` | `just update` | Pull the latest version and re-apply settings |
+| `mk update` | `just update` | **Update everything:** pull the repo, install anything newly added to the app lists, re-apply settings and extensions, then system and Flatpak updates (`--check` to preview) |
+| `mk save` | `just save` | Add apps you installed yourself to the lists, save extensions and settings, and commit |
 | `mk face` | `just face` | Face unlock wizard (`--models N`, `--user NAME`, `--tune-only`) |
 | `mk shortcuts` | | Open the shortcut cheat sheet |
 | | `just setup` | Full system setup (`sudo ./setup.sh`) |
@@ -135,7 +138,12 @@ Press **Super+/** for a live cheat sheet that always matches your keyboard.
 | | Shortcut | Action |
 | :--- | :--- | :--- |
 | **Windows** | `Alt+Tab` · `Super+Tab` | Switch windows (all workspaces) · switch apps |
-| | `Super+←/→/↑/↓` | Snap left / right · maximize · restore |
+| | `Super+←/→` | Snap to the left / right half |
+| | `Super+←` then `Super+↑/↓` | Snap to a quarter |
+| | `Super+Z` | Snap layouts (pick a layout, then a window for each part) |
+| | `Super+↑` · `Super+↓` | Maximize · restore |
+| | `Super+Ctrl+T` · `Super+Ctrl+C` | Always on top · centre window |
+| | `Super+Ctrl+←/→` | Previous / next desktop |
 | | `Super+D` · `Super+E` · `Super+I` | Show desktop · Files · Settings |
 | | `Super+S` · `Super+R` | Search · run a command |
 | | `Super+1…9` | Open the 1st…9th dock app |
@@ -152,7 +160,8 @@ Press **Super+/** for a live cheat sheet that always matches your keyboard.
 | | `Super+Alt+←/→` · `Super+Alt+1…4` | Previous/next workspace · go to workspace |
 | | `Super+Shift+A` · `Super+M` | Quick settings · notifications |
 | | `Super+L` · `Super+Backspace` | Lock · shut down / restart |
-| **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Cheat sheet · notes & focus timer · camera controls |
+| **Apps** | `Super+N` · `Super+B` | Notes (Obsidian) · web browser |
+| **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Cheat sheet · quick notes & focus timer · camera controls |
 | **Touchpad** | 3-finger pinch · 4-finger pinch | Volume · show desktop |
 
 Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboard. `Ctrl+Alt+←/→` is left free for Zen Browser.

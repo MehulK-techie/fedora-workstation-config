@@ -138,10 +138,26 @@ Edit `apps/dnf-packages.txt` (Fedora packages) or `apps/flatpaks.txt` (Flathub a
 ### Stay up to date
 
 ```bash
-mk update      # pulls the latest version and re-applies desktop settings
-mk doctor      # health check: updates, codecs, GPU video, extensions, face unlock
-mk export      # saves your current extensions and settings into the repo
+mk update            # update everything (see below)
+mk update --check    # preview what mk update would do; changes nothing
+mk save              # keep what you added yourself (apps, extensions, settings)
+mk doctor            # health check: updates, codecs, GPU video, extensions, shortcuts, face unlock
 ```
+
+**`mk update`** does four things in order:
+
+1. Pulls the newest version of this repo (skipped if you have uncommitted changes).
+2. Installs anything that is in `apps/dnf-packages.txt` or `apps/flatpaks.txt` but not on your computer (asks for your password once).
+3. Re-applies desktop settings, and installs and enables any extension added to `config/enabled-extensions.txt`.
+4. Installs system and Flatpak updates (`--no-upgrade` skips this).
+
+**`mk save`** works the other way round. Install an app, or enable and tune an extension, then run `mk save`. It:
+
+- adds new Flatpaks and new Fedora packages to the app lists,
+- saves your extensions and their settings,
+- makes a Git commit of `apps/` and `config/`.
+
+Push the commit (`git push`) and every other computer gets the change on its next `mk update`.
 
 A background check also notifies you once a day when a new version is available.
 
@@ -256,6 +272,8 @@ gsettings reset-recursively org.gnome.mutter.keybindings
 
 **Remove the MK top-bar watermark:** switch off *MK Workstation Indicator* in Extension Manager.
 
+**Bring back the old login scripts** that sync replaced (they toggled every extension at login): move them from `~/.config/mk-workstation/retired-autostart/` back to `~/.config/autostart/`.
+
 **Turn off the daily update check:** `systemctl --user disable --now mk-update-check.timer`
 
 **Remove the desktop tools:**
@@ -285,7 +303,8 @@ Installed apps and repositories stay. Remove them with `sudo dnf remove <package
 | `Howdy could not be installed` | The Howdy COPR may not support your Fedora version yet. Try `sudo ./setup.sh` again later. |
 | `DNF package not installed: …` / `Flatpak failed to install: …` | That app isn't available for your system. Remove it from the list in `apps/`, or install an alternative. |
 | `Skipped … (… not installed or too old)` | That extension isn't installed, so its tweak was skipped. Install it with Extension Manager and run `./sync.sh` again. |
-| Extensions don't appear | Log out and back in. GNOME loads new extensions only at login. |
+| Extensions don't appear | Log out and back in. GNOME loads new extensions only at login. Run `mk sync` once if an extension you switched off earlier won't come back: sync takes it off GNOME's *disabled* list. |
+| Blur missing right after login, back after locking the screen | Blur my Shell started before the desktop was ready. `mk sync` installs a login helper that re-applies it a few seconds after login; run `mk sync` once, then log out and in. |
 | An extension shows as "outdated" or ERROR | It doesn't support your GNOME version yet. Update it in Extension Manager or switch it off; `mk doctor` lists them. |
 | OCR shortcut does nothing | Run `ocr-snip` in a Terminal to see the error. It needs `tesseract`, `zenity` and `wl-clipboard` (all in `apps/dnf-packages.txt`). |
 | `mk: command not found` | Open a new Terminal. If it persists, run `./sync.sh` from the repo folder. |

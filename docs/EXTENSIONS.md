@@ -1,6 +1,6 @@
 # Extensions Guide
 
-MK Workstation enables 12 GNOME extensions plus its own small top-bar mark, and restores each one **with its saved settings**. This guide shows what each does and how to change it, whether you prefer clicking or the terminal.
+MK Workstation enables 13 GNOME extensions plus its own small top-bar mark, and restores each one **with its saved settings**. This guide shows what each does and how to change it, whether you prefer clicking or the terminal.
 
 - **Everyone:** [Change an extension in 30 seconds](#change-an-extension-in-30-seconds) · [The extensions](#the-extensions) · [Keep it smooth](#keep-it-smooth)
 - **Tech-savvy:** [How syncing works](#how-syncing-works) · [Command-line tweaking](#command-line-tweaking) · [Add or remove an extension](#add-or-remove-an-extension)
@@ -33,6 +33,7 @@ To switch an extension off, use the toggle next to it in Extension Manager. `mk 
 | **Text Extractor** | Select any area of the screen and copy its text (OCR inside GNOME) | **Super+Alt+T**; no top-bar icon | Extension Manager ⚙ |
 | **AppIndicator Support** | Shows tray icons for apps like Spotify, ZapZap, Lutris and Steam (the Windows system tray / macOS menu-bar icons) | GNOME default | Extension Manager ⚙ |
 | **Caffeine** | A coffee-cup toggle in Quick Settings that keeps the screen awake (like PowerToys Awake or Amphetamine) | GNOME default | Click the toggle in Quick Settings |
+| **Tiling Assistant** | Windows-style split screen: snap halves and quarters, Snap Assist offers your other windows for the free space, snapped windows raise together, snap layouts | Super+←/→ halves; then Super+↑/↓ for quarters; **Super+Z** layouts; Super+Ctrl+C centre; no animations | Extension Manager ⚙ (layouts: *Layouts* tab, saved in `~/.config/tiling-assistant/layouts.json`) |
 | **Places Status Indicator** | Top-bar menu for Home, Downloads, drives and network places | GNOME default | (no settings) |
 | **MK Workstation Indicator** | A faint **MK** mark in the top bar that brightens on hover | — | Switch off in Extension Manager to remove it |
 
@@ -50,6 +51,20 @@ Extensions run inside GNOME Shell, so a heavy or broken one can make the whole d
 | Top bar CPU use | Astra Monitor › increase the update interval, or hide graphs you don't need |
 | Desktop feels slow after a GNOME upgrade | Run `mk doctor`; disable anything it reports as ERROR or OUTDATED |
 | Not sure which extension is the cause | Turn them all off with the main switch in Extension Manager, then enable them one at a time |
+
+---
+
+## Split screen and snap layouts
+
+| Do this | Result |
+| :--- | :--- |
+| `Super+←` or `Super+→` | Window takes the left or right half. Snap Assist then shows your other windows: click one to fill the other half. |
+| `Super+←`, then `Super+↑` (or `↓`) | Window takes the top-left (or bottom-left) quarter. Same on the right. |
+| Drag a window to a screen edge or corner | Half or quarter, with a preview |
+| `Super+Z` | Pick a layout, then a window for each part: Halves, Main + side (66/34), Three columns, Left + two stacked, Four quarters, Focus centre |
+| Click one window of a snapped group | The whole group comes to the front |
+
+The six MK layouts live in `config/tiling-layouts.json` and are installed only if you haven't made your own. Edit them in Extension Manager › Tiling Assistant ⚙ › *Layouts*.
 
 ---
 
@@ -124,7 +139,6 @@ These are on the reference machine but not part of the MK set. Enable them in Ex
 
 | Extension | What it does |
 | :--- | :--- |
-| Tiling Assistant | Windows-style quarter tiling and snap layouts (`mk sync` already turns off its popup if you enable it) |
 | Burn My Windows | Animated window open and close effects |
 | Compiz Windows Effect / Magic Lamp | Wobbly windows / genie minimize animation |
 | Just Perfection | Hide or resize parts of the GNOME interface |

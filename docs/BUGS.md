@@ -8,11 +8,11 @@
 | **Updated** | 2026-10-23: second pass added B25–B28 and S5, found on the live system and by the automated security review. |
 | **Method** | Read every script and document; ran `bash -n` and ShellCheck; ran `sync.sh` against a throwaway dconf database; checked every package name with `dnf repoquery` and every Flatpak ID with `flatpak remote-info`; checked GNOME 50 schemas with `gsettings`. |
 
-**Summary:** 45 findings. 36 are fixed on the branch and 9 are still open.
+**Summary:** 48 findings. 39 are fixed on the branch and 9 are still open.
 
 | Category | Found | Fixed | Open |
 | :--- | :---: | :---: | :---: |
-| [Bugs](#1-bugs) | 29 | 23 | 6 |
+| [Bugs](#1-bugs) | 32 | 26 | 6 |
 | [Duplicated code](#2-duplicated-code) | 5 | 4 | 1 |
 | [Hallucinations and false claims](#3-hallucinations-and-false-claims) | 6 | 5 | 1 |
 | [Security and privacy](#4-security-and-privacy) | 5 | 4 | 1 |
@@ -49,6 +49,9 @@ Severity: **Critical** = the script aborts or does the wrong thing for everyone 
 | B26 | Medium | GNOME extensions | `screenshot-ocr@nbubis.github.com` was enabled but in ERROR state on GNOME 50. `mk export` now skips extensions that don't load, and `mk doctor` reports them. | `26b41e3`, `947d0eb` |
 | B27 | Medium | `setup.sh` (AMD) | On Fedora 44 the VA driver ships inside `mesa-dri-drivers` with H.264/HEVC removed: `vainfo` showed only VP9, so most video was decoded on the CPU. `setup.sh` installs `mesa-va-drivers-freeworld`, and `mk doctor` now checks the real decode profiles instead of whether a driver exists. | `91f1650`, `947d0eb` |
 | B29 | Medium | Live keymap | Seven keys were bound to two actions at once: `Print` (screenshot and screenshot UI), `Super+1…4` (workspace and dock app), `Super+S` (overview and quick settings), `Super+N` (GNOME notification focus and the user's own Obsidian shortcut). One keymap now resolves all of them, and `mk doctor` reports any future clash. Verified on the live desktop: 0 conflicts. | `aafe885` |
+| B30 | High | GNOME `disabled-extensions` | Caffeine and mk-indicator were on GNOME's `disabled-extensions` list, which overrides `enabled-extensions`. sync.sh "enabled" them but they never loaded, and any extension switched off once in Extension Manager could never come back. sync.sh now removes the extensions it enables from that list. Verified live: both ACTIVE. | `6b9167f` |
+| B31 | High | `~/.config/autostart` (local hacks) | Blur my Shell showed no blur after login until the screen was locked and unlocked. `fix-extensions.desktop` toggled **every** extension 3 s after login, which crashed Astra Monitor ("already disposed", 19 errors) without fixing blur. Replaced by `bin/mk-session`, which re-initializes only Blur my Shell once the shell has settled (0 errors in a live run); the old hacks are moved aside, not deleted. | `33b8691` |
+| B32 | Medium | WACK Shell 1.0.0 (third-party) | `super.vfunc_event()` doesn't exist on GNOME 50, so pointer events over WACK's logo and workspace buttons threw 500 JS errors in one session. Patched idempotently by sync.sh (upstream `main` still has the call). | `33b8691` |
 | B19 | Low | `setup.sh`, `sync.sh` | Home was assumed to be `/home/$USER`. Running outside a GNOME session failed with raw gsettings errors. Repo, COPR and Flatpak failures were hidden by `\|\| true`. | `cce59cf`, `89ad4a5` |
 
 ### Open

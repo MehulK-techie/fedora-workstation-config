@@ -19,10 +19,13 @@ face:
 export:
     ./scripts/update-repo.sh
 
-# Pull the latest version and re-apply desktop settings
-update:
-    git pull --ff-only
-    ./sync.sh
+# Update everything: repo, new apps, settings, extensions, system (--check to preview)
+update *ARGS:
+    ./bin/mk update {{ARGS}}
+
+# Capture apps, extensions and settings you added, and commit them
+save:
+    ./bin/mk save
 
 # Syntax-check and lint every script
 check:

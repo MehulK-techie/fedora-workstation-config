@@ -180,6 +180,50 @@ open(path, "w").write((text + "\n\n" if text else "") + block)
 PY
 printf '%s\n' "$SCRIPT_DIR" > "$HOME/.config/mk-workstation/repo-path"
 
+# Touchpad-friendly Firefox and Zen (config/browser/user.js): swipe back and
+# forward, momentum scrolling, pinch zoom. A marked block in each profile's
+# user.js; read when the browser next starts.
+for profile in "$HOME"/.config/mozilla/firefox/*/ "$HOME"/.mozilla/firefox/*/ \
+               "$HOME"/.var/app/app.zen_browser.zen/.zen/*/ "$HOME"/.zen/*/; do
+    [[ -f "$profile/prefs.js" ]] || continue
+    touch "$profile/user.js"
+    python3 - "$profile/user.js" "$SCRIPT_DIR/config/browser/user.js" << 'PY'
+import re, sys
+path, source = sys.argv[1:]
+text = open(path).read()
+text = re.sub(r"// >>> MK Workstation.*?// <<< MK Workstation\n?", "", text, flags=re.S).rstrip("\n")
+block = ("// >>> MK Workstation (managed by sync.sh; edit config/browser/user.js)\n"
+         + open(source).read() + "// <<< MK Workstation\n")
+open(path, "w").write((text + "\n\n" if text else "") + block)
+PY
+done
+
+# Cursor: Bibata Modern Classic (GPL-3.0, github.com/ful1e5/Bibata_Cursor), a
+# sleek black pointer with a white edge that suits the dark desktop. Pinned
+# release and checksum; CURSOR= in config/theme.conf (or yours) picks another
+# installed theme, CURSOR=Adwaita goes back to GNOME's.
+CURSOR_NAME="Bibata-Modern-Classic"
+CURSOR_URL="https://github.com/ful1e5/Bibata_Cursor/releases/download/v2.0.7/Bibata-Modern-Classic.tar.xz"
+CURSOR_SHA="7d3495864e5bbef02f5e77de760b2905903b63c71495a78ef6306d19a3b556d8"
+cursor=$(cat "$SCRIPT_DIR/config/theme.conf" "$HOME/.config/mk-workstation/theme.conf" 2> /dev/null |
+    sed -n 's/^CURSOR=//p' | tail -1 || true)
+cursor="${cursor:-$CURSOR_NAME}"
+if [[ "$cursor" == "$CURSOR_NAME" && ! -d "$HOME/.local/share/icons/$CURSOR_NAME" ]] && command -v curl &> /dev/null; then
+    tmp=$(mktemp -d)
+    if curl -fsSL --max-time 60 -o "$tmp/cursor.tar.xz" "$CURSOR_URL" \
+        && echo "$CURSOR_SHA  $tmp/cursor.tar.xz" | sha256sum -c --quiet - 2> /dev/null; then
+        mkdir -p "$HOME/.local/share/icons"
+        tar -xJf "$tmp/cursor.tar.xz" -C "$HOME/.local/share/icons"
+    else
+        echo "[!] Couldn't download the $CURSOR_NAME cursor; keeping the current one."
+    fi
+    rm -rf "$tmp"
+fi
+if [[ -d "$HOME/.local/share/icons/$cursor" || -d "/usr/share/icons/$cursor" ]]; then
+    gsettings set org.gnome.desktop.interface cursor-theme "$cursor"
+fi
+
+
 # Daily, low-priority check for repo updates (shows a notification via `mk check`)
 UNIT_DIR="$HOME/.config/systemd/user"
 mkdir -p "$UNIT_DIR"
@@ -337,6 +381,29 @@ if [[ -f "$LAMP_JS" ]] && ! grep -q 'MK: skipNextEffect' "$LAMP_JS" &&
         "$LAMP_JS"
     echo "    [+] Patched Magic Lamp to respect gesture animations (takes effect after logging in again)"
 fi
+# Smoother unlock: GNOME switches off every extension that isn't marked for the
+# lock screen when you lock, and rebuilds them all as you unlock, which is the
+# hitch you see as the lock screen slides away (and gestures don't answer for a
+# moment). Keep the ones with nothing to show or type on the lock screen loaded:
+# animations and gestures (they only act on the normal desktop). Not the
+# clipboard, text grabber or resource monitor (its menu lists your processes):
+# they would work on the lock screen.
+for uuid in impatience@gfxmonk.net burn-my-windows@schneegans.github.com \
+            compiz-windows-effect@hermes83.github.com compiz-alike-magic-lamp-effect@hermes83.github.com \
+            touchpad-gesture-customization@coooolapps.com transparent-top-bar@ftpix.com; do
+    meta="$USER_EXT_DIR/$uuid/metadata.json"
+    [[ -f "$meta" ]] || continue
+    python3 - "$meta" << 'PY' && echo "    [+] $uuid stays loaded while locked (after logging in again)"
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path))
+modes = data.get("session-modes", ["user"])
+if "unlock-dialog" in modes:
+    sys.exit(1)
+data["session-modes"] = modes + ["unlock-dialog"]
+json.dump(data, open(path, "w"), indent=2)
+PY
+done
 # Burn My Windows: a short, subtle "Glide" when windows open and close. The MK
 # profile is high priority, so it wins over the default profile (Fire).
 BMW_PROFILE="$HOME/.config/burn-my-windows/profiles/mk-glide.conf"
@@ -463,6 +530,11 @@ gsettings_append org.gnome.desktop.search-providers disabled \
 # Laptop comfort: tap to click, natural scrolling, battery %, weekday, Night Light
 gsettings set org.gnome.desktop.peripherals.touchpad tap-to-click true
 gsettings set org.gnome.desktop.peripherals.touchpad natural-scroll true
+# Ignore the palm while typing, but only for a moment, so fast typing-then-
+# swiping (Alt+Tab with three fingers) still responds right away.
+gsettings set org.gnome.desktop.peripherals.touchpad disable-while-typing true
+gsettings set org.gnome.desktop.peripherals.touchpad disable-while-typing-timeout 300
+gsettings set org.gnome.desktop.peripherals.touchpad tap-and-drag true
 gsettings set org.gnome.desktop.interface show-battery-percentage true
 gsettings set org.gnome.desktop.interface clock-show-weekday true
 gsettings set org.gnome.settings-daemon.plugins.color night-light-enabled true

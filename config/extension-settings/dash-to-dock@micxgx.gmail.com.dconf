@@ -20,6 +20,7 @@ isolate-monitors=true
 isolate-workspaces=true
 pressure-threshold=8.0
 require-pressure-to-show=true
+running-indicator-dominant-color=true
 running-indicator-style='DOT'
 scroll-action='cycle-windows'
 show-delay=0.050000000000000003

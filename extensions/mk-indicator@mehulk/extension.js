@@ -4,6 +4,7 @@ import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
+import { DockGlow } from './dockGlow.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -65,6 +66,10 @@ export default class MKIndicatorExtension extends Extension {
             Main.overview.connect('hiding', () => this._setDocksShown(true)),
         ];
 
+        // Dock icons glow in their app's own colour on hover.
+        this._dockGlow = new DockGlow();
+        this._dockGlow.enable();
+
         // Blur my Shell can blur the top bar before the wallpaper is loaded at
         // login and then shows no blur until the next unlock. Rebuild its panel
         // blur once the shell has finished starting up and settled.
@@ -114,6 +119,8 @@ export default class MKIndicatorExtension extends Extension {
     }
 
     disable() {
+        this._dockGlow?.disable();
+        this._dockGlow = null;
         this._brandMonitor?.cancel();
         this._brandMonitor = null;
         if (this._startupId) {

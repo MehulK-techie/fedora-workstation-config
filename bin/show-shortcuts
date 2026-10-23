@@ -1,130 +1,648 @@
-#!/usr/bin/env bash
-# MK Workstation shortcut cheat sheet (Super+/). Every value is read live from
-# GNOME, so it always matches what your keyboard actually does.
-set -euo pipefail
+#!/usr/bin/env python3
+"""Keyboard shortcuts window (Super+/).
 
-TMP_HUD=$(mktemp /tmp/mk_hud_XXXXXX.txt)
-trap 'rm -f "$TMP_HUD"' EXIT
+Lists every shortcut MK sets (config/shortcuts.conf) plus your own, read live
+from GNOME: a change made anywhere shows up here at once. Each row says
+whether the shortcut works, clashes with another one, has no key, or needs a
+missing app or extension. Click a row to change its keys; add your own
+commands with +; Reset puts MK's keys back. Your changes are kept in
+~/.config/mk-workstation/shortcuts.conf, so `mk sync` never undoes them.
+"""
+import os
+import re
+import sys
+from pathlib import Path
 
-MEDIA_KEYS="org.gnome.settings-daemon.plugins.media-keys"
-CUSTOM_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
+import gi
 
-# "['<Super><Shift>s', 'Print']" -> "Super+Shift+S  /  Print"
-pretty() {
-    sed -E -e "s/@as //; s/[][]//g; s/', '/  \/  /g; s/'//g" \
-        -e 's/></+/g; s/>/+/g; s/<//g; s/\+([a-z])( |$)/+\U\1\2/g' \
-        -e 's/Control/Ctrl/g; s/period/./g; s/slash/\//g; s/Escape/Esc/g; s/BackSpace/Backspace/g; s/Page_Up/PageUp/g; s/Page_Down/PageDown/g' \
-        -e 's#  /  [^/]*KP_[0-9]##g' <<< "$1"
-}
-get_key() {
-    local val
-    val=$(gsettings get "$1" "$2" 2>/dev/null || echo "[]")
-    val=$(pretty "$val")
-    echo "${val:-—}"
-}
-get_custom() {
-    local val
-    val=$(gsettings get "$MEDIA_KEYS.custom-keybinding:$CUSTOM_PATH/mk-$1/" binding 2>/dev/null || echo "''")
-    val=$(pretty "$val")
-    echo "${val:-—}"
-}
-# Tiling Assistant keeps its keys in its own schema.
-TA_DIR="$HOME/.local/share/gnome-shell/extensions/tiling-assistant@leleat-on-github/schemas"
-get_ta() {
-    local val
-    val=$(gsettings --schemadir "$TA_DIR" get org.gnome.shell.extensions.tiling-assistant "$1" 2>/dev/null || echo "[]")
-    val=$(pretty "$val")
-    echo "${val:-—}"
-}
-row() { printf '  %-30s %s\n' "$1" "$2"; }
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 
-{
-cat << 'HEADER'
-════════════════════════════════════════════════════════════════════════════
-                    MK WORKSTATION · KEYBOARD SHORTCUTS
-                (read live from GNOME: always what your keys do)
-════════════════════════════════════════════════════════════════════════════
-HEADER
 
-echo ""
-echo "WINDOWS & WORKSPACES"
-row "Switch windows (all spaces)" "$(get_key org.gnome.desktop.wm.keybindings switch-windows)"
-row "Switch apps"                 "$(get_key org.gnome.desktop.wm.keybindings switch-applications)"
-if [[ -d "$TA_DIR" ]] && gnome-extensions info tiling-assistant@leleat-on-github 2>/dev/null | grep -q 'State: ACTIVE'; then
-    row "Snap left / right half"  "$(get_ta tile-left-half)  ·  $(get_ta tile-right-half)"
-    row "Quarter (Windows style)" "Snap left/right, then Super+Up / Super+Down"
-    row "Maximize / restore"      "$(get_ta tile-maximize)  ·  $(get_ta restore-window)"
-    row "Snap layouts"            "$(get_ta search-popup-layout)"
-    row "Centre window"           "$(get_ta center-window)"
-else
-    row "Snap left / right"       "$(get_key org.gnome.mutter.keybindings toggle-tiled-left)  ·  $(get_key org.gnome.mutter.keybindings toggle-tiled-right)"
-    row "Maximize / restore"      "$(get_key org.gnome.desktop.wm.keybindings maximize)  ·  $(get_key org.gnome.desktop.wm.keybindings unmaximize)"
-fi
-row "Always on top"               "$(get_key org.gnome.desktop.wm.keybindings toggle-above)"
-row "Full screen"                 "$(get_key org.gnome.desktop.wm.keybindings toggle-fullscreen)"
-row "Minimize / close"            "$(get_key org.gnome.desktop.wm.keybindings minimize)  ·  $(get_key org.gnome.desktop.wm.keybindings close)"
-row "Show desktop"                "$(get_key org.gnome.desktop.wm.keybindings show-desktop)"
-row "Workspace left / right"      "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-left)"
-row "Go to workspace 1-4"         "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-1) to 4"
-row "New desktop"                 "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-last)  (add Shift to take the window)"
-row "Open dock app 1-9"           "$(get_key org.gnome.shell.keybindings switch-to-application-1) to 9"
+def _add_lib_path():
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for candidate in (Path(__file__).resolve().parent.parent / "lib",
+                      Path(data_home) / "mk-workstation/lib"):
+        if (candidate / "mkworkstation").is_dir():
+            sys.path.insert(0, str(candidate))
+            return
 
-echo ""
-echo "TOUCHPAD"
-row "Switch workspace"            "4 fingers left / right"
-row "Switch window"               "3 fingers left / right"
-row "Overview / app grid"         "3 fingers up"
-row "Maximize / restore window"   "4 fingers up / down"
-row "Show desktop · volume"       "4-finger pinch  ·  3-finger pinch"
 
-echo ""
-echo "SCREENSHOTS  (saved to ~/Pictures/Screenshots and copied)"
-row "Full screen, instantly"      "$(get_key org.gnome.shell.keybindings screenshot)"
-row "Pick an area / window"       "$(get_key org.gnome.shell.keybindings show-screenshot-ui)"
-row "Current window"              "$(get_key org.gnome.shell.keybindings screenshot-window)"
-row "Copy text from screen (OCR)" "$(get_custom ocr)"
+_add_lib_path()
+import mkworkstation as mk  # noqa: E402
+from dataclasses import replace  # noqa: E402
 
-echo ""
-echo "SYSTEM"
-row "Search / overview"           "Super  ·  $(get_key org.gnome.shell.keybindings toggle-overview)"
-row "All apps"                    "$(get_key org.gnome.shell.keybindings toggle-application-view)"
-row "Files"                       "$(get_key $MEDIA_KEYS home)"
-row "Settings"                    "$(get_key $MEDIA_KEYS control-center)"
-row "Quick settings"              "$(get_key org.gnome.shell.keybindings toggle-quick-settings)"
-row "Notifications"               "$(get_key org.gnome.shell.keybindings toggle-message-tray)"
-row "Clipboard history"           "Super+V"
-row "Run a command"               "$(get_key org.gnome.desktop.wm.keybindings panel-run-dialog)"
-row "Terminal"                    "$(get_custom terminal)"
-row "System Monitor"              "$(get_custom taskmgr)"
-row "Lock screen"                 "$(get_key $MEDIA_KEYS screensaver)"
-row "Shut down / restart"         "$(get_key $MEDIA_KEYS shutdown)"
+APP_ID = "io.github.mehulk.MkShortcuts"
+MODIFIER_KEYS = {getattr(Gdk, f"KEY_{n}") for n in (
+    "Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R", "Super_L",
+    "Super_R", "Meta_L", "Meta_R", "Hyper_L", "Hyper_R", "ISO_Level3_Shift", "Caps_Lock")}
+GESTURE_UUID = "touchpad-gesture-customization@coooolapps.com"
+GESTURE_SCHEMA = "org.gnome.shell.extensions.touchpad-gesture-customization"
+GESTURES = [
+    ("3 fingers left / right", "horizontal-swipe-3-fingers-gesture"),
+    ("4 fingers left / right", "horizontal-swipe-4-fingers-gesture"),
+    ("3 fingers up / down", "vertical-swipe-3-fingers-gesture"),
+    ("4 fingers up / down", "vertical-swipe-4-fingers-gesture"),
+    ("3-finger pinch", "pinch-3-finger-gesture"),
+    ("4-finger pinch", "pinch-4-finger-gesture"),
+]
 
-echo ""
-echo "APPS"
-row "Notes (Obsidian)"            "$(get_custom obsidian)"
-row "Web browser"                 "$(get_custom browser)"
-echo ""
-echo "MK TOOLS"
-row "Emoji board"                 "$(get_custom emoji)"
-row "Notes & focus timer"         "$(get_custom notes)"
-row "Camera controls"             "$(get_custom camera)"
-row "This cheat sheet"            "$(get_custom hud)"
+CSS = b"""
+.mk-key { background: alpha(@accent_bg_color, 0.16); color: @window_fg_color;
+          border: 1px solid alpha(@accent_bg_color, 0.45); border-radius: 7px;
+          padding: 2px 8px; font-weight: 700; font-size: 0.9em; }
+.mk-key-big { font-size: 1.6em; padding: 8px 18px; border-radius: 12px; }
+.mk-ok { color: #57e389; }
+.mk-warn { color: #f6d32d; }
+.mk-error { color: #ff7b8f; }
+.mk-off { color: alpha(@window_fg_color, 0.45); }
+.mk-chip { border-radius: 999px; padding: 3px 12px; background: alpha(@window_fg_color, 0.07); }
+"""
 
-echo ""
-echo "TIPS"
-echo "  • In Files, select a file and press Space to preview it (Quick Look)."
-echo "  • Ctrl+Alt+←/→ is left free for Zen Browser workspaces."
-echo "  • Terminal: mk update (update everything) · mk save (keep what you added) · mk doctor"
-echo "════════════════════════════════════════════════════════════════════════════"
-} > "$TMP_HUD"
 
-ACTION=$(zenity --text-info \
-    --title="MK Workstation · Keyboard Shortcuts" \
-    --filename="$TMP_HUD" \
-    --font="monospace 10" \
-    --width=820 --height=760 \
-    --ok-label="Close" --extra-button="Open Keyboard Settings" 2>/dev/null || true)
+def key_label(accel):
+    ok, key, mods = Gtk.accelerator_parse(accel)
+    if not ok or not key:
+        return accel
+    return Gtk.accelerator_get_label(key, mods)
 
-if [[ "$ACTION" == "Open Keyboard Settings" ]]; then
-    gnome-control-center keyboard &
-fi
+
+def normalize(accel):
+    ok, key, mods = Gtk.accelerator_parse(accel)
+    if not ok or not key:
+        return None
+    return Gdk.keyval_to_lower(key), int(mods)
+
+
+def chips(keys):
+    box = Gtk.Box(spacing=6, valign=Gtk.Align.CENTER)
+    for accel in keys:
+        label = Gtk.Label(label=key_label(accel))
+        label.add_css_class("mk-key")
+        box.append(label)
+    if not keys:
+        label = Gtk.Label(label="no key")
+        label.add_css_class("dim-label")
+        box.append(label)
+    return box
+
+
+class KeyCaptureDialog(Adw.Dialog):
+    """Press a key combination. Esc cancels, Backspace alone removes the key."""
+
+    def __init__(self, title, can_add, who_uses, on_done):
+        super().__init__(title=title, content_width=420)
+        self.on_done = on_done
+        self.who_uses = who_uses
+        self.accel = None
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16,
+                      margin_top=12, margin_bottom=20, margin_start=20, margin_end=20)
+        hint = Gtk.Label(label="Press the new key combination", wrap=True)
+        hint.add_css_class("title-4")
+        box.append(hint)
+        self.preview = Gtk.Label(label="…")
+        self.preview.add_css_class("mk-key")
+        self.preview.add_css_class("mk-key-big")
+        self.preview.set_halign(Gtk.Align.CENTER)
+        box.append(self.preview)
+        self.warning = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER)
+        self.warning.add_css_class("mk-warn")
+        box.append(self.warning)
+        small = Gtk.Label(label="Esc cancels · Backspace removes the key")
+        small.add_css_class("dim-label")
+        small.add_css_class("caption")
+        box.append(small)
+
+        buttons = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
+        self.set_btn = Gtk.Button(label="Set", sensitive=False)
+        self.set_btn.add_css_class("suggested-action")
+        self.set_btn.add_css_class("pill")
+        self.set_btn.connect("clicked", lambda *_: self._finish("replace"))
+        buttons.append(self.set_btn)
+        self.add_btn = Gtk.Button(label="Add as extra key", sensitive=False, visible=can_add)
+        self.add_btn.add_css_class("pill")
+        self.add_btn.connect("clicked", lambda *_: self._finish("add"))
+        buttons.append(self.add_btn)
+        remove = Gtk.Button(label="No key")
+        remove.add_css_class("pill")
+        remove.connect("clicked", lambda *_: self._finish("remove"))
+        buttons.append(remove)
+        box.append(buttons)
+
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        view.set_content(box)
+        self.set_child(view)
+
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self._on_key)
+        self.add_controller(keys)
+        self.connect("map", self._inhibit)
+        self.connect("closed", self._restore)
+
+    # While capturing, GNOME must not act on the keys (Super+S, Print, ...).
+    def _toplevel(self):
+        root = self.get_root()
+        surface = root.get_surface() if root else None
+        return surface if isinstance(surface, Gdk.Toplevel) else None
+
+    def _inhibit(self, *_):
+        top = self._toplevel()
+        if top:
+            top.inhibit_system_shortcuts(None)
+
+    def _restore(self, *_):
+        top = self._toplevel()
+        if top:
+            top.restore_system_shortcuts()
+
+    def _on_key(self, ctrl, keyval, keycode, state):
+        if keyval in MODIFIER_KEYS:
+            return True
+        mods = state & Gtk.accelerator_get_default_mod_mask()
+        if not mods and keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        if not mods and keyval == Gdk.KEY_BackSpace:
+            self._finish("remove")
+            return True
+        # Use the unshifted key: Super+Shift+4, not Super+Shift+dollar.
+        ok, base, *_ = self.get_display().translate_key(keycode, 0, 0)
+        keyval = Gdk.keyval_to_lower(base if ok and base else keyval)
+        self.accel = Gtk.accelerator_name(keyval, mods)
+        self.preview.set_label(key_label(self.accel))
+        users = self.who_uses(self.accel)
+        self.warning.set_label(f"Also used by: {', '.join(users)}" if users else "")
+        self.set_btn.set_sensitive(True)
+        self.add_btn.set_sensitive(True)
+        return True
+
+    def _finish(self, mode):
+        self.on_done(mode, self.accel)
+        self.close()
+
+
+class CommandDialog(Adw.Dialog):
+    """Add or edit a shortcut that runs a command."""
+
+    def __init__(self, window, title, name="", command="", accel="", on_save=None):
+        super().__init__(title=title, content_width=480)
+        self.window = window
+        self.accel = accel
+        self.on_save = on_save
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18,
+                       margin_top=12, margin_bottom=20, margin_start=20, margin_end=20)
+        group = Adw.PreferencesGroup()
+        self.name_row = Adw.EntryRow(title="Name", text=name)
+        self.cmd_row = Adw.EntryRow(title="Command (e.g. flatpak run com.spotify.Client)",
+                                    text=command)
+        self.key_row = Adw.ActionRow(title="Keys", activatable=True)
+        self.key_chip = Gtk.Label()
+        self.key_chip.add_css_class("mk-key")
+        self.key_row.add_suffix(self.key_chip)
+        self.key_row.connect("activated", self._pick_key)
+        for row in (self.name_row, self.cmd_row, self.key_row):
+            group.add(row)
+        page.append(group)
+        save = Gtk.Button(label="Save", halign=Gtk.Align.CENTER)
+        save.add_css_class("suggested-action")
+        save.add_css_class("pill")
+        save.connect("clicked", self._save)
+        page.append(save)
+        self._show_key()
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        view.set_content(page)
+        self.set_child(view)
+
+    def _show_key(self):
+        self.key_chip.set_label(key_label(self.accel) if self.accel else "click to set")
+
+    def _pick_key(self, *_):
+        def done(mode, accel):
+            self.accel = "" if mode == "remove" else (accel or "")
+            self._show_key()
+        KeyCaptureDialog("Shortcut keys", False, self.window.who_uses, done).present(self.window)
+
+    def _save(self, *_):
+        name, command = self.name_row.get_text().strip(), self.cmd_row.get_text().strip()
+        if not name or not command:
+            self.window.toast("A name and a command are needed")
+            return
+        self.on_save(name, command, self.accel)
+        self.close()
+
+
+class ShortcutsWindow(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Keyboard Shortcuts")
+        self.set_default_size(760, 760)
+        self._watch = []
+        self._pending = 0
+        self.owners = {}
+        self.labels = {}
+
+        header = Adw.HeaderBar()
+        self.title = Adw.WindowTitle(title="Keyboard Shortcuts", subtitle=mk.brand()[0])
+        header.set_title_widget(self.title)
+        add = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Add a shortcut that runs a command")
+        add.connect("clicked", self._on_add)
+        header.pack_start(add)
+        search_btn = Gtk.ToggleButton(icon_name="system-search-symbolic", tooltip_text="Search (Ctrl+F)")
+        header.pack_end(self._build_menu())
+        header.pack_end(search_btn)
+
+        self.search = Gtk.SearchEntry(placeholder_text="Search shortcuts or keys")
+        self.search.connect("search-changed", lambda *_: self.refresh())
+        bar = Gtk.SearchBar(child=self.search, show_close_button=False)
+        bar.connect_entry(self.search)
+        bar.set_key_capture_widget(self)
+        search_btn.bind_property("active", bar, "search-mode-enabled",
+                                 GObject.BindingFlags.BIDIRECTIONAL)
+
+        self.summary = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER, margin_top=6, margin_bottom=6)
+        self.list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24,
+                                margin_top=6, margin_bottom=24, margin_start=12, margin_end=12)
+        clamp = Adw.Clamp(maximum_size=820, child=self.list_box)
+        self.scroller = Gtk.ScrolledWindow(child=clamp, vexpand=True)
+
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        body.append(bar)
+        body.append(self.summary)
+        body.append(self.scroller)
+        self.toasts = Adw.ToastOverlay(child=body)
+        view = Adw.ToolbarView()
+        view.add_top_bar(header)
+        view.set_content(self.toasts)
+        self.set_content(view)
+
+        monitor_targets = [mk.OVERRIDES_FILE, mk.DEFAULT_SHORTCUTS, mk.BRAND_FILE]
+        self._monitors = []
+        for path in monitor_targets:
+            mon = Gio.File.new_for_path(str(path)).monitor_file(Gio.FileMonitorFlags.NONE, None)
+            mon.connect("changed", lambda *_: self.queue_refresh())
+            self._monitors.append(mon)
+        self.refresh()
+
+    # ---------- menu ----------
+    def _build_menu(self):
+        menu = Gio.Menu()
+        menu.append("Reset all to MK defaults…", "win.reset-all")
+        menu.append("Edit my shortcuts file", "win.edit-file")
+        menu.append("GNOME keyboard settings", "win.gnome-settings")
+        for name, cb in (("reset-all", self._on_reset_all),
+                         ("edit-file", self._on_edit_file),
+                         ("gnome-settings", lambda *_: Gio.Subprocess.new(
+                             ["gnome-control-center", "keyboard"], Gio.SubprocessFlags.NONE))):
+            action = Gio.SimpleAction.new(name, None)
+            action.connect("activate", cb)
+            self.add_action(action)
+        return Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu)
+
+    def toast(self, text):
+        self.toasts.add_toast(Adw.Toast(title=text, timeout=3))
+
+    # ---------- live data ----------
+    def queue_refresh(self, *_):
+        if not self._pending:
+            self._pending = GLib.timeout_add(150, self._do_refresh)
+
+    def _do_refresh(self):
+        self._pending = 0
+        self.refresh()
+        return GLib.SOURCE_REMOVE
+
+    def _watch_settings(self, settings):
+        settings.connect("changed", self.queue_refresh)
+        self._watch.append(settings)
+
+    def _scan(self):
+        """Every accelerator GNOME knows, and who owns it."""
+        self._watch = []
+        owners, labels = {}, {}
+
+        def own(accel, owner):
+            n = normalize(accel)
+            if n:
+                owners.setdefault(n, set()).add(owner)
+
+        source = Gio.SettingsSchemaSource.get_default()
+        for schema_id in mk.KEYBINDING_SCHEMAS:
+            schema = source.lookup(schema_id, True)
+            if not schema:
+                continue
+            settings = Gio.Settings.new(schema_id)
+            self._watch_settings(settings)
+            for key in schema.list_keys():
+                if settings.get_value(key).get_type_string() == "as":
+                    for accel in settings.get_strv(key):
+                        own(accel, f"{schema_id} {key}")
+        media = Gio.Settings.new(mk.MEDIA_KEYS)
+        others = []
+        for path in media.get_strv("custom-keybindings"):
+            s = Gio.Settings.new_with_path(mk.CUSTOM_SCHEMA, path)
+            self._watch_settings(s)
+            if s.get_string("binding"):
+                own(s.get_string("binding"), path)
+            labels[path] = s.get_string("name") or path.rstrip("/").rsplit("/", 1)[-1]
+            if not path.rstrip("/").rsplit("/", 1)[-1].startswith("mk-"):
+                others.append((path, s))
+        self._watch_settings(Gio.Settings.new("org.gnome.shell"))
+        self.owners, self.labels, self.others = owners, labels, others
+
+    def who_uses(self, accel, exclude=None):
+        n = normalize(accel)
+        return sorted(self.labels.get(o, o.split()[-1]) for o in self.owners.get(n, ())
+                      if o != exclude)
+
+    def _owner_id(self, sc, settings, key):
+        return settings.props.path if sc.kind == "custom" else f"{sc.schema} {key}"
+
+    def _status(self, sc, settings, key, live):
+        if sc.kind == "ext" and not mk.extension_enabled(sc.uuid):
+            return "off", "Extension is off: " + sc.uuid.split("@")[0]
+        if settings is None:
+            return "off", "Not installed on this system"
+        if sc.kind == "custom" and not mk.command_available(sc.command):
+            return "error", "Command not found: " + sc.command
+        if not live:
+            return "off", "No key set"
+        owner = self._owner_id(sc, settings, key)
+        clash = sorted({u for a in live for u in self.who_uses(a, exclude=owner)})
+        if clash:
+            return "warn", "Same keys as: " + ", ".join(clash)
+        return "ok", "Working"
+
+    # ---------- building the list ----------
+    def refresh(self):
+        adj = self.scroller.get_vadjustment()
+        scroll = adj.get_value()
+        self._scan()
+        for child in list(self.list_box):
+            self.list_box.remove(child)
+        query = self.search.get_text().strip().lower()
+        counts = {"ok": 0, "warn": 0, "error": 0, "off": 0}
+        groups = {}
+
+        for sc in mk.load_shortcuts():
+            if sc.hidden:
+                continue
+            settings, key = mk.settings_for(sc)
+            if settings is not None:
+                self._watch_settings(settings)
+                live = mk.live_keys(sc)
+                self.labels[self._owner_id(sc, settings, key)] = sc.label
+            else:
+                live = []
+            state, note = self._status(sc, settings, key, live)
+            counts[state] += 1
+            text = f"{sc.label} {sc.group} {' '.join(key_label(k) for k in live)}".lower()
+            if query and query not in text:
+                continue
+            groups.setdefault(sc.group, []).append(self._row(sc, live, state, note))
+
+        for name, rows in groups.items():
+            group = Adw.PreferencesGroup(title=name)
+            for row in rows:
+                group.add(row)
+            self.list_box.append(group)
+
+        if self.others:
+            group = Adw.PreferencesGroup(title="Your other shortcuts",
+                                         description="Made in GNOME Settings or another tool")
+            shown = 0
+            for path, s in self.others:
+                row = self._other_row(path, s)
+                if query and query not in (s.get_string("name") + key_label(s.get_string("binding"))).lower():
+                    continue
+                group.add(row)
+                shown += 1
+            if shown:
+                self.list_box.append(group)
+
+        gestures = self._gesture_group(query)
+        if gestures:
+            self.list_box.append(gestures)
+
+        for child in list(self.summary):
+            self.summary.remove(child)
+        for state, word in (("ok", "working"), ("warn", "clash"), ("error", "broken"), ("off", "off or unset")):
+            if counts[state] or state == "ok":
+                chip = Gtk.Label(label=f"● {counts[state]} {word}")
+                chip.add_css_class("mk-chip")
+                chip.add_css_class(f"mk-{state}")
+                self.summary.append(chip)
+        self.title.set_subtitle(mk.brand()[0])
+        GLib.idle_add(lambda: adj.set_value(scroll) and False)
+
+    def _status_icon(self, state, note):
+        icon = {"ok": "emblem-ok-symbolic", "warn": "dialog-warning-symbolic",
+                "error": "dialog-error-symbolic", "off": "media-playback-pause-symbolic"}[state]
+        image = Gtk.Image(icon_name=icon, tooltip_text=note)
+        image.add_css_class(f"mk-{state}")
+        return image
+
+    def _row(self, sc, live, state, note):
+        subtitle = note if state != "ok" else (sc.command if sc.kind == "custom" else "")
+        default = None if sc.user_added else mk.default_for(sc.ident)
+        outside = default is not None and not sc.overridden and state != "off" and \
+            [k for k in default.keys] != (live if sc.kind != "custom" else live[:1]) and \
+            not (sc.kind == "custom" and default.keys[:1] == live)
+        if outside:
+            subtitle = "Changed outside MK · Reset puts MK's keys back"
+        elif sc.overridden and not sc.user_added:
+            subtitle = (subtitle + " · " if subtitle else "") + "Your keys"
+        row = Adw.ActionRow(title=GLib.markup_escape_text(sc.label),
+                            subtitle=GLib.markup_escape_text(subtitle), activatable=True)
+        row.add_prefix(self._status_icon(state, note))
+        row.add_suffix(chips(live))
+        if (sc.overridden and not sc.user_added) or outside:
+            reset = Gtk.Button(icon_name="edit-undo-symbolic", tooltip_text="Reset to MK's keys",
+                               valign=Gtk.Align.CENTER)
+            reset.add_css_class("flat")
+            reset.connect("clicked", lambda *_: self._reset(sc))
+            row.add_suffix(reset)
+        if sc.user_added:
+            delete = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Delete",
+                                valign=Gtk.Align.CENTER)
+            delete.add_css_class("flat")
+            delete.connect("clicked", lambda *_: self._delete(sc))
+            row.add_suffix(delete)
+        row.add_suffix(Gtk.Image(icon_name="document-edit-symbolic"))
+        row.connect("activated", lambda *_: self._edit(sc, live))
+        return row
+
+    def _other_row(self, path, s):
+        binding = s.get_string("binding")
+        command = s.get_string("command")
+        ok = mk.command_available(command)
+        clash = [u for u in self.who_uses(binding, exclude=path)] if binding else []
+        state, note = ("error", "Command not found") if not ok else \
+            ("warn", "Same keys as: " + ", ".join(clash)) if clash else \
+            ("off", "No key set") if not binding else ("ok", "Working")
+        row = Adw.ActionRow(title=GLib.markup_escape_text(s.get_string("name") or "Unnamed"),
+                            subtitle=GLib.markup_escape_text(command), activatable=True)
+        row.add_prefix(self._status_icon(state, note))
+        row.add_suffix(chips([binding] if binding else []))
+        row.add_suffix(Gtk.Image(icon_name="document-edit-symbolic"))
+
+        def save(name, cmd, accel):
+            s.set_string("name", name)
+            s.set_string("command", cmd)
+            s.set_string("binding", accel)
+        row.connect("activated", lambda *_: CommandDialog(
+            self, "Edit shortcut", s.get_string("name"), command, binding, save).present(self))
+        return row
+
+    def _gesture_group(self, query):
+        source = mk._ext_source(GESTURE_UUID)
+        schema = source.lookup(GESTURE_SCHEMA, True) if source else None
+        if not schema:
+            return None
+        settings = Gio.Settings.new_full(schema, None, None)
+        self._watch_settings(settings)
+        group = Adw.PreferencesGroup(
+            title="Touchpad gestures",
+            description="Change them in Extension Manager › Touchpad Gesture Customization")
+        shown = 0
+        for label, key in GESTURES:
+            if not schema.has_key(key):
+                continue
+            value = settings.get_string(key).replace("_", " ").capitalize()
+            if query and query not in f"{label} {value}".lower():
+                continue
+            row = Adw.ActionRow(title=label, subtitle=value)
+            row.add_prefix(Gtk.Image(icon_name="input-touchpad-symbolic"))
+            group.add(row)
+            shown += 1
+        return group if shown else None
+
+    # ---------- actions ----------
+    def _commit(self, sc, keys):
+        new = replace(sc, keys=keys)
+        mk.save_override(mk.Shortcut(sc.group, sc.label, sc.target, keys))
+        if mk.apply(new):
+            Gio.Settings.sync()
+            self.toast(f"{sc.label}: " + (", ".join(key_label(k) for k in keys) or "no key"))
+        else:
+            self.toast(f"Saved, but {sc.label} can't be applied here (app or extension missing)")
+        self.queue_refresh()
+
+    def _edit(self, sc, live):
+        if sc.kind == "custom":
+            def save(name, command, accel):
+                ident = sc.target.split()[0]
+                mk.save_override(mk.Shortcut(sc.group, name, f"{ident} {command}",
+                                             [accel] if accel else []))
+                mk.apply(mk.Shortcut(sc.group, name, f"{ident} {command}", [accel] if accel else []))
+                Gio.Settings.sync()
+                self.queue_refresh()
+            CommandDialog(self, "Edit shortcut", sc.label, sc.command,
+                          live[0] if live else "", save).present(self)
+            return
+
+        settings, key = mk.settings_for(sc)
+        owner = self._owner_id(sc, settings, key) if settings else None
+
+        def done(mode, accel):
+            if mode == "remove":
+                self._commit(sc, [])
+            elif accel and mode == "add":
+                self._commit(sc, live + [accel] if accel not in live else live)
+            elif accel:
+                self._commit(sc, [accel])
+        KeyCaptureDialog(sc.label, True, lambda a: self.who_uses(a, exclude=owner),
+                         done).present(self)
+
+    def _on_add(self, *_):
+        def save(name, command, accel):
+            slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "command"
+            taken = {s.ident for s in mk.load_shortcuts()}
+            ident, n = f"custom:user-{slug}", 2
+            while ident in taken:
+                ident, n = f"custom:user-{slug}-{n}", n + 1
+            sc = mk.Shortcut("Your shortcuts", name, f"{ident} {command}", [accel] if accel else [])
+            mk.save_override(sc)
+            if mk.apply(sc):
+                Gio.Settings.sync()
+                self.toast(f"Added {name}")
+            else:
+                self.toast(f"Saved {name}, but its command wasn't found")
+            self.queue_refresh()
+        CommandDialog(self, "New shortcut", on_save=save).present(self)
+
+    def _reset(self, sc):
+        mk.remove_override(sc.ident)
+        default = mk.default_for(sc.ident)
+        if default and mk.apply(default):
+            Gio.Settings.sync()
+            self.toast(f"{sc.label}: back to MK's keys")
+        self.queue_refresh()
+
+    def _delete(self, sc):
+        mk.remove_override(sc.ident)
+        if sc.kind == "custom":
+            mk.remove_custom(sc.custom_id)
+        Gio.Settings.sync()
+        self.toast(f"Deleted {sc.label}")
+        self.queue_refresh()
+
+    def _on_reset_all(self, *_):
+        dialog = Adw.AlertDialog(heading="Reset all shortcuts?",
+                                 body="Every MK shortcut goes back to its default keys. "
+                                      "Shortcuts you added stay.")
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("reset", "Reset")
+        dialog.set_response_appearance("reset", Adw.ResponseAppearance.DESTRUCTIVE)
+
+        def response(_d, answer):
+            if answer == "reset":
+                mk.clear_overrides(keep_added=True)
+                mk.apply_all()
+                self.toast("All shortcuts are back to MK's defaults")
+                self.queue_refresh()
+        dialog.connect("response", response)
+        dialog.present(self)
+
+    def _on_edit_file(self, *_):
+        if not mk.OVERRIDES_FILE.exists():
+            mk.clear_overrides(keep_added=True)
+        Gio.AppInfo.launch_default_for_uri(mk.OVERRIDES_FILE.as_uri(), None)
+
+
+class ShortcutsApp(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID)
+        self.window = None
+
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.set_accels_for_action("win.close", ["Escape"])
+
+    def do_activate(self):
+        # Super+/ toggles: pressing it again while the window is in front closes it.
+        if self.window and self.window.is_active():
+            self.window.close()
+            return
+        if self.window is None:
+            self.window = ShortcutsWindow(self)
+            close = Gio.SimpleAction.new("close", None)
+            close.connect("activate", lambda *_: self.window.close())
+            self.window.add_action(close)
+            self.window.connect("close-request", self._on_close)
+        self.window.present()
+
+    def _on_close(self, *_):
+        self.window = None
+        return False
+
+
+if __name__ == "__main__":
+    sys.exit(ShortcutsApp().run(sys.argv[:1]))

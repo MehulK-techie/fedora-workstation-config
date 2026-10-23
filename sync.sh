@@ -24,7 +24,6 @@ fi
 
 USER_EXT_DIR="$HOME/.local/share/gnome-shell/extensions"
 MEDIA_KEYS="org.gnome.settings-daemon.plugins.media-keys"
-CUSTOM_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
 
 # Add items to a string-array key, keeping whatever the user already has there.
 gsettings_append() {
@@ -90,17 +89,6 @@ ego_install() {
     return "$rc"
 }
 
-# Custom shortcuts live in named mk-* slots and are appended to the list, so
-# the user's own custom shortcuts (custom0, custom1, ...) are never touched.
-add_shortcut() {
-    local slot="$CUSTOM_PATH/mk-$1/"
-    local schema="$MEDIA_KEYS.custom-keybinding:$slot"
-    gsettings set "$schema" name "$2"
-    gsettings set "$schema" command "$3"
-    gsettings set "$schema" binding "$4"
-    gsettings_append "$MEDIA_KEYS" custom-keybindings "$slot"
-}
-
 # Older versions of this script used numbered customN slots. Drop only the
 # ones that run MK tools so they don't duplicate the new mk-* slots.
 remove_legacy_shortcuts() {
@@ -143,6 +131,11 @@ echo "    [+] Settings snapshot saved (undo with: mk restore)"
 mkdir -p "$HOME/.local/bin" "$HOME/.config/mk-workstation"
 cp -f "$SCRIPT_DIR/bin/"* "$HOME/.local/bin/"
 chmod +x "$HOME/.local/bin/"*
+# The tools' shared Python library and the defaults it reads (shortcuts, brand)
+MK_SHARE="$HOME/.local/share/mk-workstation"
+mkdir -p "$MK_SHARE"
+rm -rf "${MK_SHARE:?}/lib" "${MK_SHARE:?}/config"
+cp -r "$SCRIPT_DIR/lib" "$SCRIPT_DIR/config" "$MK_SHARE/"
 printf '%s\n' "$SCRIPT_DIR" > "$HOME/.config/mk-workstation/repo-path"
 
 # Daily, low-priority check for repo updates (shows a notification via `mk check`)
@@ -279,11 +272,8 @@ gsettings_remove org.gnome.shell disabled-extensions "${ACTIVE_EXTENSIONS[@]}" "
 gsettings_remove org.gnome.shell enabled-extensions space-bar@luchrioh
 
 # 3. Window Management & Multitasking (All Workspaces, Zero Lag)
-echo "==> Applying window management keybindings..."
-gsettings set org.gnome.desktop.wm.keybindings switch-applications "['<Super>Tab']"
-gsettings set org.gnome.desktop.wm.keybindings switch-applications-backward "['<Shift><Super>Tab']"
-gsettings set org.gnome.desktop.wm.keybindings switch-windows "['<Alt>Tab']"
-gsettings set org.gnome.desktop.wm.keybindings switch-windows-backward "['<Shift><Alt>Tab']"
+# Every keyboard shortcut lives in config/shortcuts.conf (applied in step 9).
+echo "==> Applying window management settings..."
 gsettings set org.gnome.shell.app-switcher current-workspace-only false
 gsettings set org.gnome.shell.window-switcher current-workspace-only false
 # Touchpad Gesture Customization rewrites the line above every time it starts
@@ -302,8 +292,6 @@ ext_set "$TA" "$TA_SCHEMA" enable-tiling-popup true
 ext_set "$TA" "$TA_SCHEMA" enable-raise-tile-group true
 ext_set "$TA" "$TA_SCHEMA" enable-tile-animations false
 ext_set "$TA" "$TA_SCHEMA" enable-layout-picker true
-ext_set "$TA" "$TA_SCHEMA" search-popup-layout "['<Super>z']"
-ext_set "$TA" "$TA_SCHEMA" center-window "['<Super><Control>c']"
 # Install the MK layouts unless you already made your own (TA's examples don't count).
 TA_LAYOUTS="$HOME/.config/tiling-assistant/layouts.json"
 TA_EXAMPLE=$(find "$USER_EXT_DIR/$TA" "/usr/share/gnome-shell/extensions/$TA" -name layouts_example.json 2>/dev/null | head -n 1 || true)
@@ -322,45 +310,14 @@ if [[ "$(gnome-extensions info "$TA" 2>/dev/null | awk '/State:/ { print $2 }')"
     gsettings set org.gnome.desktop.wm.keybindings maximize "['<Super>Up']"
     gsettings set org.gnome.desktop.wm.keybindings unmaximize "['<Super>Down']"
 fi
-gsettings set org.gnome.desktop.wm.keybindings close "['<Super>q', '<Alt>F4']"
 # Busy apps (games, compiles) get 20s before GNOME shows "not responding" (default 5s).
 gsettings set org.gnome.mutter check-alive-timeout 20000
 
-# 4. Protect Zen Browser Workspaces (Release Ctrl+Alt+Arrows)
-# Super+Ctrl+arrows also switch workspaces, like Windows virtual desktops.
-gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Page_Up', '<Super><Alt>Left', '<Super><Control>Left']"
-gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Super>Page_Down', '<Super><Alt>Right', '<Super><Control>Right']"
-gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-up "[]"
-gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-down "[]"
-gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-left "['<Super><Shift>Page_Up', '<Super><Shift><Alt>Left']"
-gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-right "['<Super><Shift>Page_Down', '<Super><Shift><Alt>Right']"
-# Super+1-9 opens dock apps (Windows taskbar style); workspaces use Super+Alt+N,
-# matching Super+Alt+arrows, so the two never fight over the same keys.
-for n in 1 2 3 4; do
-    gsettings set org.gnome.desktop.wm.keybindings "switch-to-workspace-$n" "['<Super><Alt>$n']"
-    gsettings set org.gnome.desktop.wm.keybindings "move-to-workspace-$n" "['<Super><Shift><Alt>$n']"
-done
-# Spaces / virtual desktops: workspaces come and go as you use them, and the
-# last one is always empty, so "go to the last workspace" opens a fresh desktop
-# (Windows Super+Ctrl+D); add Shift to take the focused window along.
+# 4. Workspaces, Spaces style: they come and go as you use them, and the last
+# one is always empty, so "go to the last workspace" (Super+Ctrl+D) opens a
+# fresh desktop. Ctrl+Alt+arrows stay free for Zen Browser.
 gsettings set org.gnome.mutter dynamic-workspaces true
 gsettings set org.gnome.mutter workspaces-only-on-primary true
-gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-last "['<Super>End', '<Super><Control>d']"
-gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-last "['<Super><Shift>End', '<Super><Control><Shift>d']"
-
-# 5. Instant Screenshot & Power Keybindings
-# Print (Fn+PrtSc on laptops) = instant full screen; area selection on Shift+Print,
-# Super+Shift+S (Windows) and Super+Shift+4 (macOS); Super+Shift+3 = macOS full screen.
-# Every capture is saved to ~/Pictures/Screenshots and copied to the clipboard.
-gsettings set org.gnome.shell.keybindings screenshot "['Print', '<Super><Shift>3']"
-gsettings set org.gnome.shell.keybindings screenshot-window "['<Alt>Print']"
-gsettings set org.gnome.shell.keybindings show-screenshot-ui "['<Shift>Print', '<Super><Shift>s', '<Super><Shift>4']"
-# GNOME 50 renamed power-off to shutdown; Ctrl+Alt+Delete stays on GNOME's logout.
-if gsettings list-keys "$MEDIA_KEYS" | grep -qx shutdown; then
-    gsettings set "$MEDIA_KEYS" shutdown "['<Super>BackSpace', '<Super><Shift>x']"
-else
-    gsettings set "$MEDIA_KEYS" power-off "['<Super>BackSpace', '<Super><Shift>x', 'XF86PowerOff']"
-fi
 
 # 6. Clean Calendar & Panel Defaults
 gsettings set org.gnome.desktop.calendar show-weekdate false
@@ -369,19 +326,6 @@ gsettings set org.gnome.shell.weather locations "[]"
 
 # 6b. Windows & macOS conveniences (GNOME stays GNOME: Super still opens the overview)
 echo "==> Applying Windows & macOS conveniences..."
-MK_WM="org.gnome.desktop.wm.keybindings"
-MK_SHELL="org.gnome.shell.keybindings"
-gsettings set "$MEDIA_KEYS" home "['<Super>e']"                   # Files (Win+E)
-gsettings set "$MEDIA_KEYS" control-center "['<Super>i']"         # Settings (Win+I)
-gsettings set "$MK_WM" show-desktop "['<Super>d']"                # Show desktop (Win+D)
-gsettings set "$MK_WM" panel-run-dialog "['<Alt>F2', '<Super>r']" # Run a command (Win+R)
-gsettings set "$MK_SHELL" toggle-overview "['<Super>s']"          # Search (Win+S)
-gsettings set "$MK_SHELL" toggle-quick-settings "['<Super><Shift>a']" # Quick settings
-gsettings set "$MK_SHELL" toggle-application-view "['<Super>a']"  # App grid (GNOME/Launchpad)
-gsettings set "$MK_SHELL" toggle-message-tray "['<Super>m']"      # Notifications; Super+V is clipboard
-gsettings set "$MK_SHELL" focus-active-notification "[]"          # frees Super+N for notes
-gsettings set "$MK_WM" toggle-above "['<Super><Control>t']"         # Always on top (PowerToys)
-gsettings set "$MK_WM" toggle-fullscreen "['<Super><Control>f']"    # Full screen (macOS Ctrl+Cmd+F)
 # Files, Finder-style: expandable folders in list view, folders first,
 # item counts, and "Create Link" / "Delete Permanently" in the menus
 gsettings set org.gnome.nautilus.list-view use-tree-view true
@@ -468,25 +412,10 @@ fi
 # 9. Register Custom Hotkeys
 echo "==> Registering MK custom shortcuts..."
 remove_legacy_shortcuts
-add_shortcut ocr     "OCR Text Extractor"        "$HOME/.local/bin/ocr-snip"        "<Super><Shift>t"
-add_shortcut emoji   "Emoji Board"               "gnome-characters"                 "<Super>period"
-add_shortcut hud     "Workstation Shortcuts HUD" "$HOME/.local/bin/show-shortcuts"  "<Super>slash"
-add_shortcut notes   "Quick Notes & Timer"       "$HOME/.local/bin/mk-scratchpad"   "<Super><Shift>n"
-add_shortcut camera  "Camera Studio Controls"    "$HOME/.local/bin/camera-controls" "<Super>c"
-add_shortcut taskmgr "System Monitor"            "gnome-system-monitor"             "<Control><Shift>Escape"
-# Ctrl+Alt+T opens a terminal: Fedora's Ptyxis, or whichever is installed
-for term in ptyxis kgx gnome-terminal; do
-    if command -v "$term" &>/dev/null; then
-        add_shortcut terminal "Terminal" "$term" "<Control><Alt>t"
-        break
-    fi
-done
-# Super+N opens Obsidian for notes; Super+B opens your default web browser.
-add_shortcut obsidian "Notes (Obsidian)" "flatpak run md.obsidian.Obsidian" "<Super>n"
-browser=$(xdg-settings get default-web-browser 2>/dev/null || true)
-if [[ -n "$browser" ]]; then
-    add_shortcut browser "Web Browser" "gtk-launch ${browser%.desktop}" "<Super>b"
-fi
+# Every shortcut: config/shortcuts.conf, then your changes from the Shortcuts
+# window (Super+/) in ~/.config/mk-workstation/shortcuts.conf. Runs after the
+# saved extension settings, so your choices win over extension defaults too.
+PYTHONPATH="$MK_SHARE/lib" python3 -m mkworkstation apply-shortcuts
 
 # Drop your own custom shortcuts that run exactly what an mk-* shortcut now
 # runs (such as an older "Launch Obsidian" on Super+N), so no key is bound twice.

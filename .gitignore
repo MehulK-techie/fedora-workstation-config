@@ -34,3 +34,6 @@ places.sqlite*
 storage/
 HANDOFF.md
 .claude/settings.local.json
+
+# Python bytecode
+__pycache__/

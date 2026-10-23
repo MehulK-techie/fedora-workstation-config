@@ -4,8 +4,8 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-SHELL_FILES=(*.sh scripts/*.sh bin/mk bin/mk-apps bin/mk-doctor bin/ocr-snip bin/show-shortcuts bin/mk-scratchpad)
-PYTHON_FILES=(bin/camera-controls)
+SHELL_FILES=(*.sh scripts/*.sh bin/mk bin/mk-apps bin/mk-doctor bin/ocr-snip bin/mk-scratchpad)
+PYTHON_FILES=(bin/camera-controls bin/show-shortcuts bin/mk-companion bin/mk-timer lib/mkworkstation/*.py)
 
 for f in "${SHELL_FILES[@]}"; do
     bash -n "$f"

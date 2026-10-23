@@ -114,8 +114,16 @@ export class DockGlow {
         // Dash to Dock may start after us: look for its docks a few times.
         this._tries = 0;
         this._findId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
-            this._attachDocks();
-            return ++this._tries < 15 ? GLib.SOURCE_CONTINUE : (this._findId = 0, GLib.SOURCE_REMOVE);
+            try {
+                this._attachDocks();
+            } catch (e) {
+                // the shell is shutting down
+            }
+            if (this._docks.length || ++this._tries >= 15) {
+                this._findId = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+            return GLib.SOURCE_CONTINUE;
         });
         this._attachDocks();
     }

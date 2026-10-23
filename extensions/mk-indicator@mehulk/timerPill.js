@@ -43,6 +43,8 @@ export class TimerPill {
             }
         });
         Main.panel._centerBox.add_child(this._button);
+        // The panel can be torn down before we're disabled (logout): stop then.
+        this._button.connect('destroy', () => this._teardown());
 
         GLib.mkdir_with_parents(GLib.path_get_dirname(STATE), 0o755);
         this._monitor = Gio.File.new_for_path(STATE).monitor_file(Gio.FileMonitorFlags.NONE, null);
@@ -57,6 +59,8 @@ export class TimerPill {
         } catch (e) {
             this._state = null;
         }
+        if (!this._button)
+            return;
         const running = Boolean(this._state?.running);
         this._button.visible = running && !Main.sessionMode.isLocked;
         if (running && !this._tickId) {
@@ -79,7 +83,7 @@ export class TimerPill {
     }
 
     _update() {
-        if (!this._state?.running)
+        if (!this._button || !this._state?.running)
             return;
         const left = this._left();
         this._label.text = this._state.paused ? `${fmt(left)} ⏸` : fmt(left);
@@ -112,14 +116,19 @@ export class TimerPill {
             this._button.visible = !locked && Boolean(this._state?.running);
     }
 
-    disable() {
+    _teardown() {
         if (this._tickId) {
             GLib.source_remove(this._tickId);
             this._tickId = 0;
         }
         this._monitor?.cancel();
         this._monitor = null;
-        this._button?.destroy();
-        this._button = null;
+        this._button = this._label = this._ring = null;
+    }
+
+    disable() {
+        const button = this._button;
+        this._teardown();
+        button?.destroy();
     }
 }

@@ -265,6 +265,7 @@ rows = [
     ("Battery", "Profile stays where you left it", "Performance on AC, balanced on battery, saver when low"),
     ("Login", "Password", "Face unlock and fingerprint, detected and set up for you"),
     ("Health", "—", "mk doctor checks codecs, GPU, extensions, clashes, updates"),
+    ("Sound", "Thin laptop speakers", "B&amp;O-style speaker tuning: EQ, bass, limiter (mk sound)"),
 ]
 col = [M, M + 110, M + 110 + 330]
 ty = y + 14
@@ -340,13 +341,48 @@ footer(cr, page)
 
 # 8 ── Focus timer
 new_page()
-y = header(cr, "Focus timer", "Deep work, then a small celebration")
-th = image(cr, "focus-timer", M, y + 12, 300, crop=TIMER)
-image(cr, "timer-celebration", M + 320, y + 12, W - 2 * M - 320, h=th)
-text(cr, "Pick minutes and seconds or a preset; the timer slips into the background and can "
-         "silence notifications. When time is up, a pixel robot takes over the screen, collecting "
-         "coins, instead of an alarm. Again, +5 min or a break in one click.",
-     M, y + 24 + th, W - 2 * M, 10.5, MUTED, spacing=1.1)
+y = header(cr, "Focus timer", "Lives on your desktop, not in a window")
+fh = image(cr, "focus-screen", M, y + 12, 520)
+image(cr, "timer-celebration", M + 540, y + 12, W - 2 * M - 540, h=fh, crop=(440, 0, 1040, 1080))
+caption(cr, "Step away and the focus screen takes over, like a screensaver", M, y + 18 + fh, 520)
+caption(cr, "Time's up: robot, coins, fireworks", M + 540, y + 18 + fh, W - 2 * M - 540)
+bullets(cr, [
+    ("Out of the way", "the window hides; a small ring and countdown sit in the top bar"),
+    ("Calm when you step away", "aurora light and the big ring; any key brings you back; never covers a video"),
+    ("Focus mode", "can silence notifications; a celebration instead of an alarm"),
+], M, y + 40 + fh, W - 2 * M, size=10.5, gap=6)
+footer(cr, page)
+
+# 8b ── Welcome
+new_page()
+y = header(cr, "After you log in", "Welcome back home, sir.")
+wh = image(cr, "welcome-light", M, y + 12, 500)
+bullets(cr, [
+    ("Neon edge light", "a line races around the screen edges, OnePlus-style, then the greeting fades in"),
+    ("Waits for everything", "plays once every extension has loaded, so login stays smooth"),
+    ("Sir, ma'am or your name", "or write your own line; change it in Quick Settings or the Companion"),
+    ("A voice like an AI assistant", "calm British voice (natural Piper voice optional, no sudo)"),
+    ("Your switch", "Quick Settings › Welcome light, or mk welcome off"),
+], M + 520, y + 16, W - M - (M + 520), size=10.5, gap=9)
+footer(cr, page)
+
+# 8c ── Small touches
+new_page()
+y = header(cr, "The little things", "Polished where you look every day")
+CAL, FILES, OSD, ICONS = (540, 0, 780, 660), (0, 40, 1200, 700), (640, 700, 640, 380), (500, 60, 920, 420)
+cw = (W - 2 * M - 3 * 16) / 4
+for i, (name, crop, cap) in enumerate((("calendar", CAL, "Calendar: glowing today, hover glow"),
+                                       ("files", FILES, "Files: cyan hover and selection"),
+                                       ("osd-stack", OSD, "Workspace dots step above volume"),
+                                       ("app-icons", ICONS, "Own icons; swap in yours (mk icon)"))):
+    x = M + i * (cw + 16)
+    ih = image(cr, name, x, y + 14, cw, h=cw * 0.8, crop=crop)
+    caption(cr, cap, x, y + 20 + ih, cw)
+bullets(cr, [
+    ("Speaker tuning", "laptop speakers sound thin on Linux without the vendor's Windows DSP; mk sound adds EQ, bass and a limiter"),
+    ("Alt+Tab", "pops in smoothly; Alt+` switches windows of one app; wobbly windows while dragging"),
+    ("Dock", "magnification and a soft glow in each app's colour"),
+], M, y + 50 + cw * 0.8, W - 2 * M, size=10.5, gap=7)
 footer(cr, page)
 
 # 9 ── Hardware

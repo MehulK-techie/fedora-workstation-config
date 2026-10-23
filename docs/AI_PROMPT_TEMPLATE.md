@@ -10,15 +10,16 @@
 - **Local Path:** wherever the repo was cloned (the `mk` CLI records it in `~/.config/mk-workstation/repo-path`)
 - **Script roles:** `setup.sh` (root: DNF, RPM Fusion, Flatpaks, Howdy) → runs `sync.sh` as the user (the single source of all GNOME settings); `register-face.sh` (face unlock wizard + PAM); `mk export` saves settings and extensions into `config/`
 
-### ACTIVE EXTENSIONS (10, listed in `config/enabled-extensions.txt`, settings in `config/extension-settings/`)
-Touchpad Gesture Customization, Blur my Shell, Astra Monitor, Clipboard Indicator, Transparent Top Bar, WACK Lockscreen Clock, WACK Shell, Text Extractor, Places Status Indicator, Dash to Dock, plus the project's own `mk-indicator@mehulk`.
+### ACTIVE EXTENSIONS (12, listed in `config/enabled-extensions.txt`, settings in `config/extension-settings/`)
+Touchpad Gesture Customization, Blur my Shell, Astra Monitor, Clipboard Indicator, Transparent Top Bar, WACK Lockscreen Clock, WACK Shell, Text Extractor, Places Status Indicator, Dash to Dock, AppIndicator, Caffeine, plus the project's own `mk-indicator@mehulk`.
 
 ### KEYBINDING & UTILITY MATRIX
 - `Super + Shift + T` / `Super + Alt + T` : OCR (`ocr-snip` via the screenshot portal / Text Extractor)
 - `Super + V` : Clipboard history
+- Windows/macOS keymap: Super+E/I/D/R/S, Ctrl+Shift+Esc, Super+1-9 dock apps, Super+Shift+3/4 screenshots, Ctrl+Alt+T terminal, Super+Alt+1-4 workspaces (full table in README)
 - `Super + .` : Emoji Board (GNOME Characters)
 - `Super + /` : Live Shortcuts HUD
-- `Super + N` : Quick Notes & Focus Timer
+- `Super + Shift + N` : Quick Notes & Focus Timer (Super+N is left for your own shortcut)
 - `Super + C` : Camera Controls Studio
 - `Alt + Tab` / `Super + Tab` : Window switcher across all workspaces / app switcher
 - `Super + Backspace` / `Super + Shift + X` : Shut down dialog

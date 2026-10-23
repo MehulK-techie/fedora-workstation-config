@@ -8,11 +8,11 @@
 | **Updated** | 2026-10-23: second pass added B25–B28 and S5, found on the live system and by the automated security review. |
 | **Method** | Read every script and document; ran `bash -n` and ShellCheck; ran `sync.sh` against a throwaway dconf database; checked every package name with `dnf repoquery` and every Flatpak ID with `flatpak remote-info`; checked GNOME 50 schemas with `gsettings`. |
 
-**Summary:** 44 findings. 35 are fixed on the branch and 9 are still open.
+**Summary:** 45 findings. 36 are fixed on the branch and 9 are still open.
 
 | Category | Found | Fixed | Open |
 | :--- | :---: | :---: | :---: |
-| [Bugs](#1-bugs) | 28 | 22 | 6 |
+| [Bugs](#1-bugs) | 29 | 23 | 6 |
 | [Duplicated code](#2-duplicated-code) | 5 | 4 | 1 |
 | [Hallucinations and false claims](#3-hallucinations-and-false-claims) | 6 | 5 | 1 |
 | [Security and privacy](#4-security-and-privacy) | 5 | 4 | 1 |
@@ -48,6 +48,7 @@ Severity: **Critical** = the script aborts or does the wrong thing for everyone 
 | B25 | High | `config/extension-settings/text-extractor…dconf` (live setting) | Text Extractor's shortcut was saved as `['<Shift>t']`, apparently mis-recorded. The extension registers it with `Main.wm.addKeybinding`, so it grabbed **Shift+T globally** and typing a capital T could trigger OCR. Its default (Super+Shift+T) also collides with the MK OCR shortcut. Now Super+Alt+T. | `62dc7c6` |
 | B26 | Medium | GNOME extensions | `screenshot-ocr@nbubis.github.com` was enabled but in ERROR state on GNOME 50. `mk export` now skips extensions that don't load, and `mk doctor` reports them. | `26b41e3`, `947d0eb` |
 | B27 | Medium | `setup.sh` (AMD) | On Fedora 44 the VA driver ships inside `mesa-dri-drivers` with H.264/HEVC removed: `vainfo` showed only VP9, so most video was decoded on the CPU. `setup.sh` installs `mesa-va-drivers-freeworld`, and `mk doctor` now checks the real decode profiles instead of whether a driver exists. | `91f1650`, `947d0eb` |
+| B29 | Medium | Live keymap | Seven keys were bound to two actions at once: `Print` (screenshot and screenshot UI), `Super+1…4` (workspace and dock app), `Super+S` (overview and quick settings), `Super+N` (GNOME notification focus and the user's own Obsidian shortcut). One keymap now resolves all of them, and `mk doctor` reports any future clash. Verified on the live desktop: 0 conflicts. | `aafe885` |
 | B19 | Low | `setup.sh`, `sync.sh` | Home was assumed to be `/home/$USER`. Running outside a GNOME session failed with raw gsettings errors. Repo, COPR and Flatpak failures were hidden by `\|\| true`. | `cce59cf`, `89ad4a5` |
 
 ### Open

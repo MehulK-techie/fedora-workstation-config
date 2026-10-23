@@ -111,12 +111,14 @@ Log out and back in afterwards. Run `./setup.sh --help` for the options.
 | :--- | :--- |
 | Command-line tools | Copies `bin/*` to `~/.local/bin`: `mk`, `mk-doctor`, `ocr-snip`, `show-shortcuts`, `mk-scratchpad`, `camera-controls`. |
 | Update check | A daily, low-priority background check (systemd user timer) that shows a notification when a new version of this repo is available. |
-| Extensions | Installs and enables the 10 extensions in `config/enabled-extensions.txt` plus the small **MK** mark in the top bar, then restores their saved settings from `config/extension-settings/`. Missing extensions are downloaded from extensions.gnome.org for your GNOME version. Extensions you already enabled stay enabled. See [EXTENSIONS.md](EXTENSIONS.md). |
+| Extensions | Installs and enables the 12 extensions in `config/enabled-extensions.txt` plus the small **MK** mark in the top bar, then restores their saved settings from `config/extension-settings/`. Missing extensions are downloaded from extensions.gnome.org for your GNOME version. Extensions you already enabled stay enabled. See [EXTENSIONS.md](EXTENSIONS.md). |
 | Window shortcuts | Alt+Tab switches windows across all workspaces, Super+Tab switches apps, plus snap, maximize and workspace keys. Ctrl+Alt+arrows are left free for Zen Browser. |
 | Screenshots and power | `Print`, `Alt+Print`, `Shift+Print` / `Super+Shift+S`; Super+Backspace or Super+Shift+X opens the shut-down dialog. |
 | Look and feel | Blur on the top bar (off in the overview and lock screen), fractional scaling support, rounded dialogs (`~/.config/gnome-shell/gnome-shell.css`), and 20 s instead of 5 s before GNOME calls a busy app "not responding". |
 | Calendar | Hides week numbers and **clears world clocks and weather locations** from the top-bar calendar. |
-| Custom shortcuts | Adds five shortcuts named `mk-…`. Your own custom shortcuts are kept. |
+| Windows & macOS habits | Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Super+1–9 dock apps, Super+Shift+3/4 screenshots, minimize/maximize buttons, centred new windows. Notifications move to Super+M and quick settings to Super+Shift+A. Workspaces use Super+Alt+1–4. |
+| Custom shortcuts | Adds `mk-…` shortcuts (OCR, emoji, cheat sheet, notes on Super+Shift+N, camera, System Monitor on Ctrl+Shift+Esc, terminal on Ctrl+Alt+T). Your own custom shortcuts are kept. |
+| Safety net | Saves a snapshot of all your desktop settings before changing anything (newest 5 kept). `mk restore` undoes the last sync. |
 
 The full shortcut list is in the [README](../README.md#keyboard-shortcuts), and on your screen with **Super + /**.
 
@@ -221,6 +223,8 @@ Everything else, including multiple faces, lighting, security and troubleshootin
 ---
 
 ## Undo and uninstall
+
+**Undo the last desktop sync:** `mk restore`. It puts back the settings snapshot `sync.sh` saved just before it ran, then you log out and back in. Snapshots are in `~/.config/mk-workstation/backups/`.
 
 **Turn off face unlock** (password-only login again):
 

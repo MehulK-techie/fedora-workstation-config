@@ -3,6 +3,10 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Windows & macOS conveniences** with one conflict-free keymap (Super+E/I/D/R/S, Ctrl+Shift+Esc, Super+1–9, Super+Shift+3/4, Ctrl+Alt+T, Quick Look), AppIndicator tray icons and Caffeine.
+- **Settings snapshot before every sync** and `mk restore`.
+- **Shortcut conflict check** in `mk doctor`; live, grouped cheat sheet on Super+/.
+- README hero screenshot.
 - **Face unlock wizard:** up to 5 face models recorded in different lighting, a light check before each one, camera-type tuning, camera auto-exposure, `--user` for other people, `--tune-only`, and `mk face`.
 - **Extensions with settings:** `mk export` saves enabled extensions and their settings to `config/`; `sync.sh` installs them from extensions.gnome.org for your GNOME version and restores the settings.
 - **`mk doctor`** health check, and a daily update notification (systemd user timer).

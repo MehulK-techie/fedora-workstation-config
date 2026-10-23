@@ -11,6 +11,10 @@
 
 [Quick start](#quick-start) · [Guide](docs/GUIDE.md) · [Face unlock](docs/FACE-UNLOCK.md) · [Extensions](docs/EXTENSIONS.md) · [Audit](docs/BUGS.md)
 
+<img src="docs/assets/desktop.jpg" alt="MK Workstation desktop: GNOME overview with blurred top bar, live system monitor, search, and a floating dock" width="900">
+
+<sub>GNOME 50 overview with Blur my Shell, Astra Monitor, WACK Shell and Dash to Dock. Wallpaper art by its respective creator.</sub>
+
 </div>
 
 ---
@@ -28,6 +32,8 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 | Codecs and video | `ffmpeg` swap at best | Full codecs **plus** GPU video decoding for AMD, Intel or NVIDIA |
 | Face unlock | Not offered, or one quick scan | Guided wizard: up to 5 face models across lighting conditions, several people, IR-aware security |
 | After setup | You're on your own | `mk doctor` health check, daily update notifications, `mk sync` to restore |
+| Keyboard shortcuts | Added on top of whatever is there, clashes and all | One conflict-free keymap with Windows and macOS habits built in; `mk doctor` flags any key bound twice |
+| Changed your mind | Reinstall | `mk restore` puts back the settings snapshot taken before every sync |
 | Failures | Hidden or fatal | Listed at the end with what to do; full log in `/var/log` |
 
 ---
@@ -45,9 +51,15 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Hardware video decoding: detects your GPU and installs the right VA-API driver, so video plays on the GPU instead of the CPU
 
 **Desktop, kept in sync**
-- 10 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
+- 12 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
 - `mk export` saves your current extensions and their settings into the repo; `mk sync` puts them back on any machine
 - Alt+Tab across all workspaces, window snapping, screenshot and power keys, blur and dock styling
+
+**Feels familiar from Windows and macOS, still GNOME**
+- Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps
+- macOS habits: Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), centred new windows, Super+Q / Super+H
+- Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
+- System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
 
 **Face unlock** ([details](docs/FACE-UNLOCK.md))
 - A guided wizard records face models in normal, dim and bright light, so unlock keeps working as the room changes
@@ -55,7 +67,8 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - IR cameras are picked automatically. On a regular webcam it keeps strict matching and asks before enabling face unlock for `sudo`
 
 **Tools and upkeep**
-- `mk doctor`: one-screen health check covering updates, codecs, GPU decoding, broken extensions, failed services, disk space and face unlock
+- `mk doctor`: one-screen health check covering updates, codecs, GPU decoding, broken extensions, shortcut conflicts, failed services, disk space and face unlock
+- A settings snapshot before every sync, undone with `mk restore`
 - Daily background check that tells you when a new version of this repo is available
 - OCR text-from-screen, a live shortcut cheat sheet, notes and a focus timer, webcam controls
 - `just` recipes and GitHub Actions ShellCheck on every push
@@ -90,14 +103,14 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | Group | Apps |
 | :--- | :--- |
 | Browsing, notes, office | Zen Browser, Obsidian, Joplin, ONLYOFFICE |
-| Desktop tools | Extension Manager, GNOME Tweaks, Frog (text from images), Cameractrls, FlipClock, Flameshot |
+| Desktop tools | Extension Manager, GNOME Tweaks, Sushi (Quick Look), Frog (text from images), Cameractrls, FlipClock, Flameshot |
 | Communication and audio | ZapZap (WhatsApp), Spotify, SonoBus, EasyEffects |
 | Gaming | Lutris, GameMode, Gamescope, MangoHud, vkBasalt |
 | Development | VS Code, Distrobox, Android tools, GCC, Make, Node.js, pip |
 | Terminal | btop, fastfetch, fzf, ripgrep, zoxide, ncdu, just, chezmoi, 7-Zip, unrar |
 | Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, gThumb, Kamoso, Media Writer |
 
-**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, and the MK top-bar mark.
+**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, AppIndicator (tray icons), Caffeine (keep awake), and the MK top-bar mark.
 
 ---
 
@@ -108,6 +121,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk doctor` | | Health check with a fix for every problem it finds |
 | `mk sync` | `just sync` | Re-apply desktop settings and saved extension settings |
 | `mk export` | `just export` | Save your current settings and extensions into the repo |
+| `mk restore` | | Undo the last sync from its settings snapshot |
 | `mk update` | `just update` | Pull the latest version and re-apply settings |
 | `mk face` | `just face` | Face unlock wizard (`--models N`, `--user NAME`, `--tune-only`) |
 | `mk shortcuts` | | Open the shortcut cheat sheet |
@@ -116,21 +130,32 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 
 ## Keyboard shortcuts
 
-| Shortcut | Action |
-| :--- | :--- |
-| `Alt+Tab` / `Super+Tab` | Switch windows (all workspaces) / switch apps |
-| `Super+Q` | Close window |
-| `Super+←` / `→` / `↑` / `↓` | Snap left / snap right / maximize / restore |
-| `Super+Page Up` / `Page Down` | Previous / next workspace (also `Super+Alt+←/→`) |
-| `Print` / `Alt+Print` / `Super+Shift+S` | Screenshot screen / window / pick an area |
-| `Super+Backspace` or `Super+Shift+X` | Shut down / restart dialog |
-| `Super+Shift+T` / `Super+Alt+T` | OCR: copy text from the screen (MK tool / Text Extractor) |
-| `Super+V` | Clipboard history |
-| `Super+.` / `Super+/` | Emoji board / shortcut cheat sheet |
-| `Super+N` / `Super+C` | Notes and focus timer / webcam controls |
-| 3-finger / 4-finger pinch | Volume / show desktop |
+Press **Super+/** for a live cheat sheet that always matches your keyboard.
 
-`Ctrl+Alt+←/→` is left free for Zen Browser's workspace switching.
+| | Shortcut | Action |
+| :--- | :--- | :--- |
+| **Windows** | `Alt+Tab` · `Super+Tab` | Switch windows (all workspaces) · switch apps |
+| | `Super+←/→/↑/↓` | Snap left / right · maximize · restore |
+| | `Super+D` · `Super+E` · `Super+I` | Show desktop · Files · Settings |
+| | `Super+S` · `Super+R` | Search · run a command |
+| | `Super+1…9` | Open the 1st…9th dock app |
+| | `Ctrl+Shift+Esc` | System Monitor |
+| | `Super+V` · `Super+.` | Clipboard history · emoji |
+| **Screenshots** | `Print` (`Fn+PrtSc`) · `Super+Shift+3` | Whole screen, instantly |
+| | `Shift+Print` · `Super+Shift+S` · `Super+Shift+4` | **Select an area** (or a window) |
+| | `Alt+Print` | Current window |
+| | `Super+Shift+T` · `Super+Alt+T` | Copy text from the screen (OCR) |
+| **macOS** | `Super+Q` · `Super+H` | Close · hide (minimize) |
+| | `Space` in Files | Quick Look preview |
+| **Linux / GNOME** | `Super` · `Super+A` | Overview · all apps |
+| | `Ctrl+Alt+T` | Terminal |
+| | `Super+Alt+←/→` · `Super+Alt+1…4` | Previous/next workspace · go to workspace |
+| | `Super+Shift+A` · `Super+M` | Quick settings · notifications |
+| | `Super+L` · `Super+Backspace` | Lock · shut down / restart |
+| **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Cheat sheet · notes & focus timer · camera controls |
+| **Touchpad** | 3-finger pinch · 4-finger pinch | Volume · show desktop |
+
+Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboard. `Ctrl+Alt+←/→` is left free for Zen Browser.
 
 ---
 

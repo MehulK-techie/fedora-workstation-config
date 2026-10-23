@@ -28,6 +28,7 @@
 - **App icons and launchers** for MK's apps, with `mk icon` for your own images.
 - **Calendar and Files styling** matching the workstation; workspace dots no longer overlap the volume pop-up.
 - Fixed: `sync.sh` aborting when `bin/` contained a `__pycache__` folder (found by a fresh-account test).
+- **Alt+Tab redesign:** frosted card, bright cyan ring on the selection, others shrink and dim, selection glides; smooth with 3-finger swipes too (switcher appears after 60 ms instead of 150 ms).
 - **docs/ARCHITECTURE.md** (how it works, how to extend it) and **docs/REFERENCE.md** (every command, file, format, timer).
 - **Rename it:** `mk rename "Name" TAG` or Companion › Rename; the top-bar tag follows live. Forks set the default in `config/brand.conf`.
 - **docs/CUSTOMIZING.md:** how to make it yours or fork it without editing scripts.

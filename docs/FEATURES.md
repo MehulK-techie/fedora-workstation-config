@@ -54,7 +54,7 @@ Credit for everything in the last two groups belongs to its authors; see
 | Dock magnification | The icon under the pointer grows, neighbours follow in a wave | `config/dock.conf` |
 | App-coloured dock glow | A soft circular tint in each app's own colour on hover | `dockGlow.js` |
 | Timer countdown | Ring + time in the top bar while a focus timer runs; click to open | automatic |
-| Alt+Tab pop-in | The switcher grows and fades in instead of appearing at once | automatic |
+| Alt+Tab, redesigned | Frosted navy card; the selected window gets a bright cyan ring while the others shrink and dim; selection glides when you scrub with the keyboard or a 3-finger swipe; pops in on both | automatic (`switcher.js`, `stylesheet.css`) |
 | Calendar styling | Round day cells with cyan hover glow, glowing today, softer other-month days | `stylesheet.css` |
 | Pop-ups that don't collide | Workspace dots glide above the volume/brightness pop-up when both show | `osdStack.js` |
 | Dock out of the way | Hidden in the overview so window titles stay readable | automatic |

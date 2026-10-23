@@ -25,6 +25,10 @@ generate_system_context.sh
 # Browser credentials & persistent databases
 logins.json
 key4.db
+cert9.db
 cookies.sqlite*
+sessionstore-backups/
+sessionstore.jsonlz4
+recovery.jsonlz4
 places.sqlite*
 storage/

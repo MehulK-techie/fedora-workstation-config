@@ -287,6 +287,29 @@ rm -rf "${USER_EXT_DIR:?}/$MK_INDICATOR"
 cp -r "$SCRIPT_DIR/extensions/$MK_INDICATOR" "$USER_EXT_DIR/"
 
 gsettings set org.gnome.shell disable-user-extensions false
+# Effects profile (`mk effects full|lite|auto`, default auto): lite keeps the
+# heaviest effects (config/effects.conf) installed but switched off, so older
+# or low-power machines stay smooth. auto picks lite on weak hardware.
+EFFECTS=$(cat "$HOME/.config/mk-workstation/effects" 2>/dev/null || echo auto)
+read -ra HEAVY_EXTENSIONS <<< "$(sed -n 's/^HEAVY=//p' "$SCRIPT_DIR/config/effects.conf")"
+if [[ "$EFFECTS" != full && "$EFFECTS" != lite ]]; then
+    lite_below=$(sed -n 's/^AUTO_LITE_BELOW_GB=//p' "$SCRIPT_DIR/config/effects.conf")
+    mem_gb=$(awk '/^MemTotal/ { print int($2 / 1048576) }' /proc/meminfo)
+    if (( mem_gb < ${lite_below:-4} )) || (( $(nproc) <= 2 )) || ! compgen -G "/dev/dri/renderD*" > /dev/null; then
+        EFFECTS=lite
+    else
+        EFFECTS=full
+    fi
+fi
+if [[ "$EFFECTS" == lite ]]; then
+    kept=()
+    for uuid in "${ACTIVE_EXTENSIONS[@]}"; do
+        [[ " ${HEAVY_EXTENSIONS[*]} " == *" $uuid "* ]] || kept+=("$uuid")
+    done
+    ACTIVE_EXTENSIONS=("${kept[@]}")
+    gsettings_remove org.gnome.shell enabled-extensions "${HEAVY_EXTENSIONS[@]}"
+    echo "    [*] Effects: lite (blur, window effects and genie off; 'mk effects full' turns them on)"
+fi
 # Write the list directly: `gnome-extensions enable` fails on Wayland for
 # extensions the running shell hasn't loaded yet.
 gsettings_append org.gnome.shell enabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR"

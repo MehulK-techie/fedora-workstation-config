@@ -176,6 +176,27 @@ case "${1:-help}" in
         PYTHONPATH="$HOME/.local/share/mk-workstation/lib" python3 -m mkworkstation task "$@"
         ;;
 
+    effects)
+        # full: every effect · lite: blur, window effects and genie off · auto: lite on weak hardware
+        shift
+        EFFECTS_FILE="$HOME/.config/mk-workstation/effects"
+        case "${1:-}" in
+            full|lite|auto)
+                mkdir -p "$(dirname "$EFFECTS_FILE")"
+                echo "$1" > "$EFFECTS_FILE"
+                echo "==> Effects: $1. Applying..."
+                "$REPO_DIR/sync.sh" | grep -E "Effects|✔|log out" || true
+                ;;
+            "")
+                echo "Effects: $(cat "$EFFECTS_FILE" 2>/dev/null || echo auto)   (mk effects full | lite | auto)"
+                ;;
+            *)
+                echo "Usage: mk effects full | lite | auto" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+
     rename)
         # Rename the MK windows, notifications and top-bar tag on this computer.
         shift
@@ -252,6 +273,7 @@ case "${1:-help}" in
         echo "  task       Add a task: mk task \"pay rent\" [when]   (when: 30m, 2h, 18:00, tomorrow 9:00)"
         echo "  remind     Same as task, with a reminder: mk remind \"stretch\" 45m"
         echo "  list       Show notes, tasks and their reminders"
+        echo "  effects    Visual effects: full, lite (smooth on older machines) or auto"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"
         ;;

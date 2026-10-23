@@ -194,6 +194,26 @@ if v4l2-ctl -d "$SELECTED_CAM" --list-ctrls-menus 2>/dev/null | grep -q 'auto_ex
     fi
 fi
 
+# A regular webcam can be fooled by a photo, and sudo grants full control of
+# the computer, so on RGB cameras sudo face unlock is opt-in. Answering no
+# also removes it if an earlier run (or an IR camera) had enabled it.
+SUDO_FACE=1
+sudo_has_howdy() {
+    grep -qE '^[[:space:]]*auth[[:space:]].*pam_howdy\.so' /etc/pam.d/sudo 2>/dev/null
+}
+if [[ "$CAM_TYPE" == "rgb" ]] && { (( !TUNE_ONLY )) || sudo_has_howdy; }; then
+    answer=""
+    read -rp "  Use face unlock for sudo (admin commands)? A photo of you could pass. [y/N]: " answer || true
+    if [[ ! "$answer" =~ ^[yY] ]]; then
+        SUDO_FACE=0
+        if sudo_has_howdy; then
+            [[ -f /etc/pam.d/sudo.bak ]] || cp -a /etc/pam.d/sudo /etc/pam.d/sudo.bak
+            sed -i -E '/^[[:space:]]*auth[[:space:]].*pam_howdy\.so/d' /etc/pam.d/sudo
+            echo "    [+] Removed face unlock from sudo; it now asks for your password."
+        fi
+    fi
+fi
+
 if (( TUNE_ONLY )); then
     echo "✔ Re-tuned Howdy for ${SELECTED_CAM}. No face models were changed."
     exit 0
@@ -250,15 +270,7 @@ echo "[+] Recorded ${recorded} new face model(s) for ${TARGET_USER}."
 # Step 4: Turn on face unlock for the login screen and sudo.
 # ------------------------------------------------------------------------------
 echo "==> Step 4/4: Enabling face unlock..."
-# A regular webcam can be fooled by a photo, and sudo grants full control of
-# the computer, so on RGB cameras sudo needs an explicit yes.
-if [[ "$CAM_TYPE" == "rgb" ]]; then
-    PAM_FILES=(/etc/pam.d/gdm-password)
-    answer=""
-    echo "  Face unlock will be used on the login screen."
-    read -rp "  Also use it for sudo (admin commands)? A photo of you could pass. [y/N]: " answer || true
-    [[ "$answer" =~ ^[yY] ]] && PAM_FILES+=(/etc/pam.d/sudo)
-fi
+(( SUDO_FACE )) || PAM_FILES=(/etc/pam.d/gdm-password)
 if [[ ! -e /usr/lib64/security/pam_howdy.so ]] && [[ ! -e /usr/lib/security/pam_howdy.so ]]; then
     echo "⚠ pam_howdy.so not found — skipping PAM changes to prevent lockout."
 else

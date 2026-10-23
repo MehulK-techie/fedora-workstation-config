@@ -353,6 +353,38 @@ bullets(cr, [
 ], M, y + 40 + fh, W - 2 * M, size=10.5, gap=6)
 footer(cr, page)
 
+# 8a ── Focus screensavers
+new_page()
+y = header(cr, "Step away", "Screensavers that play over your work")
+bw = (W - 2 * M - 16) / 2
+bh = image(cr, "saver-bubbles", M, y + 12, bw)
+image(cr, "saver-mystify", M + bw + 16, y + 12, bw)
+caption(cr, "Bubbles: soap bubbles that bounce off each other", M, y + 18 + bh, bw)
+caption(cr, "Mystify: glowing shapes with echoes", M + bw + 16, y + 18 + bh, bw)
+bullets(cr, [
+    ("No new window", "drawn by the top-bar extension right over what you were doing; gone at the first touch"),
+    ("Three classics, or a surprise", "Bubbles, Mystify, Starfield, or the full-screen Aurora; pick one in the timer"),
+    ("Smooth on any machine", "a few small moving pieces, not a full-screen canvas: 60 fps even without a GPU"),
+], M, y + 40 + bh, W - 2 * M, size=10.5, gap=6)
+footer(cr, page)
+
+# 8a2 ── MK Notes
+new_page()
+y = header(cr, "Super + N · Obsidian, Apple Notes and Samsung Notes in one", "MK Notes, on laptop and phone")
+nh = image(cr, "notes-read", M, y + 12, 470)
+image(cr, "phone-note", M + 486, y + 12, nh * 404 / 816, h=nh)
+caption(cr, "On the laptop: links, callouts, checklists, a drawing", M, y + 18 + nh, 470)
+caption(cr, "On the phone", M + 486, y + 18 + nh, nh * 404 / 816)
+bullets(cr, [
+    ("Your files", "a Markdown vault Obsidian opens too; folders, pins, colours, #tags"),
+    ("Connected", "[[links]], backlinks, outline, graph view, quick switcher"),
+    ("Like Apple Notes", "paste or capture screenshots, checklists that continue"),
+    ("Like Samsung Notes", "draw and handwrite with pressure on lined or grid paper"),
+    ("Pro features, free", "PDF export, publish as a website, version history"),
+    ("On your phone", "browser or Android app, works offline, syncs over Wi-Fi"),
+], M + 486 + nh * 404 / 816 + 18, y + 14, W - M - (M + 486 + nh * 404 / 816 + 18), size=9.5, gap=7)
+footer(cr, page)
+
 # 8b ── Welcome
 new_page()
 y = header(cr, "After you log in", "Welcome back home, sir.")

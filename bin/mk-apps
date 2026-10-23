@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# App-list helper for `mk update` and `mk save`.
+#   mk-apps missing   print apps from apps/*.txt that aren't installed ("dnf NAME" / "flatpak ID")
+#   mk-apps capture   add apps you installed yourself to apps/*.txt
+#   mk-apps baseline  record the packages that existed before MK (only the first time)
+set -euo pipefail
+
+REPO_DIR=""
+[[ -f "$HOME/.config/mk-workstation/repo-path" ]] && REPO_DIR=$(< "$HOME/.config/mk-workstation/repo-path")
+[[ -d "$REPO_DIR/apps" ]] || REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DNF_LIST="$REPO_DIR/apps/dnf-packages.txt"
+FLATPAK_LIST="$REPO_DIR/apps/flatpaks.txt"
+BASELINE="$HOME/.config/mk-workstation/dnf-baseline.txt"
+
+manifest() {
+    grep -vE '^\s*(#|$)' "$1" | sed 's/[[:space:]]*$//' | sort -u || true
+}
+installed_flatpaks() {
+    flatpak list --app --columns=application 2>/dev/null | sort -u
+}
+user_installed_packages() {
+    dnf repoquery --userinstalled --qf '%{name}\n' 2>/dev/null | sort -u
+}
+# Append items under a dated heading, once per run.
+append_section() {
+    local file=$1
+    shift
+    (( $# )) || return 0
+    printf '\n# --- Added with mk save on %s ---\n' "$(date +%F)" >> "$file"
+    printf '%s\n' "$@" >> "$file"
+}
+
+case "${1:-}" in
+    missing)
+        while IFS= read -r pkg; do
+            rpm -q --whatprovides "$pkg" &>/dev/null || echo "dnf $pkg"
+        done < <(manifest "$DNF_LIST")
+        comm -23 <(manifest "$FLATPAK_LIST") <(installed_flatpaks) | sed 's/^/flatpak /'
+        ;;
+
+    capture)
+        mapfile -t new_flatpaks < <(comm -13 <(manifest "$FLATPAK_LIST") <(installed_flatpaks))
+        new_packages=()
+        if [[ -s "$BASELINE" ]]; then
+            mapfile -t new_packages < <(comm -23 <(user_installed_packages) \
+                <(sort -u "$BASELINE" <(manifest "$DNF_LIST")))
+        else
+            echo "[*] No package baseline yet (run mk sync once); only Flatpaks were checked." >&2
+        fi
+        append_section "$FLATPAK_LIST" "${new_flatpaks[@]}"
+        append_section "$DNF_LIST" "${new_packages[@]}"
+        echo "[+] New Flatpaks added to the list: ${#new_flatpaks[@]}${new_flatpaks[*]:+ (${new_flatpaks[*]})}"
+        echo "[+] New packages added to the list: ${#new_packages[@]}${new_packages[*]:+ (${new_packages[*]})}"
+        ;;
+
+    baseline)
+        if [[ ! -s "$BASELINE" ]]; then
+            mkdir -p "$(dirname "$BASELINE")"
+            user_installed_packages > "$BASELINE"
+        fi
+        ;;
+
+    *)
+        sed -n '2,5p' "$0" | sed 's/^# //'
+        exit 2
+        ;;
+esac

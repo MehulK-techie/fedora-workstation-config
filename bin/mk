@@ -24,14 +24,84 @@ updates_available() {
 
 case "${1:-help}" in
     update)
-        echo "==> Checking for MK Workstation updates..."
-        if ! updates_available; then
-            echo "✔ MK Workstation is already up-to-date (Commit: $(git -C "$REPO_DIR" rev-parse --short HEAD))"
+        # One command keeps everything current: the repo, any app added to
+        # apps/*.txt, desktop settings and extensions, then system updates.
+        #   mk update --check       show what would happen, change nothing
+        #   mk update --no-upgrade  skip the dnf/Flatpak system upgrade
+        shift
+        CHECK_ONLY=0
+        UPGRADE=1
+        for arg in "$@"; do
+            case "$arg" in
+                --check) CHECK_ONLY=1 ;;
+                --no-upgrade) UPGRADE=0 ;;
+                *) echo "[-] Unknown option: $arg" >&2; exit 2 ;;
+            esac
+        done
+
+        echo "==> 1/4 MK Workstation repo"
+        if ! git -C "$REPO_DIR" rev-parse --abbrev-ref '@{u}' &>/dev/null; then
+            echo "    [*] Branch doesn't track a remote branch; using the local copy."
+        elif ! git -C "$REPO_DIR" diff --quiet || ! git -C "$REPO_DIR" diff --cached --quiet; then
+            echo "    [*] You have uncommitted changes; skipping the pull (run 'mk save' first)."
+        elif updates_available; then
+            if (( CHECK_ONLY )); then
+                echo "    New version available: $(git -C "$REPO_DIR" log --oneline HEAD..'@{u}' | wc -l) new commit(s)."
+            else
+                git -C "$REPO_DIR" pull --ff-only
+            fi
         else
-            echo "⚡ New updates found! Pulling latest optimizations..."
-            git -C "$REPO_DIR" pull --ff-only
+            echo "    ✔ Up to date ($(git -C "$REPO_DIR" rev-parse --short HEAD))"
+        fi
+
+        echo "==> 2/4 Apps from apps/dnf-packages.txt and apps/flatpaks.txt"
+        mapfile -t missing < <("$REPO_DIR/bin/mk-apps" missing)
+        if (( ${#missing[@]} == 0 )); then
+            echo "    ✔ Everything in the app lists is installed."
+        else
+            printf '    + %s\n' "${missing[@]}"
+        fi
+
+        echo "==> 3/4 Desktop settings and extensions"
+        if (( CHECK_ONLY )); then
+            echo "    Would re-apply settings and install any missing extensions (mk sync)."
+        elif (( ${#missing[@]} )); then
+            # setup.sh installs what's missing and then runs sync.sh as you.
+            echo "    Installing ${#missing[@]} new app(s); your password is needed."
+            sudo "$REPO_DIR/setup.sh"
+        else
             "$REPO_DIR/sync.sh"
-            echo "✔ Workstation updated and synchronized successfully!"
+        fi
+
+        echo "==> 4/4 System and Flatpak updates"
+        if (( !UPGRADE )); then
+            echo "    Skipped (--no-upgrade)."
+        elif (( CHECK_ONLY )); then
+            echo "    Pending: $(dnf check-update --quiet 2>/dev/null | grep -cE '^[[:alnum:]]' || true) package(s), $(flatpak remote-ls --updates --columns=application 2>/dev/null | grep -c . || true) Flatpak(s)."
+        else
+            flatpak update -y --noninteractive
+            sudo dnf upgrade --refresh -y
+        fi
+
+        if (( CHECK_ONLY )); then
+            echo "Nothing was changed. Run 'mk update' to apply."
+        else
+            echo "✔ MK Workstation is up to date. Run 'mk doctor' for a health check."
+        fi
+        ;;
+
+    save)
+        # Capture what you've added yourself: new apps, extensions and settings.
+        echo "==> Adding apps you installed yourself to apps/*.txt..."
+        "$REPO_DIR/bin/mk-apps" capture
+        echo "==> Saving extensions and settings..."
+        "$REPO_DIR/scripts/update-repo.sh"
+        git -C "$REPO_DIR" add apps config
+        if git -C "$REPO_DIR" diff --cached --quiet -- apps config; then
+            echo "✔ Nothing new to save."
+        else
+            git -C "$REPO_DIR" commit -q -m "chore(mk save): capture apps, extensions and settings" -- apps config
+            echo "✔ Saved as a commit. Publish it with: git -C \"$REPO_DIR\" push"
         fi
         ;;
 
@@ -86,7 +156,8 @@ case "${1:-help}" in
         echo "Usage: mk <command>"
         echo ""
         echo "Commands:"
-        echo "  update     Pull the latest version and re-apply desktop settings"
+        echo "  update     Update everything: repo, new apps, settings, extensions, system (--check to preview)"
+        echo "  save       Capture apps, extensions and settings you added into the repo (commits locally)"
         echo "  check      Show a notification if updates are available"
         echo "  sync       Re-apply MK desktop settings (shortcuts, extensions, tweaks)"
         echo "  export     Save this machine's GNOME settings into the repo (for your fork)"

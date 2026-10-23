@@ -1,6 +1,6 @@
 # Extensions Guide
 
-MK Workstation enables 17 GNOME extensions plus its own small top-bar mark, and restores each one **with its saved settings**. This guide shows what each does and how to change it, whether you prefer clicking or the terminal.
+MK Workstation enables 16 GNOME extensions plus its own small top-bar mark, and restores each one **with its saved settings**. This guide shows what each does and how to change it, whether you prefer clicking or the terminal.
 
 - **Everyone:** [Change an extension in 30 seconds](#change-an-extension-in-30-seconds) · [The extensions](#the-extensions) · [Keep it smooth](#keep-it-smooth)
 - **Tech-savvy:** [How syncing works](#how-syncing-works) · [Command-line tweaking](#command-line-tweaking) · [Add or remove an extension](#add-or-remove-an-extension)
@@ -36,7 +36,6 @@ To switch an extension off, use the toggle next to it in Extension Manager. `mk 
 | **Tiling Assistant** | Windows-style split screen: snap halves and quarters, Snap Assist offers your other windows for the free space, snapped windows raise together, snap layouts | Super+←/→ halves; then Super+↑/↓ for quarters; **Super+Z** layouts; Super+Ctrl+C centre; no animations | Extension Manager ⚙ (layouts: *Layouts* tab, saved in `~/.config/tiling-assistant/layouts.json`) |
 | **Impatience** | Speeds up every GNOME animation for a snappier, macOS-like feel | Speed factor 0.75 (25% faster); 1.0 is GNOME's normal speed | Extension Manager ⚙ |
 | **Magic Lamp** | macOS genie effect when minimizing into the dock | 350 ms (default 500). `sync.sh` patches it to skip the genie when a gesture already animates the window (4-finger pinch), which removes a double animation that stuttered | Extension Manager ⚙ |
-| **Space Bar** | Workspaces as named pills in the top bar, replacing GNOME's activity dots | Each workspace is named after its first app and numbered; click to switch (click the active one for the overview), scroll the top bar to move between them, drag pills to reorder, Super+W menu to rename, Ctrl+Alt+Super+←/→ moves the current workspace. Navy and cyan to match Alt+Tab | Extension Manager ⚙ |
 | **Burn My Windows** | Window open and close effects | One subtle effect, *Glide*: windows scale in and out in 220 ms. Stored as the high-priority profile `~/.config/burn-my-windows/profiles/mk-glide.conf` (from `config/burn-my-windows-profile.conf`); `sync.sh` rewrites it, so make your own profile in its settings instead of editing this one | Extension Manager ⚙ |
 | **Places Status Indicator** | Top-bar menu for Home, Downloads, drives and network places | GNOME default | (no settings) |
 | **MK Workstation Indicator** | A faint **MK** mark in the top bar that brightens on hover, plus the MK Alt+Tab theme (frosted navy panel, cyan highlight on the selected window) | — | Switch off in Extension Manager to remove it |

@@ -5,14 +5,13 @@
 ### Added
 - **macOS feel:** trackpad gestures (4 fingers ←/→ workspaces, 3 fingers ←/→ windows, 3 fingers ↑ overview), 25% faster animations (Impatience), genie minimize (Magic Lamp), a subtle glide when windows open and close (Burn My Windows), Super+Ctrl+F full screen, Finder-style Files, sharp X11 apps at fractional scaling.
 - **Windows feel:** taskbar-style dock (click focuses or minimizes, thumbnails for apps with several windows, middle-click for a new window), Super+Ctrl+D new desktop (Shift takes the window along).
-- **Better workspaces:** Space Bar shows named workspace pills in the top bar (named after their app, click, scroll, drag to reorder, Super+W to rename).
 - **Livelier desktop:** soft cyan hover glow on top-bar buttons, dock icons and overview windows; touchpad gestures in the Super+/ cheat sheet.
 - **`mk uninstall`**, a permanent pre-MK settings snapshot, SECURITY.md, CODE_OF_CONDUCT.md, THIRD_PARTY.md, issue and PR templates, .editorconfig.
 - **Themed Alt+Tab:** GNOME's flat switcher with live thumbnails of every window on every workspace, styled by mk-indicator's stylesheet (frosted navy panel, cyan selection).
 - **Windows-style multitasking** (Tiling Assistant): snap halves and quarters, Snap Assist, six snap layouts on Super+Z, tile groups, always on top (Super+Ctrl+T), Super+Ctrl+←/→ desktops.
 - **Super+N** Obsidian and **Super+B** default browser; duplicate user shortcuts are folded into the mk-* versions.
 - **`mk update`** updates everything (repo, newly listed apps, settings, extensions, system) with `--check` preview; **`mk save`** captures apps, extensions and settings you added and commits them.
-- Login helper `mk-session` that makes Blur my Shell reliable after login.
+- Blur my Shell's top-bar blur is rebuilt by mk-indicator once GNOME has finished starting, so it shows right after login.
 - **Windows & macOS conveniences** with one conflict-free keymap (Super+E/I/D/R/S, Ctrl+Shift+Esc, Super+1–9, Super+Shift+3/4, Ctrl+Alt+T, Quick Look), AppIndicator tray icons and Caffeine.
 - **Settings snapshot before every sync** and `mk restore`.
 - **Shortcut conflict check** in `mk doctor`; live, grouped cheat sheet on Super+/.

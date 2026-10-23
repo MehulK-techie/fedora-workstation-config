@@ -8,7 +8,7 @@
 | **Updated** | 2026-10-23: second pass added B25–B28 and S5, found on the live system and by the automated security review. |
 | **Method** | Read every script and document; ran `bash -n` and ShellCheck; ran `sync.sh` against a throwaway dconf database; checked every package name with `dnf repoquery` and every Flatpak ID with `flatpak remote-info`; checked GNOME 50 schemas with `gsettings`. |
 
-**Summary:** 49 findings. 44 are fixed on the branch and 5 are still open.
+**Summary:** 52 findings. 47 are fixed on the branch and 5 are still open.
 
 | Category | Found | Fixed | Open |
 | :--- | :---: | :---: | :---: |
@@ -52,6 +52,9 @@ Severity: **Critical** = the script aborts or does the wrong thing for everyone 
 | B30 | High | GNOME `disabled-extensions` | Caffeine and mk-indicator were on GNOME's `disabled-extensions` list, which overrides `enabled-extensions`. sync.sh "enabled" them but they never loaded, and any extension switched off once in Extension Manager could never come back. sync.sh now removes the extensions it enables from that list. Verified live: both ACTIVE. | `6b9167f` |
 | B31 | High | `~/.config/autostart` (local hacks) | Blur my Shell showed no blur after login until the screen was locked and unlocked. `fix-extensions.desktop` toggled **every** extension 3 s after login, which crashed Astra Monitor ("already disposed", 19 errors) without fixing blur. Replaced by `bin/mk-session`, which re-initializes only Blur my Shell once the shell has settled (0 errors in a live run); the old hacks are moved aside, not deleted. | `33b8691` |
 | B32 | Medium | WACK Shell 1.0.0 (third-party) | `super.vfunc_event()` doesn't exist on GNOME 50, so pointer events over WACK's logo and workspace buttons threw 500 JS errors in one session. Patched idempotently by sync.sh (upstream `main` still has the call). | `33b8691` |
+| B33 | High | `bin/mk-session`, `~/.config/systemd/user/mk-blur-fix.service` | Top-bar blur still missing after some logins. `mk-session` toggled Blur my Shell 4 s after login, sometimes before the wallpaper was ready, and an older `mk-blur-fix.service` from a previous install raced it. mk-indicator now rebuilds only the panel blur from inside the shell, 3 s after GNOME reports startup complete; sync.sh retires both old helpers. | this commit |
+| B34 | Medium | Magic Lamp (third-party) | Ignored GNOME's `skipNextEffect()`, so the 4-finger pinch (show desktop) played the gesture's own slide and then a genie: visible stutter. Patched idempotently by sync.sh. | `a39069f` |
+| B35 | Medium | WACK Shell 1.0.0 (third-party) | Called `paint_to_content()` on the GNOME 50 dock, which lacks it: an error and stack trace on every dock movement. Patched by sync.sh. | `a39069f` |
 | B19 | Low | `setup.sh`, `sync.sh` | Home was assumed to be `/home/$USER`. Running outside a GNOME session failed with raw gsettings errors. Repo, COPR and Flatpak failures were hidden by `\|\| true`. | `cce59cf`, `89ad4a5` |
 
 ### Open

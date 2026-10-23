@@ -1,3 +1,4 @@
+import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -39,6 +40,34 @@ export default class MKIndicatorExtension extends Extension {
             Main.overview.connect('showing', () => this._setDocksShown(false)),
             Main.overview.connect('hiding', () => this._setDocksShown(true)),
         ];
+
+        // Blur my Shell can blur the top bar before the wallpaper is loaded at
+        // login and then shows no blur until the next unlock. Rebuild its panel
+        // blur once the shell has finished starting up and settled.
+        if (Main.layoutManager._startingUp) {
+            this._startupId = Main.layoutManager.connect('startup-complete', () => {
+                Main.layoutManager.disconnect(this._startupId);
+                this._startupId = 0;
+                this._scheduleBlurRefresh();
+            });
+        } else {
+            this._scheduleBlurRefresh();
+        }
+    }
+
+    _scheduleBlurRefresh() {
+        this._blurTimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 3, () => {
+            this._blurTimeoutId = 0;
+            const blur = global.blur_my_shell;
+            const panel = blur?._panel_blur;
+            if (panel && blur._settings?.panel?.BLUR) {
+                if (panel.enabled)
+                    panel.reset();
+                else
+                    panel.enable();
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _setDocksShown(shown) {
@@ -61,6 +90,14 @@ export default class MKIndicatorExtension extends Extension {
     }
 
     disable() {
+        if (this._startupId) {
+            Main.layoutManager.disconnect(this._startupId);
+            this._startupId = 0;
+        }
+        if (this._blurTimeoutId) {
+            GLib.source_remove(this._blurTimeoutId);
+            this._blurTimeoutId = 0;
+        }
         this._overviewIds?.forEach(id => Main.overview.disconnect(id));
         this._overviewIds = null;
         for (const dock of Main.uiGroup.get_children()) {

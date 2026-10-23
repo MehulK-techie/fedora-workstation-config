@@ -174,28 +174,27 @@ systemctl --user daemon-reload 2>/dev/null \
     && systemctl --user enable --now mk-update-check.timer &>/dev/null \
     || echo "    [*] Couldn't enable the daily update check (no systemd user session)"
 
-# Login helper: re-initializes Blur my Shell after GNOME Shell has settled (bin/mk-session).
+# Blur my Shell's panel blur after login is now refreshed from inside the shell
+# by mk-indicator, once startup has finished. Older login hacks toggled every
+# extension (crashing others), toggled Blur my Shell too early (mk-session), or
+# re-applied keys that now persist. Move them aside rather than delete them.
 AUTOSTART_DIR="$HOME/.config/autostart"
-mkdir -p "$AUTOSTART_DIR"
-cat > "$AUTOSTART_DIR/mk-session.desktop" << DESKTOP
-[Desktop Entry]
-Type=Application
-Name=MK Workstation session start
-Comment=Makes sure Blur my Shell is applied after login
-Exec=$HOME/.local/bin/mk-session
-X-GNOME-Autostart-enabled=true
-NoDisplay=true
-DESKTOP
-# Older login hacks toggled every extension (crashing others) or re-applied keys
-# that now persist. Move them aside rather than delete them.
 RETIRED_DIR="$HOME/.config/mk-workstation/retired-autostart"
-for hack in fix-extensions.desktop bms-panel-fix.desktop gnome-alt-tab-fix.desktop; do
+rm -f "$HOME/.local/bin/mk-session"
+for hack in fix-extensions.desktop bms-panel-fix.desktop gnome-alt-tab-fix.desktop mk-session.desktop; do
     if [[ -f "$AUTOSTART_DIR/$hack" ]]; then
         mkdir -p "$RETIRED_DIR"
         mv -f "$AUTOSTART_DIR/$hack" "$RETIRED_DIR/"
         echo "    [+] Retired old login hack $hack (kept in $RETIRED_DIR)"
     fi
 done
+if [[ -f "$HOME/.config/systemd/user/mk-blur-fix.service" ]]; then
+    systemctl --user disable mk-blur-fix.service &>/dev/null || true
+    mkdir -p "$RETIRED_DIR"
+    mv -f "$HOME/.config/systemd/user/mk-blur-fix.service" "$RETIRED_DIR/"
+    systemctl --user daemon-reload &>/dev/null || true
+    echo "    [+] Retired old login hack mk-blur-fix.service (kept in $RETIRED_DIR)"
+fi
 
 # Remember which packages existed before MK, so `mk save` can spot new ones.
 "$HOME/.local/bin/mk-apps" baseline
@@ -275,6 +274,9 @@ gsettings_append org.gnome.shell enabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$
 # GNOME's disabled-extensions list overrides enabled-extensions, so an extension
 # switched off once in Extension Manager would otherwise never come back.
 gsettings_remove org.gnome.shell disabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR"
+# Extensions an earlier MK version enabled and later dropped: switch them off.
+# Space Bar duplicated GNOME's own workspace dots in the top bar.
+gsettings_remove org.gnome.shell enabled-extensions space-bar@luchrioh
 
 # 3. Window Management & Multitasking (All Workspaces, Zero Lag)
 echo "==> Applying window management keybindings..."

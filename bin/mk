@@ -162,7 +162,6 @@ case "${1:-help}" in
         systemctl --user disable --now mk-update-check.timer &>/dev/null || true
         rm -f "$HOME/.config/systemd/user/mk-update-check.service" "$HOME/.config/systemd/user/mk-update-check.timer"
         systemctl --user daemon-reload &>/dev/null || true
-        rm -f "$HOME/.config/autostart/mk-session.desktop"
         rm -f "$HOME/.config/burn-my-windows/profiles/mk-glide.conf"
 
         MEDIA_KEYS="org.gnome.settings-daemon.plugins.media-keys"

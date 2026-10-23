@@ -75,10 +75,27 @@ pres.defineSlideMaster({
 let objectId = 0;
 const oid = name => `${name}-${++objectId}`;
 
+// What to say on each slide (presenter view).
+const NOTES = {
+  "Great foundation, bare walls": "Fedora is a great base but bare. Setting it up by hand takes a weekend; MK does it in one command and about fifteen minutes, and everything stays a normal GNOME setting you can undo.",
+  "Snap, tile, focus. No dragging.": "Windows-style snapping: Super and the arrows for halves and quarters, Super+Z for layouts, Snap Assist offers the other windows for the free space.",
+  "A desktop that says hello, and remembers": "After login the light runs round the screen once the desktop is ready, and the greeting shows your pinned tasks and next reminder. The colours across the desktop come from your wallpaper.",
+  "MK Notes: write, link, draw, find": "MK Notes keeps notes as plain Markdown files. Links, backlinks and a graph; draw with a pen; paste screenshots; edit with a live preview. The same notes are on your phone.",
+  "The features you'd normally pay for": "Sync to your phone over Wi-Fi, PDF export, publishing as a website and version history are built in, plus a tasks view, a daily-notes calendar, focus mode and your own look.",
+  "Step away. It notices.": "The focus timer counts down in the top bar. Step away and a screensaver plays over your work; when time's up there's a small celebration instead of an alarm.",
+  "Everything you check, one click away": "A light system monitor in the top bar with honest numbers, clipboard history on Super+V, a keep-awake switch and the usual tray icons.",
+  "Installed and ready on first login": "The apps people ask for are there on first login, including Joplin, ONLYOFFICE, Zen and VS Code. The app lists are plain text files you can edit.",
+  "It looks at your hardware, then tunes for it": "It checks the hardware first: fingerprint or face unlock where there's a reader, power profiles on battery, speaker tuning, touch and 2-in-1 support, the right video driver.",
+  "Your hands already know these": "Shortcuts follow Windows and macOS habits. Super+/ shows every one live and lets you change any key.",
+  "Try it, change your mind, nothing breaks": "Every change is snapshotted, mk restore undoes it and mk uninstall removes MK's tools. mk doctor checks health; mk update updates everything.",
+};
+
 function content(section, kicker, title) {
   const s = pres.addSlide({ masterName: "MK_CONTENT", sectionTitle: section });
   s.addText(kicker.toUpperCase(), { placeholder: "kicker" });
   s.addText(title, { placeholder: "title" });
+  if (NOTES[title])
+    s.addNotes(NOTES[title]);
   return s;
 }
 
@@ -283,6 +300,7 @@ s.addText([
   { text: "      " },
   { text: "Every feature", options: { hyperlink: { url: GITHUB + "/blob/main/docs/FEATURES.md" }, color: C.accent2, bold: true } },
 ], { x: 0.6, y: 4.65, w: 8.8, h: 0.35, fontSize: 14, isTextBox: true, margin: 0 });
+s.addNotes("Clone, change into the folder, run setup with sudo. It asks before anything optional, like face unlock. Then log out and back in.");
 
 // pptxgenjs can't write theme colours; build-deck.sh writes THEME (saved
 // next to the deck as JSON) into the theme part afterwards.

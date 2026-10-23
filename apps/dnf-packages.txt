@@ -41,6 +41,8 @@ just
 chezmoi
 7zip
 unrar
+playerctl
+brightnessctl
 
 # --- Photos, screenshots, camera and audio -------------------------------------
 gthumb
@@ -48,13 +50,19 @@ kamoso
 flameshot
 guvcview
 easyeffects
+mediawriter
 
 # --- Gaming (Lutris itself is a Flatpak) ---------------------------------------
 gamemode
 gamescope
 mangohud
+vkBasalt
 
 # --- Development (code comes from the VS Code repo setup.sh adds) --------------
 code
 distrobox
 android-tools
+gcc
+make
+python3-pip
+nodejs22-npm

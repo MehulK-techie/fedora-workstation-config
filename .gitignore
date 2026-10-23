@@ -37,3 +37,6 @@ HANDOFF.md
 
 # Python bytecode
 __pycache__/
+
+# Built apps (scripts/build-apk.sh)
+dist/

@@ -35,6 +35,10 @@ check:
 overview:
     python3 docs/overview/build.py
 
+# Rebuild the PowerPoint deck (docs/MK-Workstation-Overview.pptx)
+deck:
+    docs/overview/build-deck.sh
+
 # Retake the screenshots on this desktop (drives it for ~90 s; see the script's header)
 screenshots:
     python3 docs/overview/capture.py

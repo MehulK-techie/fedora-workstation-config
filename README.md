@@ -268,7 +268,8 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 | [docs/RELEASING.md](docs/RELEASING.md) | For the maintainer: cutting a release and where to share it |
 | [docs/NOTES.md](docs/NOTES.md) | MK Notes: writing, drawing, screenshots, PDF, publishing, history, and the phone app with Wi-Fi sync |
 | [docs/FEATURES.md](docs/FEATURES.md) | Every feature, app, command and shortcut, split into what MK built and what it configures or installs from others |
-| [docs/MK-Workstation-Overview.pdf](docs/MK-Workstation-Overview.pdf) | 16 slides to show someone: stock Fedora, what MK adds, screenshots (rebuild: `just overview`) |
+| [docs/MK-Workstation-Overview.pdf](docs/MK-Workstation-Overview.pdf) | The 16-page overview to show someone: clickable contents and links, screenshots (rebuild: `just overview`) |
+| [docs/MK-Workstation-Overview.pptx](docs/MK-Workstation-Overview.pptx) | The same story as a 14-slide PowerPoint deck with speaker notes, for presenting (rebuild: `just deck`) |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | What gets detected and tuned: fingerprint, cameras, GPUs, 2-in-1s, power, login screen; tested machines |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit: setup, sync, the shared library, the apps, the shell extension, and how to add things |
 | [docs/REFERENCE.md](docs/REFERENCE.md) | Every `mk` command, tool, file, format, timer and path |

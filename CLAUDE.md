@@ -9,7 +9,7 @@ extensions/mk-indicator@mehulk (top-bar watermark). User-facing docs: README.md,
 ## Rules
 - Never run sudo, setup.sh, register-face.sh, or anything touching /etc. I run those myself.
 - Never run git reset, git checkout -- <file>, or git restore without asking.
-- Work on a branch, commit after each logical fix, show the diff before committing.
+- Work on a branch and commit after each logical fix without asking; summarize the diff after committing.
 - After editing any .sh file: run `bash -n <file>` and `shellcheck <file>`.
 - All gsettings/dconf calls go through the as_user() helper (sets DBUS_SESSION_BUS_ADDRESS and XDG_RUNTIME_DIR).
 - Scripts must be idempotent: safe to run twice with no duplicate lines.

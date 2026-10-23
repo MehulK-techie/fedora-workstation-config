@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Laptop speaker tuning with EasyEffects (`mk sound`).
+#
+# Small laptop speakers sound thin on Linux because the maker's sound software
+# (Bang & Olufsen Audio on HP, Dolby on others) only exists on Windows. The
+# "MK Laptop Speakers" profile does the same kind of work: removes rumble the
+# speakers can't play, adds warmth and psychoacoustic bass, tames harshness,
+# widens the stereo a little, then a compressor and limiter keep it clean.
+#
+#   mk sound on       install the profile, load it now and at every login
+#   mk sound off      stop processing (EasyEffects stays installed)
+#   mk sound status   is it on, and which profile
+set -euo pipefail
+
+PRESET="MK Laptop Speakers"
+REPO_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+SOURCE="$HOME/.local/share/mk-workstation/assets/sound/$PRESET.json"
+[[ -f "$SOURCE" ]] || SOURCE="$REPO_DIR/assets/sound/$PRESET.json"
+PRESET_DIR="$HOME/.local/share/easyeffects/output"
+AUTOSTART="$HOME/.config/autostart/mk-sound.desktop"
+
+if ! command -v easyeffects &> /dev/null; then
+    echo "[-] EasyEffects isn't installed. Run: sudo dnf install easyeffects (or sudo ./setup.sh)" >&2
+    exit 1
+fi
+
+running() { pgrep -x easyeffects > /dev/null; }
+
+case "${1:-status}" in
+    on)
+        mkdir -p "$PRESET_DIR" "$(dirname "$AUTOSTART")"
+        cp -f "$SOURCE" "$PRESET_DIR/$PRESET.json"
+        cat > "$AUTOSTART" << DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Laptop speaker tuning
+Comment=EasyEffects with the MK Laptop Speakers profile (mk sound)
+Exec=sh -c 'easyeffects --service-mode & sleep 4; easyeffects -l "$PRESET"'
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+DESKTOP
+        running || { setsid -f easyeffects --service-mode > /dev/null 2>&1; sleep 4; }
+        easyeffects -l "$PRESET"
+        easyeffects -b 2 > /dev/null 2>&1 || true   # make sure global bypass is off
+        echo "✔ Speaker tuning on ($PRESET). Fine-tune it in the EasyEffects app."
+        ;;
+    off)
+        rm -f "$AUTOSTART"
+        running && easyeffects -q
+        echo "✔ Speaker tuning off. 'mk sound on' brings it back."
+        ;;
+    status)
+        if running; then
+            echo "Speaker tuning: on · $(easyeffects -a output 2> /dev/null || echo "$PRESET")"
+        else
+            echo "Speaker tuning: off   (mk sound on)"
+        fi
+        [[ -f "$AUTOSTART" ]] && echo "Starts at login: yes" || echo "Starts at login: no"
+        ;;
+    *)
+        echo "Usage: mk sound [on | off | status]" >&2
+        exit 2
+        ;;
+esac

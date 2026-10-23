@@ -134,8 +134,8 @@ chmod +x "$HOME/.local/bin/"*
 # The tools' shared Python library and the defaults it reads (shortcuts, brand)
 MK_SHARE="$HOME/.local/share/mk-workstation"
 mkdir -p "$MK_SHARE"
-rm -rf "${MK_SHARE:?}/lib" "${MK_SHARE:?}/config"
-cp -r "$SCRIPT_DIR/lib" "$SCRIPT_DIR/config" "$MK_SHARE/"
+rm -rf "${MK_SHARE:?}/lib" "${MK_SHARE:?}/config" "${MK_SHARE:?}/assets"
+cp -r "$SCRIPT_DIR/lib" "$SCRIPT_DIR/config" "$SCRIPT_DIR/assets" "$MK_SHARE/"
 
 # MK's apps in the app grid, dock and Alt+Tab, with their icons. Your own image
 # wins: ~/.config/mk-workstation/icons/<name>.svg or .png (see `mk icon`).

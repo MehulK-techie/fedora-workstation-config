@@ -1,8 +1,27 @@
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
+
+const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
+const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
+
+// The short tag from brand.conf (yours first, then the installed default).
+function brandShort() {
+    for (const path of [USER_BRAND, DEFAULT_BRAND]) {
+        try {
+            const [ok, bytes] = GLib.file_get_contents(path);
+            const match = ok && new TextDecoder().decode(bytes).match(/^SHORT=(.*)$/m);
+            if (match && match[1].trim())
+                return match[1].trim();
+        } catch (e) {
+            // missing file: try the next one
+        }
+    }
+    return 'MK';
+}
 
 export default class MKIndicatorExtension extends Extension {
     enable() {
@@ -17,7 +36,7 @@ export default class MKIndicatorExtension extends Extension {
 
         // Translucent aesthetic monogram
         this._label = new St.Label({
-            text: 'MK',
+            text: brandShort(),
             y_align: Clutter.ActorAlign.CENTER,
             style: 'font-weight: 700; font-size: 10px; letter-spacing: 2px; color: rgba(255, 255, 255, 0.25);'
         });
@@ -33,6 +52,11 @@ export default class MKIndicatorExtension extends Extension {
         });
 
         Main.panel._rightBox.insert_child_at_index(this._indicator, 0);
+
+        // `mk rename` and the Companion's menu rewrite this file: follow it live.
+        this._brandMonitor = Gio.File.new_for_path(USER_BRAND)
+            .monitor_file(Gio.FileMonitorFlags.NONE, null);
+        this._brandMonitor.connect('changed', () => this._label?.set_text(brandShort()));
 
         // The dock auto-hides on the desktop, but Dash to Dock always shows it
         // in the overview, on top of window titles. Fade it out there too.
@@ -90,6 +114,8 @@ export default class MKIndicatorExtension extends Extension {
     }
 
     disable() {
+        this._brandMonitor?.cancel();
+        this._brandMonitor = null;
         if (this._startupId) {
             Main.layoutManager.disconnect(this._startupId);
             this._startupId = 0;

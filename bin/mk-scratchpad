@@ -1,42 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-NOTES_FILE="$HOME/.mk_scratchpad.md"
-[ -f "$NOTES_FILE" ] || printf "# ⚡ MK Workspace Scratchpad\n\n## 📝 Quick Notes\n- \n\n## ✅ To-Do Tasks\n- [ ] Task 1\n- [ ] Task 2\n" > "$NOTES_FILE"
-
-ACTION=$(zenity --list --title="⚡ MK Workspace Companion" \
-  --width=540 --height=400 \
-  --column="Tool" --column="Description" \
-  "Scratchpad" "Open Markdown Notes & To-Do List" \
-  "Obsidian"   "Full notes app: linked notes, vaults, graph (Super+N)" \
-  "Timer"      "Focus timer: minutes and seconds, with a celebration" \
-  "View Tasks" "Quick Peek at Active To-Dos" \
-  2>/dev/null || true)
-
-case "$ACTION" in
-  "Scratchpad")
-    zenity --text-info --title="MK Quick Scratchpad & To-Do" --filename="$NOTES_FILE" --editable --width=600 --height=450 2>/dev/null > "${NOTES_FILE}.tmp"
-    if [ -s "${NOTES_FILE}.tmp" ]; then
-      mv "${NOTES_FILE}.tmp" "$NOTES_FILE"
-      notify-send -t 2000 "MK Workspace" "Notes and tasks saved successfully."
-    fi
-    rm -f "${NOTES_FILE}.tmp"
-    ;;
-  "Obsidian")
-    if flatpak info md.obsidian.Obsidian &>/dev/null; then
-      setsid -f flatpak run md.obsidian.Obsidian >/dev/null 2>&1
-    elif command -v obsidian &>/dev/null; then
-      setsid -f obsidian >/dev/null 2>&1
-    else
-      notify-send -i dialog-information "Obsidian isn't installed" \
-        "Install it with: flatpak install flathub md.obsidian.Obsidian"
-    fi
-    ;;
-  "Timer")
-    setsid -f "$HOME/.local/bin/mk-timer" >/dev/null 2>&1
-    ;;
-  "View Tasks")
-    TASKS=$(grep -E '^\s*- \[[ x]\]' "$NOTES_FILE" 2>/dev/null || echo "No tasks found.")
-    zenity --info --title="Active To-Do Checklist" --text="$TASKS" --width=400 --height=300 2>/dev/null || true
-    ;;
-esac
+# Older shortcut name for the Companion (notes, tasks, timer). Kept so custom
+# shortcuts and habits that still call mk-scratchpad keep working.
+exec "$HOME/.local/bin/mk-companion" "$@"

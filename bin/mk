@@ -13,6 +13,16 @@ if [[ ! -d "$REPO_DIR/.git" ]]; then
     exit 1
 fi
 
+# The name from brand.conf (yours, then the installed default): `mk rename`.
+brand_name() {
+    local file name
+    for file in "$HOME/.config/mk-workstation/brand.conf" "$HOME/.local/share/mk-workstation/config/brand.conf"; do
+        name=$(sed -n 's/^NAME=//p' "$file" 2>/dev/null | head -n 1)
+        [[ -n "$name" ]] && { echo "$name"; return; }
+    done
+    echo "MK Workstation"
+}
+
 updates_available() {
     if ! git -C "$REPO_DIR" rev-parse --abbrev-ref '@{u}' &>/dev/null; then
         echo "[-] The repo's current branch doesn't track a remote branch; can't check for updates." >&2
@@ -107,7 +117,7 @@ case "${1:-help}" in
 
     check)
         if updates_available; then
-            notify-send -i software-update-available "MK Workstation Update" "New performance updates are available. Run 'mk update' to apply."
+            notify-send -i software-update-available "$(brand_name) update" "New performance updates are available. Run 'mk update' to apply."
         fi
         ;;
 
@@ -151,6 +161,21 @@ case "${1:-help}" in
         "$HOME/.local/bin/show-shortcuts"
         ;;
 
+    rename)
+        # Rename the MK windows, notifications and top-bar tag on this computer.
+        shift
+        if [[ $# -lt 1 || -z "$1" ]]; then
+            echo "Usage: mk rename \"Name\" [TAG]    (now: $(brand_name))" >&2
+            exit 2
+        fi
+        # Default tag: the name's initials, e.g. "Riya's Desk" -> RD
+        tag="${2:-$(awk '{ for (i = 1; i <= NF && i <= 3; i++) printf toupper(substr($i, 1, 1)) }' <<< "$1")}"
+        mkdir -p "$HOME/.config/mk-workstation"
+        printf '# Your name for MK Workstation (mk rename, or the Companion'"'"'s menu).\nNAME=%s\nSHORT=%s\n' \
+            "$1" "${tag:0:6}" > "$HOME/.config/mk-workstation/brand.conf"
+        echo "✔ Renamed to \"$1\" (top bar: ${tag:0:6}). Open windows update the next time they open."
+        ;;
+
     uninstall)
         # Remove everything MK added to your account. Settings snapshots in
         # ~/.config/mk-workstation/backups are kept so you can still restore.
@@ -181,7 +206,8 @@ case "${1:-help}" in
 
         gnome-extensions disable mk-indicator@mehulk &>/dev/null || true
         rm -rf "$HOME/.local/share/gnome-shell/extensions/mk-indicator@mehulk"
-        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-timer ocr-snip show-shortcuts \
+        rm -rf "$HOME/.local/share/mk-workstation/lib" "$HOME/.local/share/mk-workstation/config"
+        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-timer ocr-snip show-shortcuts \
             camera-controls fix-alt-tab close-workspace-apps; do
             rm -f "$HOME/.local/bin/$tool"
         done
@@ -206,7 +232,8 @@ case "${1:-help}" in
         echo "  restore    Undo the last sync: restore the settings snapshot it saved"
         echo "  doctor     Check system health: updates, codecs, extensions, face unlock"
         echo "  face       Set up face unlock (add --models N or --user NAME)"
-        echo "  shortcuts  Open the interactive keyboard shortcuts cheat sheet"
+        echo "  shortcuts  Keyboard shortcuts: see, change, add or reset them (also Super+/)"
+        echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"
         ;;
 esac

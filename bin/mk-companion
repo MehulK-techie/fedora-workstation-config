@@ -1,0 +1,532 @@
+#!/usr/bin/env python3
+"""Companion (Super+Shift+N): notes, tasks, the focus timer and Obsidian.
+
+Notes: add as many as you like, pin the important ones (they stay open at the
+top), reorder them, and the rest fold away until you open them.
+Tasks: tick them off, pin them, delete them; finished ones collect under Done.
+Everything saves as you type, to ~/.local/share/mk-workstation/companion.json.
+
+  mk-companion          open (or bring back) the window
+  mk-companion tasks    open on the task list
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+import uuid
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+
+
+def _add_lib_path():
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for candidate in (Path(__file__).resolve().parent.parent / "lib",
+                      Path(data_home) / "mk-workstation/lib"):
+        if (candidate / "mkworkstation").is_dir():
+            sys.path.insert(0, str(candidate))
+            return
+
+
+_add_lib_path()
+import mkworkstation as mk  # noqa: E402
+
+APP_ID = "io.github.mehulk.MkCompanion"
+STORE = mk.DATA_DIR / "companion.json"
+OLD_SCRATCHPAD = Path.home() / ".mk_scratchpad.md"
+OBSIDIAN = "md.obsidian.Obsidian"
+
+CSS = b"""
+@define-color accent_bg_color #0aa5d8;
+@define-color accent_color #4fd3ff;
+.mk-note-text { background: transparent; font-size: 1.02em; }
+.mk-note-box { background: alpha(@window_fg_color, 0.04); border-radius: 12px; padding: 10px; }
+.mk-title-entry { font-weight: 700; font-size: 1.1em; }
+.mk-done label.title { text-decoration: line-through; opacity: 0.55; }
+.mk-pinned-icon { color: @accent_color; }
+.mk-hero { font-size: 1.5em; font-weight: 800; }
+.mk-sub { opacity: 0.65; }
+.mk-launch { border-radius: 14px; padding: 10px 16px; }
+"""
+
+
+def now():
+    return time.time()
+
+
+def ago(ts):
+    delta = max(0, now() - ts)
+    if delta < 60:
+        return "just now"
+    if delta < 3600:
+        return f"{int(delta // 60)} min ago"
+    if delta < 86400:
+        return f"{int(delta // 3600)} h ago"
+    return time.strftime("%d %b", time.localtime(ts))
+
+
+class Store:
+    """The notes and tasks, saved as JSON. Imports the old scratchpad once."""
+
+    def __init__(self):
+        self.notes, self.tasks = [], []
+        if STORE.exists():
+            try:
+                data = json.loads(STORE.read_text())
+                self.notes, self.tasks = data.get("notes", []), data.get("tasks", [])
+            except (OSError, ValueError):
+                pass
+        elif OLD_SCRATCHPAD.exists():
+            self._import_scratchpad()
+        self._save_id = 0
+
+    def _import_scratchpad(self):
+        body = []
+        for line in OLD_SCRATCHPAD.read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("- [ ]", "- [x]", "- [X]")):
+                text = stripped[5:].strip()
+                if text and text not in ("Task 1", "Task 2"):
+                    self.add_task(text, done=stripped[3] in "xX")
+            elif stripped and not stripped.startswith("#") and stripped != "-":
+                body.append(line)
+        if body:
+            self.add_note("Scratchpad", "\n".join(body))
+        self.save_now()
+
+    def add_note(self, title="", body=""):
+        note = {"id": uuid.uuid4().hex, "title": title, "body": body,
+                "pinned": False, "updated": now()}
+        self.notes.insert(0, note)
+        return note
+
+    def add_task(self, text, done=False):
+        task = {"id": uuid.uuid4().hex, "text": text, "done": done,
+                "pinned": False, "created": now()}
+        self.tasks.insert(0, task)
+        return task
+
+    def save(self):
+        """Save soon (typing doesn't write the file on every key)."""
+        if self._save_id:
+            GLib.source_remove(self._save_id)
+        self._save_id = GLib.timeout_add(400, self.save_now)
+
+    def save_now(self):
+        self._save_id = 0
+        STORE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = STORE.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"notes": self.notes, "tasks": self.tasks}, indent=1))
+        tmp.replace(STORE)
+        return GLib.SOURCE_REMOVE
+
+
+def launch(argv):
+    try:
+        subprocess.Popen(argv, start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except OSError:
+        return False
+
+
+def flat_button(icon, tooltip, callback):
+    button = Gtk.Button(icon_name=icon, tooltip_text=tooltip, valign=Gtk.Align.CENTER)
+    button.add_css_class("flat")
+    button.add_css_class("circular")
+    button.connect("clicked", lambda *_: callback())
+    return button
+
+
+class CompanionWindow(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app)
+        self.set_default_size(560, 760)
+        self.store = Store()
+        self.open_notes = set()
+
+        self.stack = Adw.ViewStack()
+        self.notes_page = self.stack.add_titled_with_icon(
+            self._build_notes(), "notes", "Notes", "accessories-text-editor-symbolic")
+        self.tasks_page = self.stack.add_titled_with_icon(
+            self._build_tasks(), "tasks", "Tasks", "checkbox-checked-symbolic")
+
+        header = Adw.HeaderBar()
+        header.set_title_widget(Adw.ViewSwitcher(stack=self.stack,
+                                                 policy=Adw.ViewSwitcherPolicy.WIDE))
+        new = flat_button("list-add-symbolic", "New note (Ctrl+N)", self.new_item)
+        header.pack_start(new)
+        header.pack_end(self._build_menu())
+
+        launchers = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER, margin_top=8, margin_bottom=12)
+        for icon, label, tooltip, cb in (
+            ("alarm-symbolic", "Focus timer", "Countdown with a celebration", self.open_timer),
+            ("emblem-documents-symbolic", "Obsidian", "Full notes app (Super+N)", self.open_obsidian),
+        ):
+            content = Adw.ButtonContent(icon_name=icon, label=label)
+            button = Gtk.Button(child=content, tooltip_text=tooltip)
+            button.add_css_class("mk-launch")
+            button.connect("clicked", lambda *_, c=cb: c())
+            launchers.append(button)
+
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        body.append(self.stack)
+        body.append(launchers)
+        self.toasts = Adw.ToastOverlay(child=body)
+        view = Adw.ToolbarView()
+        view.add_top_bar(header)
+        view.set_content(self.toasts)
+        self.set_content(view)
+
+        self.stack.connect("notify::visible-child-name", lambda *_: self._update_new_tooltip(new))
+        self.refresh_title()
+        self.refresh_notes()
+        self.refresh_tasks()
+        self.connect("close-request", lambda *_: (self.store.save_now(), False)[1])
+
+    # ---------- chrome ----------
+    def refresh_title(self):
+        self.set_title(f"{mk.brand()[1]} Companion")
+
+    def _update_new_tooltip(self, button):
+        on_tasks = self.stack.get_visible_child_name() == "tasks"
+        button.set_tooltip_text("New task (Ctrl+N)" if on_tasks else "New note (Ctrl+N)")
+
+    def _build_menu(self):
+        menu = Gio.Menu()
+        menu.append("Rename this workstation…", "win.rename")
+        menu.append("Keyboard shortcuts", "win.shortcuts")
+        for name, cb in (("rename", self.rename_dialog),
+                         ("shortcuts", lambda *_: launch([str(Path.home() / ".local/bin/show-shortcuts")]))):
+            action = Gio.SimpleAction.new(name, None)
+            action.connect("activate", cb)
+            self.add_action(action)
+        new = Gio.SimpleAction.new("new", None)
+        new.connect("activate", lambda *_: self.new_item())
+        self.add_action(new)
+        return Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu)
+
+    def toast(self, text):
+        self.toasts.add_toast(Adw.Toast(title=text, timeout=2))
+
+    def new_item(self):
+        if self.stack.get_visible_child_name() == "tasks":
+            self.task_entry.grab_focus()
+            return
+        note = self.store.add_note()
+        self.open_notes.add(note["id"])
+        self.store.save()
+        self.refresh_notes(focus=note["id"])
+
+    def open_timer(self):
+        if not launch([str(Path.home() / ".local/bin/mk-timer")]):
+            self.toast("Focus timer isn't installed: run mk sync")
+
+    def open_obsidian(self):
+        user_app = Path.home() / ".local/share/flatpak/app" / OBSIDIAN
+        if (user_app.exists() or Path("/var/lib/flatpak/app", OBSIDIAN).exists()) and \
+                launch(["flatpak", "run", OBSIDIAN]):
+            return
+        if not launch(["obsidian"]):
+            self.toast("Obsidian isn't installed: flatpak install flathub " + OBSIDIAN)
+
+    def rename_dialog(self, *_):
+        name, short = mk.brand()
+        dialog = Adw.Dialog(title="Rename this workstation", content_width=420)
+        group = Adw.PreferencesGroup(
+            description="Shown in these windows, notifications and the top bar.")
+        name_row = Adw.EntryRow(title="Name", text=name)
+        short_row = Adw.EntryRow(title="Short tag (top bar)", text=short)
+        group.add(name_row)
+        group.add(short_row)
+        save = Gtk.Button(label="Save", halign=Gtk.Align.CENTER)
+        save.add_css_class("suggested-action")
+        save.add_css_class("pill")
+
+        def do_save(*_):
+            new_name = name_row.get_text().strip() or name
+            new_short = short_row.get_text().strip()[:6] or short
+            mk.set_brand(new_name, new_short)
+            self.refresh_title()
+            self.toast(f"Renamed to {new_name}")
+            dialog.close()
+        save.connect("clicked", do_save)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18, margin_top=12,
+                      margin_bottom=20, margin_start=20, margin_end=20)
+        box.append(group)
+        box.append(save)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        view.set_content(box)
+        dialog.set_child(view)
+        dialog.present(self)
+
+    # ---------- notes ----------
+    def _build_notes(self):
+        self.notes_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20,
+                                 margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        clamp = Adw.Clamp(maximum_size=760, child=self.notes_box)
+        return Gtk.ScrolledWindow(child=clamp, vexpand=True)
+
+    def refresh_notes(self, focus=None):
+        for child in list(self.notes_box):
+            self.notes_box.remove(child)
+        notes = self.store.notes
+        if not notes:
+            page = Adw.StatusPage(icon_name="accessories-text-editor-symbolic",
+                                  title="No notes yet",
+                                  description="Jot ideas, snippets, plans. Pin the ones you need often.")
+            button = Gtk.Button(label="New note", halign=Gtk.Align.CENTER)
+            button.add_css_class("pill")
+            button.add_css_class("suggested-action")
+            button.connect("clicked", lambda *_: self.new_item())
+            page.set_child(button)
+            self.notes_box.append(page)
+            return
+        pinned = [n for n in notes if n["pinned"]]
+        others = [n for n in notes if not n["pinned"]]
+        focus_widget = None
+        for title, items, desc in (("Pinned", pinned, "Always open, always on top"),
+                                   ("Notes", others, "Click a note to open it")):
+            if not items:
+                continue
+            group = Adw.PreferencesGroup(title=title, description=desc)
+            for note in items:
+                row, entry = self._note_row(note)
+                group.add(row)
+                if note["id"] == focus:
+                    focus_widget = entry
+            self.notes_box.append(group)
+        if focus_widget:
+            GLib.idle_add(lambda: focus_widget.grab_focus() and False)
+
+    def _note_title(self, note):
+        if note["title"].strip():
+            return note["title"].strip()
+        first = next((ln.strip() for ln in note["body"].splitlines() if ln.strip()), "")
+        return first[:60] or "Untitled note"
+
+    def _note_row(self, note):
+        expanded = note["pinned"] or note["id"] in self.open_notes
+        row = Adw.ExpanderRow(title=GLib.markup_escape_text(self._note_title(note)),
+                              subtitle=f"Edited {ago(note['updated'])}",
+                              expanded=expanded)
+        row.set_title_lines(1)
+        if note["pinned"]:
+            icon = Gtk.Image(icon_name="view-pin-symbolic")
+            icon.add_css_class("mk-pinned-icon")
+            row.add_prefix(icon)
+        row.add_suffix(flat_button("go-up-symbolic", "Move up", lambda: self._move(note, -1)))
+        row.add_suffix(flat_button("go-down-symbolic", "Move down", lambda: self._move(note, 1)))
+        row.add_suffix(flat_button("view-pin-symbolic", "Unpin" if note["pinned"] else "Pin to top",
+                                   lambda: self._toggle_pin(note)))
+        row.add_suffix(flat_button("user-trash-symbolic", "Delete", lambda: self._delete_note(note)))
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=8,
+                      margin_bottom=8, margin_start=8, margin_end=8)
+        box.add_css_class("mk-note-box")
+        entry = Gtk.Entry(text=note["title"], placeholder_text="Title")
+        entry.add_css_class("flat")
+        entry.add_css_class("mk-title-entry")
+        text = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=4, bottom_margin=4,
+                            left_margin=4, right_margin=4, accepts_tab=False)
+        text.add_css_class("mk-note-text")
+        text.get_buffer().set_text(note["body"])
+        text.set_size_request(-1, 160)
+
+        def changed(*_):
+            buf = text.get_buffer()
+            note["title"] = entry.get_text()
+            note["body"] = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+            note["updated"] = now()
+            row.set_title(GLib.markup_escape_text(self._note_title(note)))
+            row.set_subtitle("Saved")
+            self.store.save()
+        entry.connect("changed", changed)
+        text.get_buffer().connect("changed", changed)
+        row.connect("notify::expanded", lambda r, _p: (self.open_notes.add(note["id"])
+                                                       if r.get_expanded()
+                                                       else self.open_notes.discard(note["id"])))
+        box.append(entry)
+        box.append(text)
+        row.add_row(box)
+        return row, entry
+
+    def _move(self, note, step):
+        notes = self.store.notes
+        i = notes.index(note)
+        # move within its own section (pinned or not)
+        j = i + step
+        while 0 <= j < len(notes) and notes[j]["pinned"] != note["pinned"]:
+            j += step
+        if 0 <= j < len(notes):
+            notes[i], notes[j] = notes[j], notes[i]
+            self.store.save()
+            self.refresh_notes()
+
+    def _toggle_pin(self, note):
+        note["pinned"] = not note["pinned"]
+        self.store.save()
+        self.refresh_notes()
+        self.toast("Pinned" if note["pinned"] else "Unpinned")
+
+    def _delete_note(self, note):
+        index = self.store.notes.index(note)
+        self.store.notes.remove(note)
+        self.store.save()
+        self.refresh_notes()
+        toast = Adw.Toast(title=f"Deleted “{self._note_title(note)}”", button_label="Undo", timeout=5)
+
+        def undo(*_):
+            self.store.notes.insert(index, note)
+            self.store.save()
+            self.refresh_notes()
+        toast.connect("button-clicked", undo)
+        self.toasts.add_toast(toast)
+
+    # ---------- tasks ----------
+    def _build_tasks(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20,
+                      margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        add_group = Adw.PreferencesGroup()
+        self.task_entry = Adw.EntryRow(title="Add a task and press Enter")
+        self.task_entry.set_show_apply_button(True)
+        self.task_entry.connect("apply", self._add_task)
+        self.task_entry.connect("entry-activated", self._add_task)
+        add_group.add(self.task_entry)
+        box.append(add_group)
+        self.progress = Gtk.ProgressBar(show_text=True, margin_start=4, margin_end=4)
+        box.append(self.progress)
+        self.tasks_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        box.append(self.tasks_box)
+        clamp = Adw.Clamp(maximum_size=760, child=box)
+        return Gtk.ScrolledWindow(child=clamp, vexpand=True)
+
+    def _add_task(self, *_):
+        text = self.task_entry.get_text().strip()
+        if text:
+            self.store.add_task(text)
+            self.store.save()
+            self.task_entry.set_text("")
+            self.refresh_tasks()
+
+    def refresh_tasks(self):
+        for child in list(self.tasks_box):
+            self.tasks_box.remove(child)
+        tasks = self.store.tasks
+        total, done = len(tasks), sum(t["done"] for t in tasks)
+        self.progress.set_visible(total > 0)
+        self.progress.set_fraction(done / total if total else 0)
+        self.progress.set_text(f"{done} of {total} done" if total else "")
+        pinned = [t for t in tasks if t["pinned"] and not t["done"]]
+        todo = [t for t in tasks if not t["pinned"] and not t["done"]]
+        finished = [t for t in tasks if t["done"]]
+        if not total:
+            self.tasks_box.append(Adw.StatusPage(
+                icon_name="checkbox-checked-symbolic", title="Nothing to do",
+                description="Add a task above. Pin the ones that matter today."))
+            return
+        for title, items in (("Pinned", pinned), ("To do", todo)):
+            if items:
+                group = Adw.PreferencesGroup(title=title)
+                for task in items:
+                    group.add(self._task_row(task))
+                self.tasks_box.append(group)
+        if finished:
+            group = Adw.PreferencesGroup()
+            expander = Adw.ExpanderRow(title=f"Done ({len(finished)})", subtitle="Click to show")
+            clear = flat_button("edit-clear-all-symbolic", "Clear finished tasks", self._clear_done)
+            expander.add_suffix(clear)
+            for task in finished:
+                expander.add_row(self._task_row(task))
+            group.add(expander)
+            self.tasks_box.append(group)
+
+    def _task_row(self, task):
+        row = Adw.ActionRow(title=GLib.markup_escape_text(task["text"]), activatable=True)
+        row.set_title_lines(3)
+        if task["done"]:
+            row.add_css_class("mk-done")
+        check = Gtk.CheckButton(active=task["done"], valign=Gtk.Align.CENTER)
+        check.connect("toggled", lambda c: self._toggle_done(task, c.get_active(), row))
+        row.add_prefix(check)
+        row.set_activatable_widget(check)
+        if not task["done"]:
+            row.add_suffix(flat_button("view-pin-symbolic", "Unpin" if task["pinned"] else "Pin to top",
+                                       lambda: self._toggle_task_pin(task)))
+        row.add_suffix(flat_button("user-trash-symbolic", "Delete", lambda: self._delete_task(task)))
+        return row
+
+    def _toggle_done(self, task, active, row):
+        task["done"] = active
+        self.store.save()
+        if active:
+            row.add_css_class("mk-done")
+            # let the strike-through show for a moment before it moves to Done
+            GLib.timeout_add(450, lambda: self.refresh_tasks() and False)
+        else:
+            self.refresh_tasks()
+
+    def _toggle_task_pin(self, task):
+        task["pinned"] = not task["pinned"]
+        self.store.save()
+        self.refresh_tasks()
+
+    def _delete_task(self, task):
+        index = self.store.tasks.index(task)
+        self.store.tasks.remove(task)
+        self.store.save()
+        self.refresh_tasks()
+        toast = Adw.Toast(title="Task deleted", button_label="Undo", timeout=5)
+
+        def undo(*_):
+            self.store.tasks.insert(index, task)
+            self.store.save()
+            self.refresh_tasks()
+        toast.connect("button-clicked", undo)
+        self.toasts.add_toast(toast)
+
+    def _clear_done(self):
+        self.store.tasks = [t for t in self.store.tasks if not t["done"]]
+        self.store.save()
+        self.refresh_tasks()
+
+
+class CompanionApp(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self.window = None
+
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.PREFER_DARK)
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.set_accels_for_action("win.new", ["<Control>n"])
+        self.set_accels_for_action("window.close", ["<Control>w", "Escape"])
+
+    def do_command_line(self, command_line):
+        args = command_line.get_arguments()[1:]
+        if self.window is None:
+            self.window = CompanionWindow(self)
+            self.window.connect("close-request", self._on_close)
+        if args and args[0] == "tasks":
+            self.window.stack.set_visible_child_name("tasks")
+        self.window.refresh_title()
+        self.window.present()
+        return 0
+
+    def _on_close(self, *_):
+        self.window = None
+        return False
+
+
+if __name__ == "__main__":
+    sys.exit(CompanionApp().run(sys.argv))

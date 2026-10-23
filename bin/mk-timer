@@ -6,8 +6,9 @@ instead of an alarm sound when the time is up.
   mk-timer 25              start 25 minutes now
   mk-timer 1:30 "Reading"  start 1 min 30 s with a label
 
-Only one timer runs at a time: launching it again brings the window back.
-Closing the window while it counts down keeps the timer running.
+Once started, the timer gets out of the way: the window hides (it isn't in
+Alt+Tab or the dock) and counts down in the background. Launching it again
+shows the countdown. When the time is up, the celebration fills the screen.
 """
 import math
 import random
@@ -127,10 +128,11 @@ class TimerWindow(Adw.ApplicationWindow):
         self.stack.add_named(self._build_run(), "run")
         self.stack.add_named(self._build_done(), "done")
 
-        view = Adw.ToolbarView()
-        view.add_top_bar(Adw.HeaderBar())
-        view.set_content(self.stack)
-        self.set_content(view)
+        self.view = Adw.ToolbarView()
+        self.view.add_top_bar(Adw.HeaderBar())
+        self.view.set_content(self.stack)
+        self.set_content(self.view)
+        self._check_id = 0
         self.connect("close-request", self._on_close)
 
     # ---------- pages ----------
@@ -218,7 +220,8 @@ class TimerWindow(Adw.ApplicationWindow):
             ("Again", lambda *_: self.start(self.total, self.task), "suggested-action"),
             ("+5 min", lambda *_: self.start(300, self.task), None),
             ("5 min break", lambda *_: self.start(300, "Break"), None),
-            ("New timer", lambda *_: self.stack.set_visible_child_name("setup"), None),
+            ("New timer", lambda *_: self.leave_celebration("setup"), None),
+            ("Done", lambda *_: self.leave_celebration(None), None),
         ):
             b = Gtk.Button(label=label)
             b.add_css_class("pill")
@@ -261,7 +264,34 @@ class TimerWindow(Adw.ApplicationWindow):
         self.task_label.set_label(self.task or "Focus")
         self.pause_btn.set_icon_name("media-playback-pause-symbolic")
         self.get_application().hold()
-        self.stack.set_visible_child_name("run")
+        self.leave_celebration("run")
+        # The ring's own tick stops while the window is hidden, so check the
+        # clock separately.
+        if not self._check_id:
+            self._check_id = GLib.timeout_add(250, self._check)
+        self.set_visible(False)
+        note = Gio.Notification.new(f"Timer started · {fmt(seconds)}")
+        note.set_body("Running in the background. Open Focus Timer again to see the countdown.")
+        note.set_default_action("app.show")
+        self.get_application().send_notification("running", note)
+
+    def _check(self):
+        if self.running and self.remaining() <= 0:
+            self.finish()
+        if not self.running:
+            self._check_id = 0
+            return GLib.SOURCE_REMOVE
+        return GLib.SOURCE_CONTINUE
+
+    def leave_celebration(self, page):
+        """Back from the full-screen celebration to a normal window (or close)."""
+        if self.is_fullscreen():
+            self.unfullscreen()
+        self.view.set_reveal_top_bars(True)
+        if page is None:
+            self.close()
+        else:
+            self.stack.set_visible_child_name(page)
 
     def stop(self):
         if self.running:
@@ -294,6 +324,9 @@ class TimerWindow(Adw.ApplicationWindow):
         self.scene_state = {"coins": [], "confetti": [], "jumps": 0, "last_phase": 0.0}
         self.set_title("Time's up!")
         self.stack.set_visible_child_name("done")
+        self.view.set_reveal_top_bars(False)
+        self.set_visible(True)
+        self.fullscreen()
         self.scene.add_tick_callback(self._scene_tick)
         app = self.get_application()
         note = Gio.Notification.new("Time's up!")
@@ -329,8 +362,12 @@ class TimerWindow(Adw.ApplicationWindow):
             self.start(total, self.task_entry.get_text())
 
     def _on_key(self, _ctrl, keyval, _code, _state):
-        if self.stack.get_visible_child_name() == "run" and keyval == Gdk.KEY_space:
+        page = self.stack.get_visible_child_name()
+        if page == "run" and keyval == Gdk.KEY_space:
             self.toggle_pause()
+            return True
+        if page == "done" and keyval == Gdk.KEY_Escape:
+            self.leave_celebration(None)
             return True
         return False
 
@@ -410,6 +447,10 @@ class TimerWindow(Adw.ApplicationWindow):
     def _draw_scene(self, _area, cr, w, h):
         t = time.monotonic() - self.done_at
         st = self.scene_state
+        # Drawn for 460 x 380 and scaled up to fill a full screen.
+        k = max(1.0, min(w / 460, h / 380))
+        cr.scale(k, k)
+        w, h = w / k, h / k
         px = 5
         sprite_w, sprite_h = 12 * px, 13 * px
         ground = h - 46
@@ -562,7 +603,9 @@ class TimerApp(Adw.Application):
         if self.window is None:
             self.window = TimerWindow(self)
             if self.autostart:
+                # `mk-timer 25`: start straight away, in the background
                 self.window.start(*self.autostart)
+                return
         self.window.set_visible(True)
         self.window.present()
 

@@ -72,7 +72,11 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - `mk doctor`: one-screen health check covering updates, codecs, GPU decoding, broken extensions, shortcut conflicts, failed services, disk space and face unlock
 - A settings snapshot before every sync, undone with `mk restore`
 - Daily background check that tells you when a new version of this repo is available
-- OCR text-from-screen, a live shortcut cheat sheet, notes and a focus timer, webcam controls
+- **Shortcuts window (Super+/):** every shortcut and gesture, live, each marked working, clashing, unset or broken; click to change keys, + to add your own commands, Reset to go back
+- **Companion (Super+Shift+N):** notes you can pin, reorder and fold away; a task list you tick off and pin; one click to Obsidian or the focus timer
+- **Focus timer:** minutes and seconds, hides while it counts, then a full-screen pixel celebration instead of an alarm
+- **Make it yours:** rename it (`mk rename`), change any shortcut without touching code; see [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md)
+- OCR text-from-screen and webcam controls
 - `just` recipes and GitHub Actions ShellCheck on every push
 
 ---
@@ -127,14 +131,15 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk update` | `just update` | **Update everything:** pull the repo, install anything newly added to the app lists, re-apply settings and extensions, then system and Flatpak updates (`--check` to preview) |
 | `mk save` | `just save` | Add apps you installed yourself to the lists, save extensions and settings, and commit |
 | `mk face` | `just face` | Face unlock wizard (`--models N`, `--user NAME`, `--tune-only`) |
-| `mk shortcuts` | | Open the shortcut cheat sheet |
+| `mk shortcuts` | | Shortcuts window: see, change, add or reset shortcuts (also Super+/) |
+| `mk rename "Name" TAG` | | Rename MK's windows, notifications and top-bar tag |
 | `mk uninstall` | | Remove MK's tools, shortcuts and helpers from your account |
 | | `just setup` | Full system setup (`sudo ./setup.sh`) |
 | | `just check` | Lint every script (same as CI) |
 
 ## Keyboard shortcuts
 
-Press **Super+/** for a live cheat sheet that always matches your keyboard.
+Press **Super+/** for the Shortcuts window: it always matches your keyboard, shows which shortcuts work, and lets you change them. Every default lives in [config/shortcuts.conf](config/shortcuts.conf).
 
 | | Shortcut | Action |
 | :--- | :--- | :--- |
@@ -162,7 +167,7 @@ Press **Super+/** for a live cheat sheet that always matches your keyboard.
 | | `Super+Shift+A` · `Super+M` | Quick settings · notifications |
 | | `Super+L` · `Super+Backspace` | Lock · shut down / restart |
 | **Apps** | `Super+N` · `Super+B` | Notes (Obsidian) · web browser |
-| **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Cheat sheet · quick notes & focus timer · camera controls |
+| **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Shortcuts window · Companion (notes, tasks, timer) · camera controls |
 | **Touchpad** | 4 fingers ←/→ · 3 fingers ←/→ | Switch workspaces (Spaces) · switch windows, on every workspace |
 | | 3 fingers ↑/↓ · 4 fingers ↑/↓ | Overview (Mission Control) · maximize / restore the window |
 | | 3-finger pinch · 4-finger pinch | Volume · show desktop (pinch again to bring windows back) |
@@ -181,14 +186,17 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 ├── sync-shortcuts.sh     Compatibility shim for older installs; runs sync.sh
 ├── justfile              just setup | sync | face | export | update | check
 ├── apps/                 dnf-packages.txt, flatpaks.txt
-├── bin/                  mk, mk-apps, mk-doctor, ocr-snip, show-shortcuts, mk-scratchpad, mk-timer, camera-controls
+├── bin/                  mk, mk-apps, mk-doctor, ocr-snip, show-shortcuts, mk-companion, mk-timer, camera-controls
+├── lib/mkworkstation/    Shared Python: branding, shortcut catalogue, applying it to GNOME
 ├── config/
+│   ├── shortcuts.conf           Every keyboard shortcut (group | label | target | keys)
+│   ├── brand.conf               The name shown in MK's windows and top bar
 │   ├── enabled-extensions.txt   Extensions sync.sh installs and enables
 │   ├── extension-settings/      One saved .dconf per extension
 │   └── *.dconf                  Reference snapshots written by mk export
 ├── extensions/           mk-indicator (ours) + WACK Shell (GPL, no GNOME 50 build online)
 ├── scripts/              update-repo.sh (mk export), lint.sh
-├── docs/                 GUIDE, FACE-UNLOCK, EXTENSIONS, BUGS, AI_PROMPT_TEMPLATE
+├── docs/                 GUIDE, CUSTOMIZING, FACE-UNLOCK, EXTENSIONS, BUGS, AI_PROMPT_TEMPLATE
 └── .github/              ShellCheck CI, issue and pull request templates
 ```
 
@@ -197,6 +205,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 | Document | For |
 | :--- | :--- |
 | [docs/GUIDE.md](docs/GUIDE.md) | Installing and using it: beginners, everyday users, and contributors. Includes undo and troubleshooting. |
+| [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md) | Making it yours or forking it: rename, shortcuts, apps, extensions, colours, without touching the scripts |
 | [docs/FACE-UNLOCK.md](docs/FACE-UNLOCK.md) | Face unlock in three steps, multiple faces, lighting, and security |
 | [docs/EXTENSIONS.md](docs/EXTENSIONS.md) | What each extension does and how to adjust it, with clicks or with commands |
 | [docs/BUGS.md](docs/BUGS.md) | Full audit: bugs, duplicated code, false claims, and how this compares to similar projects |

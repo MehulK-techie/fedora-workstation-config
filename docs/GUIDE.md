@@ -109,7 +109,7 @@ Log out and back in afterwards. Run `./setup.sh --help` for the options.
 
 | Change | Details |
 | :--- | :--- |
-| Command-line tools | Copies `bin/*` to `~/.local/bin`: `mk`, `mk-doctor`, `ocr-snip`, `show-shortcuts`, `mk-scratchpad`, `mk-timer`, `camera-controls`. |
+| Command-line tools | Copies `bin/*` to `~/.local/bin`: `mk`, `mk-doctor`, `ocr-snip`, `show-shortcuts`, `mk-companion`, `mk-timer`, `camera-controls`; the shared Python library and defaults go to `~/.local/share/mk-workstation/`. |
 | Update check | A daily, low-priority background check (systemd user timer) that shows a notification when a new version of this repo is available. |
 | Extensions | Installs and enables the 12 extensions in `config/enabled-extensions.txt` plus the small **MK** mark in the top bar, then restores their saved settings from `config/extension-settings/`. Missing extensions are downloaded from extensions.gnome.org for your GNOME version. Extensions you already enabled stay enabled. See [EXTENSIONS.md](EXTENSIONS.md). |
 | Window shortcuts | Alt+Tab switches windows across all workspaces, Super+Tab switches apps, plus snap, maximize and workspace keys. Ctrl+Alt+arrows are left free for Zen Browser. |

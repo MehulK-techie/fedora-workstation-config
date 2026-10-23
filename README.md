@@ -11,7 +11,7 @@
 
 [Quick start](#quick-start) · [Overview (PDF)](docs/MK-Workstation-Overview.pdf) · [All features](docs/FEATURES.md) · [Guide](docs/GUIDE.md) · [Hardware](docs/HARDWARE.md) · [Customize](docs/CUSTOMIZING.md) · [Reference](docs/REFERENCE.md)
 
-<img src="docs/assets/screens/overview.jpg" alt="MK Workstation: GNOME overview with the Companion notes app, workspaces and a blurred top bar" width="900">
+<img src="docs/assets/screens/welcome.jpg" alt="MK Workstation: the greeting after login, with pinned tasks and the next reminder" width="900">
 
 <sub>The overview on an HP ENVY x360 13 running MK Workstation. Wallpaper: Fedora 44 default (CC BY-SA 4.0).</sub>
 
@@ -25,12 +25,12 @@
 
 | | |
 | :---: | :---: |
-| <img src="docs/assets/screens/shortcuts-window.jpg" width="420"><br><sub>Super+/ · every shortcut, live, editable</sub> | <img src="docs/assets/screens/companion-tasks.jpg" width="420"><br><sub>Super+Shift+N · notes, tasks, reminders</sub> |
+| <img src="docs/assets/screens/shortcuts-window.jpg" width="420"><br><sub>Super+/ · every shortcut, live, editable</sub> | <img src="docs/assets/screens/notes-split.jpg" width="420"><br><sub>Super+N · MK Notes, edit with live preview</sub> |
 | <img src="docs/assets/screens/focus-timer.jpg" width="420"><br><sub>Focus timer</sub> | <img src="docs/assets/screens/timer-celebration.jpg" width="420"><br><sub>…and the celebration when time is up</sub> |
-| <img src="docs/assets/screens/snap-layouts.jpg" width="420"><br><sub>Super+Z · snap layouts</sub> | <img src="docs/assets/screens/mk-device.jpg" width="420"><br><sub>mk device · what MK found on this laptop</sub> |
+| <img src="docs/assets/screens/alttab.jpg" width="420"><br><sub>Alt+Tab or three fingers · the ring glides with you</sub> | <img src="docs/assets/screens/tiled.jpg" width="420"><br><sub>Halves and quarters, Windows-style</sub> |
 
-| <img src="docs/assets/screens/welcome-light.jpg" width="420"><br><sub>Welcome after login</sub> | <img src="docs/assets/screens/focus-screen.jpg" width="420"><br><sub>Focus screen when you step away</sub> |
-| <img src="docs/assets/screens/calendar.jpg" width="420"><br><sub>Calendar, with the timer countdown in the top bar</sub> | <img src="docs/assets/screens/files.jpg" width="420"><br><sub>Files with cyan hover and selection</sub> |
+| <img src="docs/assets/screens/companion.jpg" width="420"><br><sub>Super+Shift+N · Companion: quick notes, tasks, reminders</sub> | <img src="docs/assets/screens/saver-bubbles.jpg" width="420"><br><sub>Step away during a focus session: bubbles over your work</sub> |
+| <img src="docs/assets/screens/calendar.jpg" width="420"><br><sub>Calendar, with the timer countdown in the top bar</sub> | <img src="docs/assets/screens/notes-tasks.jpg" width="420"><br><sub>Every checkbox from every note, in one list</sub> |
 
 <p align="center"><img src="docs/assets/screens/dock-magnify.jpg" width="640"><br><sub>Dock magnification and app-coloured glow</sub></p>
 

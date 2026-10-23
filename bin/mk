@@ -176,6 +176,43 @@ case "${1:-help}" in
         PYTHONPATH="$HOME/.local/share/mk-workstation/lib" python3 -m mkworkstation task "$@"
         ;;
 
+    focus)
+        # mk focus [25 | 1:30 | 90s] ["label"]: start the focus timer in the background
+        shift
+        setsid -f "$HOME/.local/bin/mk-timer" "${1:-25}" "${@:2}" > /dev/null 2>&1
+        length="${1:-25}"
+        [[ "$length" =~ ^[0-9]+$ ]] && length="$length min"
+        echo "✔ Focus timer started: $length${2:+ · $2}. Run mk-timer to see the countdown."
+        ;;
+
+    power)
+        # Smart power profiles on laptops: mk power [status | on | off]
+        shift
+        case "${1:-status}" in
+            status)
+                if [[ -x "$HOME/.local/bin/mk-power" ]]; then
+                    "$HOME/.local/bin/mk-power" status
+                fi
+                echo "Service: $(systemctl --user is-active mk-power.service 2>/dev/null || true)  (mk power on | off)"
+                ;;
+            on)
+                rm -f "$HOME/.config/mk-workstation/power-off"
+                "$REPO_DIR/sync.sh" > /dev/null
+                echo "✔ Smart power on: $(systemctl --user is-active mk-power.service 2>/dev/null || true)"
+                ;;
+            off)
+                mkdir -p "$HOME/.config/mk-workstation"
+                touch "$HOME/.config/mk-workstation/power-off"
+                systemctl --user disable --now mk-power.service &>/dev/null || true
+                echo "✔ Smart power off. Pick profiles yourself in Quick Settings."
+                ;;
+            *)
+                echo "Usage: mk power [status | on | off]" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+
     effects)
         # full: every effect · lite: blur, window effects and genie off · auto: lite on weak hardware
         shift
@@ -220,7 +257,8 @@ case "${1:-help}" in
         read -rp "Continue? [y/N]: " answer
         [[ "$answer" =~ ^[yY] ]] || { echo "Nothing changed."; exit 0; }
 
-        systemctl --user disable --now mk-update-check.timer mk-reminders.timer &>/dev/null || true
+        systemctl --user disable --now mk-update-check.timer mk-reminders.timer mk-power.service &>/dev/null || true
+        rm -f "$HOME/.config/systemd/user/mk-power.service"
         rm -f "$HOME/.config/systemd/user/"mk-update-check.{service,timer} "$HOME/.config/systemd/user/"mk-reminders.{service,timer}
         systemctl --user daemon-reload &>/dev/null || true
         rm -f "$HOME/.config/burn-my-windows/profiles/mk-glide.conf"
@@ -243,7 +281,7 @@ case "${1:-help}" in
         gnome-extensions disable mk-indicator@mehulk &>/dev/null || true
         rm -rf "$HOME/.local/share/gnome-shell/extensions/mk-indicator@mehulk"
         rm -rf "$HOME/.local/share/mk-workstation/lib" "$HOME/.local/share/mk-workstation/config"
-        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-timer mk-reminders ocr-snip show-shortcuts \
+        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-timer mk-reminders mk-power ocr-snip show-shortcuts \
             camera-controls fix-alt-tab close-workspace-apps; do
             rm -f "$HOME/.local/bin/$tool"
         done
@@ -273,6 +311,8 @@ case "${1:-help}" in
         echo "  task       Add a task: mk task \"pay rent\" [when]   (when: 30m, 2h, 18:00, tomorrow 9:00)"
         echo "  remind     Same as task, with a reminder: mk remind \"stretch\" 45m"
         echo "  list       Show notes, tasks and their reminders"
+        echo "  focus      Start the focus timer: mk focus 25 \"Writing\" (also 1:30, 90s)"
+        echo "  power      Smart power profiles on laptops: status, on, off"
         echo "  effects    Visual effects: full, lite (smooth on older machines) or auto"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"

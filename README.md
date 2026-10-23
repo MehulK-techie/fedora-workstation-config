@@ -77,6 +77,9 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - **Reminders:** on any note or task, in 10 min, at 18:00, or every day; they fire even with the Companion closed, with Open and Snooze
 - **Capture from the terminal:** `mk note "idea"`, `mk task "pay rent" 18:00`, `mk remind "stretch" 45m`, `mk list`
 - **Focus mode:** the timer can silence notifications while it counts and puts them back afterwards
+- **Smart power (laptops):** performance when plugged in, balanced on battery, power-saver below 25%, switching by itself; `mk power off` if you'd rather choose
+- **Morning brief:** one notification a day with your open tasks and today's reminders
+- **Housekeeping:** Trash and temp files older than 30 days are cleared automatically; slow search providers are skipped so overview search stays instant
 - **Smooth on any machine:** `mk effects lite` (or `auto` on weak hardware) turns off blur and window effects; `full` brings them back
 - **Focus timer:** minutes and seconds, hides while it counts, then a full-screen pixel celebration instead of an alarm
 - **Make it yours:** rename it (`mk rename`), change any shortcut, app, extension or colour without touching code; see [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md). Hackers: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/REFERENCE.md](docs/REFERENCE.md)
@@ -137,6 +140,8 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk face` | `just face` | Face unlock wizard (`--models N`, `--user NAME`, `--tune-only`) |
 | `mk shortcuts` | | Shortcuts window: see, change, add or reset shortcuts (also Super+/) |
 | `mk note` · `mk task` · `mk remind` · `mk list` | | Add notes and tasks (with reminders) from a terminal; list them |
+| `mk focus 25 "Label"` | | Start the focus timer in the background |
+| `mk power` | | Smart power profiles: status, on, off |
 | `mk effects full\|lite\|auto` | | Visual effects profile; lite keeps older machines smooth |
 | `mk rename "Name" TAG` | | Rename MK's windows, notifications and top-bar tag |
 | `mk uninstall` | | Remove MK's tools, shortcuts and helpers from your account |

@@ -12,6 +12,9 @@
 - **Focus mode:** the timer can silence notifications while it counts, and always restores them.
 - **Dock glow in each app's colour** (Spotify green, Obsidian purple…), worked out from the app icon; running-app dots match.
 - **`mk effects full | lite | auto`:** heavy effects off on weak machines (auto: under 4 GiB RAM, ≤2 cores or software graphics); list in `config/effects.conf`.
+- **Smart power profiles (laptops, `mk-power`):** performance on AC, balanced on battery, power-saver when low; only switches on changes, so manual choices stick; `config/power.conf`, `mk power`.
+- **Morning brief**, **`mk focus`**, automatic Trash/temp cleanup after 30 days, and slow search providers (Boxes, Contacts, Passwords) skipped.
+- Dock glow is now a subtle circular tint.
 - **docs/ARCHITECTURE.md** (how it works, how to extend it) and **docs/REFERENCE.md** (every command, file, format, timer).
 - **Rename it:** `mk rename "Name" TAG` or Companion › Rename; the top-bar tag follows live. Forks set the default in `config/brand.conf`.
 - **docs/CUSTOMIZING.md:** how to make it yours or fork it without editing scripts.

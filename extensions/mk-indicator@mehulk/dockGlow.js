@@ -162,12 +162,13 @@ export class DockGlow {
             icon.set_style(null);
             return;
         }
+        // Subtle on purpose: a soft circular tint and a faint halo, not a neon ring.
         const [r, g, b] = colour;
         icon.set_style(
-            `background-color: rgba(${r},${g},${b},0.22);` +
-            `box-shadow: 0 0 18px 3px rgba(${r},${g},${b},0.55);` +
-            `border: 1px solid rgba(${r},${g},${b},0.65);` +
-            'transition-duration: 180ms;');
+            'border-radius: 999px;' +
+            `background-color: rgba(${r},${g},${b},0.10);` +
+            `box-shadow: 0 0 10px 0 rgba(${r},${g},${b},0.22);` +
+            'transition-duration: 220ms;');
     }
 
     disable() {

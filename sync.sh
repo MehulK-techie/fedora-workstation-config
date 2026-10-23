@@ -193,6 +193,29 @@ systemctl --user daemon-reload 2>/dev/null \
     && systemctl --user enable --now mk-update-check.timer mk-reminders.timer &>/dev/null \
     || echo "    [*] Couldn't enable the update check and reminders (no systemd user session)"
 
+# Laptops: smart power profiles (performance plugged in, balanced on battery,
+# power-saver when low; config/power.conf). Event-driven, so it costs nothing
+# while idle. `mk power off` turns it off and it stays off.
+if compgen -G "/sys/class/power_supply/BAT*" > /dev/null && [[ ! -f "$HOME/.config/mk-workstation/power-off" ]]; then
+    cat > "$UNIT_DIR/mk-power.service" << 'UNIT'
+[Unit]
+Description=Smart power profiles (MK Workstation)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/mk-power
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target
+UNIT
+    systemctl --user daemon-reload 2>/dev/null
+    systemctl --user enable mk-power.service &>/dev/null || true
+    systemctl --user restart mk-power.service &>/dev/null || true
+fi
+
 # Blur my Shell's panel blur after login is now refreshed from inside the shell
 # by mk-indicator, once startup has finished. Older login hacks toggled every
 # extension (crashing others), toggled Blur my Shell too early (mk-session), or
@@ -386,6 +409,15 @@ gsettings set org.gnome.nautilus.preferences show-delete-permanently true
 gsettings set org.gnome.desktop.wm.preferences button-layout "appmenu:minimize,maximize,close"
 gsettings set org.gnome.mutter center-new-windows true
 gsettings set org.gnome.desktop.interface enable-hot-corners true
+# Housekeeping: Trash and temporary files older than 30 days are removed
+# automatically (GNOME's own privacy setting), so the disk doesn't silt up.
+gsettings set org.gnome.desktop.privacy remove-old-trash-files true
+gsettings set org.gnome.desktop.privacy remove-old-temp-files true
+gsettings set org.gnome.desktop.privacy old-files-age 30
+# Faster overview search: skip search providers for apps that are rarely
+# searched and often slow or failing to answer (VMs, contacts, passwords).
+gsettings_append org.gnome.desktop.search-providers disabled \
+    org.gnome.Boxes.desktop org.gnome.Contacts.desktop org.gnome.seahorse.Application.desktop
 # Laptop comfort: tap to click, natural scrolling, battery %, weekday, Night Light
 gsettings set org.gnome.desktop.peripherals.touchpad tap-to-click true
 gsettings set org.gnome.desktop.peripherals.touchpad natural-scroll true

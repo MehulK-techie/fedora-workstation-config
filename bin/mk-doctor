@@ -137,6 +137,21 @@ if systemctl --user is-enabled mk-update-check.timer &>/dev/null; then
 else
     warn "Daily update check is off" "Run: mk sync"
 fi
+if systemctl --user is-active mk-reminders.timer &>/dev/null; then
+    ok "Reminders are on"
+else
+    warn "Reminders are off" "Run: mk sync"
+fi
+if compgen -G "/sys/class/power_supply/BAT*" > /dev/null; then
+    if systemctl --user is-active mk-power.service &>/dev/null; then
+        ok "Smart power: $("$HOME/.local/bin/mk-power" status 2>/dev/null | sed 's/^Power: //')"
+    elif [[ -f "$HOME/.config/mk-workstation/power-off" ]]; then
+        ok "Smart power is off (your choice; mk power on)"
+    else
+        warn "Smart power isn't running" "Run: mk power on"
+    fi
+fi
+ok "Effects: $(cat "$HOME/.config/mk-workstation/effects" 2>/dev/null || echo auto) (mk effects full | lite | auto)"
 shortcuts=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null | grep -o "/mk-" | wc -l)
 if (( shortcuts >= 5 )); then
     ok "MK shortcuts registered ($shortcuts)"

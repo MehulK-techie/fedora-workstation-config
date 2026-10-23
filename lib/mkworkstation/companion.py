@@ -151,17 +151,59 @@ def _notify(kind, item):
                          stderr=subprocess.DEVNULL)
 
 
+BRIEF_HOUR = 7
+
+
+def brief_text(data, now):
+    """'3 tasks open (1 pinned) · today: 18:00 Pay rent' or '' if nothing."""
+    open_tasks = [t for t in data["tasks"] if not t.get("done")]
+    pinned = [t for t in open_tasks if t.get("pinned")]
+    today = datetime.fromtimestamp(now).date()
+    upcoming = []
+    for kind in ("notes", "tasks"):
+        for item in data[kind]:
+            at = item.get("remind_at")
+            if at and at > now and datetime.fromtimestamp(at).date() == today:
+                label = (item.get("title") or item.get("text") or "").strip().splitlines()
+                upcoming.append((at, label[0][:40] if label else "Reminder"))
+    parts = []
+    if open_tasks:
+        parts.append(f"{len(open_tasks)} task{'s' * (len(open_tasks) != 1)} open"
+                     + (f" ({len(pinned)} pinned)" if pinned else ""))
+    if upcoming:
+        parts.append("today: " + ", ".join(
+            f"{datetime.fromtimestamp(at).strftime('%H:%M')} {label}" for at, label in sorted(upcoming)[:3]))
+    return " · ".join(parts)
+
+
+def _notify_brief(text):
+    if shutil.which("notify-send"):
+        script = ('a=$(notify-send -a "Companion" -i x-office-calendar-symbolic '
+                  '-A open="Open tasks" --wait "Good morning" "$1"); '
+                  '[ "$a" = open ] && "$2/mk-companion" tasks')
+        subprocess.Popen(["sh", "-c", script, "sh", text, str(Path.home() / ".local/bin")],
+                         start_new_session=True, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+
+
 def snooze(item_id, seconds):
     state = _read(STATE, {})
     state.setdefault("snooze", {})[item_id] = time.time() + seconds
     _write(STATE, state)
 
 
-def check(now=None, notify=_notify):
-    """Fire every reminder that's due. Returns how many fired."""
+def check(now=None, notify=_notify, brief=_notify_brief):
+    """Fire every reminder that's due, and the once-a-day morning brief.
+    Returns how many reminders fired."""
     now = now or time.time()
     data = load()
     state = _read(STATE, {})
+    day = datetime.fromtimestamp(now)
+    if state.get("brief") != day.date().isoformat() and day.hour >= BRIEF_HOUR:
+        state["brief"] = day.date().isoformat()
+        text = brief_text(data, now)
+        if text:
+            brief(text)
     fired = state.setdefault("fired", {})
     snoozed = state.setdefault("snooze", {})
     count = 0

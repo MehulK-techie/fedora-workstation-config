@@ -67,10 +67,15 @@
   transition-duration: 160ms;
 }
 
+#dashtodockContainer .overview-tile .overview-icon,
+#dashtodockContainer .show-apps .overview-icon {
+  border-radius: 999px;
+}
+
 #dashtodockContainer .overview-tile:hover .overview-icon,
 #dashtodockContainer .show-apps:hover .overview-icon {
-  background-color: rgba(0, 200, 255, 0.16);
-  box-shadow: 0 0 12px 0 rgba(0, 210, 255, 0.35);
+  background-color: rgba(0, 200, 255, 0.08);
+  box-shadow: 0 0 10px 0 rgba(0, 210, 255, 0.18);
 }
 
 .window-caption {

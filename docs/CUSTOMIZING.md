@@ -22,6 +22,7 @@ There are two ways to customize:
 | Extensions and their settings | Extension Manager, then `mk save` | `config/enabled-extensions.txt`, `config/extension-settings/` |
 | Snap layouts (Super+Z) | `~/.config/tiling-assistant/layouts.json` | `config/tiling-layouts.json` |
 | Window open/close effect | Burn My Windows settings (make your own profile) | `config/burn-my-windows-profile.conf` |
+| Power profiles (laptops) | `~/.config/mk-workstation/power.conf`, or `mk power off` | `config/power.conf` |
 | Heavy effects on or off | `mk effects full`, `lite` or `auto` | `config/effects.conf` (which effects count as heavy, and the auto threshold) |
 | Focus timer silencing notifications | The switch in the timer | default in `bin/mk-timer` (`SILENCE`) |
 | Dock hover colours | Automatic from each app's icon | `extensions/mk-indicator@mehulk/dockGlow.js` (glow strength in `_hover`) |

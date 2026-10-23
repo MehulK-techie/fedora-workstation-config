@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Smart power profiles for laptops (mk-power.service).
+
+Plugged in -> ON_AC profile, on battery -> ON_BATTERY, below LOW_PERCENT ->
+LOW_BATTERY (config/power.conf, or ~/.config/mk-workstation/power.conf).
+It only switches when something changes (plugging in, unplugging, crossing the
+low-battery line), so a profile you pick yourself in Quick Settings stays until
+the next change. Event-driven: it sleeps until UPower says something happened.
+
+  mk-power          run (the user service does this)
+  mk-power status   print what it would choose now
+"""
+import os
+import sys
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+UPOWER = ("org.freedesktop.UPower", "/org/freedesktop/UPower", "org.freedesktop.UPower")
+DISPLAY = ("org.freedesktop.UPower", "/org/freedesktop/UPower/devices/DisplayDevice",
+           "org.freedesktop.UPower.Device")
+PROFILES = ("org.freedesktop.UPower.PowerProfiles", "/org/freedesktop/UPower/PowerProfiles",
+            "org.freedesktop.UPower.PowerProfiles")
+DEFAULTS = {"ON_AC": "performance", "ON_BATTERY": "balanced",
+            "LOW_BATTERY": "power-saver", "LOW_PERCENT": "25"}
+
+
+def load_config():
+    config = dict(DEFAULTS)
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+    for path in (data_home / "mk-workstation/config/power.conf",
+                 config_home / "mk-workstation/power.conf"):
+        try:
+            for line in path.read_text().splitlines():
+                line = line.split("#", 1)[0].strip()
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    config[key.strip()] = value.strip()
+        except OSError:
+            pass
+    return config
+
+
+def proxy(bus, service):
+    return Gio.DBusProxy.new_sync(bus, Gio.DBusProxyFlags.NONE, None, *service, None)
+
+
+class SmartPower:
+    def __init__(self):
+        self.bus = Gio.bus_get_sync(Gio.BusType.SYSTEM)
+        self.upower = proxy(self.bus, UPOWER)
+        self.display = proxy(self.bus, DISPLAY)
+        self.profiles = proxy(self.bus, PROFILES)
+        self.config = load_config()
+        self.last_state = None
+
+    def state(self):
+        on_battery = bool(self.upower.get_cached_property("OnBattery").unpack())
+        percent = self.display.get_cached_property("Percentage").unpack()
+        if not on_battery:
+            return "ac"
+        return "low" if percent <= float(self.config["LOW_PERCENT"]) else "battery"
+
+    def wanted(self, state):
+        key = {"ac": "ON_AC", "battery": "ON_BATTERY", "low": "LOW_BATTERY"}[state]
+        return self.config[key]
+
+    def available(self):
+        value = self.profiles.get_cached_property("Profiles")
+        return {p["Profile"] for p in value.unpack()} if value else set()
+
+    def apply(self, *_):
+        state = self.state()
+        if state == self.last_state:
+            return
+        self.last_state = state
+        self.config = load_config()
+        profile = self.wanted(state)
+        if profile not in self.available():
+            return
+        current = self.profiles.get_cached_property("ActiveProfile").unpack()
+        if current == profile:
+            return
+        try:
+            self.bus.call_sync(PROFILES[0], PROFILES[1], "org.freedesktop.DBus.Properties", "Set",
+                               GLib.Variant("(ssv)", (PROFILES[2], "ActiveProfile",
+                                                      GLib.Variant("s", profile))),
+                               None, Gio.DBusCallFlags.NONE, -1, None)
+            print(f"{state}: {current} -> {profile}", flush=True)
+        except GLib.Error as error:
+            print(f"Couldn't switch to {profile}: {error.message}", file=sys.stderr, flush=True)
+
+    def run(self):
+        for p in (self.upower, self.display):
+            p.connect("g-properties-changed", self.apply)
+        self.apply()
+        GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    smart = SmartPower()
+    if sys.argv[1:] == ["status"]:
+        state = smart.state()
+        current = smart.profiles.get_cached_property("ActiveProfile").unpack()
+        print(f"Power: {state} · now {current} · smart choice {smart.wanted(state)}")
+    elif sys.argv[1:]:
+        print(__doc__.strip(), file=sys.stderr)
+        sys.exit(2)
+    else:
+        smart.run()

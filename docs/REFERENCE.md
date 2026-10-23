@@ -20,6 +20,8 @@ Every command, file and format. How the parts fit together is in
 | `mk task "TEXT" [WHEN]` | Add a Companion task |
 | `mk remind "TEXT" WHEN` | Add a task with a reminder |
 | `mk list` | Print notes, tasks and reminders |
+| `mk focus [DURATION] ["LABEL"]` | Start the focus timer in the background (`25`, `1:30`, `90s`) |
+| `mk power [status\|on\|off]` | Smart power profiles on laptops |
 | `mk effects [full\|lite\|auto]` | Show or set the visual effects profile |
 | `mk rename "NAME" [TAG]` | Rename MK's windows, notifications and top-bar tag |
 | `mk check` | Notify if a new version of the repo is available (run daily by a timer) |
@@ -37,7 +39,8 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `show-shortcuts` | Super+/ | Shortcuts window |
 | `mk-companion [tasks \| note ID]` | Super+Shift+N | Notes, tasks, reminders, timer and Obsidian buttons |
 | `mk-timer [DURATION [LABEL]]` | via Companion | Focus timer; `mk-timer 25`, `mk-timer 1:30 "Reading"` start it in the background |
-| `mk-reminders [snooze ID SECONDS]` | timer | Fires due reminders |
+| `mk-reminders [snooze ID SECONDS]` | timer | Fires due reminders and the morning brief |
+| `mk-power [status]` | service | Smart power profiles (laptops) |
 | `ocr-snip` | Super+Shift+T | Copy text from a screen area |
 | `camera-controls` | Super+C | Webcam brightness, contrast, focus… |
 | `mk-doctor` | | Same as `mk doctor` |
@@ -50,6 +53,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | :--- | :--- | :--- |
 | `config/shortcuts.conf` | `group \| label \| target \| keys` (see below) | `sync.sh`, Shortcuts window |
 | `config/brand.conf` | `NAME=`, `SHORT=` | every MK window, top-bar tag, `mk` |
+| `config/power.conf` | `ON_AC=`, `ON_BATTERY=`, `LOW_BATTERY=`, `LOW_PERCENT=` | `mk-power` |
 | `config/effects.conf` | `HEAVY=` UUIDs, `AUTO_LITE_BELOW_GB=` | `sync.sh` |
 | `config/enabled-extensions.txt` | one UUID per line | `sync.sh` |
 | `config/extension-settings/<uuid>.dconf` | `# dconf path: …` header, then `dconf dump` output | `sync.sh` |
@@ -81,6 +85,8 @@ empty means none. Group `-` applies but hides the line.
 | `~/.config/mk-workstation/brand.conf` | Your name for it | Yes: back to the default name |
 | `~/.config/mk-workstation/effects` | `full`, `lite` or `auto` | Yes: auto |
 | `~/.config/mk-workstation/timer.conf` | Focus timer preferences | Yes |
+| `~/.config/mk-workstation/power.conf` | Your power profile choices (same keys as `config/power.conf`) | Yes |
+| `~/.config/mk-workstation/power-off` | Present after `mk power off` | Yes: `mk power on` |
 | `~/.config/mk-workstation/backups/` | Settings snapshots; `original-dconf.ini` is your pre-MK desktop | Keep `original-dconf.ini` |
 | `~/.local/share/mk-workstation/companion.json` | Your notes and tasks | **No**: it's your data |
 | `~/.local/share/mk-workstation/reminders-state.json` | Which reminders already fired | Yes (due ones may fire again) |
@@ -98,7 +104,8 @@ journalctl --user -u mk-reminders.service -n 20
 | Unit | Runs | When |
 | :--- | :--- | :--- |
 | `mk-update-check.timer` | `mk check` | daily, 15 min after boot |
-| `mk-reminders.timer` | `mk-reminders` | every minute (`Persistent`, catches up after sleep) |
+| `mk-reminders.timer` | `mk-reminders` | every minute (`Persistent`, catches up after sleep); morning brief once a day after 07:00 |
+| `mk-power.service` | `mk-power` | laptops only; sleeps until plugged in, unplugged or battery low |
 
 ## Environment
 

@@ -194,9 +194,11 @@ case "${1:-help}" in
         ;;
 
     welcome)
-        # mk welcome [on | off | test | voice on|off | notify on|off | greeting "TEXT"]
+        # mk welcome [on | off | test | title sir|maam|name|none | greeting "TEXT"
+        #             | voice on|off|install|remove | notify on|off | edit]
         shift
         WELCOME_CONF="$HOME/.config/mk-workstation/welcome.conf"
+        VOICE="$HOME/.local/bin/mk-voice"
         set_welcome() {
             mkdir -p "$(dirname "$WELCOME_CONF")"
             touch "$WELCOME_CONF"
@@ -208,18 +210,34 @@ case "${1:-help}" in
         }
         case "${1:-}" in
             on|off) set_welcome WELCOME "$1"; echo "✔ Welcome light $1" ;;
-            voice) set_welcome VOICE "${2:-on}"; echo "✔ Spoken greeting ${2:-on}" ;;
-            notify) set_welcome EDGE_NOTIFY "${2:-on}"; echo "✔ Edge light for notifications ${2:-on}" ;;
+            title)
+                case "${2:-}" in
+                    sir|maam|name|none) set_welcome TITLE "$2"; "$VOICE" render > /dev/null; "$VOICE" status | head -n 1 ;;
+                    *) echo "Usage: mk welcome title sir|maam|name|none" >&2; exit 2 ;;
+                esac
+                ;;
             greeting)
-                [[ -n "${2:-}" ]] || { echo "Usage: mk welcome greeting \"Welcome back, {name}.\"" >&2; exit 2; }
-                set_welcome GREETING "${2//|/}"; echo "✔ Greeting: ${2//|/}" ;;
+                [[ -n "${2:-}" ]] || { echo "Usage: mk welcome greeting \"Welcome back home, {title}.\"" >&2; exit 2; }
+                set_welcome GREETING "${2//|/}"; "$VOICE" render > /dev/null; "$VOICE" status | head -n 1
+                ;;
+            voice)
+                case "${2:-on}" in
+                    on|off) set_welcome VOICE "${2:-on}"; echo "✔ Spoken greeting ${2:-on}"; [[ "${2:-on}" == on ]] && "$VOICE" render > /dev/null ;;
+                    install) "$VOICE" install && set_welcome VOICE on ;;
+                    remove) "$VOICE" remove ;;
+                    *) echo "Usage: mk welcome voice on|off|install|remove" >&2; exit 2 ;;
+                esac
+                ;;
+            notify) set_welcome EDGE_NOTIFY "${2:-on}"; echo "✔ Edge light for notifications ${2:-on}" ;;
+            edit) setsid -f "$HOME/.local/bin/mk-companion" welcome > /dev/null 2>&1 ;;
             test)
                 mkdir -p "$HOME/.cache/mk-workstation"
                 date > "$HOME/.cache/mk-workstation/welcome-test"
                 ;;
             *)
-                echo "Usage: mk welcome [on | off | test | voice on|off | notify on|off | greeting \"TEXT\"]"
-                grep -hE '^(WELCOME|GREETING|VOICE|EDGE_NOTIFY)=' "$HOME/.local/share/mk-workstation/config/welcome.conf" "$WELCOME_CONF" 2> /dev/null | tail -n 4
+                echo "Usage: mk welcome [on | off | test | edit | title sir|maam|name|none"
+                echo "                  | greeting \"TEXT\" | voice on|off|install|remove | notify on|off]"
+                "$VOICE" status
                 ;;
         esac
         ;;
@@ -348,7 +366,7 @@ case "${1:-help}" in
         gnome-extensions disable mk-indicator@mehulk &>/dev/null || true
         rm -rf "$HOME/.local/share/gnome-shell/extensions/mk-indicator@mehulk"
         rm -rf "$HOME/.local/share/mk-workstation/lib" "$HOME/.local/share/mk-workstation/config"
-        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-timer mk-reminders mk-power ocr-snip show-shortcuts \
+        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-timer mk-reminders mk-power mk-voice ocr-snip show-shortcuts \
             camera-controls fix-alt-tab close-workspace-apps; do
             rm -f "$HOME/.local/bin/$tool"
         done
@@ -378,7 +396,7 @@ case "${1:-help}" in
         echo "  task       Add a task: mk task \"pay rent\" [when]   (when: 30m, 2h, 18:00, tomorrow 9:00)"
         echo "  remind     Same as task, with a reminder: mk remind \"stretch\" 45m"
         echo "  list       Show notes, tasks and their reminders"
-        echo "  welcome    Welcome light after login: on, off, test, voice, notify, greeting"
+        echo "  welcome    Welcome after login: on, off, test, edit, title, greeting, voice (install), notify"
         echo "  device     What this computer has, and what MK tunes for it"
         echo "  fingerprint  Enroll a finger for login and sudo (list, delete, settings)"
         echo "  focus      Start the focus timer: mk focus 25 \"Writing\" (also 1:30, 90s)"

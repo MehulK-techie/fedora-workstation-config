@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Spoken welcome greeting.
+
+  mk-voice say        speak the greeting (renders it first if it changed)
+  mk-voice render     re-render the greeting audio
+  mk-voice install    install the natural British voice (Piper, ~260 MB, no sudo)
+  mk-voice remove     remove it again (back to espeak-ng)
+  mk-voice status     which voice and greeting are in use
+"""
+import os
+import sys
+from pathlib import Path
+
+
+def _add_lib_path():
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for candidate in (Path(__file__).resolve().parent.parent / "lib",
+                      Path(data_home) / "mk-workstation/lib"):
+        if (candidate / "mkworkstation").is_dir():
+            sys.path.insert(0, str(candidate))
+            return
+
+
+_add_lib_path()
+from mkworkstation import welcome  # noqa: E402
+
+if __name__ == "__main__":
+    command = sys.argv[1] if len(sys.argv) > 1 else "status"
+    try:
+        if command == "say":
+            welcome.say()
+        elif command == "render":
+            print(welcome.render(force=True) or "No voice engine (install espeak-ng)")
+        elif command == "install":
+            welcome.install_natural_voice()
+            print("✔ Natural voice installed. Hear it: mk welcome test")
+        elif command == "remove":
+            welcome.remove_natural_voice()
+            print("✔ Removed; using espeak-ng")
+        elif command == "status":
+            c = welcome.conf()
+            print(f"Greeting: {welcome.greeting(c)}")
+            print(f"Spoken: {c['VOICE']} · voice: {welcome.engine() or 'none'}"
+                  + ("" if welcome.engine() == "piper" else "  (natural voice: mk welcome voice install)"))
+        else:
+            print(__doc__.strip(), file=sys.stderr)
+            sys.exit(2)
+    except Exception as error:  # noqa: BLE001 - report any failure plainly
+        print(f"[-] {error}", file=sys.stderr)
+        sys.exit(1)

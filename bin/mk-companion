@@ -39,6 +39,7 @@ def _add_lib_path():
 _add_lib_path()
 import mkworkstation as mk  # noqa: E402
 from mkworkstation import companion as cstore  # noqa: E402
+from mkworkstation import welcome as wconf  # noqa: E402
 
 APP_ID = "io.github.mehulk.MkCompanion"
 STORE = cstore.STORE
@@ -83,10 +84,10 @@ class Store:
     def __init__(self):
         data = cstore.load()
         self.notes, self.tasks = data["notes"], data["tasks"]
-        if not STORE.exists() and OLD_SCRATCHPAD.exists():
-            self._import_scratchpad()
         self._save_id = 0
         self.mtime = self._disk_mtime()
+        if not STORE.exists() and OLD_SCRATCHPAD.exists():
+            self._import_scratchpad()
 
     @staticmethod
     def _disk_mtime():
@@ -333,8 +334,9 @@ class CompanionWindow(Adw.ApplicationWindow):
     def _build_menu(self):
         menu = Gio.Menu()
         menu.append("Rename this workstation…", "win.rename")
+        menu.append("Welcome greeting…", "win.welcome")
         menu.append("Keyboard shortcuts", "win.shortcuts")
-        for name, cb in (("rename", self.rename_dialog),
+        for name, cb in (("rename", self.rename_dialog), ("welcome", self.welcome_dialog),
                          ("shortcuts", lambda *_: launch([str(Path.home() / ".local/bin/show-shortcuts")]))):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", cb)
@@ -367,6 +369,87 @@ class CompanionWindow(Adw.ApplicationWindow):
             return
         if not launch(["obsidian"]):
             self.toast("Obsidian isn't installed: flatpak install flathub " + OBSIDIAN)
+
+    def welcome_dialog(self, *_):
+        """What the welcome after login says, and how it sounds."""
+        c = wconf.conf()
+        dialog = Adw.Dialog(title="Welcome greeting", content_width=460)
+        group = Adw.PreferencesGroup(
+            description="Shown (and spoken, if you like) with the edge light after you log in. "
+                        "{title} and {name} are filled in for you.")
+        on_row = Adw.SwitchRow(title="Welcome after login", active=c["WELCOME"] != "off")
+        text_row = Adw.EntryRow(title="Greeting", text=c["GREETING"])
+        titles = [("sir", "Sir"), ("maam", "Ma'am"), ("name", "Your first name"), ("none", "No title")]
+        title_row = Adw.ComboRow(title="Call me", model=Gtk.StringList.new([t[1] for t in titles]))
+        current = c.get("TITLE", "sir").lower().replace("ma'am", "maam")
+        title_row.set_selected(next((i for i, t in enumerate(titles) if t[0] == current), 0))
+        sub_row = Adw.SwitchRow(title="Show the date and time", active=c["SUBTITLE"] != "off")
+        voice_row = Adw.SwitchRow(title="Speak it", active=c["VOICE"] == "on")
+        for row in (on_row, text_row, title_row, sub_row, voice_row):
+            group.add(row)
+        preview = Gtk.Label(wrap=True)
+        preview.add_css_class("title-4")
+
+        natural = Adw.ActionRow(title="Natural British voice",
+                                subtitle="Installed" if wconf.engine() == "piper"
+                                else "Optional download, about 260 MB (no sudo)")
+        install = Gtk.Button(label="Install" if wconf.engine() != "piper" else "Installed",
+                             valign=Gtk.Align.CENTER, sensitive=wconf.engine() != "piper")
+        natural.add_suffix(install)
+        voice_group = Adw.PreferencesGroup()
+        voice_group.add(natural)
+
+        def save(*_):
+            wconf.set_value("WELCOME", "on" if on_row.get_active() else "off")
+            wconf.set_value("GREETING", text_row.get_text().strip() or "Welcome back home, {title}.")
+            wconf.set_value("TITLE", titles[title_row.get_selected()][0])
+            wconf.set_value("SUBTITLE", "on" if sub_row.get_active() else "off")
+            wconf.set_value("VOICE", "on" if voice_row.get_active() else "off")
+            preview.set_label(f"“{wconf.greeting()}”")
+        for row, signal in ((on_row, "notify::active"), (text_row, "changed"),
+                            (title_row, "notify::selected"), (sub_row, "notify::active"),
+                            (voice_row, "notify::active")):
+            row.connect(signal, save)
+        preview.set_label(f"“{wconf.greeting()}”")
+
+        def play(*_):
+            save()
+            cache = Path(GLib.get_user_cache_dir()) / "mk-workstation"
+            cache.mkdir(parents=True, exist_ok=True)
+            (cache / "welcome-test").write_text(str(time.time()))  # the shell replays the light
+        def do_install(*_):
+            install.set_sensitive(False)
+            install.set_label("Installing…")
+            proc = subprocess.Popen([str(Path.home() / ".local/bin/mk-voice"), "install"],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            def poll():
+                if proc.poll() is None:
+                    return GLib.SOURCE_CONTINUE
+                ok = proc.returncode == 0
+                install.set_label("Installed" if ok else "Retry")
+                install.set_sensitive(not ok)
+                natural.set_subtitle("Installed" if ok else "Download failed; check the connection")
+                return GLib.SOURCE_REMOVE
+            GLib.timeout_add(500, poll)
+        install.connect("clicked", do_install)
+        play_btn = Gtk.Button(label="Play it now", halign=Gtk.Align.CENTER)
+        play_btn.add_css_class("suggested-action")
+        play_btn.add_css_class("pill")
+        play_btn.connect("clicked", play)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16, margin_top=12,
+                      margin_bottom=20, margin_start=20, margin_end=20)
+        for widget in (preview, group, voice_group, play_btn):
+            box.append(widget)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        view.set_content(box)
+        dialog.set_child(view)
+        dialog.connect("closed", lambda *_: subprocess.Popen(
+            [str(Path.home() / ".local/bin/mk-voice"), "render"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        dialog.present(self)
 
     def rename_dialog(self, *_):
         name, short = mk.brand()
@@ -665,6 +748,9 @@ class CompanionApp(Adw.Application):
             self.window.connect("close-request", self._on_close)
         if args and args[0] == "tasks":
             self.window.stack.set_visible_child_name("tasks")
+        elif args and args[0] == "welcome":
+            self.window.present()
+            self.window.welcome_dialog()
         elif len(args) == 2 and args[0] == "note":
             self.window.store.merge_from_disk()
             self.window.open_note(args[1])

@@ -12,14 +12,16 @@ import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
+import { ExtensionState } from 'resource:///org/gnome/shell/misc/extensionUtils.js';
 
 const CONFIG_DIR = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation']);
 const USER_CONF = GLib.build_filenamev([CONFIG_DIR, 'welcome.conf']);
 const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'welcome.conf']);
 const TEST_FILE = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'welcome-test']);
 const DEFAULTS = {
-    WELCOME: 'on', GREETING: 'Welcome back home, sir.', SUBTITLE: 'on', VOICE: 'off',
+    WELCOME: 'on', GREETING: 'Welcome back home, {title}.', TITLE: 'sir', SUBTITLE: 'on', VOICE: 'off',
     EDGE_NOTIFY: 'off', COLOR_A: '#00c8ff', COLOR_B: '#7c4dff',
 };
 
@@ -201,12 +203,73 @@ export class EdgeLight {
     }
 }
 
+const BIN = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin']);
+const TITLES = [['sir', 'Sir'], ['maam', "Ma'am"], ['name', 'Your first name'], ['none', 'No title']];
+
+function run(argv) {
+    try {
+        Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+    } catch (e) {
+        console.warn(`mk-indicator: ${argv[0]}: ${e.message}`);
+    }
+}
+
+// Same rules as lib/mkworkstation/welcome.py.
+export function greetingText(conf = welcomeConf()) {
+    const key = (conf.TITLE || 'sir').toLowerCase();
+    let title = {sir: 'sir', maam: "ma'am", "ma'am": "ma'am", none: ''}[key];
+    const first = GLib.get_real_name().split(' ')[0] || GLib.get_user_name();
+    if (key === 'name')
+        title = first;
+    else if (title === undefined)
+        title = conf.TITLE;
+    let text = conf.GREETING;
+    if (!title)
+        text = text.replace(', {title}', '').replace(' {title}', '').replace('{title}', '');
+    return text.replaceAll('{title}', title).replaceAll('{name}', first).trim();
+}
+
+// Quick Settings: click to switch the welcome on or off; the arrow opens
+// choices for how you're addressed, the voice, a preview and editing.
 const WelcomeToggle = GObject.registerClass(
-class WelcomeToggle extends QuickSettings.QuickToggle {
-    _init() {
+class WelcomeToggle extends QuickSettings.QuickMenuToggle {
+    _init(onPreview) {
         super._init({title: 'Welcome light', iconName: 'starred-symbolic', toggleMode: true});
         this.checked = welcomeConf().WELCOME !== 'off';
         this.connect('notify::checked', () => writeUserKey('WELCOME', this.checked ? 'on' : 'off'));
+        this.menu.setHeader('starred-symbolic', 'Welcome light', greetingText());
+        this._titleItems = TITLES.map(([key, label]) => {
+            const item = new PopupMenu.PopupMenuItem(label);
+            item.connect('activate', () => {
+                writeUserKey('TITLE', key);
+                this._sync();
+                run([`${BIN}/mk-voice`, 'render']);
+            });
+            this.menu.addMenuItem(item);
+            return [key, item];
+        });
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        this._voice = new PopupMenu.PopupSwitchMenuItem('Speak the greeting', welcomeConf().VOICE === 'on');
+        this._voice.connect('toggled', (_i, state) => {
+            writeUserKey('VOICE', state ? 'on' : 'off');
+            if (state)
+                run([`${BIN}/mk-voice`, 'render']);
+        });
+        this.menu.addMenuItem(this._voice);
+        this.menu.addAction('Play it now', () => onPreview());
+        this.menu.addAction('Edit greeting…', () => run([`${BIN}/mk-companion`, 'welcome']));
+        this.menu.connect('open-state-changed', (_m, open) => open && this._sync());
+        this._sync();
+    }
+
+    _sync() {
+        const conf = welcomeConf();
+        const current = (conf.TITLE || 'sir').toLowerCase().replace("ma'am", 'maam');
+        for (const [key, item] of this._titleItems)
+            item.setOrnament(key === current ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
+        this._voice.setToggleState(conf.VOICE === 'on');
+        this.menu.setHeader('starred-symbolic', 'Welcome light', greetingText(conf));
+        this.subtitle = this.checked ? greetingText(conf) : null;
     }
 });
 
@@ -214,7 +277,7 @@ export class Welcome {
     enable() {
         this._light = new EdgeLight();
         this._indicator = new QuickSettings.SystemIndicator();
-        this._toggle = new WelcomeToggle();
+        this._toggle = new WelcomeToggle(() => this.greet(true));
         this._indicator.quickSettingsItems.push(this._toggle);
         Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
 
@@ -243,11 +306,30 @@ export class Welcome {
 
     }
 
-    // Called once GNOME's own startup animation has finished.
-    greetSoon(ms = 700) {
-        this._loginId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+    // At login: wait until every enabled extension has finished loading and
+    // nothing has changed for a moment, so the welcome plays on a settled,
+    // fully drawn desktop instead of competing with extensions starting up.
+    whenSettled(callback, {quietMs = 700, maxMs = 12000} = {}) {
+        const pending = [ExtensionState.INITIALIZED, ExtensionState.ACTIVATING, ExtensionState.DOWNLOADING];
+        const shell = new Gio.Settings({schema_id: 'org.gnome.shell'});
+        const started = GLib.get_monotonic_time();
+        let lastChange = started;
+        this._stateId = Main.extensionManager.connect('extension-state-changed', () => {
+            lastChange = GLib.get_monotonic_time();
+        });
+        this._loginId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+            const now = GLib.get_monotonic_time();
+            const busy = shell.get_strv('enabled-extensions').some(uuid => {
+                const ext = Main.extensionManager.lookup(uuid);
+                return ext && pending.includes(ext.state);
+            });
+            const settled = !busy && (now - lastChange) / 1000 >= quietMs;
+            if (!settled && (now - started) / 1000 < maxMs)
+                return GLib.SOURCE_CONTINUE;
             this._loginId = 0;
-            this.greet(false);
+            Main.extensionManager.disconnect(this._stateId);
+            this._stateId = 0;
+            callback();
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -256,11 +338,10 @@ export class Welcome {
         const conf = welcomeConf();
         if (!force && conf.WELCOME === 'off')
             return;
-        const name = GLib.get_real_name().split(' ')[0] || GLib.get_user_name();
-        const greeting = conf.GREETING.replace('{name}', name);
-        this._light.play({greeting, subtitle: conf.SUBTITLE !== 'off', duration: 3200});
-        if (conf.VOICE === 'on' && GLib.find_program_in_path('spd-say'))
-            Gio.Subprocess.new(['spd-say', '-r', '-15', greeting], Gio.SubprocessFlags.NONE);
+        const greeting = greetingText(conf);
+        this._light.play({greeting, subtitle: conf.SUBTITLE !== 'off', duration: 3400});
+        if (conf.VOICE === 'on')
+            run([`${BIN}/mk-voice`, 'say']);
     }
 
     _onNotification() {
@@ -274,6 +355,10 @@ export class Welcome {
         if (this._loginId) {
             GLib.source_remove(this._loginId);
             this._loginId = 0;
+        }
+        if (this._stateId) {
+            Main.extensionManager.disconnect(this._stateId);
+            this._stateId = 0;
         }
         this._testMonitor?.cancel();
         this._testMonitor = null;

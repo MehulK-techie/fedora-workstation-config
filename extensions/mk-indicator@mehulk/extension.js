@@ -7,6 +7,7 @@ import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { DockGlow } from './dockGlow.js';
 import { Welcome } from './welcome.js';
 import { TimerPill } from './timerPill.js';
+import { SwitcherAnimation } from './switcher.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -79,6 +80,8 @@ export default class MKIndicatorExtension extends Extension {
         this._welcome.enable();
         this._timerPill = new TimerPill();
         this._timerPill.enable();
+        this._switcher = new SwitcherAnimation();
+        this._switcher.enable();
         this._sessionId = Main.sessionMode.connect('updated', () => this._onSessionMode());
         this._onSessionMode();
 
@@ -90,8 +93,16 @@ export default class MKIndicatorExtension extends Extension {
             this._startupId = Main.layoutManager.connect('startup-complete', () => {
                 Main.layoutManager.disconnect(this._startupId);
                 this._startupId = 0;
-                this._scheduleBlurRefresh();
-                this._welcome?.greetSoon();
+                // Once every extension is up: fix the top-bar blur first, then
+                // greet, so nothing redraws underneath the welcome animation.
+                this._welcome?.whenSettled(() => {
+                    this._refreshBlur();
+                    this._greetId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 350, () => {
+                        this._greetId = 0;
+                        this._welcome?.greet(false);
+                        return GLib.SOURCE_REMOVE;
+                    });
+                });
             });
         }
     }
@@ -109,19 +120,15 @@ export default class MKIndicatorExtension extends Extension {
         }
     }
 
-    _scheduleBlurRefresh() {
-        this._blurTimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 3, () => {
-            this._blurTimeoutId = 0;
-            const blur = global.blur_my_shell;
-            const panel = blur?._panel_blur;
-            if (panel && blur._settings?.panel?.BLUR) {
-                if (panel.enabled)
-                    panel.reset();
-                else
-                    panel.enable();
-            }
-            return GLib.SOURCE_REMOVE;
-        });
+    _refreshBlur() {
+        const blur = global.blur_my_shell;
+        const panel = blur?._panel_blur;
+        if (panel && blur._settings?.panel?.BLUR) {
+            if (panel.enabled)
+                panel.reset();
+            else
+                panel.enable();
+        }
     }
 
     _setDocksShown(shown) {
@@ -154,15 +161,17 @@ export default class MKIndicatorExtension extends Extension {
         this._welcome = null;
         this._timerPill?.disable();
         this._timerPill = null;
+        this._switcher?.disable();
+        this._switcher = null;
         this._brandMonitor?.cancel();
         this._brandMonitor = null;
         if (this._startupId) {
             Main.layoutManager.disconnect(this._startupId);
             this._startupId = 0;
         }
-        if (this._blurTimeoutId) {
-            GLib.source_remove(this._blurTimeoutId);
-            this._blurTimeoutId = 0;
+        if (this._greetId) {
+            GLib.source_remove(this._greetId);
+            this._greetId = 0;
         }
         this._overviewIds?.forEach(id => Main.overview.disconnect(id));
         this._overviewIds = null;

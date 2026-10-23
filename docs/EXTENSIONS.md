@@ -1,6 +1,6 @@
 # Extensions Guide
 
-MK Workstation enables 13 GNOME extensions plus its own small top-bar mark, and restores each one **with its saved settings**. This guide shows what each does and how to change it, whether you prefer clicking or the terminal.
+MK Workstation enables 14 GNOME extensions plus its own small top-bar mark, and restores each one **with its saved settings**. This guide shows what each does and how to change it, whether you prefer clicking or the terminal.
 
 - **Everyone:** [Change an extension in 30 seconds](#change-an-extension-in-30-seconds) · [The extensions](#the-extensions) · [Keep it smooth](#keep-it-smooth)
 - **Tech-savvy:** [How syncing works](#how-syncing-works) · [Command-line tweaking](#command-line-tweaking) · [Add or remove an extension](#add-or-remove-an-extension)
@@ -34,6 +34,7 @@ To switch an extension off, use the toggle next to it in Extension Manager. `mk 
 | **AppIndicator Support** | Shows tray icons for apps like Spotify, ZapZap, Lutris and Steam (the Windows system tray / macOS menu-bar icons) | GNOME default | Extension Manager ⚙ |
 | **Caffeine** | A coffee-cup toggle in Quick Settings that keeps the screen awake (like PowerToys Awake or Amphetamine) | GNOME default | Click the toggle in Quick Settings |
 | **Tiling Assistant** | Windows-style split screen: snap halves and quarters, Snap Assist offers your other windows for the free space, snapped windows raise together, snap layouts | Super+←/→ halves; then Super+↑/↓ for quarters; **Super+Z** layouts; Super+Ctrl+C centre; no animations | Extension Manager ⚙ (layouts: *Layouts* tab, saved in `~/.config/tiling-assistant/layouts.json`) |
+| **Coverflow Alt-Tab** | Animated 3D Alt+Tab switcher over a tinted, dimmed desktop | Timeline style; windows from **all workspaces** with the current one first; cyan highlight, navy tint, overlay icons; 0.25 s ease-out animation; Super+Tab stays GNOME's app switcher | Extension Manager ⚙ |
 | **Places Status Indicator** | Top-bar menu for Home, Downloads, drives and network places | GNOME default | (no settings) |
 | **MK Workstation Indicator** | A faint **MK** mark in the top bar that brightens on hover | — | Switch off in Extension Manager to remove it |
 

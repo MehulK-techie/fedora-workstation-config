@@ -52,7 +52,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Hardware video decoding: detects your GPU and installs the right VA-API driver, so video plays on the GPU instead of the CPU
 
 **Desktop, kept in sync**
-- 13 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
+- 14 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
 - `mk export` saves your current extensions and their settings into the repo; `mk sync` puts them back on any machine
 - Alt+Tab across all workspaces, window snapping, screenshot and power keys, blur and dock styling
 
@@ -112,7 +112,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | Terminal | btop, fastfetch, fzf, ripgrep, zoxide, ncdu, just, chezmoi, 7-Zip, unrar |
 | Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, gThumb, Kamoso, Media Writer |
 
-**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), AppIndicator (tray icons), Caffeine (keep awake), and the MK top-bar mark.
+**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Astra Monitor, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Coverflow Alt-Tab (animated switcher), AppIndicator (tray icons), Caffeine (keep awake), and the MK top-bar mark.
 
 ---
 
@@ -137,7 +137,7 @@ Press **Super+/** for a live cheat sheet that always matches your keyboard.
 
 | | Shortcut | Action |
 | :--- | :--- | :--- |
-| **Windows** | `Alt+Tab` · `Super+Tab` | Switch windows (all workspaces) · switch apps |
+| **Windows** | `Alt+Tab` · `Super+Tab` | Animated 3D window switcher (all workspaces, current first) · switch apps |
 | | `Super+←/→` | Snap to the left / right half |
 | | `Super+←` then `Super+↑/↓` | Snap to a quarter |
 | | `Super+Z` | Snap layouts (pick a layout, then a window for each part) |

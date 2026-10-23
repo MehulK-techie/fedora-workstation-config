@@ -1,15 +1,63 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TMP_IMG=$(mktemp /tmp/ocr_snip_XXXXXX.png)
-TMP_TXT=$(mktemp /tmp/ocr_snip_XXXXXX.txt)
-trap 'rm -f "$TMP_IMG" "$TMP_TXT"' EXIT
+TMP_DIR=$(mktemp -d /tmp/ocr_snip_XXXXXX)
+trap 'rm -rf "$TMP_DIR"' EXIT
+TMP_IMG="$TMP_DIR/snip.png"
+TMP_TXT="$TMP_DIR/snip.txt"
 
-if ! slurp_area=$(slurp -b '#00000088' -c '#00ffff' -w 2); then
+# GNOME doesn't support grim's capture protocol, so ask the desktop's
+# screenshot portal for an interactive capture (GNOME shows its own area
+# picker). Exit codes: 0 captured, 1 cancelled, 2 portal unavailable.
+capture_with_portal() {
+    python3 - "$TMP_IMG" << 'PY'
+import os, shutil, sys
+import gi
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib
+
+try:
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+    token = f"mk_ocr_{os.getpid()}"
+    sender = bus.get_unique_name()[1:].replace(".", "_")
+    handle = f"/org/freedesktop/portal/desktop/request/{sender}/{token}"
+    loop, result = GLib.MainLoop(), {}
+
+    def on_response(*args):
+        code, results = args[5].unpack()
+        result["code"], result["uri"] = code, results.get("uri")
+        loop.quit()
+
+    bus.signal_subscribe("org.freedesktop.portal.Desktop", "org.freedesktop.portal.Request",
+                         "Response", handle, None, Gio.DBusSignalFlags.NONE, on_response)
+    bus.call_sync("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                  "org.freedesktop.portal.Screenshot", "Screenshot",
+                  GLib.Variant("(sa{sv})", ("", {"interactive": GLib.Variant("b", True),
+                                                 "handle_token": GLib.Variant("s", token)})),
+                  None, Gio.DBusCallFlags.NONE, -1, None)
+except GLib.Error:
+    sys.exit(2)
+
+loop.run()
+if result.get("code") != 0 or not result.get("uri"):
+    sys.exit(1)
+# The portal saves into the user's Pictures folder; move it so snips don't pile up.
+shutil.move(Gio.File.new_for_uri(result["uri"]).get_path(), sys.argv[1])
+PY
+}
+
+status=0
+capture_with_portal || status=$?
+if (( status == 1 )); then
     exit 0
+elif (( status == 2 )); then
+    # wlroots compositors (Sway, Hyprland) without a screenshot portal
+    if ! command -v grim &>/dev/null || ! slurp_area=$(slurp -b '#00000088' -c '#00ffff' -w 2); then
+        exit 0
+    fi
+    grim -g "$slurp_area" "$TMP_IMG"
 fi
 
-grim -g "$slurp_area" "$TMP_IMG"
 tesseract "$TMP_IMG" "${TMP_TXT%.txt}" --oem 1 --psm 6 -l eng 2>/dev/null || \
 tesseract "$TMP_IMG" "${TMP_TXT%.txt}" -l eng 2>/dev/null
 

@@ -1,68 +1,109 @@
 #!/usr/bin/env python3
+"""Sliders for the webcam's hardware controls.
+
+Only controls the camera reports are shown, using the camera's own ranges,
+and each slider starts at the current value so opening the window changes
+nothing.
+"""
+import glob
+import re
 import subprocess
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-def get_video_device():
-    try:
-        out = subprocess.check_output("ls /dev/video* 2>/dev/null", shell=True).decode().split()
-        return out[0] if out else "/dev/video0"
-    except:
-        return "/dev/video0"
+PRIMARY = [("brightness", "Brightness"), ("contrast", "Contrast"), ("saturation", "Saturation")]
+ADVANCED = [("sharpness", "Sharpness"), ("gamma", "Gamma"),
+            ("white_balance_temperature", "White Balance Temperature")]
+CTRL_RE = re.compile(r"^\s*(\w+)\s+0x[0-9a-f]+\s+\(int\)\s*:\s*min=(-?\d+)\s+max=(-?\d+)"
+                     r"\s+step=(\d+)\s+default=(-?\d+)\s+value=(-?\d+)")
 
-DEV = get_video_device()
 
-def set_ctrl(ctrl_name, val):
-    val = int(float(val))
-    subprocess.run(f"v4l2-ctl -d {DEV} --set-ctrl={ctrl_name}={val}", shell=True)
+def v4l2(*args):
+    return subprocess.run(["v4l2-ctl", *args], capture_output=True, text=True).stdout
 
-def reset_all():
-    subprocess.run(f"v4l2-ctl -d {DEV} --reset-controls", shell=True)
-    messagebox.showinfo("Camera Controls", "All parameters reset to hardware defaults.")
-    root.destroy()
 
-root = tk.Tk()
-root.title(f"Camera Controls Studio ({DEV})")
-root.geometry("450x580")
-root.configure(bg="#1e1e2e")
+def find_camera():
+    """First /dev/video* node that captures video (skips metadata nodes)."""
+    for dev in sorted(glob.glob("/dev/video*"), key=lambda d: int(re.sub(r"\D", "", d) or 0)):
+        caps = re.search(r"Device Caps\s*:\s*(0x[0-9a-fA-F]+)", v4l2("-d", dev, "--info"))
+        if caps and int(caps.group(1), 16) & 0x1:
+            return dev
+    return None
 
-style = ttk.Style()
-style.theme_use("clam")
-style.configure("TLabel", background="#1e1e2e", foreground="#cdd6f4", font=("Sans", 10))
-style.configure("Header.TLabel", font=("Sans", 12, "bold"), foreground="#89b4fa")
 
-ttk.Label(root, text="Camera Hardware Tuning", style="Header.TLabel").pack(pady=10)
-frame = tk.Frame(root, bg="#1e1e2e")
-frame.pack(fill="both", expand=True, padx=25, pady=5)
+def list_controls(dev):
+    ctrls = {}
+    for line in v4l2("-d", dev, "--list-ctrls").splitlines():
+        m = CTRL_RE.match(line)
+        if m:
+            ctrls[m.group(1)] = dict(zip(("min", "max", "step", "default", "value"),
+                                         map(int, m.groups()[1:])))
+    return ctrls
 
-def add_slider(parent, label_text, ctrl_name, from_, to_, default_val):
-    lbl = ttk.Label(parent, text=f"{label_text}:")
-    lbl.pack(anchor="w", pady=(6, 0))
-    scale = tk.Scale(parent, from_=from_, to=to_, orient="horizontal",
-                     bg="#313244", fg="#cdd6f4", highlightthickness=0,
-                     command=lambda val: set_ctrl(ctrl_name, val))
-    scale.set(default_val)
-    scale.pack(fill="x", pady=(0, 6))
-    return scale
 
-# Primary Controls
-add_slider(frame, "Brightness", "brightness", -64, 64, 0)
-add_slider(frame, "Contrast", "contrast", 0, 100, 32)
-add_slider(frame, "Saturation", "saturation", 0, 100, 64)
+def main():
+    dev = find_camera()
+    if dev is None:
+        messagebox.showerror("Camera Controls", "No camera found.")
+        return
+    ctrls = list_controls(dev)
 
-# Advanced Controls
-ttk.Label(frame, text="Advanced Hardware Controls", style="Header.TLabel").pack(anchor="w", pady=(12, 4))
-add_slider(frame, "Sharpness", "sharpness", 0, 10, 2)
-add_slider(frame, "Gamma", "gamma", 100, 300, 220)
-add_slider(frame, "White Balance Temperature", "white_balance_temperature", 2800, 6500, 4600)
+    def set_ctrl(name, val):
+        subprocess.run(["v4l2-ctl", "-d", dev, f"--set-ctrl={name}={int(float(val))}"])
 
-btn_frame = tk.Frame(root, bg="#1e1e2e")
-btn_frame.pack(fill="x", pady=15, padx=25)
+    root = tk.Tk()
+    root.title(f"Camera Controls Studio ({dev})")
+    root.geometry("450x580")
+    root.configure(bg="#1e1e2e")
 
-tk.Button(btn_frame, text="Reset Defaults", bg="#f38ba8", fg="#11111b",
-          font=("Sans", 10, "bold"), relief="flat", command=reset_all).pack(side="left", expand=True, fill="x", padx=5)
+    style = ttk.Style()
+    style.theme_use("clam")
+    style.configure("TLabel", background="#1e1e2e", foreground="#cdd6f4", font=("Sans", 10))
+    style.configure("Header.TLabel", font=("Sans", 12, "bold"), foreground="#89b4fa")
 
-tk.Button(btn_frame, text="Apply & Close", bg="#a6e3a1", fg="#11111b",
-          font=("Sans", 10, "bold"), relief="flat", command=root.destroy).pack(side="right", expand=True, fill="x", padx=5)
+    ttk.Label(root, text="Camera Hardware Tuning", style="Header.TLabel").pack(pady=10)
+    frame = tk.Frame(root, bg="#1e1e2e")
+    frame.pack(fill="both", expand=True, padx=25, pady=5)
 
-root.mainloop()
+    scales = {}
+
+    def add_slider(name, label_text):
+        c = ctrls[name]
+        ttk.Label(frame, text=f"{label_text}:").pack(anchor="w", pady=(6, 0))
+        scale = tk.Scale(frame, from_=c["min"], to=c["max"], resolution=c["step"], orient="horizontal",
+                         bg="#313244", fg="#cdd6f4", highlightthickness=0)
+        scale.set(c["value"])
+        # Attach the callback after set() so opening the window doesn't write to the camera.
+        scale.configure(command=lambda val: set_ctrl(name, val))
+        scale.pack(fill="x", pady=(0, 6))
+        scales[name] = scale
+
+    for name, label in PRIMARY:
+        if name in ctrls:
+            add_slider(name, label)
+    advanced = [(n, label) for n, label in ADVANCED if n in ctrls]
+    if advanced:
+        ttk.Label(frame, text="Advanced Hardware Controls", style="Header.TLabel").pack(anchor="w", pady=(12, 4))
+        for name, label in advanced:
+            add_slider(name, label)
+    if not scales:
+        ttk.Label(frame, text="This camera has no adjustable controls.").pack(pady=20)
+
+    def reset_all():
+        for name, scale in scales.items():
+            scale.set(ctrls[name]["default"])
+            set_ctrl(name, ctrls[name]["default"])
+        messagebox.showinfo("Camera Controls", "All parameters reset to hardware defaults.")
+
+    btn_frame = tk.Frame(root, bg="#1e1e2e")
+    btn_frame.pack(fill="x", pady=15, padx=25)
+    tk.Button(btn_frame, text="Reset Defaults", bg="#f38ba8", fg="#11111b",
+              font=("Sans", 10, "bold"), relief="flat", command=reset_all).pack(side="left", expand=True, fill="x", padx=5)
+    tk.Button(btn_frame, text="Close", bg="#a6e3a1", fg="#11111b",
+              font=("Sans", 10, "bold"), relief="flat", command=root.destroy).pack(side="right", expand=True, fill="x", padx=5)
+
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

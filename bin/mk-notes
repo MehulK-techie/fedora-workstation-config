@@ -84,6 +84,20 @@ def conf_set(key, value):
     path.write_text("\n".join(lines) + "\n")
 
 
+FONTS = {"sans": ("Sans", '"Inter", "Adwaita Sans", "Cantarell", system-ui, sans-serif'),
+         "serif": ("Serif", '"Source Serif 4", "Noto Serif", Georgia, serif'),
+         "mono": ("Monospace", '"JetBrains Mono", "Adwaita Mono", "Source Code Pro", monospace')}
+WIDTHS = {"narrow": ("Narrow", 640), "medium": ("Medium", 760), "wide": ("Wide", 920), "full": ("Full width", 0)}
+SPACINGS = {"compact": ("Compact", 1.45), "comfortable": ("Comfortable", 1.65), "airy": ("Airy", 1.85)}
+DEFAULT_LOOK = {"THEME": "system", "FONT": "sans", "FONT_SIZE": "16", "WIDTH": "medium",
+                "SPACING": "comfortable", "FORMAT_BAR": "on", "OPEN_IN": "edit", "SORT": "edited"}
+
+
+def look_conf():
+    conf = {**DEFAULT_LOOK, **nv.load_conf()}
+    return conf
+
+
 def snippet(text):
     for line in text.splitlines():
         line = line.strip()
@@ -534,11 +548,15 @@ class NotesWindow(Adw.ApplicationWindow):
 
         self._build()
         self._actions()
+        self.reading = self.splitting = False
+        self.apply_look()
         GLib.timeout_add_seconds(3, self._poll)
         self.connect("close-request", self._on_close)
         self.refresh()
         last = self.vault.state.get("last")
         self.open_note(last if last and self.vault.path(last).exists() else (self._first_note()))
+        if look_conf()["OPEN_IN"] in ("split", "read"):
+            self.mode.set_active_name(look_conf()["OPEN_IN"])
         if nv.load_conf().get("SYNC", "off") == "on":
             self.set_sync(True)
 
@@ -586,16 +604,29 @@ class NotesWindow(Adw.ApplicationWindow):
         note_head = Adw.HeaderBar(show_start_title_buttons=False, title_widget=Gtk.Label())
         self.mode = Adw.ToggleGroup()
         self.mode.add(Adw.Toggle(name="edit", icon_name="document-edit-symbolic", tooltip="Edit (Ctrl+E)"))
+        self.mode.add(Adw.Toggle(name="split", icon_name="view-dual-symbolic", tooltip="Edit with live preview (Ctrl+\\)"))
         self.mode.add(Adw.Toggle(name="read", icon_name="view-reveal-symbolic", tooltip="Read (Ctrl+E)"))
         self.mode.set_active_name("edit")
-        self.mode.connect("notify::active-name", lambda *_: self.set_reading(self.mode.get_active_name() == "read"))
+        self.mode.connect("notify::active-name", lambda *_: self.set_mode(self.mode.get_active_name()))
         note_head.pack_start(self.mode)
         for icon, tip, action in (("camera-photo-symbolic", "Insert screenshot (Ctrl+Shift+S)", "win.screenshot"),
                                   ("document-edit-symbolic", "Draw or handwrite (Ctrl+Shift+P)", "win.draw"),
                                   ("insert-image-symbolic", "Insert image or file", "win.attach")):
             note_head.pack_start(Gtk.Button(icon_name=icon if icon != "document-edit-symbolic" else "applications-graphics-symbolic",
                                             tooltip_text=tip, action_name=action))
+        self.calendar = Gtk.Calendar()
+        self.calendar.connect("day-selected", self._on_calendar_day)
+        self.calendar.connect("notify::month", lambda *_: self._mark_calendar())
+        self.calendar.connect("notify::year", lambda *_: self._mark_calendar())
+        cal_pop = Gtk.Popover(child=self.calendar)
+        cal_pop.connect("show", lambda *_: self._mark_calendar())
+        note_head.pack_start(Gtk.MenuButton(icon_name="x-office-calendar-symbolic", popover=cal_pop,
+                                            tooltip_text="Daily notes calendar"))
         menu = Gio.Menu()
+        section = Gio.Menu()
+        for label, action in (("Preferences…", "win.preferences"), ("Focus mode (F11)", "win.focus")):
+            section.append(label, action)
+        menu.append_section(None, section)
         section = Gio.Menu()
         for label, action in (("Export to PDF…", "win.pdf"), ("Version history…", "win.history"),
                               ("Rename (F2)", "win.rename"), ("Delete note", "win.delete")):
@@ -608,7 +639,7 @@ class NotesWindow(Adw.ApplicationWindow):
         menu.append_section(None, section)
         section = Gio.Menu()
         for label, action in (("Phone…", "win.phone"), ("Open vault folder", "win.open-folder"),
-                              ("Open in Obsidian", "win.obsidian"), ("Keyboard shortcuts", "win.shortcuts")):
+                              ("Keyboard shortcuts", "win.shortcuts")):
             section.append(label, action)
         menu.append_section(None, section)
         note_head.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, tooltip_text="Menu"))
@@ -674,7 +705,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self._apply_scheme()
         Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self._apply_scheme())
         self.view = GtkSource.View(buffer=self.buffer, wrap_mode=Gtk.WrapMode.WORD_CHAR,
-                                   left_margin=40, right_margin=40, top_margin=10, bottom_margin=120,
+                                   left_margin=24, right_margin=24, top_margin=10, bottom_margin=120,
                                    pixels_below_lines=4, css_classes=["mk-editor"], auto_indent=True,
                                    insert_spaces_instead_of_tabs=True, tab_width=4, smart_backspace=True)
         self.view.connect("paste-clipboard", self._on_paste)
@@ -685,7 +716,9 @@ class NotesWindow(Adw.ApplicationWindow):
         drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
         drop.connect("drop", self._on_drop)
         self.view.add_controller(drop)
-        self.editor_scroll = Gtk.ScrolledWindow(child=self.view, vexpand=True)
+        # The text keeps a comfortable line length however wide the window is.
+        self.clamp = Adw.ClampScrollable(child=self.view, maximum_size=760, tightening_threshold=600)
+        self.editor_scroll = Gtk.ScrolledWindow(child=self.clamp, vexpand=True, hexpand=True)
 
         self.web = WebKit.WebView(vexpand=True)
         settings = self.web.get_settings()
@@ -698,9 +731,11 @@ class NotesWindow(Adw.ApplicationWindow):
         manager.register_script_message_handler("mk", None)
         manager.connect("script-message-received::mk", self._on_web_message)
 
-        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=150)
-        self.stack.add_named(self.editor_scroll, "edit")
-        self.stack.add_named(self.web, "read")
+        # Edit, read, or both side by side with a live preview.
+        self.web.set_hexpand(True)
+        self.panes = Gtk.Paned(start_child=self.editor_scroll, end_child=self.web, wide_handle=False,
+                               shrink_start_child=False, shrink_end_child=False)
+        self.web.set_visible(False)
 
         self.info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_start=12, margin_end=12,
                             margin_top=8, width_request=250)
@@ -710,13 +745,14 @@ class NotesWindow(Adw.ApplicationWindow):
         self.info_toggle.connect("toggled", lambda *_: self._fill_info())
 
         body = Gtk.Box()
-        self.stack.set_hexpand(True)
-        body.append(self.stack)
+        self.panes.set_hexpand(True)
+        body.append(self.panes)
         body.append(self.info_revealer)
         note_box.append(body)
 
         self.toast = Adw.ToastOverlay(child=note_box)
 
+        self.list_box = list_box
         inner = Gtk.Paned(start_child=list_box, end_child=self.toast, position=330,
                           shrink_start_child=False, resize_start_child=False)
         self.split = Adw.OverlaySplitView(sidebar=side_box, content=inner, min_sidebar_width=200,
@@ -756,7 +792,11 @@ class NotesWindow(Adw.ApplicationWindow):
             ("publish", self.publish, []),
             ("phone", self.show_phone, []),
             ("open-folder", lambda: Gio.AppInfo.launch_default_for_uri(self.vault.root.as_uri(), None), []),
-            ("obsidian", self.open_obsidian, []),
+            ("preferences", self.show_preferences, ["<Control>comma"]),
+            ("show-tasks", lambda: self._set_scope(("tasks", None), "Tasks"), ["<Control><Shift>t"]),
+            ("focus", self.toggle_focus, ["F11"]),
+            ("split", lambda: self.mode.set_active_name("edit" if self.mode.get_active_name() == "split" else "split"),
+             ["<Control>backslash"]),
             ("shortcuts", self.show_shortcuts, ["<Control>question"]),
             ("toggle-sidebar", lambda: self.side_toggle.set_active(not self.side_toggle.get_active()), ["F9"]),
             ("bold", lambda: self.wrap("**", "**"), ["<Control>b"]),
@@ -781,13 +821,19 @@ class NotesWindow(Adw.ApplicationWindow):
 
     def refresh(self, keep_scope=True):
         self._fill_sidebar()
+        if self.scope[0] == "tasks":
+            self._fill_tasks()
+            return
         notes = self._scoped_notes()
         signature = [(n["rel"], n["mtime"]) for n, _s in notes]
         pinned = self.vault.state["pinned"]
         if not self.search.get_text().strip():
+            order = look_conf()["SORT"]
+            secondary = {"title": lambda n: n["title"].lower(),
+                         "folder": lambda n: (n["folder"].lower(), n["title"].lower())}.get(order, lambda n: -n["mtime"])
             notes.sort(key=lambda ns: (ns[0]["rel"] not in pinned,
                                        pinned.index(ns[0]["rel"]) if ns[0]["rel"] in pinned else 0,
-                                       -ns[0]["mtime"]))
+                                       secondary(ns[0])))
         while (row := self.list.get_row_at_index(0)) is not None:
             self.list.remove(row)
         self.rows = {}
@@ -923,7 +969,9 @@ class NotesWindow(Adw.ApplicationWindow):
 
         rows = [add("All notes", "view-list-symbolic", ("all", None), count=len(self.vault.notes())),
                 add("Pinned", "view-pin-symbolic", ("pinned", None), count=len(self.vault.state["pinned"])),
-                add("Daily notes", "x-office-calendar-symbolic", ("daily", None))]
+                add("Daily notes", "x-office-calendar-symbolic", ("daily", None)),
+                add("Tasks", "checkbox-checked-symbolic", ("tasks", None),
+                    count=sum(1 for t in self.vault.tasks() if not t[3]))]
         folders = [f for f in self.vault.folders() if f not in ("Daily", "Templates")]
         if folders:
             header("FOLDERS")
@@ -941,6 +989,11 @@ class NotesWindow(Adw.ApplicationWindow):
                 self.sidebar.select_row(row)
                 self._quiet_scope = False
 
+    def _set_scope(self, scope, title):
+        self.scope = scope
+        self.list_title.set_title(title)
+        self.refresh()
+
     def _on_scope(self, _box, row):
         if row is None or row.scope is None or getattr(self, "_quiet_scope", False):
             return
@@ -948,7 +1001,7 @@ class NotesWindow(Adw.ApplicationWindow):
             return
         self.scope = row.scope
         kind, value = row.scope
-        titles = {"all": "All notes", "pinned": "Pinned", "daily": "Daily notes"}
+        titles = {"all": "All notes", "pinned": "Pinned", "daily": "Daily notes", "tasks": "Tasks"}
         self.list_title.set_title(titles.get(kind) or (f"#{value}" if kind == "tag" else value.split("/")[-1]))
         GLib.idle_add(self.refresh)
         if self.split.get_collapsed():
@@ -963,6 +1016,7 @@ class NotesWindow(Adw.ApplicationWindow):
         if not self.vault.path(rel).exists():
             return
         self.rel = rel
+        self._rendered = None
         self.loading = True
         self.buffer.begin_irreversible_action()
         self.buffer.set_text(self.vault.read(rel))
@@ -981,7 +1035,7 @@ class NotesWindow(Adw.ApplicationWindow):
         row = self.rows.get(rel)
         if row:
             self.list.select_row(row)
-        if self.reading:
+        if self.reading or getattr(self, "splitting", False):
             self._render()
         self._fill_info()
 
@@ -993,12 +1047,18 @@ class NotesWindow(Adw.ApplicationWindow):
         folder = Path(self.rel).parent.as_posix()
         folder = "" if folder == "." else f"{folder}  ·  "
         edited = when(self.vault.path(self.rel).stat().st_mtime) if self.vault.path(self.rel).exists() else ""
-        self.meta.set_text(f"{folder}{words} words  ·  edited {edited}")
+        minutes = max(1, round(words / 220)) if words else 0
+        reading = f"  ·  {minutes} min read" if minutes else ""
+        self.meta.set_text(f"{folder}{words} words{reading}  ·  edited {edited}")
 
     def _on_changed(self, _buf):
         if self.loading or not self.rel:
             return
         self.dirty = True
+        if getattr(self, "splitting", False):
+            if getattr(self, "_preview_id", 0):
+                GLib.source_remove(self._preview_id)
+            self._preview_id = GLib.timeout_add(250, lambda: (setattr(self, "_preview_id", 0), self._render(), False)[2])
         if self.save_id:
             GLib.source_remove(self.save_id)
         self.save_id = GLib.timeout_add(600, self._save_now)
@@ -1315,22 +1375,208 @@ class NotesWindow(Adw.ApplicationWindow):
                       pattern=(data or {}).get("pattern", "plain")).present()
 
     # ---------- reading view ----------
-    def set_reading(self, reading):
-        self._save_now()
-        self.reading = reading
-        self.formatbar.set_sensitive(not reading)
-        self.stack.set_visible_child_name("read" if reading else "edit")
-        if reading:
-            self._render()
+    # ---------- tasks across the vault ----------
+    def _fill_tasks(self):
+        while (row := self.list.get_row_at_index(0)) is not None:
+            self.list.remove(row)
+        self.rows = {}
+        query = self.search.get_text().strip().lower()
+        tasks = [t for t in self.vault.tasks() if not query or query in t[2].lower()]
+        open_count = 0
+        for rel, number, text, done in tasks:
+            open_count += not done
+            row = Gtk.ListBoxRow()
+            row.rel = rel
+            box = Gtk.Box(spacing=10)
+            check = Gtk.CheckButton(active=done, valign=Gtk.Align.START)
+            check.connect("toggled", lambda _c, r=rel, n=number: self._toggle_task(r, n))
+            box.append(check)
+            labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
+            clean = re.sub(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]", lambda m: m.group(2) or m.group(1), text)
+            labels.append(Gtk.Label(label=clean, xalign=0, wrap=True, css_classes=["mk-row-title"] if not done else ["dim-label"]))
+            labels.append(Gtk.Label(label=Path(rel).stem, xalign=0, css_classes=["mk-row-meta"]))
+            box.append(labels)
+            row.set_child(box)
+            row.labels = (labels.get_first_child(), labels.get_last_child())
+            self.list.append(row)
+        self.count_label.set_text(f"{open_count} open · {len(tasks) - open_count} done")
+        self.signature = None
+
+    def _toggle_task(self, rel, number):
+        if rel == self.rel:
+            self._save_now()
+        self.vault.toggle_task(rel, number)
+        if rel == self.rel:
+            self.open_note(rel)
+        GLib.idle_add(lambda: (self.refresh(), False)[1])
+
+    # ---------- daily notes calendar ----------
+    def _mark_calendar(self):
+        self.calendar.clear_marks()
+        date = self.calendar.get_date()
+        for day in range(1, 32):
+            try:
+                rel = f"Daily/{date.get_year():04d}-{date.get_month():02d}-{day:02d}.md"
+            except ValueError:
+                continue
+            if self.vault.path(rel).exists():
+                self.calendar.mark_day(day)
+
+    def _on_calendar_day(self, calendar):
+        date = calendar.get_date()
+        rel = self.vault.daily(datetime(date.get_year(), date.get_month(), date.get_day_of_month()))
+        self.refresh()
+        self.open_note(rel)
+        self._mark_calendar()
+
+    # ---------- focus mode ----------
+    def toggle_focus(self):
+        self.focused = not getattr(self, "focused", False)
+        if self.focused:
+            self._before_focus = (self.side_toggle.get_active(), self.info_toggle.get_active())
+            self.side_toggle.set_active(False)
+            self.info_toggle.set_active(False)
+            self.fullscreen()
         else:
+            self.unfullscreen()
+            self.side_toggle.set_active(self._before_focus[0])
+            self.info_toggle.set_active(self._before_focus[1])
+        self.list_box.set_visible(not self.focused)
+        self.formatbar.set_visible(not self.focused and look_conf()["FORMAT_BAR"] != "off")
+        if self.focused:
+            self.toast.add_toast(Adw.Toast(title="Focus mode · F11 to come back", timeout=2))
+
+    # ---------- preferences ----------
+    def apply_look(self):
+        conf = look_conf()
+        Adw.StyleManager.get_default().set_color_scheme({
+            "light": Adw.ColorScheme.FORCE_LIGHT, "dark": Adw.ColorScheme.FORCE_DARK}.get(
+            conf["THEME"], Adw.ColorScheme.DEFAULT))
+        look = self._look()
+        spacing = SPACINGS.get(conf["SPACING"], SPACINGS["comfortable"])[1]
+        css = (f".mk-editor, .mk-editor text {{ font-family: {look['font']}; font-size: {look['size']}px; }}")
+        if not getattr(self, "_look_css", None):
+            self._look_css = Gtk.CssProvider()
+            Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), self._look_css,
+                                                      Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+        self._look_css.load_from_string(css)
+        self.view.set_pixels_below_lines(int(look["size"] * (spacing - 1.2)))
+        self.view.set_pixels_inside_wrap(int(look["size"] * (spacing - 1.25)))
+        width = WIDTHS.get(conf["WIDTH"], WIDTHS["medium"])[1]
+        self.clamp.set_maximum_size(width or 10000)
+        self.formatbar.set_visible(conf["FORMAT_BAR"] != "off" and not getattr(self, "focused", False))
+        self._rendered = None
+        if self.reading or getattr(self, "splitting", False):
+            self._render()
+
+    def show_preferences(self):
+        conf = look_conf()
+        dialog = Adw.PreferencesDialog(title="Preferences")
+        page = Adw.PreferencesPage(title="Appearance", icon_name="applications-graphics-symbolic")
+
+        def choice(group, title, key, options, subtitle=None):
+            keys = list(options)
+            row = Adw.ComboRow(title=title, subtitle=subtitle or "",
+                               model=Gtk.StringList.new([options[k][0] if isinstance(options[k], tuple) else options[k] for k in keys]))
+            row.set_selected(keys.index(conf[key]) if conf[key] in keys else 0)
+            row.connect("notify::selected", lambda r, _p: (conf_set(key, keys[r.get_selected()]), self.apply_look(),
+                                                          self.refresh()))
+            group.add(row)
+
+        looks = Adw.PreferencesGroup(title="Look")
+        choice(looks, "Style", "THEME", {"system": "Follow the system", "light": "Light", "dark": "Dark"})
+        choice(looks, "Font", "FONT", FONTS)
+        size = Adw.SpinRow.new_with_range(12, 26, 1)
+        size.set_title("Text size")
+        size.set_value(int(conf["FONT_SIZE"] or 16))
+        size.connect("notify::value", lambda r, _p: (conf_set("FONT_SIZE", str(int(r.get_value()))), self.apply_look()))
+        looks.add(size)
+        choice(looks, "Line length", "WIDTH", WIDTHS, "How wide text runs before it wraps")
+        choice(looks, "Line spacing", "SPACING", SPACINGS)
+        page.add(looks)
+
+        editing = Adw.PreferencesGroup(title="Writing")
+        bar = Adw.SwitchRow(title="Formatting bar", active=conf["FORMAT_BAR"] != "off")
+        bar.connect("notify::active", lambda r, _p: (conf_set("FORMAT_BAR", "on" if r.get_active() else "off"),
+                                                    self.apply_look()))
+        editing.add(bar)
+        choice(editing, "Open notes in", "OPEN_IN", {"edit": "Edit", "split": "Edit with preview", "read": "Read"})
+        choice(editing, "Sort notes by", "SORT", {"edited": "Last edited", "title": "Title", "folder": "Folder"})
+        page.add(editing)
+
+        vault = Adw.PreferencesGroup(title="Notes folder",
+                                     description="Any folder of Markdown files works, an Obsidian vault included.")
+        where = Adw.ActionRow(title=str(self.vault.root), subtitle="Where your notes live")
+        change = Gtk.Button(label="Change…", valign=Gtk.Align.CENTER)
+        where.add_suffix(change)
+        vault.add(where)
+        history = Adw.SwitchRow(title="Version history", subtitle="Keep earlier versions of every note",
+                                active=nv.load_conf().get("HISTORY", "on") != "off")
+        history.connect("notify::active", lambda r, _p: (conf_set("HISTORY", "on" if r.get_active() else "off"),
+                                                        setattr(self.vault, "history_enabled", r.get_active())))
+        vault.add(history)
+        page.add(vault)
+
+        def pick_folder(*_):
+            def chosen(d, res):
+                try:
+                    folder = d.select_folder_finish(res)
+                except GLib.Error:
+                    return
+                self._save_now()
+                conf_set("NOTES_DIR", folder.get_path())
+                self.vault = nv.Vault(folder.get_path())
+                if self.server:
+                    self.server.vault = self.vault
+                where.set_title(str(self.vault.root))
+                self.rel = None
+                self.scope = ("all", None)
+                self.refresh()
+                self.open_note(self._first_note())
+            Gtk.FileDialog(title="Choose your notes folder").select_folder(self, None, chosen)
+        change.connect("clicked", pick_folder)
+        dialog.add(page)
+        dialog.present(self)
+
+    def set_mode(self, mode):
+        """edit, split (edit with a live preview) or read."""
+        self._save_now()
+        self.reading = mode == "read"
+        self.splitting = mode == "split"
+        self.formatbar.set_sensitive(not self.reading)
+        self.editor_scroll.set_visible(not self.reading)
+        self.web.set_visible(mode != "edit")
+        if self.splitting:
+            GLib.idle_add(lambda: self.panes.set_position(self.panes.get_width() // 2) and False)
+        if mode != "edit":
+            self._render()
+        if not self.reading:
             self.view.grab_focus()
+
+    def set_reading(self, reading):  # kept for callers that only know read/edit
+        self.mode.set_active_name("read" if reading else "edit")
+
+    def _look(self):
+        conf = look_conf()
+        width = WIDTHS.get(conf["WIDTH"], WIDTHS["medium"])[1]
+        return {"font": FONTS.get(conf["FONT"], FONTS["sans"])[1], "size": int(conf["FONT_SIZE"] or 16),
+                "width": width if not getattr(self, "splitting", False) else 0,
+                "spacing": SPACINGS.get(conf["SPACING"], SPACINGS["comfortable"])[1]}
 
     def _render(self):
         if not self.rel:
             return
         dark = Adw.StyleManager.get_default().get_dark()
         text = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), False)
-        self.web.load_html(self.vault.page(self.rel, text, dark=dark), self.vault.path(self.rel).parent.as_uri() + "/")
+        if getattr(self, "_rendered", None) == self.rel and self.splitting:
+            # Live preview: swap the content in place so the scroll position stays.
+            body = json.dumps(self.vault.render(self.rel, text))
+            self.web.evaluate_javascript(f"document.getElementById('mk-body').innerHTML = {body};", -1,
+                                         None, None, None, None)
+            return
+        self._rendered = self.rel
+        self.web.load_html(self.vault.page(self.rel, text, dark=dark, look=self._look()),
+                           self.vault.path(self.rel).parent.as_uri() + "/")
 
     def _on_policy(self, _web, decision, kind):
         if kind != WebKit.PolicyDecisionType.NAVIGATION_ACTION:
@@ -1570,13 +1816,6 @@ class NotesWindow(Adw.ApplicationWindow):
     def palette(self):
         Picker("Commands", self.commands, lambda name: self.activate_action(f"win.{name}", None),
                "Type a command…").present(self)
-
-    def open_obsidian(self):
-        uri = f"obsidian://open?path={GLib.uri_escape_string(str(self.vault.path(self.rel or '')), None, False)}"
-        try:
-            Gio.AppInfo.launch_default_for_uri(uri, None)
-        except GLib.Error:
-            self.toast.add_toast(Adw.Toast(title="Obsidian isn't installed (flatpak install md.obsidian.Obsidian)"))
 
     def show_shortcuts(self):
         text = "\n".join(f"{keys:<22} {label}" for label, keys, _n in self.commands if keys)

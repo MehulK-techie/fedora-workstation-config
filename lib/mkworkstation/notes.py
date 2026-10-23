@@ -341,11 +341,27 @@ class Vault:
         self.write(rel, TASK.sub(flip, text))
 
     # ---------- daily notes, templates ----------
-    def daily(self):
-        rel = f"Daily/{datetime.now():%Y-%m-%d}.md"
-        if not self.path(rel).exists():
-            self.write(rel, f"# {datetime.now():%A, %d %B %Y}\n\n## Tasks\n- [ ] \n\n## Notes\n")
+    def daily(self, day=None, create=True):
+        """Today's note (or another day's): Daily/2026-10-24.md."""
+        day = day or datetime.now()
+        rel = f"Daily/{day:%Y-%m-%d}.md"
+        if create and not self.path(rel).exists():
+            self.write(rel, f"# {day:%A, %d %B %Y}\n\n## Tasks\n- [ ] \n\n## Notes\n")
         return rel
+
+    def tasks(self):
+        """Every checkbox in the vault: (rel, number, text, done), open ones first.
+        number is what toggle_task() takes."""
+        out = []
+        for note in self.notes():
+            text = self.read(note["rel"])
+            for n, m in enumerate(TASK.finditer(text)):
+                line_end = text.find("\n", m.end())
+                body = text[m.end():line_end if line_end >= 0 else len(text)].strip()
+                if body:
+                    out.append((note["rel"], n, body, m.group(2).lower() == "x"))
+        out.sort(key=lambda t: t[3])
+        return out
 
     def templates(self):
         folder = self.root / "Templates"
@@ -485,14 +501,20 @@ class Vault:
         return re.sub(r'<img src="(?!file:|https?:|data:)([^"]+)"',
                       lambda m: f'<img src="{base}{m.group(1)}"', out)
 
-    def page(self, rel, text, dark=True, printing=False):
-        """A full HTML page around render()."""
+    def page(self, rel, text, dark=True, printing=False, look=None):
+        """A full HTML page around render(). look: your reading preferences,
+        {"font": CSS font list, "size": px, "width": px or 0, "spacing": line height}."""
         body = self.render(rel, text)
         if printing:
             body = f'<h1 class="note-title">{html.escape(Path(rel).stem)}</h1>' + re.sub(
                 r'<input type="checkbox"[^>]*?( checked)?>',
                 lambda m: '<span class="box">☑</span>' if m.group(1) else '<span class="box">☐</span>', body)
-        return PAGE.format(title=html.escape(Path(rel).stem), body=body, nonce=secrets.token_hex(8),
+        extra = ""
+        if look and not printing:
+            width = f"max-width: {int(look['width'])}px;" if look.get("width") else "max-width: none;"
+            extra = (f"body {{ font-family: {look['font']}; font-size: {int(look['size'])}px; "
+                     f"line-height: {float(look['spacing'])}; {width} }}")
+        return PAGE.format(title=html.escape(Path(rel).stem), body=body, nonce=secrets.token_hex(8), extra=extra,
                            scheme="dark" if dark else "light", printing="print" if printing else "")
 
     def pdf(self, rel, out_path):
@@ -518,7 +540,7 @@ class Vault:
             body = body.replace(self.attachments.as_uri() + "/", "attachments/")
             body = re.sub(r'href="mknote:([^"#]+)[^"]*"',
                           lambda m: f'href="{slug.get(self.resolve(html.unescape(m.group(1))) or "", "#")}"', body)
-            page = PAGE.format(title=html.escape(note["title"]), scheme="light", printing="", nonce=secrets.token_hex(8),
+            page = PAGE.format(title=html.escape(note["title"]), scheme="light", printing="", nonce=secrets.token_hex(8), extra="",
                                body=f'<nav><ul>{nav}</ul></nav><article><h1 class="note-title">'
                                     f'{html.escape(note["title"])}</h1>{body}</article>')
             (out / slug[note["rel"]]).write_text(page, encoding="utf-8")
@@ -605,7 +627,8 @@ nav ul {{ list-style: none; padding: 0; }}
 .box {{ font-size: 1.15em; margin-right: 6px; }}
 @page {{ size: A4; margin: 18mm; }}
 @media print {{ a {{ color: inherit; }} }}
-</style></head><body class="{printing}">{body}
+{extra}
+</style></head><body class="{printing}"><main id="mk-body">{body}</main>
 <script nonce="{nonce}">
 document.addEventListener('change', e => {{
   if (e.target.dataset.task !== undefined && window.webkit?.messageHandlers?.mk)

@@ -181,7 +181,7 @@ case "${1:-help}" in
 
         gnome-extensions disable mk-indicator@mehulk &>/dev/null || true
         rm -rf "$HOME/.local/share/gnome-shell/extensions/mk-indicator@mehulk"
-        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad ocr-snip show-shortcuts \
+        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-timer ocr-snip show-shortcuts \
             camera-controls fix-alt-tab close-workspace-apps; do
             rm -f "$HOME/.local/bin/$tool"
         done

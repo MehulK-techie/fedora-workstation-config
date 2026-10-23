@@ -1,0 +1,584 @@
+#!/usr/bin/env python3
+"""MK focus timer: a glowing countdown ring, and a little pixel celebration
+instead of an alarm sound when the time is up.
+
+  mk-timer                 pick a time
+  mk-timer 25              start 25 minutes now
+  mk-timer 1:30 "Reading"  start 1 min 30 s with a label
+
+Only one timer runs at a time: launching it again brings the window back.
+Closing the window while it counts down keeps the timer running.
+"""
+import math
+import random
+import sys
+import time
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+gi.require_version("PangoCairo", "1.0")
+gi.require_foreign("cairo")
+import cairo  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango, PangoCairo  # noqa: E402
+
+APP_ID = "io.github.mehulk.MkTimer"
+CYAN = (0.0, 0.82, 1.0)
+AMBER = (1.0, 0.72, 0.2)
+RED = (1.0, 0.36, 0.45)
+PRESETS = [(1, 0), (5, 0), (15, 0), (25, 0), (50, 0)]
+
+CSS = b"""
+.mk-big-spin { font-size: 34px; font-weight: 800; }
+.mk-caption { font-size: 12px; opacity: 0.6; }
+.mk-colon { font-size: 34px; font-weight: 800; opacity: 0.6; }
+.mk-preset { border-radius: 999px; padding: 4px 14px; }
+.mk-start { border-radius: 999px; padding: 10px 40px; font-weight: 700; }
+.mk-task { font-size: 15px; opacity: 0.8; }
+"""
+
+# Original pixel robot, 12 x 13. C helmet, W visor, K eyes, N body, Y light.
+ROBOT_BASE = [
+    "....CCCC....",
+    "...CCCCCC...",
+    "..CCWWWWCC..",
+    "..CWKWWKWC..",
+    "..CWWWWWWC..",
+    "...CCCCCC...",
+    ".....YY.....",
+    "..NNNNNNNN..",
+    ".NNNNYYNNNN.",
+    ".NNNNNNNNNN.",
+    "..NNNNNNNN..",
+]
+ROBOT_LEGS = {
+    "stand": ["..NN....NN..", ".CCC....CCC."],
+    "run1": ["...NN..NN...", "..CCC...CCC."],
+    "run2": ["..NN....NN..", ".CCC.....CC."],
+    "jump": [".NN......NN.", "CCC......CCC"],
+}
+PALETTE = {
+    "C": (0.0, 0.82, 1.0),
+    "W": (0.92, 0.97, 1.0),
+    "K": (0.05, 0.08, 0.16),
+    "N": (0.16, 0.24, 0.45),
+    "Y": (1.0, 0.82, 0.25),
+}
+
+
+def mix(a, b, t):
+    return tuple(x + (y - x) * t for x, y in zip(a, b))
+
+
+def ring_color(fraction):
+    """Cyan, then amber for the last quarter, red for the last tenth.
+    Short crossfades only, so the ring never passes through muddy greens."""
+    for edge, before, after in ((0.25, AMBER, CYAN), (0.1, RED, AMBER)):
+        if abs(fraction - edge) < 0.015:
+            return mix(before, after, (fraction - edge + 0.015) / 0.03)
+    if fraction > 0.25:
+        return CYAN
+    return AMBER if fraction > 0.1 else RED
+
+
+def fmt(seconds):
+    seconds = max(0, int(math.ceil(seconds)))
+    h, rest = divmod(seconds, 3600)
+    m, s = divmod(rest, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+
+def parse_duration(text):
+    """'25' -> 25 min, '1:30' -> 1 min 30 s, '90s' -> 90 s."""
+    text = text.strip().lower()
+    if text.endswith("s") and text[:-1].isdigit():
+        return int(text[:-1])
+    if ":" in text:
+        m, s = text.split(":", 1)
+        return int(m) * 60 + int(s)
+    return int(text) * 60
+
+
+def draw_text(cr, text, font, x, y, rgba, center=True):
+    layout = PangoCairo.create_layout(cr)
+    layout.set_font_description(Pango.FontDescription.from_string(font))
+    layout.set_text(text, -1)
+    w, h = layout.get_pixel_size()
+    cr.set_source_rgba(*rgba)
+    cr.move_to(x - w / 2 if center else x, y - h / 2)
+    PangoCairo.show_layout(cr, layout)
+
+
+class TimerWindow(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Focus Timer")
+        self.set_default_size(460, 600)
+        self.total = 0.0
+        self.end_at = 0.0
+        self.paused_left = None
+        self.running = False
+        self.done_at = 0.0
+        self.task = ""
+
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE,
+                               transition_duration=250)
+        self.stack.add_named(self._build_setup(), "setup")
+        self.stack.add_named(self._build_run(), "run")
+        self.stack.add_named(self._build_done(), "done")
+
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        view.set_content(self.stack)
+        self.set_content(view)
+        self.connect("close-request", self._on_close)
+
+    # ---------- pages ----------
+    def _build_setup(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18,
+                      margin_top=12, margin_bottom=24, margin_start=24, margin_end=24,
+                      valign=Gtk.Align.CENTER)
+        title = Gtk.Label(label="How long do you want to focus?")
+        title.add_css_class("title-3")
+        box.append(title)
+
+        spins = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER)
+        self.min_spin = self._spin(0, 600, 25)
+        self.sec_spin = self._spin(0, 59, 0)
+        colon = Gtk.Label(label=":")
+        colon.add_css_class("mk-colon")
+        spins.append(self._captioned(self.min_spin, "min"))
+        spins.append(colon)
+        spins.append(self._captioned(self.sec_spin, "sec"))
+        box.append(spins)
+
+        presets = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
+        for m, s in PRESETS:
+            b = Gtk.Button(label=f"{m} min" if not s else f"{m}:{s:02d}")
+            b.add_css_class("mk-preset")
+            b.connect("clicked", self._on_preset, m, s)
+            presets.append(b)
+        box.append(presets)
+
+        self.task_entry = Gtk.Entry(placeholder_text="What are you working on? (optional)")
+        self.task_entry.connect("activate", lambda *_: self._on_start())
+        box.append(self.task_entry)
+
+        self.start_btn = Gtk.Button(label="Start", halign=Gtk.Align.CENTER)
+        self.start_btn.add_css_class("suggested-action")
+        self.start_btn.add_css_class("mk-start")
+        self.start_btn.connect("clicked", lambda *_: self._on_start())
+        box.append(self.start_btn)
+        for spin in (self.min_spin, self.sec_spin):
+            spin.connect("value-changed", self._update_start_sensitive)
+        return box
+
+    def _build_run(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14,
+                      margin_bottom=24, margin_start=16, margin_end=16)
+        self.ring = Gtk.DrawingArea(content_width=340, content_height=340,
+                                    hexpand=True, vexpand=True)
+        self.ring.set_draw_func(self._draw_ring)
+        self.ring.add_tick_callback(self._tick)
+        box.append(self.ring)
+        self.task_label = Gtk.Label(ellipsize=Pango.EllipsizeMode.END)
+        self.task_label.add_css_class("mk-task")
+        box.append(self.task_label)
+
+        buttons = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER)
+        self.pause_btn = Gtk.Button(icon_name="media-playback-pause-symbolic",
+                                    tooltip_text="Pause (Space)")
+        self.pause_btn.connect("clicked", lambda *_: self.toggle_pause())
+        plus = Gtk.Button(label="+1 min", tooltip_text="Add a minute")
+        plus.connect("clicked", lambda *_: self.add_time(60))
+        stop = Gtk.Button(icon_name="media-playback-stop-symbolic", tooltip_text="Stop")
+        stop.connect("clicked", lambda *_: self.stop())
+        for b in (self.pause_btn, plus, stop):
+            b.add_css_class("circular")
+            b.add_css_class("flat")
+            buttons.append(b)
+        self.pause_btn.remove_css_class("flat")
+        self.pause_btn.add_css_class("suggested-action")
+        box.append(buttons)
+
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._on_key)
+        self.add_controller(keys)
+        return box
+
+    def _build_done(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14,
+                      margin_bottom=24, margin_start=12, margin_end=12)
+        self.scene = Gtk.DrawingArea(content_width=430, content_height=380,
+                                     hexpand=True, vexpand=True)
+        self.scene.set_draw_func(self._draw_scene)
+        box.append(self.scene)
+        buttons = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
+        for label, cb, style in (
+            ("Again", lambda *_: self.start(self.total, self.task), "suggested-action"),
+            ("+5 min", lambda *_: self.start(300, self.task), None),
+            ("5 min break", lambda *_: self.start(300, "Break"), None),
+            ("New timer", lambda *_: self.stack.set_visible_child_name("setup"), None),
+        ):
+            b = Gtk.Button(label=label)
+            b.add_css_class("pill")
+            if style:
+                b.add_css_class(style)
+            b.connect("clicked", cb)
+            buttons.append(b)
+        box.append(buttons)
+        return box
+
+    def _spin(self, lo, hi, value):
+        spin = Gtk.SpinButton.new_with_range(lo, hi, 1)
+        spin.set_value(value)
+        spin.set_numeric(True)
+        spin.set_orientation(Gtk.Orientation.VERTICAL)
+        spin.add_css_class("mk-big-spin")
+        return spin
+
+    @staticmethod
+    def _captioned(widget, caption):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.append(widget)
+        label = Gtk.Label(label=caption)
+        label.add_css_class("mk-caption")
+        box.append(label)
+        return box
+
+    # ---------- timer logic ----------
+    def remaining(self):
+        if self.paused_left is not None:
+            return self.paused_left
+        return max(0.0, self.end_at - time.monotonic())
+
+    def start(self, seconds, task=""):
+        self.total = float(seconds)
+        self.end_at = time.monotonic() + seconds
+        self.paused_left = None
+        self.running = True
+        self.task = task.strip()
+        self.task_label.set_label(self.task or "Focus")
+        self.pause_btn.set_icon_name("media-playback-pause-symbolic")
+        self.get_application().hold()
+        self.stack.set_visible_child_name("run")
+
+    def stop(self):
+        if self.running:
+            self.running = False
+            self.get_application().release()
+        self.set_title("Focus Timer")
+        self.stack.set_visible_child_name("setup")
+
+    def toggle_pause(self):
+        if not self.running:
+            return
+        if self.paused_left is None:
+            self.paused_left = self.remaining()
+            self.pause_btn.set_icon_name("media-playback-start-symbolic")
+        else:
+            self.end_at = time.monotonic() + self.paused_left
+            self.paused_left = None
+            self.pause_btn.set_icon_name("media-playback-pause-symbolic")
+
+    def add_time(self, seconds):
+        if self.paused_left is not None:
+            self.paused_left += seconds
+        else:
+            self.end_at += seconds
+        self.total += seconds
+
+    def finish(self):
+        self.running = False
+        self.done_at = time.monotonic()
+        self.scene_state = {"coins": [], "confetti": [], "jumps": 0, "last_phase": 0.0}
+        self.set_title("Time's up!")
+        self.stack.set_visible_child_name("done")
+        self.scene.add_tick_callback(self._scene_tick)
+        app = self.get_application()
+        note = Gio.Notification.new("Time's up!")
+        note.set_body(f"{self.task or 'Focus session'} · {fmt(self.total)} done")
+        note.set_priority(Gio.NotificationPriority.HIGH)
+        note.set_default_action("app.show")
+        app.send_notification("done", note)
+        self.present()
+        app.release()
+
+    def _tick(self, widget, clock):
+        if self.running:
+            left = self.remaining()
+            self.set_title(f"{fmt(left)} · {self.task or 'Focus'}")
+            if left <= 0:
+                self.finish()
+        widget.queue_draw()
+        return GLib.SOURCE_CONTINUE
+
+    # ---------- events ----------
+    def _on_preset(self, _btn, m, s):
+        self.min_spin.set_value(m)
+        self.sec_spin.set_value(s)
+        self._on_start()
+
+    def _update_start_sensitive(self, *_):
+        total = self.min_spin.get_value_as_int() * 60 + self.sec_spin.get_value_as_int()
+        self.start_btn.set_sensitive(total > 0)
+
+    def _on_start(self):
+        total = self.min_spin.get_value_as_int() * 60 + self.sec_spin.get_value_as_int()
+        if total > 0:
+            self.start(total, self.task_entry.get_text())
+
+    def _on_key(self, _ctrl, keyval, _code, _state):
+        if self.stack.get_visible_child_name() == "run" and keyval == Gdk.KEY_space:
+            self.toggle_pause()
+            return True
+        return False
+
+    def _on_close(self, *_):
+        if self.running:
+            # Keep counting in the background; launching again shows it.
+            self.set_visible(False)
+            note = Gio.Notification.new("Timer still running")
+            note.set_body(f"{fmt(self.remaining())} left. Open Focus Timer again to see it.")
+            note.set_default_action("app.show")
+            self.get_application().send_notification("running", note)
+            return True
+        return False
+
+    # ---------- drawing: countdown ring ----------
+    def _draw_ring(self, _area, cr, w, h):
+        left = self.remaining()
+        frac = left / self.total if self.total else 0.0
+        now = time.monotonic()
+        cx, cy = w / 2, h / 2
+        r = min(w, h) / 2 - 30
+        col = ring_color(frac)
+        paused = self.paused_left is not None
+        # last 10 seconds: the ring throbs once a second
+        pulse = (left % 1.0) if (left <= 10 and not paused) else 0.0
+
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
+        cr.set_line_width(14)
+        cr.set_source_rgba(1, 1, 1, 0.07)
+        cr.arc(cx, cy, r, 0, 2 * math.pi)
+        cr.stroke()
+
+        start = -math.pi / 2
+        end = start + 2 * math.pi * frac
+        if frac > 0.001:
+            for width, alpha in ((34, 0.07), (24, 0.14), (14, 1.0)):
+                cr.set_line_width(width + pulse * 8)
+                cr.set_source_rgba(*col, alpha)
+                cr.arc(cx, cy, r, start, end)
+                cr.stroke()
+            hx, hy = cx + r * math.cos(end), cy + r * math.sin(end)
+            glow = 10 + 3 * math.sin(now * 6)
+            cr.set_source_rgba(*col, 0.35)
+            cr.arc(hx, hy, glow + 6, 0, 2 * math.pi)
+            cr.fill()
+            cr.set_source_rgba(1, 1, 1, 0.95)
+            cr.arc(hx, hy, 6, 0, 2 * math.pi)
+            cr.fill()
+
+        # three small moons orbiting slowly: the timer is alive
+        for i in range(3):
+            a = now * (0.6 if not paused else 0.1) + i * 2 * math.pi / 3
+            cr.set_source_rgba(*col, 0.5)
+            cr.arc(cx + (r + 24) * math.cos(a), cy + (r + 24) * math.sin(a), 2.5, 0, 2 * math.pi)
+            cr.fill()
+
+        alpha = 0.55 + 0.45 * abs(math.sin(now * 2)) if paused else 1.0
+        draw_text(cr, fmt(left), "Sans Bold 52", cx, cy - 8, (0.95, 0.98, 1.0, alpha))
+        draw_text(cr, "paused" if paused else "remaining", "Sans 13", cx, cy + 40,
+                  (1, 1, 1, 0.5))
+
+    # ---------- drawing: celebration ----------
+    def _scene_tick(self, widget, _clock):
+        if self.stack.get_visible_child_name() != "done":
+            return GLib.SOURCE_REMOVE
+        widget.queue_draw()
+        return GLib.SOURCE_CONTINUE
+
+    def _draw_pixels(self, cr, rows, x, y, px, flip=False):
+        for j, row in enumerate(rows):
+            for i, ch in enumerate(reversed(row) if flip else row):
+                if ch in PALETTE:
+                    cr.set_source_rgb(*PALETTE[ch])
+                    cr.rectangle(x + i * px, y + j * px, px, px)
+                    cr.fill()
+
+    def _draw_scene(self, _area, cr, w, h):
+        t = time.monotonic() - self.done_at
+        st = self.scene_state
+        px = 5
+        sprite_w, sprite_h = 12 * px, 13 * px
+        ground = h - 46
+
+        # night sky with twinkling stars
+        sky = cairo.LinearGradient(0, 0, 0, h)
+        sky.add_color_stop_rgb(0, 0.03, 0.06, 0.16)
+        sky.add_color_stop_rgb(1, 0.07, 0.13, 0.30)
+        cr.set_source(sky)
+        cr.paint()
+        rng = random.Random(7)
+        for _ in range(40):
+            sx, sy, ph = rng.uniform(0, w), rng.uniform(0, ground - 60), rng.uniform(0, 6)
+            cr.set_source_rgba(1, 1, 1, 0.25 + 0.6 * abs(math.sin(t * 1.5 + ph)))
+            cr.rectangle(sx, sy, 2, 2)
+            cr.fill()
+
+        # brick ground
+        for row in range(3):
+            y = ground + row * 16
+            offset = 0 if row % 2 == 0 else 16
+            for bx in range(-offset, int(w) + 32, 32):
+                cr.set_source_rgb(0.12, 0.30, 0.55)
+                cr.rectangle(bx + 1, y + 1, 30, 14)
+                cr.fill()
+        cr.set_source_rgb(0.0, 0.82, 1.0)
+        cr.rectangle(0, ground, w, 3)
+        cr.fill()
+
+        # robot runs in, then jumps and bumps the block again and again
+        target_x = w / 2 - sprite_w / 2
+        jump_h = 96
+        if t < 1.0:
+            k = 1 - (1 - t) ** 3
+            x = -sprite_w + (target_x + sprite_w) * k
+            y_off = 0.0
+            legs = "run1" if int(t / 0.12) % 2 else "run2"
+        else:
+            x = target_x
+            phase = ((t - 1.0) % 1.0)
+            y_off = 4 * jump_h * phase * (1 - phase)
+            legs = "jump" if 0.05 < phase < 0.95 else "stand"
+            if st["last_phase"] < 0.5 <= phase:
+                st["jumps"] += 1
+                st["coins"].append(t)
+                burst = 70 if st["jumps"] == 1 else 14
+                colors = [CYAN, AMBER, RED, (0.6, 1.0, 0.5), (0.9, 0.6, 1.0)]
+                for _ in range(burst):
+                    st["confetti"].append([w / 2, ground - sprite_h - jump_h - 40,
+                                           random.uniform(-220, 220), random.uniform(-380, -120),
+                                           random.choice(colors), random.uniform(0, 6), t])
+            st["last_phase"] = phase
+
+        block_size = 44
+        block_x = w / 2 - block_size / 2
+        block_y = ground - sprite_h - jump_h - block_size + 4
+        bump = 0.0
+        if st["coins"]:
+            since = t - st["coins"][-1]
+            if since < 0.25:
+                bump = -10 * math.sin(since / 0.25 * math.pi)
+        # the block: gold with a "!"
+        cr.set_source_rgb(1.0, 0.72, 0.2)
+        cr.rectangle(block_x, block_y + bump, block_size, block_size)
+        cr.fill()
+        cr.set_source_rgb(0.55, 0.32, 0.05)
+        cr.set_line_width(3)
+        cr.rectangle(block_x + 1.5, block_y + bump + 1.5, block_size - 3, block_size - 3)
+        cr.stroke()
+        cr.rectangle(block_x + 19, block_y + bump + 9, 6, 16)
+        cr.rectangle(block_x + 19, block_y + bump + 29, 6, 6)
+        cr.fill()
+
+        # coins pop out of the block, spin and fade, with a +1
+        alive = []
+        for born in st["coins"]:
+            age = t - born
+            if age > 0.9:
+                continue
+            alive.append(born)
+            cy = block_y - 18 - 90 * age + 60 * age * age
+            spin = abs(math.cos(age * 14))
+            fade = 1 - age / 0.9
+            cr.save()
+            cr.translate(w / 2, cy)
+            cr.scale(max(spin, 0.15), 1)
+            cr.set_source_rgba(1.0, 0.85, 0.2, fade)
+            cr.arc(0, 0, 13, 0, 2 * math.pi)
+            cr.fill()
+            cr.set_source_rgba(1.0, 0.97, 0.7, fade)
+            cr.arc(0, 0, 7, 0, 2 * math.pi)
+            cr.fill()
+            cr.restore()
+            draw_text(cr, "+1", "Sans Bold 14", w / 2 + 26, cy - 6, (1, 0.9, 0.4, fade))
+        st["coins"] = alive
+
+        # confetti with gravity
+        keep = []
+        for p in st["confetti"]:
+            age = t - p[6]
+            if age > 2.6:
+                continue
+            keep.append(p)
+            fx = p[0] + p[2] * age
+            fy = p[1] + p[3] * age + 420 * age * age
+            cr.save()
+            cr.translate(fx, fy)
+            cr.rotate(p[5] + age * 8)
+            cr.set_source_rgba(*p[4], max(0.0, 1 - age / 2.6))
+            cr.rectangle(-4, -2, 8, 4)
+            cr.fill()
+            cr.restore()
+        st["confetti"] = keep
+
+        self._draw_pixels(cr, ROBOT_BASE + ROBOT_LEGS[legs],
+                          x, ground - sprite_h - y_off, px)
+
+        # headline bounces in
+        scale = 1 + 0.35 * math.exp(-4 * t) * math.sin(14 * t)
+        cr.save()
+        cr.translate(w / 2, 46)
+        cr.scale(scale, scale)
+        draw_text(cr, "Time's up!", "Sans Bold 30", 0, 0, (1, 1, 1, 1))
+        cr.restore()
+        subtitle = f"{self.task or 'Focus session'} · {fmt(self.total)}"
+        draw_text(cr, subtitle, "Sans 13", w / 2, 82, (0.75, 0.9, 1.0, 0.85))
+        if st["jumps"]:
+            draw_text(cr, f"coins {st['jumps']}", "Sans Bold 12", w - 50, 20,
+                      (1.0, 0.85, 0.3, 0.9))
+
+
+class TimerApp(Adw.Application):
+    def __init__(self, autostart):
+        super().__init__(application_id=APP_ID)
+        self.autostart = autostart
+        self.window = None
+        show = Gio.SimpleAction.new("show", None)
+        show.connect("activate", lambda *_: self.activate())
+        self.add_action(show)
+
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.PREFER_DARK)
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    def do_activate(self):
+        if self.window is None:
+            self.window = TimerWindow(self)
+            if self.autostart:
+                self.window.start(*self.autostart)
+        self.window.set_visible(True)
+        self.window.present()
+
+
+def main():
+    autostart = None
+    if len(sys.argv) > 1:
+        try:
+            seconds = parse_duration(sys.argv[1])
+        except ValueError:
+            print(__doc__.strip(), file=sys.stderr)
+            return 2
+        if seconds > 0:
+            autostart = (seconds, " ".join(sys.argv[2:]))
+    return TimerApp(autostart).run([sys.argv[0]])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

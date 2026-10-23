@@ -5,6 +5,7 @@
 ### Added
 - **macOS feel:** trackpad gestures (4 fingers ←/→ workspaces, 3 fingers ←/→ windows, 3 fingers ↑ overview), 25% faster animations (Impatience), genie minimize (Magic Lamp), a subtle glide when windows open and close (Burn My Windows), Super+Ctrl+F full screen, Finder-style Files, sharp X11 apps at fractional scaling.
 - **Windows feel:** taskbar-style dock (click focuses or minimizes, thumbnails for apps with several windows, middle-click for a new window), Super+Ctrl+D new desktop (Shift takes the window along).
+- **Focus timer (`mk-timer`, Super+Shift+N › Timer):** minutes and seconds, presets, a glowing ring that turns amber then red, pause / +1 min, keeps running when closed, and a pixel-robot celebration instead of an alarm sound. The companion menu also opens Obsidian.
 - **Livelier desktop:** soft cyan hover glow on top-bar buttons, dock icons and overview windows; touchpad gestures in the Super+/ cheat sheet.
 - **`mk uninstall`**, a permanent pre-MK settings snapshot, SECURITY.md, CODE_OF_CONDUCT.md, THIRD_PARTY.md, issue and PR templates, .editorconfig.
 - **Themed Alt+Tab:** GNOME's flat switcher with live thumbnails of every window on every workspace, styled by mk-indicator's stylesheet (frosted navy panel, cyan selection).

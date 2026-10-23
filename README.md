@@ -181,7 +181,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 ├── sync-shortcuts.sh     Compatibility shim for older installs; runs sync.sh
 ├── justfile              just setup | sync | face | export | update | check
 ├── apps/                 dnf-packages.txt, flatpaks.txt
-├── bin/                  mk, mk-apps, mk-doctor, ocr-snip, show-shortcuts, mk-scratchpad, camera-controls
+├── bin/                  mk, mk-apps, mk-doctor, ocr-snip, show-shortcuts, mk-scratchpad, mk-timer, camera-controls
 ├── config/
 │   ├── enabled-extensions.txt   Extensions sync.sh installs and enables
 │   ├── extension-settings/      One saved .dconf per extension

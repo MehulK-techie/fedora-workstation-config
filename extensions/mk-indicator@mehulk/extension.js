@@ -67,12 +67,22 @@ export default class MKIndicatorExtension extends Extension {
 
         // The dock auto-hides on the desktop, but Dash to Dock always shows it
         // in the overview, on top of window titles. Fade it out there too.
+        // Only its opacity changes while the overview animates: hiding or
+        // showing the dock re-lays it out, and doing that mid-animation froze
+        // a frame for ~300 ms. That happens once the animation is over.
         this._overviewIds = [
             Main.overview.connect('showing', () => {
                 this._dockGlow?.resetMagnify();
-                this._setDocksShown(false);
+                this._fadeDocks(0);
             }),
-            Main.overview.connect('hiding', () => this._setDocksShown(true)),
+            Main.overview.connect('shown', () => this._docks().forEach(dock => dock.hide())),
+            Main.overview.connect('hidden', () => {
+                this._docks().forEach(dock => {
+                    dock.opacity = 0;
+                    dock.show();
+                });
+                this._fadeDocks(255);
+            }),
         ];
 
         // Dock icons glow in their app's own colour and magnify on hover.
@@ -143,22 +153,14 @@ export default class MKIndicatorExtension extends Extension {
         }
     }
 
-    _setDocksShown(shown) {
-        for (const dock of Main.uiGroup.get_children()) {
-            if (dock.name !== 'dashtodockContainer')
-                continue;
+    _docks() {
+        return Main.uiGroup.get_children().filter(actor => actor.name === 'dashtodockContainer');
+    }
+
+    _fadeDocks(opacity) {
+        for (const dock of this._docks()) {
             dock.remove_transition('opacity');
-            if (shown)
-                dock.show();
-            dock.ease({
-                opacity: shown ? 255 : 0,
-                duration: 150,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-                onComplete: () => {
-                    if (!shown)
-                        dock.hide();
-                },
-            });
+            dock.ease({opacity, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
         }
     }
 

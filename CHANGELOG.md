@@ -20,6 +20,10 @@
 - **Hardware detection** (`mk device`, docs/HARDWARE.md): CPU driver, GPU decoding, touch, 2-in-1 sensors, readers, cameras; 2-in-1s get iio-sensor-proxy.
 - **Smoother login and unlock:** the login screen uses your monitor layout; mk-indicator stays loaded across the lock screen and no longer re-applies the top-bar blur after each unlock.
 - **docs/MK-Workstation-Overview.pdf** (12 slides) with its builder and screenshot script in docs/overview/; README gallery; screenshots now use Fedora's wallpaper.
+- **Welcome light:** neon edge line and greeting after login, once all extensions have loaded; titles (sir, ma'am, name, none), editable text, optional JARVIS-style spoken greeting (espeak-ng or Piper "Alan", `mk welcome voice install`); Quick Settings menu toggle; Companion editor.
+- **Focus timer on the desktop:** top-bar countdown, screensaver-style focus view when idle, fireworks.
+- **Wobbly windows**, Alt+Tab pop-in animation, Alt+` for windows of one app; dock icons follow the dock while it slides.
+- **docs/FEATURES.md:** everything MK built vs what it configures or installs.
 - **docs/ARCHITECTURE.md** (how it works, how to extend it) and **docs/REFERENCE.md** (every command, file, format, timer).
 - **Rename it:** `mk rename "Name" TAG` or Companion › Rename; the top-bar tag follows live. Forks set the default in `config/brand.conf`.
 - **docs/CUSTOMIZING.md:** how to make it yours or fork it without editing scripts.

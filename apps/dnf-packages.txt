@@ -67,3 +67,5 @@ gcc
 make
 python3-pip
 nodejs22-npm
+espeak-ng
+sox

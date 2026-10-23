@@ -20,6 +20,7 @@ Every command, file and format. How the parts fit together is in
 | `mk task "TEXT" [WHEN]` | Add a Companion task |
 | `mk remind "TEXT" WHEN` | Add a task with a reminder |
 | `mk list` | Print notes, tasks and reminders |
+| `mk welcome [on\|off\|test\|edit\|title T\|greeting "TEXT"\|voice on\|off\|install\|remove\|notify on\|off]` | Welcome light and spoken greeting after login |
 | `mk device` | What this computer has and what MK tunes for it ([HARDWARE.md](HARDWARE.md)) |
 | `mk fingerprint [enroll [FINGER]\|list\|delete\|settings]` | Fingerprint enrollment for login and sudo |
 | `mk focus [DURATION] ["LABEL"]` | Start the focus timer in the background (`25`, `1:30`, `90s`) |
@@ -43,6 +44,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `mk-timer [DURATION [LABEL]]` | via Companion | Focus timer; `mk-timer 25`, `mk-timer 1:30 "Reading"` start it in the background |
 | `mk-reminders [snooze ID SECONDS]` | timer | Fires due reminders and the morning brief |
 | `mk-power [status]` | service | Smart power profiles (laptops) |
+| `mk-voice [say\|render\|install\|remove\|status]` | login | Spoken greeting (cached WAV) |
 | `ocr-snip` | Super+Shift+T | Copy text from a screen area |
 | `camera-controls` | Super+C | Webcam brightness, contrast, focus… |
 | `mk-doctor` | | Same as `mk doctor` |
@@ -55,6 +57,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | :--- | :--- | :--- |
 | `config/shortcuts.conf` | `group \| label \| target \| keys` (see below) | `sync.sh`, Shortcuts window |
 | `config/brand.conf` | `NAME=`, `SHORT=` | every MK window, top-bar tag, `mk` |
+| `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` | mk-indicator, mk-voice |
 | `config/dock.conf` | `MAGNIFY=`, `MAGNIFY_SPREAD=`, `MAGNIFY_MS=` | mk-indicator (dock magnification) |
 | `config/power.conf` | `ON_AC=`, `ON_BATTERY=`, `LOW_BATTERY=`, `LOW_PERCENT=` | `mk-power` |
 | `config/effects.conf` | `HEAVY=` UUIDs, `AUTO_LITE_BELOW_GB=` | `sync.sh` |
@@ -88,6 +91,9 @@ empty means none. Group `-` applies but hides the line.
 | `~/.config/mk-workstation/brand.conf` | Your name for it | Yes: back to the default name |
 | `~/.config/mk-workstation/effects` | `full`, `lite` or `auto` | Yes: auto |
 | `~/.config/mk-workstation/timer.conf` | Focus timer preferences | Yes |
+| `~/.config/mk-workstation/welcome.conf` | Your greeting and voice choices | Yes |
+| `~/.local/share/mk-workstation/voice/` | Natural voice (Piper + British "Alan" model, ~260 MB) | Yes: `mk welcome voice remove` |
+| `~/.cache/mk-workstation/timer.json` · `welcome.wav` | Timer state for the top bar · rendered greeting | Yes |
 | `~/.config/mk-workstation/dock.conf` | Your dock magnification values | Yes |
 | `~/.config/mk-workstation/power.conf` | Your power profile choices (same keys as `config/power.conf`) | Yes |
 | `~/.config/mk-workstation/power-off` | Present after `mk power off` | Yes: `mk power on` |

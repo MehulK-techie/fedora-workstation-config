@@ -1,0 +1,265 @@
+# Everything in MK Workstation
+
+Every feature, app and command, split by where it comes from:
+
+- **Built by MK**: code written for this project (MIT licensed).
+- **Configured by MK**: existing software (GNOME, extensions, system services)
+  that MK installs, sets up and tunes, but didn't write.
+- **Installed by MK**: apps from Fedora, RPM Fusion and Flathub, used as they are.
+
+Credit for everything in the last two groups belongs to its authors; see
+[THIRD_PARTY.md](../THIRD_PARTY.md).
+
+---
+
+## Built by MK
+
+### Setup and upkeep
+
+| Feature | What it does | Use it | Code |
+| :--- | :--- | :--- | :--- |
+| One-command setup | Repos, codecs, GPU video drivers, apps, Flatpaks, face/fingerprint login, then all desktop settings; safe to re-run, backs up system files, logs to `/var/log` | `sudo ./setup.sh` | `setup.sh` |
+| Desktop sync | Applies every setting, extension, shortcut and tool for your user; snapshot before each run | `mk sync` | `sync.sh` |
+| Hardware detection | Fingerprint reader, cameras (IR/RGB), GPU, battery, 2-in-1 sensors, weak hardware, login-screen display layout | `mk device` | `lib/mkworkstation/device.py`, `setup.sh` |
+| Health check | Updates, codecs, GPU decoding, extensions, shortcut clashes, fingerprint, face unlock, timers | `mk doctor` | `bin/mk-doctor` |
+| Update everything | Repo, newly listed apps, settings, extensions, system and Flatpak updates | `mk update` | `bin/mk` |
+| Capture your changes | Apps you installed, extensions and settings saved into the repo | `mk save`, `mk export` | `bin/mk-apps`, `scripts/update-repo.sh` |
+| Undo | Restore the settings snapshot before the last sync; remove MK from your account | `mk restore`, `mk uninstall` | `bin/mk` |
+| Effects profile | Heavy effects off on weak machines (auto) or on demand | `mk effects full\|lite\|auto` | `sync.sh`, `config/effects.conf` |
+| Smart power (laptops) | Performance on AC, balanced on battery, power-saver when low; only switches on changes | `mk power` | `bin/mk-power`, `config/power.conf` |
+| Face unlock wizard | Several face models in different light, IR-aware security, other users | `mk face` | `register-face.sh` |
+| Fingerprint enrollment | Enroll, list, delete fingers; login and sudo enabled by setup | `mk fingerprint` | `bin/mk`, `setup.sh` |
+| Rename it | Your name in every MK window, notification and the top-bar tag | `mk rename "Name" TAG` | `config/brand.conf` |
+| Daily update check | Notifies when this repo has a new version | automatic | `mk-update-check.timer` |
+
+### Apps
+
+| App | What it does | Open it |
+| :--- | :--- | :--- |
+| **Shortcuts window** | Every shortcut and gesture, live from GNOME; marks each working, clashing, unset or broken; change keys, add commands, reset | Super+/ |
+| **Companion** | Notes you pin, reorder and fold; tasks with progress; reminders (in N min, at a time, daily/weekly) that fire even when closed; morning brief; welcome greeting editor | Super+Shift+N |
+| **Focus timer** | Minutes and seconds; hides into a top-bar countdown; full-screen focus view when you step away (like a screensaver); can silence notifications; pixel-robot celebration with fireworks | Companion › Focus timer, `mk focus 25` |
+| **OCR snip** | Pick a screen area, get its text in the clipboard | Super+Shift+T |
+| **Camera controls** | Brightness, contrast, focus, exposure of your webcam | Super+C |
+| **Terminal capture** | Add notes and tasks with reminders without opening anything | `mk note`, `mk task`, `mk remind`, `mk list` |
+| **Spoken greeting** | Calm British "JARVIS-style" voice for the welcome (espeak-ng, or the natural Piper voice) | `mk welcome voice install` |
+
+### Desktop touches (the `mk-indicator` GNOME Shell extension)
+
+| Feature | What you see | Settings |
+| :--- | :--- | :--- |
+| Welcome light | After login, once every extension has loaded: a neon line runs around the screen edges and "Welcome back home, sir." fades in, optionally spoken | Quick Settings › Welcome light, `mk welcome`, `config/welcome.conf` |
+| Dock magnification | The icon under the pointer grows, neighbours follow in a wave | `config/dock.conf` |
+| App-coloured dock glow | A soft circular tint in each app's own colour on hover | `dockGlow.js` |
+| Timer countdown | Ring + time in the top bar while a focus timer runs; click to open | automatic |
+| Alt+Tab pop-in | The switcher grows and fades in instead of appearing at once | automatic |
+| Dock out of the way | Hidden in the overview so window titles stay readable | automatic |
+| Blur fix | Rebuilds the top-bar blur once after login so it always shows | automatic |
+| Top-bar tag | Your short tag (MK), following `mk rename` live | `config/brand.conf` |
+| Alt+Tab theme | Navy and cyan switcher, hover transitions, rounded overview captions | `stylesheet.css` |
+
+### Fixes MK applies to other people's code
+
+| Extension | Problem on GNOME 50 | Fix |
+| :--- | :--- | :--- |
+| WACK Shell | Hundreds of errors per session from `super.vfunc_event()`; dock snapshot errors on every dock move | Patched by `sync.sh` (bundled copy, GPL-3.0) |
+| Magic Lamp | Played its genie even when a gesture already animated the window (stutter) | Patched by `sync.sh` to honour GNOME's skip-effect request |
+
+---
+
+## Configured by MK
+
+### GNOME (built into Fedora)
+
+MK changes these GNOME settings; the features themselves are GNOME's.
+
+- **Windows:** Alt+Tab across all workspaces, Super+Tab apps, Alt+` windows of one app, W/F4 in Alt+Tab closes a window, Q in Super+Tab quits an app, minimize and maximize buttons, centred new windows, always on top, full screen, 20 s before "not responding".
+- **Workspaces:** dynamic workspaces (Spaces style), new desktop on Super+Ctrl+D, Super+Alt/Ctrl arrows.
+- **Screenshots:** full screen, window and area keys (Print, Super+Shift+3/4/S), saved and copied.
+- **Files:** expandable folders, folders first, item counts, Create Link, Delete Permanently, Quick Look (Space, via Sushi).
+- **Comfort:** tap to click, natural scrolling, battery percentage, weekday in the clock, Night Light, hot corner, dark style.
+- **Housekeeping:** Trash and temp files older than 30 days removed; slow search providers (Boxes, Contacts, Passwords) skipped.
+- **Login screen:** uses your display layout (no flicker between login and desktop).
+
+### GNOME extensions (from extensions.gnome.org)
+
+Installed for your GNOME version and restored with MK's settings.
+
+| Extension | By | What MK uses it for |
+| :--- | :--- | :--- |
+| [Dash to Dock](https://extensions.gnome.org/extension/307/dash-to-dock/) | michele_g | The dock: auto-hide, taskbar clicks, running-app dots in app colour |
+| [Blur my Shell](https://extensions.gnome.org/extension/3193/blur-my-shell/) | aunetx | Blurred top bar and dock |
+| [Tiling Assistant](https://extensions.gnome.org/extension/3733/tiling-assistant/) | Leleat | Windows-style snapping, quarters, Snap Assist, Super+Z layouts |
+| [Touchpad Gesture Customization](https://extensions.gnome.org/extension/7850/touchpad-gesture-customization/) | Henry | 3/4-finger gestures for windows, workspaces, overview, volume, desktop |
+| [Clipboard Indicator](https://extensions.gnome.org/extension/779/clipboard-indicator/) | Tudmotu | Clipboard history on Super+V |
+| [OCR Text Extractor](https://extensions.gnome.org/extension/8240/text-extractor/) | imshaaz | Copy text from the screen (Super+Alt+T) |
+| [Astra Monitor](https://extensions.gnome.org/extension/6682/astra-monitor/) | Astra | CPU, memory, network and disk in the top bar |
+| [Caffeine](https://extensions.gnome.org/extension/517/caffeine/) | eon | Keep the screen awake |
+| [Transparent Top Bar](https://extensions.gnome.org/extension/3960/transparent-top-bar-adjustable-transparency/) | Gonzague | Clear top bar when no window touches it |
+| [AppIndicator Support](https://extensions.gnome.org/extension/615/appindicator-support/) | 3v1n0 | Tray icons for apps like Spotify and Zapzap |
+| [Places Status Indicator](https://extensions.gnome.org/extension/8/places-status-indicator/) | fmuellner | Places menu in the top bar |
+| [Impatience](https://extensions.gnome.org/extension/277/impatience/) | gfxmonk | Animations 25% faster |
+| [Compiz alike magic lamp effect](https://extensions.gnome.org/extension/3740/compiz-alike-magic-lamp-effect/) | hermes83 | macOS genie minimize |
+| [Compiz windows effect](https://extensions.gnome.org/extension/3210/compiz-windows-effect/) | hermes83 | Wobbly windows while dragging |
+| [Burn My Windows](https://extensions.gnome.org/extension/4679/burn-my-windows/) | Simon Schneegans | Soft glide when windows open and close |
+| [WACK - Sonoma Lockscreen](https://extensions.gnome.org/extension/9713/wack-sonoma-lockscreen/) | rinzler69 | macOS-style lock screen clock |
+| WACK Shell | rinzler69 | Logo menu and macOS touches (bundled, patched; see THIRD_PARTY.md) |
+
+### System services
+
+| Service | By | Used for |
+| :--- | :--- | :--- |
+| Howdy | boltgolt and contributors (COPR `principis/howdy`) | Face unlock |
+| fprintd / libfprint | freedesktop.org | Fingerprint login |
+| tuned-ppd (power profiles) | Red Hat / freedesktop.org | Smart power switching |
+| RPM Fusion, ffmpeg, VA-API drivers | RPM Fusion, FFmpeg, Mesa, Intel, NVIDIA | Full codecs and GPU video decoding |
+| Flatpak / Flathub | Flatpak, Flathub | Sandboxed apps |
+| espeak-ng, Piper, sox | espeak-ng, Rhasspy, SoX | The spoken greeting |
+| fwupd | LVFS | Firmware update check (never flashes on its own) |
+
+---
+
+## Installed by MK (apps)
+
+From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fusion). Add or remove lines to change them.
+
+| App | What for |
+| :--- | :--- |
+| Zen Browser | Web browser (Super+B) |
+| Obsidian | Notes and knowledge base (Super+N) |
+| Joplin | Notes with sync |
+| ONLYOFFICE | Office documents |
+| Visual Studio Code | Code editor (Microsoft's repo) |
+| Spotify | Music |
+| ZapZap | WhatsApp |
+| SonoBus | Low-latency audio between computers |
+| Lutris, GameMode, Gamescope, MangoHud, vkBasalt | Gaming |
+| Extension Manager | Browse and configure extensions |
+| Frog | Grab text from images |
+| Cameractrls, Kamoso, Guvcview | Webcam settings and capture |
+| Flip Clock | Full-screen clock |
+| Flameshot, gThumb | Screenshots with annotations; image viewer |
+| EasyEffects | Audio equalizer and effects |
+| Fedora Media Writer | Make bootable USB sticks |
+| Distrobox, Android tools | Other Linux distros in containers; adb/fastboot |
+| btop, fastfetch, ncdu, ripgrep, fzf, zoxide, just, chezmoi, 7zip, unrar | Terminal tools |
+| GNOME Tweaks, Characters, Sushi | Extra GNOME settings, emoji, Quick Look |
+| Tesseract, zenity, wl-clipboard, playerctl, brightnessctl, v4l-utils | Used by MK's own tools |
+| GStreamer plugins (bad-freeworld, ugly, libav, openh264) | Media playback |
+| gcc, make, python3-pip, Node.js | Development basics |
+| espeak-ng, sox | The spoken greeting |
+
+---
+
+## Commands
+
+| Command | Does |
+| :--- | :--- |
+| `mk update [--check] [--no-upgrade]` | Update everything |
+| `mk save` · `mk export` | Capture what you added into the repo |
+| `mk sync` · `mk restore` | Re-apply settings · undo the last sync |
+| `mk doctor` · `mk device` | Health check · hardware report |
+| `mk face` · `mk fingerprint` | Face unlock wizard · fingerprint enrollment |
+| `mk shortcuts` | Shortcuts window |
+| `mk note` · `mk task` · `mk remind` · `mk list` | Companion from the terminal |
+| `mk focus [25 \| 1:30 \| 90s] ["label"]` | Start the focus timer |
+| `mk welcome on\|off\|test\|edit\|title\|greeting\|voice\|notify` | The welcome light and greeting |
+| `mk power [status\|on\|off]` | Smart power profiles |
+| `mk effects [full\|lite\|auto]` | Visual effects profile |
+| `mk rename "Name" TAG` | Rename it |
+| `mk uninstall` | Remove MK from your account |
+| `just setup \| sync \| face \| export \| update \| save \| check \| overview \| screenshots` | The same for contributors |
+
+Every option of every command: [REFERENCE.md](REFERENCE.md).
+
+---
+
+## Keyboard shortcuts
+
+Generated from [`config/shortcuts.conf`](../config/shortcuts.conf). "Built by"
+says whose action it is; the keys are MK's choice either way. Super+/ shows
+them live and lets you change any of them.
+
+**Windows**
+
+| Action | Keys | Built by |
+| :--- | :--- | :--- |
+| Switch windows (all workspaces) | Alt+Tab | GNOME |
+| Switch apps | Super+Tab | GNOME |
+| Switch windows of this app | Alt+` · Super+` | GNOME |
+| Close window | Super+Q · Alt+F4 | GNOME |
+| Snap left half | Super+Left | Extension |
+| Snap right half | Super+Right | Extension |
+| Maximize | Super+Up | Extension |
+| Restore | Super+Down | Extension |
+| Snap layouts | Super+Z | Extension |
+| Center window | Super+Ctrl+C | Extension |
+| Always on top | Super+Ctrl+T | GNOME |
+| Full screen | Super+Ctrl+F | GNOME |
+| Show desktop | Super+D | GNOME |
+
+**Workspaces**
+
+| Action | Keys | Built by |
+| :--- | :--- | :--- |
+| Previous workspace | Super+PageUp · Super+Alt+Left · Super+Ctrl+Left | GNOME |
+| Next workspace | Super+PageDown · Super+Alt+Right · Super+Ctrl+Right | GNOME |
+| New desktop | Super+End · Super+Ctrl+D | GNOME |
+| Move window left | Super+Shift+PageUp · Super+Shift+Alt+Left | GNOME |
+| Move window right | Super+Shift+PageDown · Super+Shift+Alt+Right | GNOME |
+| Move window to a new desktop | Super+Shift+End · Super+Ctrl+Shift+D | GNOME |
+| Go to workspace 1 | Super+Alt+1 | GNOME |
+| Go to workspace 2 | Super+Alt+2 | GNOME |
+| Go to workspace 3 | Super+Alt+3 | GNOME |
+| Go to workspace 4 | Super+Alt+4 | GNOME |
+| Move window to workspace 1 | Super+Shift+Alt+1 | GNOME |
+| Move window to workspace 2 | Super+Shift+Alt+2 | GNOME |
+| Move window to workspace 3 | Super+Shift+Alt+3 | GNOME |
+| Move window to workspace 4 | Super+Shift+Alt+4 | GNOME |
+
+**Screenshots**
+
+| Action | Keys | Built by |
+| :--- | :--- | :--- |
+| Full screen, instantly | Print · Super+Shift+3 | GNOME |
+| Current window | Alt+Print | GNOME |
+| Pick an area or window | Shift+Print · Super+Shift+S · Super+Shift+4 | GNOME |
+| Copy text from screen (OCR) | Super+Shift+T | MK tool |
+| Copy text (Text Extractor) | Super+Alt+T | Extension |
+
+**System**
+
+| Action | Keys | Built by |
+| :--- | :--- | :--- |
+| Search / overview | Super+S | GNOME |
+| App grid | Super+A | GNOME |
+| Quick settings | Super+Shift+A | GNOME |
+| Notifications | Super+M | GNOME |
+| Clipboard history | Super+V | Extension |
+| Run a command | Alt+F2 · Super+R | GNOME |
+| Files | Super+E | GNOME |
+| Settings | Super+I | GNOME |
+| Shut down / restart | Super+Backspace · Super+Shift+X | GNOME |
+| System Monitor | Ctrl+Shift+Esc | App |
+
+**Apps**
+
+| Action | Keys | Built by |
+| :--- | :--- | :--- |
+| Shortcuts (this window) | Super+/ | MK tool |
+| Companion: notes, tasks, timer | Super+Shift+N | MK tool |
+| Terminal | Ctrl+Alt+T | App |
+| Web browser | Super+B | App |
+| Obsidian | Super+N | App |
+| Emoji board | Super+. | App |
+| Camera controls | Super+C | MK tool |
+
+**Touchpad gestures** (Touchpad Gesture Customization, MK's settings)
+
+| Gesture | Does |
+| :--- | :--- |
+| 4 fingers ←/→ | Switch workspace |
+| 3 fingers ←/→ | Switch window, on every workspace |
+| 3 fingers ↑ | Overview |
+| 4 fingers ↑/↓ | Maximize / restore |
+| 3-finger pinch · 4-finger pinch | Volume · show desktop |

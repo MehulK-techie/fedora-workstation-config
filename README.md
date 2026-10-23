@@ -9,7 +9,7 @@
 [![ShellCheck](https://github.com/MehulK-techie/fedora-workstation-config/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/MehulK-techie/fedora-workstation-config/actions/workflows/shellcheck.yml)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-[Quick start](#quick-start) · [Overview (PDF)](docs/MK-Workstation-Overview.pdf) · [Guide](docs/GUIDE.md) · [Hardware](docs/HARDWARE.md) · [Customize](docs/CUSTOMIZING.md) · [Reference](docs/REFERENCE.md)
+[Quick start](#quick-start) · [Overview (PDF)](docs/MK-Workstation-Overview.pdf) · [All features](docs/FEATURES.md) · [Guide](docs/GUIDE.md) · [Hardware](docs/HARDWARE.md) · [Customize](docs/CUSTOMIZING.md) · [Reference](docs/REFERENCE.md)
 
 <img src="docs/assets/screens/overview.jpg" alt="MK Workstation: GNOME overview with the Companion notes app, workspaces and a blurred top bar" width="900">
 
@@ -243,6 +243,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 | :--- | :--- |
 | [docs/GUIDE.md](docs/GUIDE.md) | Installing and using it: beginners, everyday users, and contributors. Includes undo and troubleshooting. |
 | [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md) | Making it yours or forking it: rename, shortcuts, apps, extensions, colours, without touching the scripts |
+| [docs/FEATURES.md](docs/FEATURES.md) | Every feature, app, command and shortcut, split into what MK built and what it configures or installs from others |
 | [docs/MK-Workstation-Overview.pdf](docs/MK-Workstation-Overview.pdf) | 12 slides to show someone: stock Fedora, what MK adds, screenshots (rebuild: `just overview`) |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | What gets detected and tuned: fingerprint, cameras, GPUs, 2-in-1s, power, login screen; tested machines |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit: setup, sync, the shared library, the apps, the shell extension, and how to add things |

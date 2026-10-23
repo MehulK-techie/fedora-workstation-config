@@ -66,7 +66,16 @@ row "Minimize / close"            "$(get_key org.gnome.desktop.wm.keybindings mi
 row "Show desktop"                "$(get_key org.gnome.desktop.wm.keybindings show-desktop)"
 row "Workspace left / right"      "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-left)"
 row "Go to workspace 1-4"         "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-1) to 4"
+row "New desktop"                 "$(get_key org.gnome.desktop.wm.keybindings switch-to-workspace-last)  (add Shift to take the window)"
 row "Open dock app 1-9"           "$(get_key org.gnome.shell.keybindings switch-to-application-1) to 9"
+
+echo ""
+echo "TOUCHPAD"
+row "Switch workspace"            "4 fingers left / right"
+row "Switch window"               "3 fingers left / right"
+row "Overview / app grid"         "3 fingers up"
+row "Maximize / restore window"   "4 fingers up / down"
+row "Show desktop · volume"       "4-finger pinch  ·  3-finger pinch"
 
 echo ""
 echo "SCREENSHOTS  (saved to ~/Pictures/Screenshots and copied)"

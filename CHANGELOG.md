@@ -3,7 +3,9 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
-- **macOS feel:** Spaces-style touchpad gestures, 25% faster animations (Impatience), genie minimize (Magic Lamp), Super+Ctrl+F full screen, Finder-style Files, sharp X11 apps at fractional scaling.
+- **macOS feel:** trackpad gestures (4 fingers ←/→ workspaces, 3 fingers ←/→ windows, 3 fingers ↑ overview), 25% faster animations (Impatience), genie minimize (Magic Lamp), a subtle glide when windows open and close (Burn My Windows), Super+Ctrl+F full screen, Finder-style Files, sharp X11 apps at fractional scaling.
+- **Windows feel:** taskbar-style dock (click focuses or minimizes, thumbnails for apps with several windows, middle-click for a new window), Super+Ctrl+D new desktop (Shift takes the window along).
+- **Livelier desktop:** soft cyan hover glow on top-bar buttons, dock icons and overview windows; touchpad gestures in the Super+/ cheat sheet.
 - **`mk uninstall`**, a permanent pre-MK settings snapshot, SECURITY.md, CODE_OF_CONDUCT.md, THIRD_PARTY.md, issue and PR templates, .editorconfig.
 - **Themed Alt+Tab:** GNOME's flat switcher with live thumbnails of every window on every workspace, styled by mk-indicator's stylesheet (frosted navy panel, cyan selection).
 - **Windows-style multitasking** (Tiling Assistant): snap halves and quarters, Snap Assist, six snap layouts on Super+Z, tile groups, always on top (Super+Ctrl+T), Super+Ctrl+←/→ desktops.
@@ -32,6 +34,9 @@
 - Docs moved to `docs/`.
 
 ### Fixed
+- Stutter when minimizing or restoring with the 4-finger pinch: Magic Lamp played its genie after the gesture's own animation. `sync.sh` patches it to honour GNOME's skip-effect request.
+- WACK Shell logging an error and stack trace on every dock movement on GNOME 50.
+- Window titles in the overview hidden behind the dock: the dock now keeps its own space.
 - Blur my Shell missing after login (only appeared after lock/unlock); old autostart hacks retired.
 - Extensions on GNOME's disabled list never loading even when enabled.
 - 500 WACK Shell JS errors per session on GNOME 50.

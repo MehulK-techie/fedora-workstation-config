@@ -234,6 +234,33 @@ if [[ -f "$WACK_JS" ]] && grep -q 'return super.vfunc_event(event);' "$WACK_JS";
     sed -i 's|return super.vfunc_event(event);|return Clutter.EVENT_PROPAGATE; // MK: no StWidget.vfunc_event on GNOME 50|' "$WACK_JS"
     echo "    [+] Patched WACK Shell for GNOME 50 (takes effect after logging in again)"
 fi
+# WACK Shell also snapshots the dock with paint_to_content(), which GNOME 50's
+# dock actor lacks: every dock move logged an error and a stack trace, a hitch
+# right when windows minimize. Skip the snapshot instead.
+WACK_EXT_JS="$USER_EXT_DIR/wack-shell@rinzler69-wastaken.github.com/extension.js"
+if [[ -f "$WACK_EXT_JS" ]] && grep -q '^ *dock\.paint_to_content(null);' "$WACK_EXT_JS"; then
+    sed -i 's|^\( *\)dock\.paint_to_content(null);|\1dock.paint_to_content?.(null); // MK: not on GNOME 50 dock actors|' "$WACK_EXT_JS"
+    echo "    [+] Patched WACK Shell dock snapshot (takes effect after logging in again)"
+fi
+# Magic Lamp plays its genie even when GNOME was told to skip the effect, so
+# gestures that animate windows themselves (4-finger pinch to show the desktop)
+# ran two animations back to back and stuttered. Make it honour skipNextEffect().
+LAMP_JS="$USER_EXT_DIR/compiz-alike-magic-lamp-effect@hermes83.github.com/extension.js"
+if [[ -f "$LAMP_JS" ]] && ! grep -q 'MK: skipNextEffect' "$LAMP_JS" &&
+    grep -q 'stack.indexOf("_unminimizeWindow") !== -1)) {' "$LAMP_JS"; then
+    sed -i \
+        -e 's#^\( *\)\(if (stack && (stack.indexOf("_minimizeWindow") !== -1 || stack.indexOf("_unminimizeWindow") !== -1)) {\)$#\1\2\n\1    if (Main.wm._skippedActors?.delete(actor)) (Main.wm._mkSkipLamp ??= new Set()).add(actor); // MK: skipNextEffect#' \
+        -e '/window_manager.connect("\(un\)\{0,1\}minimize"/,/if (Main.overview.visible) {/ s#^\( *\)if (Main.overview.visible) {$#\1if (Main.overview.visible || Main.wm._mkSkipLamp?.delete(actor)) {#' \
+        "$LAMP_JS"
+    echo "    [+] Patched Magic Lamp to respect gesture animations (takes effect after logging in again)"
+fi
+# Burn My Windows: a short, subtle "Glide" when windows open and close. The MK
+# profile is high priority, so it wins over the default profile (Fire).
+BMW_PROFILE="$HOME/.config/burn-my-windows/profiles/mk-glide.conf"
+if [[ -d "$USER_EXT_DIR/burn-my-windows@schneegans.github.com" ]]; then
+    mkdir -p "$(dirname "$BMW_PROFILE")"
+    cp -f "$SCRIPT_DIR/config/burn-my-windows-profile.conf" "$BMW_PROFILE"
+fi
 
 # This project's own top-bar watermark: always refresh it so repo updates land.
 MK_INDICATOR="mk-indicator@mehulk"
@@ -311,6 +338,13 @@ for n in 1 2 3 4; do
     gsettings set org.gnome.desktop.wm.keybindings "switch-to-workspace-$n" "['<Super><Alt>$n']"
     gsettings set org.gnome.desktop.wm.keybindings "move-to-workspace-$n" "['<Super><Shift><Alt>$n']"
 done
+# Spaces / virtual desktops: workspaces come and go as you use them, and the
+# last one is always empty, so "go to the last workspace" opens a fresh desktop
+# (Windows Super+Ctrl+D); add Shift to take the focused window along.
+gsettings set org.gnome.mutter dynamic-workspaces true
+gsettings set org.gnome.mutter workspaces-only-on-primary true
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-last "['<Super>End', '<Super><Control>d']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-last "['<Super><Shift>End', '<Super><Control><Shift>d']"
 
 # 5. Instant Screenshot & Power Keybindings
 # Print (Fn+PrtSc on laptops) = instant full screen; area selection on Shift+Print,

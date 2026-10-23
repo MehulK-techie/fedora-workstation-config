@@ -52,14 +52,14 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Hardware video decoding: detects your GPU and installs the right VA-API driver, so video plays on the GPU instead of the CPU
 
 **Desktop, kept in sync**
-- 15 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
+- 16 curated GNOME extensions, installed from extensions.gnome.org for your exact GNOME version, **restored with their saved settings**
 - `mk export` saves your current extensions and their settings into the repo; `mk sync` puts them back on any machine
 - Alt+Tab across all workspaces, window snapping, screenshot and power keys, blur and dock styling
 
 **Feels familiar from Windows and macOS, still GNOME**
-- Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps, Super+Ctrl+←/→ desktops
+- Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps, Super+Ctrl+←/→ desktops, Super+Ctrl+D new desktop, taskbar-style dock (click focuses or minimizes, window thumbnails for apps with several windows)
 - Windows-style multitasking: snap halves and quarters, Snap Assist, Super+Z snap layouts (halves, 66/34, three columns, left + two stacked, quarters, focus centre), always on top
-- macOS habits: Spaces-style gestures (3 fingers ←/→ switch workspaces, 3 fingers ↑ overview), animations 25% faster, genie minimize into the dock, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
+- macOS habits: trackpad gestures (4 fingers ←/→ switch Spaces, 3 fingers ←/→ switch apps, 3 fingers ↑ Mission Control), a dock that windows never cover, animations 25% faster, genie minimize into the dock, a soft glide when windows open and close, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
 - Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
 - System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
 
@@ -144,7 +144,7 @@ Press **Super+/** for a live cheat sheet that always matches your keyboard.
 | | `Super+Z` | Snap layouts (pick a layout, then a window for each part) |
 | | `Super+↑` · `Super+↓` | Maximize · restore |
 | | `Super+Ctrl+T` · `Super+Ctrl+C` · `Super+Ctrl+F` | Always on top · centre window · full screen |
-| | `Super+Ctrl+←/→` | Previous / next desktop |
+| | `Super+Ctrl+←/→` · `Super+Ctrl+D` | Previous / next desktop · new desktop (add `Shift` to take the window along) |
 | | `Super+D` · `Super+E` · `Super+I` | Show desktop · Files · Settings |
 | | `Super+S` · `Super+R` | Search · run a command |
 | | `Super+1…9` | Open the 1st…9th dock app |
@@ -163,8 +163,9 @@ Press **Super+/** for a live cheat sheet that always matches your keyboard.
 | | `Super+L` · `Super+Backspace` | Lock · shut down / restart |
 | **Apps** | `Super+N` · `Super+B` | Notes (Obsidian) · web browser |
 | **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Cheat sheet · quick notes & focus timer · camera controls |
-| **Touchpad** | 3 fingers ←/→ · 3 fingers ↑ · 4 fingers ←/→ | Switch workspaces · overview · switch windows (macOS Spaces style) |
-| | 3-finger pinch · 4-finger pinch | Volume · show desktop |
+| **Touchpad** | 4 fingers ←/→ · 3 fingers ←/→ | Switch workspaces (Spaces) · switch windows, on every workspace |
+| | 3 fingers ↑/↓ · 4 fingers ↑/↓ | Overview (Mission Control) · maximize / restore the window |
+| | 3-finger pinch · 4-finger pinch | Volume · show desktop (pinch again to bring windows back) |
 
 Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboard. `Ctrl+Alt+←/→` is left free for Zen Browser.
 

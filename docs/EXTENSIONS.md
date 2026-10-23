@@ -1,6 +1,6 @@
 # Extensions Guide
 
-MK Workstation enables 15 GNOME extensions plus its own small top-bar mark, and restores each one **with its saved settings**. This guide shows what each does and how to change it, whether you prefer clicking or the terminal.
+MK Workstation enables 16 GNOME extensions plus its own small top-bar mark, and restores each one **with its saved settings**. This guide shows what each does and how to change it, whether you prefer clicking or the terminal.
 
 - **Everyone:** [Change an extension in 30 seconds](#change-an-extension-in-30-seconds) · [The extensions](#the-extensions) · [Keep it smooth](#keep-it-smooth)
 - **Tech-savvy:** [How syncing works](#how-syncing-works) · [Command-line tweaking](#command-line-tweaking) · [Add or remove an extension](#add-or-remove-an-extension)
@@ -23,10 +23,10 @@ To switch an extension off, use the toggle next to it in Extension Manager. `mk 
 | Extension | What it does | MK settings | Where to change it |
 | :--- | :--- | :--- | :--- |
 | **Blur my Shell** | Frosted-glass blur on the top bar, dock and app grid | Static blur on panel, dock and app folders (fast); blur off in the overview and lock screen; strength 16, brightness 0.75 | Extension Manager ⚙ |
-| **Dash to Dock** | A dock at the bottom of the screen | Bottom, icon size 38, hides when a window touches it (intellihide), shows only apps on the current workspace and monitor, click minimizes, scroll cycles windows, 30% background | Right-click the dock's *Show Apps* button › *Dash to Dock Settings* |
+| **Dash to Dock** | A dock at the bottom of the screen | Bottom, icon size 38, always visible with its own space so windows and overview captions never slide under it (macOS default), shows only apps on the current workspace and monitor, a dot under running apps, click focuses / minimizes / shows window thumbnails like the Windows taskbar, middle-click opens a new window, scroll cycles windows, 30% background. Prefer auto-hide? Turn on *Intelligent autohide* in its settings | Right-click the dock's *Show Apps* button › *Dash to Dock Settings* |
 | **Astra Monitor** | Live CPU, GPU, memory, disk, network and sensor readings in the top bar | Order: processor, GPU, memory, storage, network, sensors; dark theme | Click the monitor in the top bar › ⚙, or Extension Manager ⚙ |
 | **Clipboard Indicator** | Clipboard history | Open it with **Super+V** | Click the clipboard icon › *Settings* |
-| **Touchpad Gesture Customization** | macOS-style touchpad gestures | 3 fingers ←/→ switch workspaces, 3 fingers ↑ overview, 4 fingers ←/→ switch windows, 3-finger pinch volume, 4-finger pinch show desktop | Extension Manager ⚙ |
+| **Touchpad Gesture Customization** | macOS-style touchpad gestures | 4 fingers ←/→ switch workspaces, 3 fingers ←/→ switch windows on every workspace, 3 fingers ↑ overview, 4 fingers ↑/↓ maximize / restore, 3-finger pinch volume, 4-finger pinch show desktop | Extension Manager ⚙ |
 | **Transparent Top Bar** | Top bar turns transparent when no window touches it | GNOME default behaviour | Extension Manager ⚙ |
 | **WACK Shell** | macOS-style touches: logo menu, app menu, rounded look | Custom logo with menu and label, app menu shown, no bottom bar, desktop scroll on | Extension Manager ⚙ |
 | **WACK Lockscreen Clock** | A styled clock and wallpaper on the lock screen | "WACK" style, full date, fade animations, Esc puts the screen to sleep | Extension Manager ⚙ |
@@ -35,7 +35,8 @@ To switch an extension off, use the toggle next to it in Extension Manager. `mk 
 | **Caffeine** | A coffee-cup toggle in Quick Settings that keeps the screen awake (like PowerToys Awake or Amphetamine) | GNOME default | Click the toggle in Quick Settings |
 | **Tiling Assistant** | Windows-style split screen: snap halves and quarters, Snap Assist offers your other windows for the free space, snapped windows raise together, snap layouts | Super+←/→ halves; then Super+↑/↓ for quarters; **Super+Z** layouts; Super+Ctrl+C centre; no animations | Extension Manager ⚙ (layouts: *Layouts* tab, saved in `~/.config/tiling-assistant/layouts.json`) |
 | **Impatience** | Speeds up every GNOME animation for a snappier, macOS-like feel | Speed factor 0.75 (25% faster); 1.0 is GNOME's normal speed | Extension Manager ⚙ |
-| **Magic Lamp** | macOS genie effect when minimizing into the dock | 350 ms (default 500) | Extension Manager ⚙ |
+| **Magic Lamp** | macOS genie effect when minimizing into the dock | 350 ms (default 500). `sync.sh` patches it to skip the genie when a gesture already animates the window (4-finger pinch), which removes a double animation that stuttered | Extension Manager ⚙ |
+| **Burn My Windows** | Window open and close effects | One subtle effect, *Glide*: windows scale in and out in 220 ms. Stored as the high-priority profile `~/.config/burn-my-windows/profiles/mk-glide.conf` (from `config/burn-my-windows-profile.conf`); `sync.sh` rewrites it, so make your own profile in its settings instead of editing this one | Extension Manager ⚙ |
 | **Places Status Indicator** | Top-bar menu for Home, Downloads, drives and network places | GNOME default | (no settings) |
 | **MK Workstation Indicator** | A faint **MK** mark in the top bar that brightens on hover, plus the MK Alt+Tab theme (frosted navy panel, cyan highlight on the selected window) | — | Switch off in Extension Manager to remove it |
 

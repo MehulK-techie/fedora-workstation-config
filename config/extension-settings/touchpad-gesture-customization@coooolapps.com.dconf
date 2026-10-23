@@ -1,8 +1,9 @@
 # dconf path: /org/gnome/shell/extensions/touchpad-gesture-customization/
 [/]
 alttab-all-workspaces=true
-horizontal-swipe-3-fingers-gesture='WORKSPACE_SWITCHING'
-horizontal-swipe-4-fingers-gesture='WINDOW_SWITCHING'
+horizontal-swipe-3-fingers-gesture='WINDOW_SWITCHING'
+horizontal-swipe-4-fingers-gesture='WORKSPACE_SWITCHING'
 pinch-3-finger-gesture='VOLUME_CONTROL'
 pinch-4-finger-gesture='SHOW_DESKTOP'
 vertical-swipe-3-fingers-gesture='OVERVIEW_NAVIGATION'
+vertical-swipe-4-fingers-gesture='WINDOW_MANIPULATION'

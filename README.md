@@ -260,6 +260,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 | :--- | :--- |
 | [docs/GUIDE.md](docs/GUIDE.md) | Installing and using it: beginners, everyday users, and contributors. Includes undo and troubleshooting. |
 | [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md) | Making it yours or forking it: rename, shortcuts, apps, extensions, colours, without touching the scripts |
+| [docs/RELEASING.md](docs/RELEASING.md) | For the maintainer: cutting a release and where to share it |
 | [docs/FEATURES.md](docs/FEATURES.md) | Every feature, app, command and shortcut, split into what MK built and what it configures or installs from others |
 | [docs/MK-Workstation-Overview.pdf](docs/MK-Workstation-Overview.pdf) | 14 slides to show someone: stock Fedora, what MK adds, screenshots (rebuild: `just overview`) |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | What gets detected and tuned: fingerprint, cameras, GPUs, 2-in-1s, power, login screen; tested machines |

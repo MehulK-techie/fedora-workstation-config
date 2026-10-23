@@ -1,18 +1,60 @@
+# Fedora packages installed by setup.sh (one per line; lines starting with # are ignored).
+# Delete any line or section you don't want. Every name here was checked against
+# the Fedora, RPM Fusion and VS Code repositories for Fedora 44.
+
+# --- Required by the MK desktop tools (bin/) -----------------------------------
 v4l-utils
 tesseract
 tesseract-langpack-eng
-grim
-slurp
-wl-clipboard
 zenity
 python3-tkinter
+python3-gobject
 libcanberra-gtk3
-gthumb
-kamoso
+wl-clipboard
+grim
+slurp
+gnome-characters
+
+# --- GNOME extensions and desktop tweaking -------------------------------------
+gnome-tweaks
+gnome-extensions-app
+gnome-browser-connector
+gnome-shell-extension-dash-to-dock
+gnome-shell-extension-places-menu
+gnome-shell-extension-blur-my-shell
+gnome-shell-extension-appindicator
+
+# --- Multimedia codecs (RPM Fusion; ffmpeg itself is swapped in by setup.sh) ----
+gstreamer1-plugins-bad-freeworld
+gstreamer1-plugins-ugly
+gstreamer1-plugin-libav
+gstreamer1-plugin-openh264
+
+# --- Terminal tools ------------------------------------------------------------
 fastfetch
+btop
 zoxide
 fzf
 ripgrep
-gnome-shell-extension-dash-to-dock
-gnome-shell-extension-places-menu
-python3-gobject
+ncdu
+just
+chezmoi
+7zip
+unrar
+
+# --- Photos, screenshots, camera and audio -------------------------------------
+gthumb
+kamoso
+flameshot
+guvcview
+easyeffects
+
+# --- Gaming (Lutris itself is a Flatpak) ---------------------------------------
+gamemode
+gamescope
+mangohud
+
+# --- Development (code comes from the VS Code repo setup.sh adds) --------------
+code
+distrobox
+android-tools

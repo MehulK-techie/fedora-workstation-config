@@ -1,3 +1,22 @@
-io.github.zen_browser.zen
-com.visualstudio.code
+# Flathub app IDs installed by setup.sh (one per line; lines starting with # are ignored).
+# Delete any line you don't want. Every ID here was checked on Flathub.
+
+# --- Browsing, notes and office ------------------------------------------------
+app.zen_browser.zen
+md.obsidian.Obsidian
+net.cozic.joplin_desktop
+org.onlyoffice.desktopeditors
+
+# --- Desktop tools -------------------------------------------------------------
 com.mattjakeman.ExtensionManager
+com.github.tenderowl.frog
+hu.irl.cameractrls
+one.alynx.FlipClock
+
+# --- Communication, music and audio --------------------------------------------
+com.rtosta.zapzap
+com.spotify.Client
+net.sonobus.SonoBus
+
+# --- Gaming --------------------------------------------------------------------
+net.lutris.Lutris

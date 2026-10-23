@@ -120,6 +120,35 @@ cp -f "$SCRIPT_DIR/bin/"* "$HOME/.local/bin/"
 chmod +x "$HOME/.local/bin/"*
 printf '%s\n' "$SCRIPT_DIR" > "$HOME/.config/mk-workstation/repo-path"
 
+# Daily, low-priority check for repo updates (shows a notification via `mk check`)
+UNIT_DIR="$HOME/.config/systemd/user"
+mkdir -p "$UNIT_DIR"
+cat > "$UNIT_DIR/mk-update-check.service" << 'UNIT'
+[Unit]
+Description=Check for MK Workstation updates
+
+[Service]
+Type=oneshot
+Nice=19
+IOSchedulingClass=idle
+ExecStart=%h/.local/bin/mk check
+UNIT
+cat > "$UNIT_DIR/mk-update-check.timer" << 'UNIT'
+[Unit]
+Description=Daily check for MK Workstation updates
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1d
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl --user daemon-reload 2>/dev/null \
+    && systemctl --user enable --now mk-update-check.timer &>/dev/null \
+    || echo "    [*] Couldn't enable the daily update check (no systemd user session)"
+
 # 2. GNOME Extensions (list in config/enabled-extensions.txt, written by `mk export`)
 echo "==> Installing and enabling GNOME extensions..."
 mapfile -t ACTIVE_EXTENSIONS < <(grep -vE '^\s*(#|$)' "$SCRIPT_DIR/config/enabled-extensions.txt" || true)
@@ -174,6 +203,8 @@ gsettings set org.gnome.mutter.keybindings toggle-tiled-right "['<Super>Right']"
 gsettings set org.gnome.desktop.wm.keybindings maximize "['<Super>Up']"
 gsettings set org.gnome.desktop.wm.keybindings unmaximize "['<Super>Down']"
 gsettings set org.gnome.desktop.wm.keybindings close "['<Super>q', '<Alt>F4']"
+# Busy apps (games, compiles) get 20s before GNOME shows "not responding" (default 5s).
+gsettings set org.gnome.mutter check-alive-timeout 20000
 
 # 4. Protect Zen Browser Workspaces (Release Ctrl+Alt+Arrows)
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Page_Up', '<Super><Alt>Left']"

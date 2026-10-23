@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Health check for the MK Workstation (`mk doctor`). Read-only: changes nothing.
+set -uo pipefail
+
+PASS=0
+WARN=0
+ok()   { printf '  \e[32m✔\e[0m %s\n' "$1"; PASS=$((PASS + 1)); }
+warn() { printf '  \e[33m⚠\e[0m %s\n' "$1"; [[ -n "${2:-}" ]] && printf '      → %s\n' "$2"; WARN=$((WARN + 1)); }
+section() { printf '\n\e[1m%s\e[0m\n' "$1"; }
+
+# shellcheck source=/dev/null
+. /etc/os-release
+section "System"
+ok "${PRETTY_NAME:-unknown OS}, $(gnome-shell --version 2>/dev/null || echo 'GNOME not found')"
+boot=$(systemd-analyze 2>/dev/null | head -n 1 | grep -oE '= [0-9.]+s' | tr -d '= ')
+[[ -n "$boot" ]] && ok "Last boot took $boot"
+mapfile -t failed < <(systemctl --failed --no-legend --plain 2>/dev/null | awk '{ print $1 }')
+if (( ${#failed[@]} )); then
+    warn "Failed system services: ${failed[*]}" "Inspect with: systemctl status ${failed[0]}"
+else
+    ok "No failed system services"
+fi
+for mount in / "$HOME"; do
+    free=$(df -h --output=avail "$mount" | tail -n 1 | tr -d ' ')
+    use=$(df --output=pcent "$mount" | tail -n 1 | tr -dc '0-9')
+    if (( use >= 90 )); then
+        warn "Disk $mount is ${use}% full (${free} free)" "Clean up with: sudo dnf clean all; flatpak uninstall --unused"
+    else
+        ok "Disk $mount: ${free} free"
+    fi
+done
+
+section "Updates"
+updates=$(dnf check-update --quiet 2>/dev/null | grep -cE '^[[:alnum:]]' || true)
+if (( updates > 0 )); then
+    warn "$updates system package update(s) available" "Install with: sudo dnf upgrade"
+else
+    ok "System packages are up to date"
+fi
+fp_updates=$(flatpak remote-ls --updates --columns=application 2>/dev/null | grep -c . || true)
+if (( fp_updates > 0 )); then
+    warn "$fp_updates Flatpak update(s) available" "Install with: flatpak update"
+else
+    ok "Flatpaks are up to date"
+fi
+
+section "Multimedia"
+if rpm -q ffmpeg &>/dev/null; then
+    ok "Full ffmpeg codecs installed"
+else
+    warn "Only the limited ffmpeg-free is installed" "Run: sudo ./setup.sh (swaps in RPM Fusion's ffmpeg)"
+fi
+if command -v vainfo &>/dev/null; then
+    # Fedora's own Mesa leaves out H.264/HEVC, so check the profiles, not just the driver.
+    profiles=$(vainfo 2>/dev/null | grep -oE 'VAProfile(H264|HEVC|VP9|AV1)' | sed 's/VAProfile//' | sort -u | xargs)
+    if [[ "$profiles" == *H264* ]]; then
+        ok "GPU video decoding: $profiles"
+    else
+        warn "GPU can't decode H.264/HEVC video (only: ${profiles:-none}); the CPU does it instead" \
+            "Run: sudo ./setup.sh (installs the full VA-API driver for your GPU)"
+    fi
+fi
+
+section "GNOME extensions"
+while IFS= read -r uuid; do
+    state=$(gnome-extensions info "$uuid" 2>/dev/null | awk '/State:/ { print $2 }')
+    case "$state" in
+        ACTIVE|INACTIVE) ok "$uuid" ;;
+        "") warn "$uuid is enabled but not installed" "Run: mk sync" ;;
+        *) warn "$uuid: $state" "Update it in Extension Manager, or disable it: gnome-extensions disable $uuid" ;;
+    esac
+done < <(gnome-extensions list --enabled 2>/dev/null)
+
+section "Face unlock"
+if ! command -v howdy &>/dev/null; then
+    warn "Howdy isn't installed" "Run: sudo ./setup.sh"
+else
+    for pam in /etc/pam.d/gdm-password /etc/pam.d/sudo; do
+        if grep -qE '^[[:space:]]*auth[[:space:]].*pam_howdy\.so' "$pam" 2>/dev/null; then
+            ok "Enabled for $(basename "$pam")"
+        else
+            warn "Not enabled for $(basename "$pam")" "Run: mk face"
+        fi
+    done
+fi
+
+section "MK Workstation"
+repo=$(cat "$HOME/.config/mk-workstation/repo-path" 2>/dev/null || true)
+if [[ -d "$repo/.git" ]]; then
+    ok "Repo: $repo ($(git -C "$repo" rev-parse --abbrev-ref HEAD 2>/dev/null))"
+else
+    warn "Repo location unknown" "Run ./sync.sh from your clone"
+fi
+if systemctl --user is-enabled mk-update-check.timer &>/dev/null; then
+    ok "Daily update check is on"
+else
+    warn "Daily update check is off" "Run: mk sync"
+fi
+shortcuts=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null | grep -o "/mk-" | wc -l)
+if (( shortcuts >= 5 )); then
+    ok "MK shortcuts registered ($shortcuts)"
+else
+    warn "Only $shortcuts of 5 MK shortcuts registered" "Run: mk sync"
+fi
+
+printf '\n%d passed, %d to look at.\n' "$PASS" "$WARN"

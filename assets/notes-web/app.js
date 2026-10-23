@@ -36,7 +36,7 @@ const DB = (() => {
 })();
 
 // ---------- SHA-1 (crypto.subtle isn't available over plain http on a LAN) ----------
-function sha1hex(bytes) {
+function sha1(bytes) {
   const rotl = (n, s) => (n << s) | (n >>> (32 - s));
   const len = bytes.length, words = new Uint32Array(((len + 8 >> 6) + 1) * 16);
   for (let i = 0; i < len; i++) words[i >> 2] |= bytes[i] << (24 - (i % 4) * 8);
@@ -55,7 +55,20 @@ function sha1hex(bytes) {
     }
     a = (a + A) >>> 0; b = (b + B) >>> 0; c = (c + C) >>> 0; d = (d + D) >>> 0; e = (e + E) >>> 0;
   }
-  return [a, b, c, d, e].map(x => x.toString(16).padStart(8, '0')).join('').slice(0, 16);
+  const out = new Uint8Array(20), dv = new DataView(out.buffer);
+  [a, b, c, d, e].forEach((x, i) => dv.setUint32(i * 4, x));
+  return out;
+}
+const hex = bytes => [...bytes].map(x => x.toString(16).padStart(2, '0')).join('');
+const sha1hex = bytes => hex(sha1(bytes)).slice(0, 16);
+// Requests are signed with the pairing key, which never leaves the phone.
+function hmacSha1(key, message) {
+  const enc = new TextEncoder();
+  let k = enc.encode(key);
+  if (k.length > 64) k = sha1(k);
+  const pad = v => { const p = new Uint8Array(64).fill(v); k.forEach((x, i) => { p[i] ^= x; }); return p; };
+  const join = (a, b) => { const o = new Uint8Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
+  return hex(sha1(join(pad(0x5c), sha1(join(pad(0x36), enc.encode(message))))));
 }
 const hashText = text => sha1hex(new TextEncoder().encode(text));
 const hashBlob = async blob => sha1hex(new Uint8Array(await blob.arrayBuffer()));
@@ -88,6 +101,8 @@ function snippet(text) {
 const tagsOf = text => [...new Set((text.replace(/```[\s\S]*?```|`[^`\n]*`/g, '').match(/(?<![\w/&#])#[A-Za-z][\w/-]*/g) || []).map(t => t.slice(1).toLowerCase()))];
 
 // ---------- state ----------
+// Inside the Android app the page comes from the phone itself, not the laptop.
+const BUNDLED = location.hostname === 'appassets.androidplatform.net';
 const S = {server: '', key: '', pinned: [], colors: {}, files: new Map(), filter: 'all', current: null, reading: false, syncing: false};
 
 async function load() {
@@ -97,11 +112,12 @@ async function load() {
   S.colors = (await DB.getKV('colors')) || {};
   S.files = new Map((await DB.all()).map(f => [f.path, f]));
   // Opened from the laptop's pairing link: remember it.
-  const m = location.hash.match(/key=([\w-]+)/);
+  const m = location.hash.match(/key=([\w-]+)/), sv = location.hash.match(/server=([^&]+)/);
   if (m) {
-    await pair(location.protocol.startsWith('http') ? location.origin + '/' : S.server, m[1]);
+    // From the laptop's QR code (browser) or the Android app's mknotes:// link.
+    await pair(sv ? decodeURIComponent(sv[1]) : !BUNDLED ? location.origin + '/' : S.server, m[1]);
     history.replaceState(null, '', location.pathname);
-  } else if (!S.server && location.protocol.startsWith('http')) {
+  } else if (!S.server && !BUNDLED) {
     S.server = location.origin + '/';
   }
   if (![...S.files.values()].some(f => f.kind === 'note' && !f.deleted)) {
@@ -149,7 +165,10 @@ function uniquePath(folder, title) {
 
 // ---------- sync ----------
 async function api(method, path, body) {
-  const res = await fetch(S.server + path, {method, body, headers: {'X-MK-Token': S.key}, cache: 'no-store'});
+  const stamp = String(Math.floor(Date.now() / 1000)) + '', nonce = Math.random().toString(36).slice(2, 8);
+  path += (path.includes('?') ? '&' : '?') + 'n=' + nonce;  // two requests in one second still differ
+  const sig = hmacSha1(S.key, `${method} /${path} ${stamp}`);
+  const res = await fetch(S.server + path, {method, body, headers: {'X-MK-Time': stamp, 'X-MK-Sig': sig}, cache: 'no-store'});
   if (res.status === 401) throw new Error('This phone isn\'t paired: open Settings');
   if (!res.ok && res.status !== 409) throw new Error(`Laptop said ${res.status}`);
   return res;

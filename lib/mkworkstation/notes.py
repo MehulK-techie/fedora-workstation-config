@@ -14,6 +14,7 @@ import html
 import json
 import os
 import re
+import secrets
 import shutil
 import time
 from datetime import datetime
@@ -389,6 +390,10 @@ class Vault:
         import markdown
 
         body = re.sub(r"^---\n.*?\n---\n", "", text, count=1, flags=re.S)  # front matter
+        # Raw HTML in a note is shown as text, never run: notes can come from
+        # the phone, a shared vault or a download.
+        pieces = re.split(r"(^```.*?^```|`[^`\n]*`)", body, flags=re.S | re.M)
+        body = "".join(piece if i % 2 else piece.replace("<", "&lt;") for i, piece in enumerate(pieces))
         task_no = [0]
 
         def task(m):
@@ -428,6 +433,8 @@ class Vault:
         body = re.sub(r"^> \[!(\w+)\][+-]? ?(.*)\n((?:>.*\n?)*)", callout, body, flags=re.M)
 
         out = markdown.markdown(body, extensions=["extra", "sane_lists", "nl2br", "toc"])
+        # Links only to the web, mail, notes and tags: no javascript: and friends.
+        out = re.sub(r'href="(?!https?:|mailto:|mknote:|mktag:|file:|#)[^"]*"', 'href="#"', out)
         # #tags become links, but not inside code, tags or attributes.
         parts = re.split(r"(<pre.*?</pre>|<code.*?</code>|<a\b.*?</a>|<[^>]+>)", out, flags=re.S)
         out = "".join(part if i % 2 else TAG.sub(
@@ -445,7 +452,7 @@ class Vault:
             body = f'<h1 class="note-title">{html.escape(Path(rel).stem)}</h1>' + re.sub(
                 r'<input type="checkbox"[^>]*?( checked)?>',
                 lambda m: '<span class="box">☑</span>' if m.group(1) else '<span class="box">☐</span>', body)
-        return PAGE.format(title=html.escape(Path(rel).stem), body=body,
+        return PAGE.format(title=html.escape(Path(rel).stem), body=body, nonce=secrets.token_hex(8),
                            scheme="dark" if dark else "light", printing="print" if printing else "")
 
     def pdf(self, rel, out_path):
@@ -471,7 +478,7 @@ class Vault:
             body = body.replace(self.attachments.as_uri() + "/", "attachments/")
             body = re.sub(r'href="mknote:([^"#]+)[^"]*"',
                           lambda m: f'href="{slug.get(self.resolve(html.unescape(m.group(1))) or "", "#")}"', body)
-            page = PAGE.format(title=html.escape(note["title"]), scheme="light", printing="",
+            page = PAGE.format(title=html.escape(note["title"]), scheme="light", printing="", nonce=secrets.token_hex(8),
                                body=f'<nav><ul>{nav}</ul></nav><article><h1 class="note-title">'
                                     f'{html.escape(note["title"])}</h1>{body}</article>')
             (out / slug[note["rel"]]).write_text(page, encoding="utf-8")
@@ -519,6 +526,7 @@ Obsidian, and they're yours forever.
 """
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src file: data: https:; style-src 'unsafe-inline'; script-src 'nonce-{nonce}'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title><style>
 :root {{ color-scheme: {scheme}; --accent: #2fa8ff; }}
@@ -558,7 +566,7 @@ nav ul {{ list-style: none; padding: 0; }}
 @page {{ size: A4; margin: 18mm; }}
 @media print {{ a {{ color: inherit; }} }}
 </style></head><body class="{printing}">{body}
-<script>
+<script nonce="{nonce}">
 document.addEventListener('change', e => {{
   if (e.target.dataset.task !== undefined && window.webkit?.messageHandlers?.mk)
     window.webkit.messageHandlers.mk.postMessage('task:' + e.target.dataset.task);

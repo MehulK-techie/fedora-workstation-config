@@ -6,7 +6,12 @@ in ~/.config/mk-workstation/notes-token (shown as a QR code in MK Notes ›
 Phone). It runs while MK Notes runs with Phone sync on, or with
 `mk-notes --serve`.
 
-API (all but / need the key in the X-MK-Token header):
+Every API request is signed with the key (HMAC-SHA1 of "METHOD PATH TIME" in
+X-MK-Sig, the time in X-MK-Time); the key itself never crosses the network and
+a captured request can't be replayed. The notes themselves travel unencrypted
+on your Wi-Fi, so turn Phone sync on at home, not on public Wi-Fi.
+
+API:
   GET    /api/manifest                 every note and attachment with its hash
   GET    /api/file?path=P              a file
   PUT    /api/file?path=P&base=H       write P; H is the hash the phone started from
@@ -14,11 +19,14 @@ API (all but / need the key in the X-MK-Token header):
 If the laptop changed P since H, a PUT keeps both: the phone's version is saved
 as "P (phone conflict <time>).md", like Obsidian Sync does.
 """
+import hashlib
+import hmac
 import json
 import os
 import secrets
 import socket
 import threading
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -28,6 +36,7 @@ from . import notes
 
 TOKEN_FILE = notes.CONFIG_DIR / "notes-token"
 MAX_UPLOAD = 50 * 1024 * 1024
+CLOCK_SKEW = 600  # seconds a phone's clock may differ from the laptop's
 WEB_DIRS = (Path(__file__).resolve().parents[2] / "assets/notes-web",
             notes.DATA_DIR / "assets/notes-web")
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css",
@@ -76,6 +85,7 @@ class Server:
         self.on_change = on_change or (lambda rel: None)
         self.lock = threading.Lock()
         self.httpd = None
+        self.seen = {}  # signatures already used: no replays
 
     @property
     def url(self):
@@ -105,15 +115,31 @@ class Server:
                 self.send_header("Content-Length", str(len(body)))
                 # The Android app loads its page from the phone, not from here.
                 self.send_header("Access-Control-Allow-Origin", "*")
-                self.send_header("Access-Control-Allow-Headers", "X-MK-Token, Content-Type")
+                self.send_header("Access-Control-Allow-Headers", "X-MK-Time, X-MK-Sig, Content-Type")
                 self.send_header("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(body)
 
             def _authorised(self):
-                given = self.headers.get("X-MK-Token", "")
-                return secrets.compare_digest(given.encode(), token().encode())
+                stamp = self.headers.get("X-MK-Time", "")
+                sig = self.headers.get("X-MK-Sig", "")
+                try:
+                    if abs(time.time() - int(stamp)) > CLOCK_SKEW:
+                        return False
+                except ValueError:
+                    return False
+                message = f"{self.command} {self.path} {stamp}".encode()
+                expected = hmac.new(token().encode(), message, hashlib.sha1).hexdigest()
+                if not hmac.compare_digest(sig, expected):
+                    return False
+                with server.lock:
+                    now = time.time()
+                    server.seen = {k: t for k, t in server.seen.items() if now - t < 2 * CLOCK_SKEW}
+                    if sig in server.seen:
+                        return False
+                    server.seen[sig] = now
+                return True
 
             def _target(self, query):
                 rel = query.get("path", [""])[0].lstrip("/")
@@ -152,8 +178,11 @@ class Server:
                     return self._send(401, {"error": "pairing key needed"})
                 url = urlparse(self.path)
                 query = parse_qs(url.query)
-                length = int(self.headers.get("Content-Length") or 0)
-                if length > MAX_UPLOAD:
+                try:
+                    length = int(self.headers.get("Content-Length") or 0)
+                except ValueError:
+                    return self._send(400, {"error": "bad length"})
+                if length < 0 or length > MAX_UPLOAD:
                     return self._send(413, {"error": "too large"})
                 data = self.rfile.read(length)
                 try:
@@ -211,7 +240,8 @@ class Server:
                     return self._send(404, "not found", "text/plain")
                 self._send(200, file.read_bytes(), TYPES.get(file.suffix, "application/octet-stream"))
 
-        self.httpd = ThreadingHTTPServer(("0.0.0.0", self.port), Handler)
+        # Only on the Wi-Fi address (not VPNs, containers or other networks).
+        self.httpd = ThreadingHTTPServer((lan_address(), self.port), Handler)
         self.httpd.daemon_threads = True
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 

@@ -689,7 +689,6 @@ class NotesWindow(Adw.ApplicationWindow):
 
         self.web = WebKit.WebView(vexpand=True)
         settings = self.web.get_settings()
-        settings.set_allow_file_access_from_file_urls(True)
         settings.set_enable_developer_extras(False)
         transparent = Gdk.RGBA()
         transparent.parse("rgba(0,0,0,0)")
@@ -1524,8 +1523,10 @@ class NotesWindow(Adw.ApplicationWindow):
             self.open_note(rel)
         manager.connect("script-message-received::mk", message)
         dark = Adw.StyleManager.get_default().get_dark()
-        web.load_html(GRAPH_PAGE.replace("@DATA@", json.dumps(graph))
-                      .replace("@CURRENT@", json.dumps(self.rel or ""))
+        def script_json(value):  # safe inside <script>: note names can contain anything
+            return json.dumps(value).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+        web.load_html(GRAPH_PAGE.replace("@DATA@", script_json(graph))
+                      .replace("@CURRENT@", script_json(self.rel or ""))
                       .replace("@SCHEME@", "dark" if dark else "light"), "about:blank")
         view.set_content(web)
         win.set_content(view)
@@ -1599,13 +1600,20 @@ class NotesWindow(Adw.ApplicationWindow):
         group.add(switch)
         page.add(group)
         pair = Adw.PreferencesGroup(title="Pair a phone")
-        picture = Gtk.Picture(content_fit=Gtk.ContentFit.CONTAIN, height_request=260, can_shrink=True)
+        codes = Gtk.Box(spacing=12, homogeneous=True)
+        picture = Gtk.Picture(content_fit=Gtk.ContentFit.CONTAIN, height_request=220, can_shrink=True)
+        android = Gtk.Picture(content_fit=Gtk.ContentFit.CONTAIN, height_request=220, can_shrink=True)
+        for pic, caption in ((picture, "Phone browser"), (android, "MK Notes Android app")):
+            col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            col.append(pic)
+            col.append(Gtk.Label(label=caption, css_classes=["dim-label"]))
+            codes.append(col)
         url_row = Adw.ActionRow(title="Open on the phone", subtitle_selectable=True)
         steps = Gtk.Label(wrap=True, xalign=0, css_classes=["dim-label"], margin_top=8, label=(
             "1. Scan the code with the phone's camera (or open the address).\n"
             "2. Android: open the MK Notes app and scan the same code; or in Chrome, ⋮ › Add to Home screen.\n"
             "3. That's it: it keeps a copy on the phone and syncs by itself."))
-        pair.add(picture)
+        pair.add(codes)
         pair.add(url_row)
         pair.add(steps)
         new_key = Gtk.Button(label="New pairing key (unpairs other phones)", css_classes=["flat"], margin_top=6)
@@ -1619,11 +1627,14 @@ class NotesWindow(Adw.ApplicationWindow):
                 return
             url = self.server.pairing_url()
             url_row.set_subtitle(url)
-            png = qr_png(url)
+            app_link = (f"mknotes://pair?server={GLib.uri_escape_string(self.server.url, None, False)}"
+                        f"&key={notes_sync.token()}")
+            png, png_app = qr_png(url), qr_png(app_link)
             if png:
                 picture.set_paintable(Gdk.Texture.new_from_bytes(GLib.Bytes.new(png)))
+                android.set_paintable(Gdk.Texture.new_from_bytes(GLib.Bytes.new(png_app)))
             else:
-                picture.set_visible(False)
+                codes.set_visible(False)
                 steps.set_label(steps.get_label() + "\n\n(For a QR code: sudo dnf install python3-qrcode)")
         switch.connect("notify::active", lambda s, _p: (self.set_sync(s.get_active()), update()))
         new_key.connect("clicked", lambda *_: (notes_sync.new_token(), update()))

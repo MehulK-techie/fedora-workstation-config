@@ -1,81 +1,127 @@
-# Comprehensive Audit Report: Fedora MK Workstation (BUGS.md)
+# Audit: fedora-workstation-config
 
-**Target OS:** Fedora Linux 44 (Workstation Edition) | GNOME 50 Shell on Wayland  
-**Repository:** MehulK-techie/fedora-workstation-config  
-**Hardware Profile:** HP Laptop (HP Wide Vision HD Camera: /dev/video0, /dev/video1)  
+| | |
+| :--- | :--- |
+| **Audited** | `main` at `9b74950`, freshly cloned from [GitHub](https://github.com/MehulK-techie/fedora-workstation-config) on 2026-10-23 |
+| **Test machine** | Fedora 44 Workstation, GNOME 50.6 (Wayland), AMD Renoir GPU, HP Wide Vision HD camera (RGB only, no IR) |
+| **Fixes** | Branch `fix/dbus-pam-dnf`. Each fixed item names the commit that fixed it. |
+| **Method** | Read every script and document; ran `bash -n` and ShellCheck; ran `sync.sh` against a throwaway dconf database; checked every package name with `dnf repoquery` and every Flatpak ID with `flatpak remote-info`; checked GNOME 50 schemas with `gsettings`. |
 
----
+**Summary:** 39 findings. 29 are fixed on the branch and 10 are still open.
 
-## 1. Identified Bugs, Security Vulnerabilities & Regressions
+| Category | Found | Fixed | Open |
+| :--- | :---: | :---: | :---: |
+| [Bugs](#1-bugs) | 24 | 19 | 5 |
+| [Duplicated code](#2-duplicated-code) | 5 | 3 | 2 |
+| [Hallucinations and false claims](#3-hallucinations-and-false-claims) | 6 | 5 | 1 |
+| [Security and privacy](#4-security-and-privacy) | 4 | 2 | 2 |
 
-### Bug 1.1: Root-Default Facial Registration (Critical Auth Flaw)
-* **Location:** `register-face.sh`
-* **Vulnerability:** When running `sudo ./register-face.sh`, executing bare `sudo howdy add` registers face models under user `root` instead of the active desktop user.
-* **Impact:** The desktop user (`mehulkumar`) cannot authenticate at the GDM login screen or with `sudo` using facial recognition unless `-U "$REAL_USER"` is explicitly passed.
-* **Resolution:** Target user is resolved via `${SUDO_USER:-$(logname)}` and invoked as `howdy -U "$REAL_USER" add`.
-
-### Bug 1.2: Stale PAM 2.x Module Collision in `/etc/pam.d/sudo`
-* **Location:** `/etc/pam.d/sudo`
-* **Vulnerability:** The active PAM config contained:
-  `auth sufficient pam_python.so /lib64/security/howdy/pam.py`
-  Howdy 3.x (from Copr `principis/howdy`) uses the native C module `pam_howdy.so`.
-* **Impact:** Redundant PAM evaluation failures, warnings, or silent fallback when `pam_python.so` is absent.
-* **Resolution:** Cleaned using regex `/pam_python\.so.*howdy/d` to sanitize the file before prepending `auth sufficient pam_howdy.so`.
-
-### Bug 1.3: DNF Configuration Duplication & Idempotency Failure
-* **Location:** `setup.sh` -> `/etc/dnf/dnf.conf`
-* **Vulnerability:** Repeated runs produced duplicated keys:
-  - `max_parallel_downloads=10`
-  - `fastestmirror=True`
-* **Impact:** Inconsistent DNF parsing and configuration pollution.
-* **Resolution:** Scrub lines matching `(max_parallel_downloads|fastestmirror|defaultyes)` before injecting single authoritative keys under `[main]`.
-
-### Bug 1.4: Blind Camera Node Selection on HP Dual-Sensor Hardware
-* **Location:** `register-face.sh` (`CAM_DEV=$(ls /dev/video* 2>/dev/null | head -n 1)`)
-* **Vulnerability:** The HP Wide Vision HD camera exposes both `/dev/video0` and `/dev/video1`. Picking `head -n 1` blindly defaults to `/dev/video0`, which fails on systems requiring the IR sensor for facial verification.
-* **Resolution:** Added device detection via `v4l2-ctl` and interactive device prompt with default fallback.
-
-### Bug 1.5: GNOME Shell Version Mismatch / Extension Disabling
-* **Location:** `extensions/mk-indicator@mehulk/metadata.json`
-* **Vulnerability:** Metadata targeted `"shell-version": ["44", "45", "46", "47"]`, whereas Fedora 44 runs GNOME Shell 50 (`Version: 50.4`).
-* **Impact:** GNOME Shell flags the extension as incompatible and sets state to `INITIALIZED` without enabling it.
-* **Resolution:** Appended `"48", "49", "50"` to the `shell-version` array in `metadata.json`.
+Severity: **Critical** = the script aborts or does the wrong thing for everyone · **High** = a headline feature is broken or user data is lost · **Medium** = wrong in some setups, or silently degraded · **Low** = cosmetic, or risk only in edge cases.
 
 ---
 
-## 2. Hallucinations & Flawed Architectural Assumptions
+## 1. Bugs
 
-1. **Immediate `gnome-extensions enable` without Shell Discovery:**
-   * *Assumption:* Copying files to `~/.local/share/gnome-shell/extensions` and immediately running `gnome-extensions enable mk-indicator@mehulk` in the same script.
-   * *Reality:* Under GNOME Wayland, the Shell process does not watch filesystem directories for brand new extensions dynamically. It requires a session re-login or an explicit DBus reload trigger before it can be activated.
-2. **Hardcoded Package Lists vs. Repository Manifests:**
-   * *Assumption:* Maintaining package lists directly inside `setup.sh` while having `apps/dnf-packages.txt` and `apps/flatpaks.txt` in the repository.
-   * *Reality:* Leads to drift between repository manifests and setup execution. `setup.sh` should parse the `.txt` manifests directly.
+### Fixed
 
----
-
-## 3. Comparative Analysis with Similar Workstation Repositories
-
-| Feature / Architecture | Universal Blue / Bluefin | Chris Titus Linutil | Fedora Silverblue IaC | Fedora MK Workstation (Current) |
+| # | Severity | Where | Problem | Fixed in |
 | :--- | :--- | :--- | :--- | :--- |
-| **Package Engine** | Bootc / Containerfile + Homebrew | Modular Bash CLI | RPM-OSTree Layering | Native DNF5 / DNF + Flatpak |
-| **Btrfs Snapshot Safeguards**| Built-in rollback images | Snapper + Btrfs Hooks | Native OSTree rollbacks | Missing (Needs Snapper integration) |
-| **Execution Tooling** | `justfile` (`just setup`) | Dialog / Whiptail TUI | Ansible Playbooks | Shell scripts (`setup.sh`, `sync.sh`) |
-| **Dotfile / Config Engine** | Declarative Git Bare Repo | Chezmoi / Symlink Tree | Git Submodules | Ad-hoc `dconf` files |
-| **Hardware & Power Tuning** | `power-profiles-daemon` | `auto-cpufreq` / TLP | Stock Power Profiles | Stock GNOME Power Profiles |
+| B1 | Critical | `setup.sh` | `gsettings` ran under `sudo -u` with an unquoted `$DBUS_ENV` word (17 × ShellCheck SC2086) and no `XDG_RUNTIME_DIR`, so writes could miss the live session. | `cce59cf` |
+| B2 | Critical | `setup.sh:126` | `org.gnome.shell.extensions.blur-my-shell.modal-dialogs` does not exist in any installed blur-my-shell. Under `set -euo pipefail` the script aborted there, so the modal CSS and every later shortcut were never applied. | `cce59cf` |
+| B3 | Critical | `setup.sh` | `media-keys power-off` does not exist on GNOME 50 (it was renamed to `shutdown`). This aborted the run a second time. | `89ad4a5` |
+| B4 | High | `setup.sh` | Howdy was never installed: it isn't in `apps/dnf-packages.txt`, and the COPR step's `\|\| true` hid that. | `cce59cf` |
+| B5 | High | `sync.sh`, `sync-shortcuts.sh` | `custom-keybindings` was overwritten with `custom0…4`. This erased every user custom shortcut, including the existing `custom-obsidian` on the test machine. | `89ad4a5` |
+| B6 | High | `setup.sh` | `enabled-extensions` was overwritten (twice), switching off every extension the user had enabled. | `89ad4a5` |
+| B7 | High | `bin/ocr-snip` | Captured with `grim`, which GNOME/Mutter doesn't support ("compositor doesn't support the screen capture protocol"). The OCR shortcut never worked on GNOME. Now uses the xdg-desktop-portal Screenshot API. | `47184d7` |
+| B8 | High | `scripts/update-repo.sh` | `rm -rf ./extensions/*` followed by copying only locally installed extensions deleted the project's own `mk-indicator@mehulk` source. | `7ddda6a` |
+| B9 | Medium | `setup.sh` | The modal-dialog CSS was appended to `gnome-shell.css` on every run. | `cce59cf` |
+| B10 | Medium | `bin/camera-controls` | Ranges were hardcoded and wrong even for the HP camera (sharpness 0–10 instead of 0–100, gamma 100–300 instead of 100–500). The sliders wrote those made-up values to the camera as soon as the window opened. The Reset button called `v4l2-ctl --reset-controls`, which doesn't exist. | `47184d7` |
+| B11 | Medium | `bin/mk` | Once installed to `~/.local/bin`, the repo-path fallback resolved to `~/.local`, so `mk update` and `mk sync` failed. The branch was hardcoded as `origin main`. | `89ad4a5` |
+| B12 | Medium | `apps/flatpaks.txt` | `io.github.zen_browser.zen` is end-of-life on Flathub ("renamed to app.zen_browser.zen"). | `b295a93` |
+| B13 | Medium | `sync.sh` | Settings for user-installed extensions (blur-my-shell, tiling-assistant) were hidden behind `2>/dev/null \|\| true`. They silently did nothing whenever the schema wasn't on the default path. | `89ad4a5` |
+| B14 | Medium | `sync.sh` | `mutter experimental-features` was overwritten, dropping any other features the user had enabled. | `89ad4a5` |
+| B15 | Medium | `setup.sh` | `/etc/dnf/dnf.conf` was edited without a backup, contrary to the project's own rule in CLAUDE.md. | `89ad4a5` |
+| B16 | Medium | `register-face.sh` | The camera prompt defaulted to `/dev/video0` without checking the device. A metadata-only node (no video capture) could be chosen. | `cce59cf` |
+| B17 | Low | `bin/fix-alt-tab` | Runs at every login (autostart). It re-bound Ctrl+Alt+arrows, which `sync.sh` deliberately frees for Zen Browser, and re-enabled the tiling popup. | `89ad4a5` |
+| B18 | Low | `extensions/mk-indicator@mehulk` | Claimed GNOME 44 support but uses ES-module imports (GNOME 45+). No script installed or enabled it. | `1a0d1fe` |
+| B19 | Low | `setup.sh`, `sync.sh` | Home was assumed to be `/home/$USER`. Running outside a GNOME session failed with raw gsettings errors. Repo, COPR and Flatpak failures were hidden by `\|\| true`. | `cce59cf`, `89ad4a5` |
+
+### Open
+
+| # | Severity | Where | Problem | Suggested fix |
+| :--- | :--- | :--- | :--- | :--- |
+| B20 | Medium | `fedora-workstation-config.spec` | The package can't work. It copies a `zen-config/` folder that doesn't exist, and installs `setup.sh` as `/usr/bin/fedora-workstation-setup`, where `SCRIPT_DIR/apps` doesn't exist. It also `Requires: python3-pip`, which nothing uses. | Install the repo to `%{_datadir}/%{name}` and make the `/usr/bin` entry a wrapper that runs `%{_datadir}/%{name}/setup.sh`. Or remove the spec until packaging is a goal. |
+| B21 | Medium | `bin/close-workspace-apps` | Sends Alt+F4 through `wtype` or `xdotool`. GNOME supports neither virtual-keyboard input on Wayland nor `xdotool` for native windows, and no shortcut is bound to it. | Remove it, or rewrite it with a GNOME Shell extension or a D-Bus call. |
+| B22 | Low | `extensions/mk-indicator@mehulk/extension.js` | Inserts into `Main.panel._rightBox`, a private API that can change between GNOME releases. | Use `Main.panel.addToStatusArea(this.uuid, button)` with a `PanelMenu.Button`. |
+| B23 | Low | `extensions/` | 14 MB of bundled extensions. `quick-settings-tweaks` (GNOME 48 only) and `screenshot-ocr` (49 only) can't load on GNOME 50. blur-my-shell is also packaged by Fedora. | Bundle only `mk-indicator` and install the rest from extensions.gnome.org or Fedora packages. |
+| B24 | Low | `sync.sh` | Writes `~/.config/gnome-shell/gnome-shell.css`. That isn't a documented GNOME Shell styling mechanism, and it wasn't confirmed to take effect. | Check that the styling appears. If it doesn't, ship it as a user theme or a small extension stylesheet. |
 
 ---
 
-## 4. High-Value Features Recommended for Adoption
+## 2. Duplicated code
 
-1. **Snapper + Btrfs Automatic Snapshots:**
-   Fedora uses Btrfs root by default. Before modifying `/etc/pam.d/` or running DNF transactions, create an automated snapshot (`snapper create -d "Pre-MK-Setup"`).
-2. **Unified Package Manifests:**
-   Replace the hardcoded `dnf install` package list inside `setup.sh` with a loop reading directly from `apps/dnf-packages.txt` and `apps/flatpaks.txt`.
-3. **Power & Thermal Profile Automation for HP Laptops:**
-   Add `tuned` or `power-profiles-daemon` CLI rules to automatically switch to `performance` on AC power and `balanced`/`power-saver` on battery.
-4. **Transition to `justfile`:**
-   Provide a single `just` runner file in the repository root for simple developer interactions:
-   * `just install` -> runs `setup.sh`
-   * `just face` -> runs `register-face.sh`
-   * `just sync` -> dumps DConf settings to `config/`
+| # | Where | Problem | Status |
+| :--- | :--- | :--- | :--- |
+| D1 | `setup.sh`, `sync.sh`, `sync-shortcuts.sh`, `bin/fix-alt-tab` | Four files set the same keys to **conflicting** values: `switch-applications` (`[]` vs `<Super>Tab`), Ctrl+Alt workspace keys, the tiling popup, and `show-screenshot-ui` (`Print` vs `Shift+Print, Super+Shift+S`). Which value won depended on which script ran last. | Fixed `89ad4a5`: `sync.sh` is the single source; `sync-shortcuts.sh` is a shim. |
+| D2 | `setup.sh` | `REAL_USER`/`REAL_UID`/`DBUS_ENV` were defined four times; `enabled-extensions` was set twice (the first was dead code); `show-screenshot-ui` and `power-off` were set four times, with two blocks copy-pasted verbatim. | Fixed `cce59cf`. |
+| D3 | `README.md`, `AI_PROMPT_TEMPLATE.md` | The second half of the AI template was a stale copy of an older README, including `[cite: 5]` leftovers. | Fixed `1dba92b`. |
+| D4 | `config/gnome-media-keys.dconf`, `config/keybindings.dconf` | Two dumps of the same dconf subtree that contradict each other. Nothing applies either one. | Open: delete `gnome-media-keys.dconf`; `mk export` writes `keybindings.dconf`. |
+| D5 | `extensions/blur-my-shell@aunetx`, `apps/dnf-packages.txt` | blur-my-shell is both bundled and installed from Fedora. | Open: see B23. (`sync.sh` already prefers the installed copy.) |
+
+---
+
+## 3. Hallucinations and false claims
+
+These are statements in the repo that the code or the real system contradicts.
+
+| # | Where | Claim | Reality | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| H1 | `README.md` | "Privacy-Safe Sync: backs up Zen Browser CSS (`chrome/`), flags (`user.js`)…" | No script touches any browser profile. | Fixed `1dba92b`: claim removed. |
+| H2 | `README.md` | "`sync.sh`: dumps live dconf trees… to Git", "ShellCheck Passed" badge, "GNOME 40+", "Fedora 41/42" | `sync.sh` applies settings; dumping is `scripts/update-repo.sh`. ShellCheck reported 17 warnings and no CI existed. The extensions need GNOME 45+, and the tested system is Fedora 44. | Fixed `1dba92b`, `e8cbbd9` (real CI). |
+| H3 | Old `BUGS.md` (Bug 1.4) | "`/dev/video1` is the IR sensor of the HP dual-sensor camera" | `/dev/video1` is a metadata node (Device Caps `0x04a00000`, no video capture). This HP camera has no IR sensor. | Fixed: replaced by this file; `register-face.sh` detects IR from pixel formats `cce59cf`. |
+| H4 | `AI_PROMPT_TEMPLATE.md`, GitHub "About" | "instant fingerprint unlock"; 13 active extensions; `Super+Shift+C` closes workspace apps | The project uses Howdy **face** unlock; the code enables 8 extensions; nothing binds `Super+Shift+C`. | Fixed in files `1dba92b`. **Open:** edit the GitHub repo's About text. |
+| H5 | `apps/flatpaks.txt`, `mk-indicator` metadata, `camera-controls` | Zen ID `io.github.zen_browser.zen`; GNOME 44 support; `v4l2-ctl --reset-controls` | Respectively: end-of-life ID, ESM-only code, nonexistent flag. | Fixed (B12, B18, B10). |
+| H6 | `HANDOFF.md` | "PROJECT_HISTORY.md marks DBus/PAM/SELinux fixes as Solved" | There's no `PROJECT_HISTORY.md` in the repository or its history. | Fixed: those fixes now exist in code (`cce59cf`). |
+
+---
+
+## 4. Security and privacy
+
+| # | Severity | Problem | Status |
+| :--- | :--- | :--- | :--- |
+| S1 | High | `.gitignore` missed `cert9.db` (certificate store) and `sessionstore-backups/` (open tabs and form data). | Fixed `b58ad03`. |
+| S2 | Medium | Face unlock on an RGB-only camera can be fooled by a photo, and nothing warned the user. | Fixed `cce59cf`: `register-face.sh` prefers IR and warns when only RGB is available. |
+| S3 | Low | The committed dumps in `config/` contain the home path, wallpaper and lock-screen photo filenames, Run-dialog command history, and recently used emojis. | Partly fixed `1a0d1fe`: `mk export` now removes the history and replaces home paths. **Open:** the existing committed files still contain this data; re-run `mk export` or delete them. |
+| S4 | Low | `config/gnome-desktop-full.dconf` records `[file-sharing] require-password='never'`. If Public-folder sharing is ever turned on, anyone on the network can read that folder. | Open: set `require-password='always'` if you use file sharing. |
+
+---
+
+## 5. How similar projects compare, and what was adopted
+
+Projects reviewed: [fedorable](https://github.com/chetripley/fedorable) (dialog menu, editable package lists), [PYFO](https://github.com/d4rklynk/PYFO) (security-minded post-install, split package lists), [Linutil](https://github.com/ChrisTitusTech/linutil) (modular TUI toolbox, config-driven automation), [Universal Blue Bluefin](https://projectbluefin.io/) (`ujust` task recipes), and current Fedora 44 post-install guides ([debugpoint](https://debugpoint.com/10-things-to-do-fedora-44-after-install), [ostechnix](https://ostechnix.com/things-to-do-after-installing-fedora-44/), [computingforgeeks](https://computingforgeeks.com/rpm-fusion-fedora-44-codecs/)).
+
+| Feature | Seen in | Before | Now |
+| :--- | :--- | :--- | :--- |
+| Full codecs (`dnf swap ffmpeg-free ffmpeg`) + GStreamer plugins | fedorable, Fedora 44 guides | Missing | Added `91f1650`, `b295a93` |
+| GPU-aware hardware video decoding (VA-API) | Fedora 44 guides | Missing (the test machine had no AMD VA driver at all) | Added `91f1650`: AMD, Intel and NVIDIA detected via `lspci` |
+| Firmware updates via fwupd | fedorable | Missing | Added `91f1650`: reported, never flashed automatically |
+| Editable, categorized package lists | fedorable, PYFO | Flat lists, wrong Zen ID, most workspace apps missing | Categorized and verified; 43 packages and 12 Flatpaks `b295a93` |
+| Task runner (`just setup`, `just check`…) | Bluefin `ujust` | Missing | Added `e8cbbd9` |
+| CI lint on every push | Most maintained projects | Static badge only | GitHub Actions ShellCheck `e8cbbd9` |
+| Run log | Linutil-style tooling | None | `/var/log/mk-workstation-setup.log` `91f1650` |
+| Distro and edition detection | Linutil | None | Fedora-only, refuses Atomic `89ad4a5` |
+| Interactive TUI menu | fedorable, Linutil | — | **Not adopted yet**: worth adding with `gum` or `dialog` so users can pick sections |
+| Btrfs snapshot before changes | Bluefin (image rollback), Snapper-based setups | — | **Not adopted**: the test system uses Btrfs but has no Snapper config; needs a safe default first |
+| NVIDIA proprietary driver | fedorable | — | **Not automated on purpose**: Secure Boot needs manual key enrollment; `setup.sh` warns instead |
+| Firewall hardening (default zone `drop`) | PYFO (server) | — | **Not adopted**: breaks desktop features such as casting and file sharing |
+
+---
+
+## 6. Recommended next steps
+
+1. Push `fix/dbus-pam-dnf` and merge it. GitHub `main` has none of these fixes yet.
+2. Fix B20 (spec) or delete the spec file.
+3. Delete `config/gnome-media-keys.dconf` and re-run `mk export` to clean the committed dumps (D4, S3).
+4. Slim `extensions/` down to `mk-indicator` (B23).
+5. Update the GitHub About text (H4).
+6. Consider a TUI section picker and Snapper integration (section 5).

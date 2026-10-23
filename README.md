@@ -3,8 +3,9 @@
 ![Fedora](https://img.shields.io/badge/Tested_on-Fedora_44-blue?logo=fedora)
 ![GNOME](https://img.shields.io/badge/Desktop-GNOME_50_(Wayland)-blue?logo=gnome)
 ![License](https://img.shields.io/badge/License-MIT-green)
+[![ShellCheck](https://github.com/MehulK-techie/fedora-workstation-config/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/MehulK-techie/fedora-workstation-config/actions/workflows/shellcheck.yml)
 
-Shell scripts that turn a fresh Fedora Workstation into the **MK Workstation**: faster DNF, RPM Fusion and Flathub apps, a curated set of GNOME extensions, keyboard-first window management, a few handy desktop tools, and optional Howdy face unlock. Every script is safe to run again.
+Shell scripts that turn a fresh Fedora Workstation into the **MK Workstation**: faster DNF, full multimedia codecs with GPU video decoding, a ready-to-use app set (Obsidian, Lutris, Zen Browser, VS Code, Extension Manager and more), a curated set of GNOME extensions, keyboard-first window management, a few handy desktop tools, and optional Howdy face unlock. Every script is safe to run again.
 
 **New here? Read the [step-by-step guide](GUIDE.md).** It has separate paths for Linux beginners, everyday Fedora users, and people who want to customize or contribute.
 
@@ -35,7 +36,7 @@ Don't want face unlock at all? Use `sudo ./setup.sh --no-face`.
 
 | Component | What it does | Where |
 | :--- | :--- | :--- |
-| **System setup** | Faster DNF (10 parallel downloads, fastest mirror), RPM Fusion free + nonfree, packages from `apps/dnf-packages.txt`, Flathub apps from `apps/flatpaks.txt`. Backs up `dnf.conf` first. | `setup.sh` (sudo) |
+| **System setup** | Faster DNF (10 parallel downloads, fastest mirror; `dnf.conf` backed up first), RPM Fusion free + nonfree, the VS Code repo, full `ffmpeg` and GStreamer codecs, hardware video decoding for your GPU (AMD, Intel or NVIDIA), packages from `apps/dnf-packages.txt`, Flathub apps from `apps/flatpaks.txt`, and a firmware update check. Every run is logged to `/var/log/mk-workstation-setup.log`. | `setup.sh` (sudo) |
 | **Desktop settings** | Enables 8 GNOME extensions, Alt+Tab across all workspaces, window snapping and screenshot keys, blur tweaks, and the MK custom shortcuts. Keeps your own extensions and custom shortcuts. | `sync.sh` (no sudo; `setup.sh` runs it for you) |
 | **Face unlock** | Howdy face recognition for the login screen and `sudo`, with an IR camera picked automatically when present. Your password always still works. | `register-face.sh` (sudo) |
 | **Desktop tools** | OCR screen-to-text, shortcut cheat sheet, notes and focus timer, webcam controls, and the `mk` command. | `bin/` → `~/.local/bin` |
@@ -56,6 +57,17 @@ Don't want face unlock at all? Use `sudo ./setup.sh --no-face`.
 | `Super+N` / `Super+C` | Notes and focus timer / webcam controls |
 
 `Ctrl+Alt+←/→` is deliberately left free for Zen Browser's workspace switching.
+
+## Apps installed
+
+Edit the lists to choose your own. Each is grouped by purpose, so you can delete whole sections.
+
+- **Flatpaks** ([`apps/flatpaks.txt`](apps/flatpaks.txt)): Zen Browser, Obsidian, Joplin, ONLYOFFICE, Extension Manager, Frog (text from images), Cameractrls, FlipClock, ZapZap (WhatsApp), Spotify, SonoBus, Lutris.
+- **Fedora packages** ([`apps/dnf-packages.txt`](apps/dnf-packages.txt)): VS Code, GNOME Tweaks, extension packages, codecs, terminal tools (btop, fzf, ripgrep, zoxide, just, chezmoi, 7zip), Flameshot, EasyEffects, gamemode, Gamescope, MangoHud, Distrobox, Android tools, and the dependencies of the MK tools.
+
+## Task shortcuts (`just`)
+
+From the repo folder: `just setup`, `just sync`, `just face`, `just export`, `just update`, and `just check` (lint every script). Run `just` to list them.
 
 ## The `mk` command
 

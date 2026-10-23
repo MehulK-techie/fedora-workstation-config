@@ -97,17 +97,20 @@ Log out and back in afterwards. Run `./setup.sh --help` for the options.
 | Change | Details |
 | :--- | :--- |
 | `/etc/dnf/dnf.conf` | Sets `max_parallel_downloads=10`, `fastestmirror=True`, `defaultyes=True`. The original is saved as `dnf.conf.bak`. |
-| Repositories | RPM Fusion free and nonfree; the `principis/howdy` COPR (face unlock only); Flathub. |
+| Repositories | RPM Fusion free and nonfree; Microsoft's VS Code repo; the `principis/howdy` COPR (face unlock only); Flathub. |
 | Packages | Everything listed in `apps/dnf-packages.txt`, plus `howdy` when a camera is present. |
-| Flatpaks | Everything listed in `apps/flatpaks.txt` (Zen Browser, VS Code, Extension Manager). |
+| Codecs and video decoding | Replaces `ffmpeg-free` with RPM Fusion's full `ffmpeg`. Detects your graphics chip and installs its hardware video driver: `mesa-va-drivers-freeworld` (AMD), `intel-media-driver` (Intel) or `libva-nvidia-driver` (NVIDIA). The NVIDIA proprietary driver itself is not installed; see [Troubleshooting](#troubleshooting). |
+| Flatpaks | Everything listed in `apps/flatpaks.txt`: Zen Browser, Obsidian, Joplin, ONLYOFFICE, Extension Manager, Frog, Cameractrls, FlipClock, ZapZap, Spotify, SonoBus and Lutris. Then updates all Flatpaks. |
 | SELinux | Turns on `authlogin_camera` so the login screen can use the camera (face unlock only). |
+| Firmware | Checks for firmware updates with `fwupdmgr` and tells you if any exist. It never installs firmware by itself. |
+| Log | Everything setup prints is also saved to `/var/log/mk-workstation-setup.log`. |
 
 **Your desktop** (`sync.sh`, no sudo; `setup.sh` runs it for you):
 
 | Change | Details |
 | :--- | :--- |
 | Command-line tools | Copies `bin/*` to `~/.local/bin`: `mk`, `ocr-snip`, `show-shortcuts`, `mk-scratchpad`, `camera-controls`. |
-| Extensions | Enables 8 extensions (see [Extensions_guide.md](Extensions_guide.md)). Any that are missing are installed from the repo's `extensions/` folder. Extensions you already enabled stay enabled. |
+| Extensions | Enables 8 extensions (see [Extensions_guide.md](Extensions_guide.md)) plus the small **MK** watermark in the top bar (`mk-indicator`). Any that are missing are installed from the repo's `extensions/` folder. Extensions you already enabled stay enabled. |
 | Window shortcuts | Alt+Tab switches windows across all workspaces, Super+Tab switches apps, plus snap, maximize and workspace keys. Ctrl+Alt+arrows are left free for Zen Browser. |
 | Screenshots and power | `Print`, `Alt+Print`, `Shift+Print` / `Super+Shift+S`; Super+Backspace or Super+Shift+X opens the shut-down dialog. |
 | Look and feel | Blur on the top bar (off in the overview and lock screen), fractional scaling support, rounded dialogs (`~/.config/gnome-shell/gnome-shell.css`). |
@@ -137,6 +140,19 @@ mk check       # just tells you whether an update is available
 
 All scripts are safe to run again: re-running never duplicates lines or settings.
 
+### Task shortcuts with `just`
+
+From the repo folder you can use short commands instead of script names:
+
+| Command | Same as |
+| :--- | :--- |
+| `just setup` (or `just setup --no-face`) | `sudo ./setup.sh` |
+| `just sync` | `./sync.sh` |
+| `just face` | `sudo ./register-face.sh` |
+| `just export` | `mk export` |
+| `just update` | pull the latest version and re-apply settings |
+| `just check` | lint every script |
+
 ---
 
 ## Path 3: Customizing and contributing
@@ -154,6 +170,9 @@ All scripts are safe to run again: re-running never duplicates lines or settings
 | `extensions/` | Bundled extension copies, used only when an extension isn't installed. Includes this project's own `mk-indicator@mehulk`. |
 | `config/` | Snapshots of GNOME settings written by `mk export`, for reference. No script applies them. |
 | `scripts/update-repo.sh` | The engine behind `mk export`. |
+| `scripts/lint.sh` | `bash -n` + ShellCheck + Python syntax check for every script; used by `just check` and CI. |
+| `justfile` | Task shortcuts (`just setup`, `just check`, …). |
+| `.github/workflows/shellcheck.yml` | Runs `scripts/lint.sh` on every push and pull request. |
 
 ### Make it yours
 
@@ -177,10 +196,10 @@ All scripts are safe to run again: re-running never duplicates lines or settings
 
 ```bash
 sudo dnf install -y ShellCheck
-for f in *.sh scripts/*.sh bin/mk bin/fix-alt-tab bin/ocr-snip bin/show-shortcuts bin/mk-scratchpad; do
-  bash -n "$f" && shellcheck "$f"
-done
+just check
 ```
+
+GitHub runs the same check on every push. When you add a script, add it to the list in `scripts/lint.sh`.
 
 Never commit browser profile secrets (`logins.json`, `key4.db`, `cert9.db`, cookies, `sessionstore-backups/`). `.gitignore` already excludes them.
 
@@ -242,6 +261,10 @@ gsettings reset-recursively org.gnome.mutter.keybindings
 
 **Remove the rounded dialog style:** open `~/.config/gnome-shell/gnome-shell.css` and delete the block that starts with `/* MK Workstation: modal dialog styling */`.
 
+**Remove the VS Code repository:** `sudo rm /etc/yum.repos.d/vscode.repo`
+
+**Remove the MK top-bar watermark:** switch off *MK Workstation Indicator* in Extension Manager.
+
 **Remove the desktop tools:**
 
 ```bash
@@ -257,11 +280,14 @@ Installed apps and repositories stay. Remove them with `sudo dnf remove <package
 
 | Message or problem | What to do |
 | :--- | :--- |
+| Anything went wrong during setup | Read `/var/log/mk-workstation-setup.log`. It has the full output of every run. |
 | `setup.sh requires root privileges` | Run it with `sudo ./setup.sh`. |
 | `sync.sh … Do NOT run with sudo` | Run `./sync.sh` without `sudo`. |
 | `Can't reach a GNOME session` / `No GNOME session for …` | Log into the GNOME desktop and run the command from its Terminal, not from a text console or SSH. |
 | `This suite supports Fedora only` / `Fedora Atomic` | These systems aren't supported. Nothing was changed. |
 | `No camera found; skipped Howdy face unlock` | Expected on computers without a camera. Everything else was set up. |
+| `NVIDIA GPU found: the proprietary driver isn't installed automatically` | Follow RPM Fusion's NVIDIA guide (`akmod-nvidia`). With Secure Boot on, you must enroll a signing key and reboot, which is why setup doesn't do it for you. |
+| `Firmware updates are available` | Close your work, plug in the charger, then run `fwupdmgr update` and follow the prompts. |
 | `Howdy could not be installed` | The Howdy COPR may not support your Fedora version yet. Try `sudo ./setup.sh` again later. |
 | `DNF package not installed: …` / `Flatpak failed to install: …` | That app isn't available for your system. Remove it from the list in `apps/`, or install an alternative. |
 | `Skipped … (… not installed or too old)` | That extension isn't installed, so its tweak was skipped. Install it with Extension Manager and run `./sync.sh` again. |

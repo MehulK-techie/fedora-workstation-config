@@ -11,7 +11,8 @@ Usage: sudo ./register-face.sh [--user NAME] [--models N] [--tune-only]
 Sets up face unlock in a few guided steps: picks the best camera, tunes Howdy
 for it, records up to N face models in different lighting (so unlock keeps
 working in a dim room or by a bright window), then enables it for the login
-screen and sudo. Your password always keeps working. Safe to run again.
+screen and sudo (on a regular webcam, sudo only if you say yes). Your password
+always keeps working. Safe to run again.
 
   --user NAME  Enroll another account on this computer (default: you)
   --models N   How many face models to record, 1-5 (default: 3)
@@ -166,18 +167,19 @@ echo "[+] Using camera: ${SELECTED_CAM} (${CAM_NAME[$SELECTED_CAM]})"
 # ------------------------------------------------------------------------------
 # Step 2: Tune Howdy for this camera. Howdy skips frames darker than
 # dark_threshold and accepts a match below certainty/10 (lower = stricter).
+# Matching stays at Howdy's strict default for every camera: accuracy comes
+# from the extra lighting models, never from accepting weaker matches.
 # Regular webcams see mostly-dark frames in a dim room, so they get a higher
-# dark_threshold and a little more time; IR cameras keep the strict defaults.
+# dark_threshold and a little more time to find a usable frame.
 # ------------------------------------------------------------------------------
 echo "==> Step 2/4: Tuning face recognition for this camera..."
 [[ -f "${HOWDY_CONF}.bak" ]] || cp -a "$HOWDY_CONF" "${HOWDY_CONF}.bak"
 set_howdy device_path "$SELECTED_CAM"
+set_howdy certainty 3.5
 if [[ "$CAM_TYPE" == "ir" ]]; then
-    set_howdy certainty 3.5
     set_howdy dark_threshold 60
     set_howdy timeout 3
 else
-    set_howdy certainty 4.0
     set_howdy dark_threshold 80
     set_howdy timeout 4
 fi
@@ -247,7 +249,16 @@ echo "[+] Recorded ${recorded} new face model(s) for ${TARGET_USER}."
 # ------------------------------------------------------------------------------
 # Step 4: Turn on face unlock for the login screen and sudo.
 # ------------------------------------------------------------------------------
-echo "==> Step 4/4: Enabling face unlock for login and sudo..."
+echo "==> Step 4/4: Enabling face unlock..."
+# A regular webcam can be fooled by a photo, and sudo grants full control of
+# the computer, so on RGB cameras sudo needs an explicit yes.
+if [[ "$CAM_TYPE" == "rgb" ]]; then
+    PAM_FILES=(/etc/pam.d/gdm-password)
+    answer=""
+    echo "  Face unlock will be used on the login screen."
+    read -rp "  Also use it for sudo (admin commands)? A photo of you could pass. [y/N]: " answer || true
+    [[ "$answer" =~ ^[yY] ]] && PAM_FILES+=(/etc/pam.d/sudo)
+fi
 if [[ ! -e /usr/lib64/security/pam_howdy.so ]] && [[ ! -e /usr/lib/security/pam_howdy.so ]]; then
     echo "⚠ pam_howdy.so not found — skipping PAM changes to prevent lockout."
 else

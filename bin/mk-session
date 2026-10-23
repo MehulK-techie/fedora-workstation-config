@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Runs once at login (autostart entry written by sync.sh).
+#
+# Blur my Shell can start before GNOME Shell has its wallpaper and panel ready,
+# and then shows no blur until the screen is locked and unlocked (which
+# re-initializes extensions). Re-initialize only Blur my Shell once the shell
+# has settled, instead of toggling every extension, which crashes others.
+set -uo pipefail
+
+BLUR="blur-my-shell@aunetx"
+
+ext_state() {
+    gnome-extensions info "$1" 2>/dev/null | awk '/State:/ { print $2 }'
+}
+
+# Give the shell time to finish starting; wait up to 30 s for the extension.
+sleep 4
+for _ in $(seq 1 30); do
+    [[ "$(ext_state "$BLUR")" == "ACTIVE" ]] && break
+    sleep 1
+done
+[[ "$(ext_state "$BLUR")" == "ACTIVE" ]] || exit 0
+
+gnome-extensions disable "$BLUR"
+sleep 1
+gnome-extensions enable "$BLUR"

@@ -12,3 +12,4 @@ places-menu@gnome-shell-extensions.gcampax.github.com
 dash-to-dock@micxgx.gmail.com
 appindicatorsupport@rgcjonas.gmail.com
 caffeine@patapon.info
+tiling-assistant@leleat-on-github

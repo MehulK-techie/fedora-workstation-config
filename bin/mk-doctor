@@ -83,6 +83,16 @@ all_bindings() {
             grep -oE "'[^']+'" <<< "$val" | tr -d "'" | grep -v '^$' | sed "s|\$| $key|" || true
         done
     done
+    # Tiling Assistant's keys live in its own schema; count them only while it runs.
+    local ta="tiling-assistant@leleat-on-github" ta_dir
+    if [[ "$(gnome-extensions info "$ta" 2>/dev/null | awk '/State:/ { print $2 }')" == "ACTIVE" ]]; then
+        ta_dir=$(gnome-extensions info "$ta" | awk '/Path:/ { print $2 }')/schemas
+        gsettings --schemadir "$ta_dir" list-recursively org.gnome.shell.extensions.tiling-assistant 2>/dev/null \
+            | while read -r _ key val; do
+                [[ "$val" == \[* ]] || continue
+                grep -oE "'[^']+'" <<< "$val" | tr -d "'" | grep -v '^$' | sed "s|\$| tiling:$key|" || true
+            done
+    fi
     for path in $(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null | grep -oE "'[^']+'" | tr -d "'"); do
         val=$(gsettings get "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$path" binding 2>/dev/null | tr -d "'")
         [[ -n "$val" ]] && echo "$val custom:$(basename "$path")"

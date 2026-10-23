@@ -1,0 +1,49 @@
+[
+  {
+    "_name": "Halves (50 | 50)",
+    "_items": [
+      { "rect": { "x": 0, "y": 0, "width": 0.5, "height": 1 } },
+      { "rect": { "x": 0.5, "y": 0, "width": 0.5, "height": 1 } }
+    ]
+  },
+  {
+    "_name": "Main + side (66 | 34)",
+    "_items": [
+      { "rect": { "x": 0, "y": 0, "width": 0.66, "height": 1 } },
+      { "rect": { "x": 0.66, "y": 0, "width": 0.34, "height": 1 } }
+    ]
+  },
+  {
+    "_name": "Three columns",
+    "_items": [
+      { "rect": { "x": 0, "y": 0, "width": 0.3333, "height": 1 } },
+      { "rect": { "x": 0.3333, "y": 0, "width": 0.3334, "height": 1 } },
+      { "rect": { "x": 0.6667, "y": 0, "width": 0.3333, "height": 1 } }
+    ]
+  },
+  {
+    "_name": "Left + two stacked",
+    "_items": [
+      { "rect": { "x": 0, "y": 0, "width": 0.5, "height": 1 } },
+      { "rect": { "x": 0.5, "y": 0, "width": 0.5, "height": 0.5 } },
+      { "rect": { "x": 0.5, "y": 0.5, "width": 0.5, "height": 0.5 } }
+    ]
+  },
+  {
+    "_name": "Four quarters",
+    "_items": [
+      { "rect": { "x": 0, "y": 0, "width": 0.5, "height": 0.5 } },
+      { "rect": { "x": 0.5, "y": 0, "width": 0.5, "height": 0.5 } },
+      { "rect": { "x": 0, "y": 0.5, "width": 0.5, "height": 0.5 } },
+      { "rect": { "x": 0.5, "y": 0.5, "width": 0.5, "height": 0.5 } }
+    ]
+  },
+  {
+    "_name": "Focus centre (25 | 50 | 25)",
+    "_items": [
+      { "rect": { "x": 0.25, "y": 0, "width": 0.5, "height": 1 } },
+      { "rect": { "x": 0, "y": 0, "width": 0.25, "height": 1 } },
+      { "rect": { "x": 0.75, "y": 0, "width": 0.25, "height": 1 } }
+    ]
+  }
+]

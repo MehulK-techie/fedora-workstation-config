@@ -157,6 +157,32 @@ systemctl --user daemon-reload 2>/dev/null \
     && systemctl --user enable --now mk-update-check.timer &>/dev/null \
     || echo "    [*] Couldn't enable the daily update check (no systemd user session)"
 
+# Login helper: re-initializes Blur my Shell after GNOME Shell has settled (bin/mk-session).
+AUTOSTART_DIR="$HOME/.config/autostart"
+mkdir -p "$AUTOSTART_DIR"
+cat > "$AUTOSTART_DIR/mk-session.desktop" << DESKTOP
+[Desktop Entry]
+Type=Application
+Name=MK Workstation session start
+Comment=Makes sure Blur my Shell is applied after login
+Exec=$HOME/.local/bin/mk-session
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+DESKTOP
+# Older login hacks toggled every extension (crashing others) or re-applied keys
+# that now persist. Move them aside rather than delete them.
+RETIRED_DIR="$HOME/.config/mk-workstation/retired-autostart"
+for hack in fix-extensions.desktop bms-panel-fix.desktop gnome-alt-tab-fix.desktop; do
+    if [[ -f "$AUTOSTART_DIR/$hack" ]]; then
+        mkdir -p "$RETIRED_DIR"
+        mv -f "$AUTOSTART_DIR/$hack" "$RETIRED_DIR/"
+        echo "    [+] Retired old login hack $hack (kept in $RETIRED_DIR)"
+    fi
+done
+
+# Remember which packages existed before MK, so `mk save` can spot new ones.
+"$HOME/.local/bin/mk-apps" baseline
+
 # 2. GNOME Extensions (list in config/enabled-extensions.txt, written by `mk export`)
 echo "==> Installing and enabling GNOME extensions..."
 mapfile -t ACTIVE_EXTENSIONS < <(grep -vE '^\s*(#|$)' "$SCRIPT_DIR/config/enabled-extensions.txt" || true)
@@ -183,6 +209,15 @@ for uuid in "${ACTIVE_EXTENSIONS[@]}"; do
         glib-compile-schemas "$schemas" || true
     fi
 done
+# WACK Shell 1.0.0 calls super.vfunc_event(), which GNOME 50 no longer provides:
+# every pointer event over its panel buttons logs a JS error (hundreds per
+# session). Pass the event on instead. No-op once upstream fixes it.
+WACK_JS="$USER_EXT_DIR/wack-shell@rinzler69-wastaken.github.com/panelComponents.js"
+if [[ -f "$WACK_JS" ]] && grep -q 'return super.vfunc_event(event);' "$WACK_JS"; then
+    sed -i 's|return super.vfunc_event(event);|return Clutter.EVENT_PROPAGATE; // MK: no StWidget.vfunc_event on GNOME 50|' "$WACK_JS"
+    echo "    [+] Patched WACK Shell for GNOME 50 (takes effect after logging in again)"
+fi
+
 # This project's own top-bar watermark: always refresh it so repo updates land.
 MK_INDICATOR="mk-indicator@mehulk"
 [[ -d "$USER_EXT_DIR/$MK_INDICATOR" ]] || NEW_EXTENSIONS=1
@@ -203,20 +238,45 @@ gsettings set org.gnome.desktop.wm.keybindings switch-windows-backward "['<Shift
 gsettings set org.gnome.shell.app-switcher current-workspace-only false
 gsettings set org.gnome.shell.window-switcher current-workspace-only false
 
-# Window snap & sizing (Zero popup delays)
-ext_set tiling-assistant@leleat-on-github org.gnome.shell.extensions.tiling-assistant enable-tiling-popup false
-ext_set tiling-assistant@leleat-on-github org.gnome.shell.extensions.tiling-assistant window-gap 4
-gsettings set org.gnome.mutter.keybindings toggle-tiled-left "['<Super>Left']"
-gsettings set org.gnome.mutter.keybindings toggle-tiled-right "['<Super>Right']"
-gsettings set org.gnome.desktop.wm.keybindings maximize "['<Super>Up']"
-gsettings set org.gnome.desktop.wm.keybindings unmaximize "['<Super>Down']"
+# Windows-style split screen (Tiling Assistant): Super+arrows snap halves, and
+# Super+Left then Super+Up makes a quarter, as on Windows. After snapping, Snap
+# Assist offers your other windows for the free space; snapped windows raise
+# together. Super+Z picks a layout (config/tiling-layouts.json).
+TA="tiling-assistant@leleat-on-github"
+TA_SCHEMA="org.gnome.shell.extensions.tiling-assistant"
+ext_set "$TA" "$TA_SCHEMA" dynamic-keybinding-behavior 3
+ext_set "$TA" "$TA_SCHEMA" enable-tiling-popup true
+ext_set "$TA" "$TA_SCHEMA" enable-raise-tile-group true
+ext_set "$TA" "$TA_SCHEMA" enable-tile-animations false
+ext_set "$TA" "$TA_SCHEMA" enable-layout-picker true
+ext_set "$TA" "$TA_SCHEMA" search-popup-layout "['<Super>z']"
+ext_set "$TA" "$TA_SCHEMA" center-window "['<Super><Control>c']"
+# Install the MK layouts unless you already made your own (TA's examples don't count).
+TA_LAYOUTS="$HOME/.config/tiling-assistant/layouts.json"
+TA_EXAMPLE=$(find "$USER_EXT_DIR/$TA" "/usr/share/gnome-shell/extensions/$TA" -name layouts_example.json 2>/dev/null | head -n 1 || true)
+same_json() { python3 -c 'import json, sys; sys.exit(json.load(open(sys.argv[1])) != json.load(open(sys.argv[2])))' "$1" "$2" 2>/dev/null; }
+if [[ ! -s "$TA_LAYOUTS" ]] || { [[ -n "$TA_EXAMPLE" ]] && same_json "$TA_LAYOUTS" "$TA_EXAMPLE"; }; then
+    mkdir -p "$(dirname "$TA_LAYOUTS")"
+    cp -f "$SCRIPT_DIR/config/tiling-layouts.json" "$TA_LAYOUTS"
+elif ! same_json "$TA_LAYOUTS" "$SCRIPT_DIR/config/tiling-layouts.json"; then
+    echo "    [*] Kept your own Tiling Assistant layouts ($TA_LAYOUTS)"
+fi
+# While Tiling Assistant runs it owns Super+arrows (it blanks GNOME's own snap
+# keys and restores them when disabled), so only set GNOME's when it isn't running.
+if [[ "$(gnome-extensions info "$TA" 2>/dev/null | awk '/State:/ { print $2 }')" != "ACTIVE" ]]; then
+    gsettings set org.gnome.mutter.keybindings toggle-tiled-left "['<Super>Left']"
+    gsettings set org.gnome.mutter.keybindings toggle-tiled-right "['<Super>Right']"
+    gsettings set org.gnome.desktop.wm.keybindings maximize "['<Super>Up']"
+    gsettings set org.gnome.desktop.wm.keybindings unmaximize "['<Super>Down']"
+fi
 gsettings set org.gnome.desktop.wm.keybindings close "['<Super>q', '<Alt>F4']"
 # Busy apps (games, compiles) get 20s before GNOME shows "not responding" (default 5s).
 gsettings set org.gnome.mutter check-alive-timeout 20000
 
 # 4. Protect Zen Browser Workspaces (Release Ctrl+Alt+Arrows)
-gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Page_Up', '<Super><Alt>Left']"
-gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Super>Page_Down', '<Super><Alt>Right']"
+# Super+Ctrl+arrows also switch workspaces, like Windows virtual desktops.
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "['<Super>Page_Up', '<Super><Alt>Left', '<Super><Control>Left']"
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-right "['<Super>Page_Down', '<Super><Alt>Right', '<Super><Control>Right']"
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-up "[]"
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-down "[]"
 gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-left "['<Super><Shift>Page_Up', '<Super><Shift><Alt>Left']"
@@ -259,7 +319,8 @@ gsettings set "$MK_SHELL" toggle-overview "['<Super>s']"          # Search (Win+
 gsettings set "$MK_SHELL" toggle-quick-settings "['<Super><Shift>a']" # Quick settings
 gsettings set "$MK_SHELL" toggle-application-view "['<Super>a']"  # App grid (GNOME/Launchpad)
 gsettings set "$MK_SHELL" toggle-message-tray "['<Super>m']"      # Notifications; Super+V is clipboard
-gsettings set "$MK_SHELL" focus-active-notification "[]"          # frees Super+N for your own shortcut
+gsettings set "$MK_SHELL" focus-active-notification "[]"          # frees Super+N for notes
+gsettings set "$MK_WM" toggle-above "['<Super><Control>t']"         # Always on top (PowerToys)
 # Window buttons on the right, new windows centred (macOS), hot corner on
 gsettings set org.gnome.desktop.wm.preferences button-layout "appmenu:minimize,maximize,close"
 gsettings set org.gnome.mutter center-new-windows true
@@ -350,6 +411,35 @@ for term in ptyxis kgx gnome-terminal; do
         break
     fi
 done
+# Super+N opens Obsidian for notes; Super+B opens your default web browser.
+add_shortcut obsidian "Notes (Obsidian)" "flatpak run md.obsidian.Obsidian" "<Super>n"
+browser=$(xdg-settings get default-web-browser 2>/dev/null || true)
+if [[ -n "$browser" ]]; then
+    add_shortcut browser "Web Browser" "gtk-launch ${browser%.desktop}" "<Super>b"
+fi
+
+# Drop your own custom shortcuts that run exactly what an mk-* shortcut now
+# runs (such as an older "Launch Obsidian" on Super+N), so no key is bound twice.
+dedupe_custom_shortcuts() {
+    local path cmd mk_cmds=() kept=()
+    mapfile -t paths < <(gsettings get "$MEDIA_KEYS" custom-keybindings | grep -oE "'[^']+'" | tr -d "'")
+    for path in "${paths[@]}"; do
+        [[ "$path" == */mk-*/ ]] && mk_cmds+=("$(gsettings get "$MEDIA_KEYS.custom-keybinding:$path" command)")
+    done
+    for path in "${paths[@]}"; do
+        if [[ "$path" != */mk-*/ ]]; then
+            cmd=$(gsettings get "$MEDIA_KEYS.custom-keybinding:$path" command)
+            if printf '%s\n' "${mk_cmds[@]}" | grep -qxF -- "$cmd"; then
+                echo "    [+] Replaced duplicate shortcut $(basename "$path") with its mk-* version"
+                continue
+            fi
+        fi
+        kept+=("'$path'")
+    done
+    local IFS=,
+    gsettings set "$MEDIA_KEYS" custom-keybindings "[${kept[*]}]"
+}
+dedupe_custom_shortcuts
 
 echo "✔ Workstation configurations synchronized."
 if (( NEW_EXTENSIONS )); then

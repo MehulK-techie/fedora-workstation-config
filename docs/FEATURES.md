@@ -38,9 +38,10 @@ Credit for everything in the last two groups belongs to its authors; see
 
 | App | What it does | Open it |
 | :--- | :--- | :--- |
+| **MK Notes** | Notes like Obsidian, Apple Notes and Samsung Notes in one: an Obsidian-compatible Markdown vault (`~/Notes`); folders, pins, colours; `[[links]]`, backlinks, outline, graph view; #tags; checklists, callouts, tables; quick switcher and command palette; daily notes and templates; paste or capture screenshots, drop files; pen, highlighter and eraser with pressure (stylus, finger or mouse) on plain, lined, grid or dotted paper; PDF export; publish the vault as a website; version history; phone app with Wi-Fi sync (browser or Android app) | Super+N, `mk notes`, [docs/NOTES.md](NOTES.md) |
 | **Shortcuts window** | Every shortcut and gesture, live from GNOME; marks each working, clashing, unset or broken; change keys, add commands, reset | Super+/ |
 | **Companion** | Notes you pin, reorder and fold; tasks with progress; reminders (in N min, at a time, daily/weekly) that fire even when closed; morning brief; welcome greeting editor | Super+Shift+N |
-| **Focus timer** | Minutes and seconds; hides into a top-bar countdown; full-screen focus view when you step away (like a screensaver); can silence notifications; pixel-robot celebration with fireworks | Companion › Focus timer, `mk focus 25` |
+| **Focus timer** | Minutes and seconds; hides into a top-bar countdown; when you step away a screensaver plays over your work, Windows-classic style (Bubbles, Mystify, Starfield) or the full-screen Aurora view, your pick or a surprise; can silence notifications; pixel-robot celebration with fireworks | Companion › Focus timer, `mk focus 25` |
 | **OCR snip** | Pick a screen area, get its text in the clipboard | Super+Shift+T |
 | **Camera controls** | Brightness, contrast, focus, exposure of your webcam | Super+C |
 | **Terminal capture** | Add notes and tasks with reminders without opening anything | `mk note`, `mk task`, `mk remind`, `mk list` |
@@ -54,16 +55,16 @@ Credit for everything in the last two groups belongs to its authors; see
 | Dock magnification | The icon under the pointer grows, neighbours follow in a wave | `config/dock.conf` |
 | App-coloured dock glow | A soft circular tint in each app's own colour on hover | `dockGlow.js` |
 | Timer countdown | Ring + time in the top bar while a focus timer runs; click to open | automatic |
+| Focus screensavers | Bubbles (soap bubbles that bounce off each other), Mystify (glowing polygons with echoes), Starfield (flying through stars over a dimmed desktop), drawn over your windows, gone at the first touch; 60 fps, small actors only | Focus timer › Screensaver, `AMBIENT_STYLE` in `timer.conf` (`focusSaver.js`) |
 | Wallpaper accent | The most vivid colour of your wallpaper tints Alt+Tab, the calendar, top-bar and dock hover, workspace thumbnails, the welcome line, the timer ring and GNOME's own accent (Files, Settings); follows wallpaper changes | `mk accent auto\|#hex\|status`, `config/theme.conf` (`accent.js`, `colour.js`) |
-| Alt+Tab, redesigned | Frosted card; the selected window gets a bright ring in the accent colour while the others shrink and dim; selection glides when you scrub with the keyboard or a 3-finger swipe (keeps up with fast swipes: no start delay, 90 ms glide); pops in on both | automatic (`switcher.js`, `stylesheet.css`) |
+| Alt+Tab, redesigned | Frosted card with a soft shadow; one ring in the accent colour glides after the selection on a spring, every frame, so a fast 3-finger swipe across several windows is one fluid motion; the others shrink and dim; pops in | automatic (`switcher.js`, `stylesheet.css`) |
 | Calendar styling | Round day cells with an accent-coloured hover glow, glowing today, softer other-month days | `stylesheet.css` |
 | Pop-ups that don't collide | Workspace dots glide above the volume/brightness pop-up when both show | `osdStack.js` |
 | Dock out of the way | Hidden in the overview so window titles stay readable | automatic |
 | Blur fix | Rebuilds the top-bar blur once after login so it always shows | automatic |
 | Top-bar tag | Your short tag (MK), following `mk rename` live | `config/brand.conf` |
-| Alt+Tab theme | Navy and cyan switcher, hover transitions, rounded overview captions | `stylesheet.css` |
 
-Outside the shell: **Files** gets matching cyan hover and selection (`config/gtk/files.css`, kept in a marked block of `~/.config/gtk-4.0/gtk.css`).
+Outside the shell: **Files** gets matching hover and selection in the accent colour (`config/gtk/files.css`, kept in a marked block of `~/.config/gtk-4.0/gtk.css`).
 
 ### Fixes MK applies to other people's code
 
@@ -71,6 +72,7 @@ Outside the shell: **Files** gets matching cyan hover and selection (`config/gtk
 | :--- | :--- | :--- |
 | WACK Shell | Hundreds of errors per session from `super.vfunc_event()`; dock snapshot errors on every dock move | Patched by `sync.sh` (bundled copy, GPL-3.0) |
 | Magic Lamp | Played its genie even when a gesture already animated the window (stutter) | Patched by `sync.sh` to honour GNOME's skip-effect request |
+| Six animation and gesture extensions | Rebuilt at every unlock (a hitch, gestures dead for a moment) | `sync.sh` marks them for the lock screen too ([why it's safe](EXTENSIONS.md#smoother-unlock)) |
 
 ---
 
@@ -84,9 +86,11 @@ MK changes these GNOME settings; the features themselves are GNOME's.
 - **Workspaces:** dynamic workspaces (Spaces style), new desktop on Super+Ctrl+D, Super+Alt/Ctrl arrows.
 - **Screenshots:** full screen, window and area keys (Print, Super+Shift+3/4/S), saved and copied.
 - **Files:** expandable folders, folders first, item counts, Create Link, Delete Permanently, Quick Look (Space, via Sushi).
-- **Comfort:** tap to click, natural scrolling, battery percentage, weekday in the clock, Night Light, hot corner, dark style.
+- **Comfort:** tap to click, natural scrolling, palm rejection that lets go 300 ms after typing, Bibata Modern Classic cursor (GPL-3.0, `CURSOR=` in `theme.conf`), battery percentage, weekday in the clock, Night Light, hot corner, dark style.
 - **Housekeeping:** Trash and temp files older than 30 days removed; slow search providers (Boxes, Contacts, Passwords) skipped.
 - **Login screen:** uses your display layout (no flicker between login and desktop).
+- **Firefox and Zen** (`config/browser/user.js`): two-finger swipe back/forward, momentum scrolling with a gentle bounce, pinch zoom, GPU rendering and video decoding.
+- **Speaker tuning:** B&O-style voicing (warm bass the speaker can play, clear voices, smooth treble); EasyEffects starts hidden.
 
 ### GNOME extensions (from extensions.gnome.org)
 
@@ -134,7 +138,7 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | App | What for |
 | :--- | :--- |
 | Zen Browser | Web browser (Super+B) |
-| Obsidian | Notes and knowledge base (Super+N) |
+| Obsidian | Notes and knowledge base (Super+Shift+O); opens the same `~/Notes` vault as MK Notes |
 | Joplin | Notes with sync |
 | ONLYOFFICE | Office documents |
 | Visual Studio Code | Code editor (Microsoft's repo) |
@@ -175,6 +179,7 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | `mk power [status\|on\|off]` | Smart power profiles |
 | `mk effects [full\|lite\|auto]` | Visual effects profile |
 | `mk sound on\|off\|status` | Laptop speaker tuning |
+| `mk notes [today \| serve \| NOTE]` | MK Notes; `serve` = phone sync without the window |
 | `mk icon APP IMAGE\|reset` · `mk icon list` | Your own app icons |
 | `mk accent auto\|#hex\|status` | Accent colour from the wallpaper, or fixed |
 | `mk rename "Name" TAG` | Rename it |
@@ -250,7 +255,9 @@ them live and lets you change any of them.
 | Run a command | Alt+F2 · Super+R | GNOME |
 | Files | Super+E | GNOME |
 | Settings | Super+I | GNOME |
-| Shut down / restart | Super+Backspace · Super+Shift+X | GNOME |
+| Shut down / restart menu | Super+Backspace · Super+Shift+X | GNOME |
+| Shut down (asks first) | Ctrl+Alt+End | GNOME |
+| Restart (asks first) | Ctrl+Alt+Home | GNOME |
 | System Monitor | Ctrl+Shift+Esc | App |
 
 **Apps**
@@ -261,7 +268,9 @@ them live and lets you change any of them.
 | Companion: notes, tasks, timer | Super+Shift+N | MK tool |
 | Terminal | Ctrl+Alt+T | App |
 | Web browser | Super+B | App |
-| Obsidian | Super+N | App |
+| MK Notes | Super+N | MK tool |
+| MK Notes: today's note | Super+Alt+N | MK tool |
+| Obsidian | Super+Shift+O | App |
 | Emoji board | Super+. | App |
 | Camera controls | Super+C | MK tool |
 

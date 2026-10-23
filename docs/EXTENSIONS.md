@@ -26,7 +26,7 @@ To switch an extension off, use the toggle next to it in Extension Manager. `mk 
 | **Dash to Dock** | A dock at the bottom of the screen | Bottom, icon size 38, hides when a window touches it (intellihide) and in the overview (mk-indicator fades it out there so window titles stay readable), shows only apps on the current workspace and monitor, a dot under running apps, click focuses / minimizes / shows window thumbnails like the Windows taskbar, middle-click opens a new window, scroll cycles windows, 30% background | Right-click the dock's *Show Apps* button › *Dash to Dock Settings* |
 | **Astra Monitor** | Live CPU, GPU, memory, disk, network and sensor readings in the top bar | Order: processor, GPU, memory, storage, network, sensors; dark theme | Click the monitor in the top bar › ⚙, or Extension Manager ⚙ |
 | **Clipboard Indicator** | Clipboard history | Open it with **Super+V** | Click the clipboard icon › *Settings* |
-| **Touchpad Gesture Customization** | macOS-style touchpad gestures | 4 fingers ←/→ switch workspaces, 3 fingers ←/→ switch windows on every workspace, 3 fingers ↑ overview, 4 fingers ↑/↓ maximize / restore, 3-finger pinch volume, 4-finger pinch show desktop | Extension Manager ⚙ |
+| **Touchpad Gesture Customization** | macOS-style touchpad gestures | 4 fingers ←/→ switch workspaces, 3 fingers ←/→ switch windows on every workspace, 3 fingers ↑ overview, 4 fingers ↑/↓ maximize / restore, 3-finger pinch volume, 4-finger pinch show desktop; Alt+Tab takes the swipe from the first moment (`alttab-delay=0`), so fast swipes aren't lost | Extension Manager ⚙ |
 | **Transparent Top Bar** | Top bar turns transparent when no window touches it | GNOME default behaviour | Extension Manager ⚙ |
 | **WACK Shell** | macOS-style touches: logo menu, app menu, rounded look | Custom logo with menu and label, app menu shown, no bottom bar, desktop scroll on | Extension Manager ⚙ |
 | **WACK Lockscreen Clock** | A styled clock and wallpaper on the lock screen | "WACK" style, full date, fade animations, Esc puts the screen to sleep | Extension Manager ⚙ |
@@ -38,7 +38,7 @@ To switch an extension off, use the toggle next to it in Extension Manager. `mk 
 | **Magic Lamp** | macOS genie effect when minimizing into the dock | 350 ms (default 500). `sync.sh` patches it to skip the genie when a gesture already animates the window (4-finger pinch), which removes a double animation that stuttered | Extension Manager ⚙ |
 | **Burn My Windows** | Window open and close effects | One subtle effect, *Glide*: windows scale in and out in 220 ms. Stored as the high-priority profile `~/.config/burn-my-windows/profiles/mk-glide.conf` (from `config/burn-my-windows-profile.conf`); `sync.sh` rewrites it, so make your own profile in its settings instead of editing this one | Extension Manager ⚙ |
 | **Places Status Indicator** | Top-bar menu for Home, Downloads, drives and network places | GNOME default | (no settings) |
-| **MK Workstation Indicator** | A faint **MK** mark in the top bar that brightens on hover, plus the MK Alt+Tab theme (frosted navy panel, cyan highlight on the selected window) | — | Switch off in Extension Manager to remove it |
+| **MK Workstation Indicator** (`mk-indicator`, made for MK) | The **MK** mark in the top bar, and: the accent colour taken from your wallpaper; Alt+Tab with one ring that glides after the selection; the welcome light; dock glow in each app's colour and magnification; the focus-timer countdown and its screensavers drawn over your work (Bubbles, Mystify, Starfield); workspace dots that don't collide with the volume pop-up | `config/theme.conf`, `welcome.conf`, `dock.conf`, `timer.conf` (`mk accent`, `mk welcome`) | Switch off in Extension Manager to remove it |
 
 The MK desktop also has its own OCR tool on **Super+Shift+T**, separate from Text Extractor. Use whichever you prefer.
 
@@ -54,6 +54,10 @@ Extensions run inside GNOME Shell, so a heavy or broken one can make the whole d
 | Top bar CPU use | Astra Monitor › increase the update interval, or hide graphs you don't need |
 | Desktop feels slow after a GNOME upgrade | Run `mk doctor`; disable anything it reports as ERROR or OUTDATED |
 | Not sure which extension is the cause | Turn them all off with the main switch in Extension Manager, then enable them one at a time |
+
+### Smoother unlock
+
+GNOME switches off every extension that isn't made for the lock screen when you lock, and builds them all again as you unlock; that rebuild is the hitch you see as the lock screen slides away, and why gestures don't answer for a moment after. `sync.sh` keeps six of them loaded while locked: Impatience, Burn My Windows, Wobbly Windows, Magic Lamp, Touchpad Gesture Customization and Transparent Top Bar. These only animate windows or the top bar. The gestures only act on the normal desktop and overview (`Shell.ActionMode.NORMAL`/`OVERVIEW`), never on the lock screen. That was checked in the extension's code, and an update could change it, so `mk sync` is where to look if a gesture ever does something on the lock screen. Clipboard Indicator, Text Extractor and Astra Monitor (its menu lists your processes) are not kept: they would work on the lock screen.
 
 ---
 

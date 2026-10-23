@@ -106,6 +106,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - A settings snapshot before every sync, undone with `mk restore`
 - Daily background check that tells you when a new version of this repo is available
 - **Shortcuts window (Super+/):** every shortcut and gesture, live, each marked working, clashing, unset or broken; click to change keys, + to add your own commands, Reset to go back
+- **MK Notes (Super+N):** a notes app for the laptop and phone. It has Obsidian's Markdown vault, links, backlinks, graph, tags, Sync and Publish; Apple Notes' panes, pins, checklists and pasted screenshots; and Samsung Notes' pen drawing with pressure. It also exports to PDF and keeps version history. The phone app (browser or Android) syncs over Wi-Fi. See [docs/NOTES.md](docs/NOTES.md)
 - **Companion (Super+Shift+N):** notes you can pin, reorder and fold away; a task list you tick off and pin; one click to Obsidian or the focus timer
 - **Reminders:** on any note or task, in 10 min, at 18:00, or every day; they fire even with the Companion closed, with Open and Snooze
 - **Capture from the terminal:** `mk note "idea"`, `mk task "pay rent" 18:00`, `mk remind "stretch" 45m`, `mk list`
@@ -114,7 +115,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - **Morning brief:** one notification a day with your open tasks and today's reminders
 - **Housekeeping:** Trash and temp files older than 30 days are cleared automatically; slow search providers are skipped so overview search stays instant
 - **Smooth on any machine:** `mk effects lite` (or `auto` on weak hardware) turns off blur and window effects; `full` brings them back
-- **Focus timer:** minutes and seconds, hides while it counts, then a full-screen pixel celebration instead of an alarm
+- **Focus timer:** minutes and seconds, hides while it counts; step away and a screensaver plays over your work (Bubbles, Mystify, Starfield or Aurora); a full-screen pixel celebration instead of an alarm
 - **Make it yours:** rename it (`mk rename`), change any shortcut, app, extension or colour without touching code; see [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md). Hackers: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/REFERENCE.md](docs/REFERENCE.md)
 - OCR text-from-screen and webcam controls
 - `just` recipes and GitHub Actions ShellCheck on every push
@@ -179,7 +180,8 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk fingerprint` | | Enroll a finger for login and sudo (`list`, `delete`) |
 | `mk effects full\|lite\|auto` | | Visual effects profile; lite keeps older machines smooth |
 | `mk welcome` | | Welcome light and greeting: on, off, test, edit, title, voice |
-| `mk sound on\|off` | | Laptop speaker tuning (EasyEffects profile) |
+| `mk notes` · `mk notes today` · `mk notes serve` | | MK Notes; today's note; phone sync without the window |
+| `mk sound on\|off` | | Laptop speaker tuning (EasyEffects profile, B&O-style voicing) |
 | `mk icon APP IMAGE` | | Use your own image as an MK app icon |
 | `mk accent auto` | | Accent colour from your wallpaper (or `mk accent #hex`) |
 | `mk rename "Name" TAG` | | Rename MK's windows, notifications and top-bar tag |
@@ -216,7 +218,8 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | | `Super+Alt+←/→` · `Super+Alt+1…4` | Previous/next workspace · go to workspace |
 | | `Super+Shift+A` · `Super+M` | Quick settings · notifications |
 | | `Super+L` · `Super+Backspace` | Lock · shut down / restart |
-| **Apps** | `Super+N` · `Super+B` | Notes (Obsidian) · web browser |
+| | `Ctrl+Alt+End` · `Ctrl+Alt+Home` | Shut down · restart (both ask first) |
+| **Apps** | `Super+N` · `Super+Alt+N` · `Super+B` | MK Notes · today's note · web browser (Obsidian: `Super+Shift+O`) |
 | **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Shortcuts window · Companion (notes, tasks, timer) · camera controls |
 | **Touchpad** | 4 fingers ←/→ · 3 fingers ←/→ | Switch workspaces (Spaces) · switch windows, on every workspace |
 | | 3 fingers ↑/↓ · 4 fingers ↑/↓ | Overview (Mission Control) · maximize / restore the window |
@@ -263,6 +266,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 | [docs/GUIDE.md](docs/GUIDE.md) | Installing and using it: beginners, everyday users, and contributors. Includes undo and troubleshooting. |
 | [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md) | Making it yours or forking it: rename, shortcuts, apps, extensions, colours, without touching the scripts |
 | [docs/RELEASING.md](docs/RELEASING.md) | For the maintainer: cutting a release and where to share it |
+| [docs/NOTES.md](docs/NOTES.md) | MK Notes: writing, drawing, screenshots, PDF, publishing, history, and the phone app with Wi-Fi sync |
 | [docs/FEATURES.md](docs/FEATURES.md) | Every feature, app, command and shortcut, split into what MK built and what it configures or installs from others |
 | [docs/MK-Workstation-Overview.pdf](docs/MK-Workstation-Overview.pdf) | 14 slides to show someone: stock Fedora, what MK adds, screenshots (rebuild: `just overview`) |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | What gets detected and tuned: fingerprint, cameras, GPUs, 2-in-1s, power, login screen; tested machines |

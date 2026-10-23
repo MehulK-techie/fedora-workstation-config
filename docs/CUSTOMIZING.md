@@ -17,6 +17,10 @@ There are two ways to customize:
 | :--- | :--- | :--- |
 | Name and top-bar tag | `mk rename "My Desk" MD`, or Companion › menu › Rename | `config/brand.conf` |
 | Accent colour | `mk accent auto` (from your wallpaper) or `mk accent \#00c8ff` | `config/theme.conf` |
+| Mouse pointer | `CURSOR=Adwaita` (or any installed theme) in `~/.config/mk-workstation/theme.conf`, then `mk sync` | `config/theme.conf` |
+| Notes folder, phone sync, history | `~/.config/mk-workstation/notes.conf` | `config/notes.conf` |
+| Focus screensaver | Focus timer › Screensaver | `AMBIENT_STYLE` in `timer.conf` |
+| Browser touchpad prefs | your profile's `user.js`, outside the MK block | `config/browser/user.js` |
 | Keyboard shortcuts | Super+/ › click a shortcut | `config/shortcuts.conf` |
 | Your own command shortcuts | Super+/ › **+** | `config/shortcuts.conf` (`custom:` lines) |
 | Apps installed | Install them, then `mk save` | `apps/dnf-packages.txt`, `apps/flatpaks.txt` |

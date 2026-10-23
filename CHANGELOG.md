@@ -29,6 +29,19 @@
 - **Calendar and Files styling** matching the workstation; workspace dots no longer overlap the volume pop-up.
 - Fixed: `sync.sh` aborting when `bin/` contained a `__pycache__` folder (found by a fresh-account test).
 - **Alt+Tab redesign:** frosted card, bright cyan ring on the selection, others shrink and dim, selection glides; smooth with 3-finger swipes too (switcher appears after 60 ms instead of 150 ms).
+- **MK Notes** (`mk-notes`, Super+N, [docs/NOTES.md](docs/NOTES.md)):
+  - An Obsidian-compatible Markdown vault, with folders, pins, colours, links, backlinks, an outline, a graph and #tags.
+  - Checklists, callouts and tables, a quick switcher, a command palette, daily notes and templates.
+  - Paste or capture screenshots; draw with a pressure-sensitive pen.
+  - PDF export (WeasyPrint), publish the vault as a website, and version history.
+  - A phone app (browser or Android, `scripts/build-apk.sh`) that syncs over Wi-Fi with signed requests. Conflicts keep both copies.
+- **Focus screensavers over your work:** Bubbles, Mystify and Starfield, drawn by mk-indicator at 60 fps. Pick one, or let the timer surprise you.
+- **Alt+Tab glide:** one accent ring follows the selection on a spring, so fast 3-finger swipes are fluid. Lighter shadows.
+- **Speaker tuning** retuned toward B&O: more bass the speaker can play, clearer voices, smoother treble.
+- **Touchpad-friendly browsing** (Firefox, Zen): swipe back/forward, momentum scrolling, pinch zoom. Palm rejection now lets go 300 ms after typing.
+- **Bibata Modern Classic cursor**, from a pinned, checksummed release.
+- **Shut down and restart shortcuts:** Ctrl+Alt+End and Ctrl+Alt+Home (both ask first).
+- **Smoother unlock:** six animation and gesture extensions stay loaded while locked instead of being rebuilt as you unlock.
 - **Wallpaper accent** (`mk accent`, `config/theme.conf`): the most vivid wallpaper colour tints Alt+Tab, the calendar, hover glows, workspace thumbnails, the welcome line, the timer ring and GNOME's accent; updates when the wallpaper changes. Files and the Companion follow GNOME's accent.
 - **Faster touchpad Alt+Tab:** no delay before the switcher takes the swipe (was 60 ms, inputs were dropped), 90 ms glide.
 - **Smoother welcome line:** drawn as four thin edge strips instead of a full-screen canvas.

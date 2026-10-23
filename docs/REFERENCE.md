@@ -21,8 +21,9 @@ Every command, file and format. How the parts fit together is in
 | `mk remind "TEXT" WHEN` | Add a task with a reminder |
 | `mk list` | Print notes, tasks and reminders |
 | `mk welcome [on\|off\|test\|edit\|title T\|greeting "TEXT"\|voice on\|off\|install\|remove\|notify on\|off]` | Welcome light and spoken greeting after login |
+| `mk notes [today \| serve \| NOTE]` | MK Notes; `serve` runs phone sync without the window ([NOTES.md](NOTES.md)) |
 | `mk sound [on\|off\|status]` | Laptop speaker tuning with EasyEffects |
-| `mk icon [list \| APP IMAGE \| APP reset]` | Your own icon for companion, timer, shortcuts, camera or ocr |
+| `mk icon [list \| APP IMAGE \| APP reset]` | Your own icon for companion, notes, timer, shortcuts, camera or ocr |
 | `mk device` | What this computer has and what MK tunes for it ([HARDWARE.md](HARDWARE.md)) |
 | `mk fingerprint [enroll [FINGER]\|list\|delete\|settings]` | Fingerprint enrollment for login and sudo |
 | `mk focus [DURATION] ["LABEL"]` | Start the focus timer in the background (`25`, `1:30`, `90s`) |
@@ -44,6 +45,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | :--- | :--- | :--- |
 | `show-shortcuts` | Super+/ | Shortcuts window |
 | `mk-companion [tasks \| note ID]` | Super+Shift+N | Notes, tasks, reminders, timer and Obsidian buttons |
+| `mk-notes [NOTE \| --daily \| --serve]` | Super+N | MK Notes |
 | `mk-timer [DURATION [LABEL]]` | via Companion | Focus timer; `mk-timer 25`, `mk-timer 1:30 "Reading"` start it in the background |
 | `mk-reminders [snooze ID SECONDS]` | timer | Fires due reminders and the morning brief |
 | `mk-power [status]` | service | Smart power profiles (laptops) |
@@ -65,8 +67,13 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `assets/icons/*.svg`, `assets/applications/*.desktop` | App icons and launchers (`@BIN@` becomes `~/.local/bin`) | `sync.sh` |
 | `assets/sound/MK Laptop Speakers.json` | EasyEffects output preset | `mk sound` |
 | `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` (`auto` or `#rrggbb`) | mk-indicator, mk-voice |
-| `config/theme.conf` | `ACCENT=` (`auto` or `#rrggbb`), `SYSTEM_ACCENT=` (on/off) | mk-indicator (`accent.js`), `mk accent` |
+| `config/theme.conf` | `ACCENT=` (`auto` or `#rrggbb`), `SYSTEM_ACCENT=` (on/off), `CURSOR=` (cursor theme) | mk-indicator (`accent.js`), `mk accent`, `sync.sh` |
+| `config/notes.conf` | `NOTES_DIR=`, `SYNC=` (on/off), `SYNC_PORT=`, `HISTORY=` (on/off) | `mk-notes` |
+| `config/browser/user.js` | Firefox prefs (`user_pref(...)`) | `sync.sh` (marked block in each Firefox / Zen profile's `user.js`) |
+| `assets/notes-web/` | The phone app (HTML, JS, manifest) | `mk-notes` sync server, `scripts/build-apk.sh` |
+| `android/` | Android WebView wrapper for the phone app | `scripts/build-apk.sh` |
 | `config/dock.conf` | `MAGNIFY=`, `MAGNIFY_SPREAD=`, `MAGNIFY_MS=` | mk-indicator (dock magnification) |
+| `~/.config/mk-workstation/timer.conf` | `SILENCE=`, `AMBIENT=`, `AMBIENT_IDLE=` (s), `AMBIENT_STYLE=` (random, bubbles, mystify, starfield, aurora) | `mk-timer` (written by its window) |
 | `config/power.conf` | `ON_AC=`, `ON_BATTERY=`, `LOW_BATTERY=`, `LOW_PERCENT=` | `mk-power` |
 | `config/effects.conf` | `HEAVY=` UUIDs, `AUTO_LITE_BELOW_GB=` | `sync.sh` |
 | `config/enabled-extensions.txt` | one UUID per line | `sync.sh` |

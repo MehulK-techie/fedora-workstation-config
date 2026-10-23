@@ -96,13 +96,14 @@ export default class MKIndicatorExtension extends Extension {
             this._startupId = Main.layoutManager.connect('startup-complete', () => {
                 Main.layoutManager.disconnect(this._startupId);
                 this._startupId = 0;
-                // Once every extension is up: fix the top-bar blur first, then
-                // greet, so nothing redraws underneath the welcome animation.
+                // Greet the moment extensions have stopped loading (usually
+                // right away); fix the top-bar blur only after the animation, so
+                // nothing redraws underneath it.
                 this._welcome?.whenSettled(() => {
-                    this._refreshBlur();
-                    this._greetId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 350, () => {
+                    this._welcome?.greet(false);
+                    this._greetId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3600, () => {
                         this._greetId = 0;
-                        this._welcome?.greet(false);
+                        this._refreshBlur();
                         return GLib.SOURCE_REMOVE;
                     });
                 });

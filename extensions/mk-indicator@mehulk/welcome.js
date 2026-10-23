@@ -175,7 +175,7 @@ export class EdgeLight {
         box.set_pivot_point(0.5, 0.5);
         box.set_scale(0.96, 0.96);
         box.ease({
-            opacity: 255, scale_x: 1, scale_y: 1, delay: 350, duration: 650,
+            opacity: 255, scale_x: 1, scale_y: 1, delay: 120, duration: 450,
             mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
             onComplete: () => box.ease({
                 opacity: 0, delay: Math.max(600, duration - 1300), duration: 700,
@@ -309,7 +309,7 @@ export class Welcome {
     // At login: wait until every enabled extension has finished loading and
     // nothing has changed for a moment, so the welcome plays on a settled,
     // fully drawn desktop instead of competing with extensions starting up.
-    whenSettled(callback, {quietMs = 700, maxMs = 12000} = {}) {
+    whenSettled(callback, {quietMs = 150, maxMs = 2500} = {}) {
         const pending = [ExtensionState.INITIALIZED, ExtensionState.ACTIVATING, ExtensionState.DOWNLOADING];
         const shell = new Gio.Settings({schema_id: 'org.gnome.shell'});
         const started = GLib.get_monotonic_time();
@@ -317,7 +317,7 @@ export class Welcome {
         this._stateId = Main.extensionManager.connect('extension-state-changed', () => {
             lastChange = GLib.get_monotonic_time();
         });
-        this._loginId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+        this._loginId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
             const now = GLib.get_monotonic_time();
             const busy = shell.get_strv('enabled-extensions').some(uuid => {
                 const ext = Main.extensionManager.lookup(uuid);

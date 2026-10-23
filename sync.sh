@@ -133,6 +133,8 @@ echo "[+] Syncing MK Workstation User Configurations..."
 BACKUP_DIR="$HOME/.config/mk-workstation/backups"
 mkdir -p "$BACKUP_DIR"
 dconf dump / > "$BACKUP_DIR/dconf-$(date +%Y%m%d-%H%M%S).ini"
+# The very first snapshot (your desktop before MK) is kept forever.
+[[ -s "$BACKUP_DIR/original-dconf.ini" ]] || dconf dump / > "$BACKUP_DIR/original-dconf.ini"
 # Keep the 5 newest snapshots
 find "$BACKUP_DIR" -name 'dconf-*.ini' -printf '%T@ %p\n' | sort -rn | tail -n +6 | cut -d' ' -f2- | xargs -r rm -f --
 echo "    [+] Settings snapshot saved (undo with: mk restore)"

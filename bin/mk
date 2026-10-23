@@ -151,6 +151,48 @@ case "${1:-help}" in
         "$HOME/.local/bin/show-shortcuts"
         ;;
 
+    uninstall)
+        # Remove everything MK added to your account. Settings snapshots in
+        # ~/.config/mk-workstation/backups are kept so you can still restore.
+        echo "This removes the MK tools, daily update check, login helper, mk-* shortcuts"
+        echo "and the MK top-bar extension from your account. Apps and system changes stay."
+        read -rp "Continue? [y/N]: " answer
+        [[ "$answer" =~ ^[yY] ]] || { echo "Nothing changed."; exit 0; }
+
+        systemctl --user disable --now mk-update-check.timer &>/dev/null || true
+        rm -f "$HOME/.config/systemd/user/mk-update-check.service" "$HOME/.config/systemd/user/mk-update-check.timer"
+        systemctl --user daemon-reload &>/dev/null || true
+        rm -f "$HOME/.config/autostart/mk-session.desktop"
+
+        MEDIA_KEYS="org.gnome.settings-daemon.plugins.media-keys"
+        kept=()
+        while IFS= read -r path; do
+            if [[ "$path" == */mk-*/ ]]; then
+                dconf reset -f "$path"
+            else
+                kept+=("'$path'")
+            fi
+        done < <(gsettings get "$MEDIA_KEYS" custom-keybindings | grep -oE "'[^']+'" | tr -d "'")
+        if (( ${#kept[@]} )); then
+            (IFS=,; gsettings set "$MEDIA_KEYS" custom-keybindings "[${kept[*]}]")
+        else
+            gsettings set "$MEDIA_KEYS" custom-keybindings "@as []"
+        fi
+
+        gnome-extensions disable mk-indicator@mehulk &>/dev/null || true
+        rm -rf "$HOME/.local/share/gnome-shell/extensions/mk-indicator@mehulk"
+        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad ocr-snip show-shortcuts \
+            camera-controls fix-alt-tab close-workspace-apps; do
+            rm -f "$HOME/.local/bin/$tool"
+        done
+        rm -f "$HOME/.config/mk-workstation/repo-path"
+
+        echo "✔ MK Workstation removed from your account."
+        echo "  To restore your desktop as it was before MK, run this and log out and back in:"
+        echo "    dconf reset -f / && dconf load / < ~/.config/mk-workstation/backups/original-dconf.ini"
+        echo "  System-wide parts (apps, repos, face unlock, dnf.conf) are covered in docs/GUIDE.md › Undo and uninstall."
+        ;;
+
     *)
         echo "MK Workstation CLI"
         echo "Usage: mk <command>"
@@ -165,5 +207,6 @@ case "${1:-help}" in
         echo "  doctor     Check system health: updates, codecs, extensions, face unlock"
         echo "  face       Set up face unlock (add --models N or --user NAME)"
         echo "  shortcuts  Open the interactive keyboard shortcuts cheat sheet"
+        echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"
         ;;
 esac

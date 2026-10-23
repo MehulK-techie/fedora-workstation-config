@@ -94,6 +94,10 @@ test with `journalctl --user -f -o cat /usr/bin/gnome-shell`.
 | :--- | :--- |
 | `extension.js` | Top-bar tag (follows `brand.conf` live), hides the dock in the overview, rebuilds Blur my Shell's panel blur after startup |
 | `dockGlow.js` | Per-app hover colour for dock icons: saturation-weighted hue histogram of the app icon, cached per app |
+| `welcome.js` | Edge light and greeting after login (waits for extensions to settle), Quick Settings menu toggle, optional notification edge light |
+| `timerPill.js` | Focus timer countdown in the top bar, from `~/.cache/mk-workstation/timer.json` |
+| `switcher.js` | Pop-in animation for Alt+Tab / Super+Tab |
+| `osdStack.js` | Keeps the workspace dots above the volume/brightness pop-up |
 | `dockMagnify.js` | macOS-style magnification: magnified icons are clones on the UI layer (Dash to Dock clips its own icons), cosine falloff across neighbours |
 | `stylesheet.css` | Alt+Tab, hover transitions, overview captions, workspace thumbnails |
 

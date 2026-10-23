@@ -25,6 +25,8 @@ Credit for everything in the last two groups belongs to its authors; see
 | Update everything | Repo, newly listed apps, settings, extensions, system and Flatpak updates | `mk update` | `bin/mk` |
 | Capture your changes | Apps you installed, extensions and settings saved into the repo | `mk save`, `mk export` | `bin/mk-apps`, `scripts/update-repo.sh` |
 | Undo | Restore the settings snapshot before the last sync; remove MK from your account | `mk restore`, `mk uninstall` | `bin/mk` |
+| Speaker tuning | EasyEffects profile for laptop speakers: high-pass, warmth, psychoacoustic bass, less harshness, slight widening, compressor, limiter | `mk sound on\|off` | `bin/mk-sound`, `assets/sound/` |
+| App icons | Launchers and icons for MK's apps; your own image with one command | `mk icon APP IMAGE` | `assets/icons`, `assets/applications` |
 | Effects profile | Heavy effects off on weak machines (auto) or on demand | `mk effects full\|lite\|auto` | `sync.sh`, `config/effects.conf` |
 | Smart power (laptops) | Performance on AC, balanced on battery, power-saver when low; only switches on changes | `mk power` | `bin/mk-power`, `config/power.conf` |
 | Face unlock wizard | Several face models in different light, IR-aware security, other users | `mk face` | `register-face.sh` |
@@ -53,10 +55,14 @@ Credit for everything in the last two groups belongs to its authors; see
 | App-coloured dock glow | A soft circular tint in each app's own colour on hover | `dockGlow.js` |
 | Timer countdown | Ring + time in the top bar while a focus timer runs; click to open | automatic |
 | Alt+Tab pop-in | The switcher grows and fades in instead of appearing at once | automatic |
+| Calendar styling | Round day cells with cyan hover glow, glowing today, softer other-month days | `stylesheet.css` |
+| Pop-ups that don't collide | Workspace dots glide above the volume/brightness pop-up when both show | `osdStack.js` |
 | Dock out of the way | Hidden in the overview so window titles stay readable | automatic |
 | Blur fix | Rebuilds the top-bar blur once after login so it always shows | automatic |
 | Top-bar tag | Your short tag (MK), following `mk rename` live | `config/brand.conf` |
 | Alt+Tab theme | Navy and cyan switcher, hover transitions, rounded overview captions | `stylesheet.css` |
+
+Outside the shell: **Files** gets matching cyan hover and selection (`config/gtk/files.css`, kept in a marked block of `~/.config/gtk-4.0/gtk.css`).
 
 ### Fixes MK applies to other people's code
 
@@ -115,6 +121,7 @@ Installed for your GNOME version and restored with MK's settings.
 | RPM Fusion, ffmpeg, VA-API drivers | RPM Fusion, FFmpeg, Mesa, Intel, NVIDIA | Full codecs and GPU video decoding |
 | Flatpak / Flathub | Flatpak, Flathub | Sandboxed apps |
 | espeak-ng, Piper, sox | espeak-ng, Rhasspy, SoX | The spoken greeting |
+| EasyEffects | Wellington Wallace and contributors | Speaker tuning profile |
 | fwupd | LVFS | Firmware update check (never flashes on its own) |
 
 ---
@@ -166,6 +173,8 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | `mk welcome on\|off\|test\|edit\|title\|greeting\|voice\|notify` | The welcome light and greeting |
 | `mk power [status\|on\|off]` | Smart power profiles |
 | `mk effects [full\|lite\|auto]` | Visual effects profile |
+| `mk sound on\|off\|status` | Laptop speaker tuning |
+| `mk icon APP IMAGE\|reset` · `mk icon list` | Your own app icons |
 | `mk rename "Name" TAG` | Rename it |
 | `mk uninstall` | Remove MK from your account |
 | `just setup \| sync \| face \| export \| update \| save \| check \| overview \| screenshots` | The same for contributors |

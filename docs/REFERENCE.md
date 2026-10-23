@@ -21,6 +21,8 @@ Every command, file and format. How the parts fit together is in
 | `mk remind "TEXT" WHEN` | Add a task with a reminder |
 | `mk list` | Print notes, tasks and reminders |
 | `mk welcome [on\|off\|test\|edit\|title T\|greeting "TEXT"\|voice on\|off\|install\|remove\|notify on\|off]` | Welcome light and spoken greeting after login |
+| `mk sound [on\|off\|status]` | Laptop speaker tuning with EasyEffects |
+| `mk icon [list \| APP IMAGE \| APP reset]` | Your own icon for companion, timer, shortcuts, camera or ocr |
 | `mk device` | What this computer has and what MK tunes for it ([HARDWARE.md](HARDWARE.md)) |
 | `mk fingerprint [enroll [FINGER]\|list\|delete\|settings]` | Fingerprint enrollment for login and sudo |
 | `mk focus [DURATION] ["LABEL"]` | Start the focus timer in the background (`25`, `1:30`, `90s`) |
@@ -45,6 +47,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `mk-reminders [snooze ID SECONDS]` | timer | Fires due reminders and the morning brief |
 | `mk-power [status]` | service | Smart power profiles (laptops) |
 | `mk-voice [say\|render\|install\|remove\|status]` | login | Spoken greeting (cached WAV) |
+| `mk-sound [on\|off\|status]` | login | Speaker tuning profile |
 | `ocr-snip` | Super+Shift+T | Copy text from a screen area |
 | `camera-controls` | Super+C | Webcam brightness, contrast, focus… |
 | `mk-doctor` | | Same as `mk doctor` |
@@ -57,6 +60,9 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | :--- | :--- | :--- |
 | `config/shortcuts.conf` | `group \| label \| target \| keys` (see below) | `sync.sh`, Shortcuts window |
 | `config/brand.conf` | `NAME=`, `SHORT=` | every MK window, top-bar tag, `mk` |
+| `config/gtk/files.css` | GTK 4 CSS scoped to `.nautilus-window` | `sync.sh` (marked block in `~/.config/gtk-4.0/gtk.css`) |
+| `assets/icons/*.svg`, `assets/applications/*.desktop` | App icons and launchers (`@BIN@` becomes `~/.local/bin`) | `sync.sh` |
+| `assets/sound/MK Laptop Speakers.json` | EasyEffects output preset | `mk sound` |
 | `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` | mk-indicator, mk-voice |
 | `config/dock.conf` | `MAGNIFY=`, `MAGNIFY_SPREAD=`, `MAGNIFY_MS=` | mk-indicator (dock magnification) |
 | `config/power.conf` | `ON_AC=`, `ON_BATTERY=`, `LOW_BATTERY=`, `LOW_PERCENT=` | `mk-power` |
@@ -91,6 +97,9 @@ empty means none. Group `-` applies but hides the line.
 | `~/.config/mk-workstation/brand.conf` | Your name for it | Yes: back to the default name |
 | `~/.config/mk-workstation/effects` | `full`, `lite` or `auto` | Yes: auto |
 | `~/.config/mk-workstation/timer.conf` | Focus timer preferences | Yes |
+| `~/.config/mk-workstation/icons/APP.svg\|png` | Your own app icons | Yes: back to MK's icons |
+| `~/.config/gtk-4.0/gtk.css` | The block between `>>> MK Workstation` and `<<< MK Workstation` is MK's | Only that block (`mk uninstall` removes it) |
+| `~/.config/autostart/mk-sound.desktop` | Starts speaker tuning at login | Yes: `mk sound off` |
 | `~/.config/mk-workstation/welcome.conf` | Your greeting and voice choices | Yes |
 | `~/.local/share/mk-workstation/voice/` | Natural voice (Piper + British "Alan" model, ~260 MB) | Yes: `mk welcome voice remove` |
 | `~/.cache/mk-workstation/timer.json` · `welcome.wav` | Timer state for the top bar · rendered greeting | Yes |

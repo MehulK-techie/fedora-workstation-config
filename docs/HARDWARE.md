@@ -62,11 +62,41 @@ the reader itself) and is never part of this repository.
 - **Lighter effects:** if unlocking or animations still stutter on an older
   machine, `mk effects lite`.
 
+## Speakers
+
+Laptops tuned by their maker (Bang & Olufsen on HP, Dolby or Waves on others)
+sound thinner on Linux because that sound processing only exists in the
+Windows driver. `mk sound on` gives the same kind of processing with
+EasyEffects:
+
+| Stage | Why |
+| :--- | :--- |
+| High-pass at 100 Hz | Small drivers can't play lower; trying makes them distort |
+| +4 dB at 160 Hz, +2 dB at 250 Hz | Warmth and body |
+| −2 dB at 500 Hz | Less "boxy" |
+| −1 to −1.5 dB at 2.5–4 kHz | Less harsh at high volume |
+| High shelf +2 dB from 9 kHz | Air and detail |
+| Bass enhancer | Adds harmonics so you hear bass the drivers can't move |
+| Slight stereo widening | Wider image from speakers that sit close together |
+| Compressor, limiter | Louder without clipping |
+
+It starts with your session; adjust anything live in the EasyEffects app, or
+`mk sound off` to go back. Keep the system volume at or under 100%: the profile
+already adds loudness.
+
+**Advanced, HP ENVY x360 13-ay0xxx (Realtek ALC245, `103c:876e`):** Linux
+drives only one speaker pin (`0x17`); the firmware marks pin `0x14` as unused.
+On some HP B&O models the second (bass) pair sits on such a pin and needs a
+codec pin override (for example with `hdajackretask` from `alsa-tools`) or a
+kernel quirk. MK doesn't do this automatically: it's model-specific, needs
+root, and a wrong override can mute the speakers. If you try it, note what
+worked in an issue so it can become a tested option.
+
 ## Tested machines
 
 | Machine | Notes |
 | :--- | :--- |
-| **HP ENVY x360 Convertible 13-ay0xxx** (Ryzen 5 4500U, Radeon Vega 6, 8 GB, Synaptics 06cb:00e7 reader, ELAN touchscreen + stylus, RGB webcam) | The author's daily machine. Everything works, with three model quirks: the firmware has no CPPC, so the CPU uses `acpi-cpufreq` (not `amd-pstate`) and smart power profiles do the tuning; the accelerometer isn't exposed to Linux, so the screen doesn't auto-rotate; the webcam is RGB, so face unlock wants good light. |
+| **HP ENVY x360 Convertible 13-ay0xxx** (Ryzen 5 4500U, Radeon Vega 6, 8 GB, Synaptics 06cb:00e7 reader, ELAN touchscreen + stylus, RGB webcam) | The author's daily machine. Everything works, with three model quirks: the firmware has no CPPC, so the CPU uses `acpi-cpufreq` (not `amd-pstate`) and smart power profiles do the tuning; the accelerometer isn't exposed to Linux, so the screen doesn't auto-rotate; the webcam is RGB, so face unlock wants good light. Speakers: `mk sound on` (see above). |
 
 Tried it on another machine? Open an issue or pull request with the output of
 `mk device` and anything that didn't work, and it'll be added here.

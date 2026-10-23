@@ -24,6 +24,10 @@
 - **Focus timer on the desktop:** top-bar countdown, screensaver-style focus view when idle, fireworks.
 - **Wobbly windows**, Alt+Tab pop-in animation, Alt+` for windows of one app; dock icons follow the dock while it slides.
 - **docs/FEATURES.md:** everything MK built vs what it configures or installs.
+- **Speaker tuning** (`mk sound`): EasyEffects profile replacing the Windows-only vendor DSP (B&O on HP).
+- **App icons and launchers** for MK's apps, with `mk icon` for your own images.
+- **Calendar and Files styling** matching the workstation; workspace dots no longer overlap the volume pop-up.
+- Fixed: `sync.sh` aborting when `bin/` contained a `__pycache__` folder (found by a fresh-account test).
 - **docs/ARCHITECTURE.md** (how it works, how to extend it) and **docs/REFERENCE.md** (every command, file, format, timer).
 - **Rename it:** `mk rename "Name" TAG` or Companion › Rename; the top-bar tag follows live. Forks set the default in `config/brand.conf`.
 - **docs/CUSTOMIZING.md:** how to make it yours or fork it without editing scripts.

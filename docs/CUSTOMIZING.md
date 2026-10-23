@@ -25,6 +25,11 @@ There are two ways to customize:
 | Power profiles (laptops) | `~/.config/mk-workstation/power.conf`, or `mk power off` | `config/power.conf` |
 | Heavy effects on or off | `mk effects full`, `lite` or `auto` | `config/effects.conf` (which effects count as heavy, and the auto threshold) |
 | Focus timer silencing notifications | The switch in the timer | default in `bin/mk-timer` (`SILENCE`) |
+| App icons | `mk icon companion ~/Pictures/me.png` (SVG or PNG) | `assets/icons/` |
+| Files look | — | `config/gtk/files.css` |
+| Calendar look | — | `extensions/mk-indicator@mehulk/stylesheet.css` (`.calendar` rules) |
+| Speaker sound | Tweak live in the EasyEffects app, `mk sound off` to stop | `assets/sound/MK Laptop Speakers.json` |
+| Welcome greeting | Quick Settings › Welcome light, Companion › Welcome greeting, `mk welcome` | `config/welcome.conf` |
 | Dock magnification | `~/.config/mk-workstation/dock.conf` (`MAGNIFY=1` turns it off) | `config/dock.conf` |
 | Dock hover colours | Automatic from each app's icon | `extensions/mk-indicator@mehulk/dockGlow.js` (glow strength in `_hover`) |
 | Alt+Tab, dock and hover colours | — | `extensions/mk-indicator@mehulk/stylesheet.css` |

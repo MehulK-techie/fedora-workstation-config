@@ -15,7 +15,7 @@
 
 <sub>The overview on an HP ENVY x360 13 running MK Workstation. Wallpaper: Fedora 44 default (CC BY-SA 4.0).</sub>
 
-**New here? [The 12-slide overview (PDF)](docs/MK-Workstation-Overview.pdf) explains stock Fedora and what this adds.**
+**New here? [The 14-slide overview (PDF)](docs/MK-Workstation-Overview.pdf) explains stock Fedora and what this adds.**
 
 </div>
 
@@ -28,6 +28,9 @@
 | <img src="docs/assets/screens/shortcuts-window.jpg" width="420"><br><sub>Super+/ · every shortcut, live, editable</sub> | <img src="docs/assets/screens/companion-tasks.jpg" width="420"><br><sub>Super+Shift+N · notes, tasks, reminders</sub> |
 | <img src="docs/assets/screens/focus-timer.jpg" width="420"><br><sub>Focus timer</sub> | <img src="docs/assets/screens/timer-celebration.jpg" width="420"><br><sub>…and the celebration when time is up</sub> |
 | <img src="docs/assets/screens/snap-layouts.jpg" width="420"><br><sub>Super+Z · snap layouts</sub> | <img src="docs/assets/screens/mk-device.jpg" width="420"><br><sub>mk device · what MK found on this laptop</sub> |
+
+| <img src="docs/assets/screens/welcome-light.jpg" width="420"><br><sub>Welcome after login</sub> | <img src="docs/assets/screens/focus-screen.jpg" width="420"><br><sub>Focus screen when you step away</sub> |
+| <img src="docs/assets/screens/calendar.jpg" width="420"><br><sub>Calendar, with the timer countdown in the top bar</sub> | <img src="docs/assets/screens/files.jpg" width="420"><br><sub>Files with cyan hover and selection</sub> |
 
 <p align="center"><img src="docs/assets/screens/dock-magnify.jpg" width="640"><br><sub>Dock magnification and app-coloured glow</sub></p>
 
@@ -77,10 +80,19 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
 - System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
 
+**Lively, not loud**
+- **Welcome after login:** a neon line races around the screen edges and "Welcome back home, sir." fades in once every extension has loaded; sir, ma'am, your name or your own words; optional calm British voice (Quick Settings › Welcome light, `mk welcome`)
+- **Focus timer on the desktop:** a countdown ring in the top bar, a screensaver-style focus screen when you step away, fireworks when you're done
+- Wobbly windows while dragging, Alt+Tab that pops in, Alt+` for windows of one app
+- Dock magnification and a soft glow in each app's colour; calendar and Files with matching cyan hover and selection
+- Workspace dots step aside for the volume pop-up instead of overlapping it
+- MK's own apps have their own icons; put in yours with `mk icon companion ~/me.png`
+
 **Made for your hardware** ([details](docs/HARDWARE.md))
 - Detects the machine and tunes for it: fingerprint reader, IR or regular webcam, Intel/AMD/NVIDIA video, 2-in-1 sensors, battery
 - **Fingerprint login** for login and sudo when a reader exists; `mk fingerprint` to enroll
 - Smooth login: the login screen uses your display layout, so there's no flicker between login and desktop
+- **Speaker tuning:** laptop speakers lose the maker's Windows sound processing (Bang & Olufsen, Dolby); `mk sound on` adds an EQ, bass and limiter profile
 - `mk device` shows what was found and what MK does about it
 
 **Face unlock** ([details](docs/FACE-UNLOCK.md))
@@ -165,6 +177,9 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk device` | | What this computer has and what MK tunes for it |
 | `mk fingerprint` | | Enroll a finger for login and sudo (`list`, `delete`) |
 | `mk effects full\|lite\|auto` | | Visual effects profile; lite keeps older machines smooth |
+| `mk welcome` | | Welcome light and greeting: on, off, test, edit, title, voice |
+| `mk sound on\|off` | | Laptop speaker tuning (EasyEffects profile) |
+| `mk icon APP IMAGE` | | Use your own image as an MK app icon |
 | `mk rename "Name" TAG` | | Rename MK's windows, notifications and top-bar tag |
 | `mk uninstall` | | Remove MK's tools, shortcuts and helpers from your account |
 | | `just setup` | Full system setup (`sudo ./setup.sh`) |
@@ -219,7 +234,9 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 ├── sync-shortcuts.sh     Compatibility shim for older installs; runs sync.sh
 ├── justfile              just setup | sync | face | export | update | check
 ├── apps/                 dnf-packages.txt, flatpaks.txt
-├── bin/                  mk, mk-apps, mk-doctor, ocr-snip, show-shortcuts, mk-companion, mk-timer, mk-reminders, camera-controls
+├── bin/                  mk, mk-apps, mk-doctor, ocr-snip, show-shortcuts, mk-companion, mk-timer, mk-reminders,
+│                         mk-power, mk-voice, mk-sound, camera-controls
+├── assets/               App icons and launchers, speaker profile
 ├── lib/mkworkstation/    Shared Python: branding, shortcut catalogue, notes/tasks/reminders
 ├── config/
 │   ├── shortcuts.conf           Every keyboard shortcut (group | label | target | keys)
@@ -232,7 +249,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 ├── extensions/           mk-indicator (ours: top-bar tag, dock glow, Alt+Tab theme) + WACK Shell (GPL, no GNOME 50 build online)
 ├── scripts/              update-repo.sh (mk export), lint.sh
 ├── docs/                 GUIDE, HARDWARE, CUSTOMIZING, ARCHITECTURE, REFERENCE, FACE-UNLOCK, EXTENSIONS, BUGS
-│   ├── MK-Workstation-Overview.pdf   12-slide overview; overview/ rebuilds it
+│   ├── MK-Workstation-Overview.pdf   14-slide overview; overview/ rebuilds it
 │   └── assets/screens/           Screenshots (Fedora wallpaper)
 └── .github/              ShellCheck CI, issue and pull request templates
 ```
@@ -244,7 +261,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 | [docs/GUIDE.md](docs/GUIDE.md) | Installing and using it: beginners, everyday users, and contributors. Includes undo and troubleshooting. |
 | [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md) | Making it yours or forking it: rename, shortcuts, apps, extensions, colours, without touching the scripts |
 | [docs/FEATURES.md](docs/FEATURES.md) | Every feature, app, command and shortcut, split into what MK built and what it configures or installs from others |
-| [docs/MK-Workstation-Overview.pdf](docs/MK-Workstation-Overview.pdf) | 12 slides to show someone: stock Fedora, what MK adds, screenshots (rebuild: `just overview`) |
+| [docs/MK-Workstation-Overview.pdf](docs/MK-Workstation-Overview.pdf) | 14 slides to show someone: stock Fedora, what MK adds, screenshots (rebuild: `just overview`) |
 | [docs/HARDWARE.md](docs/HARDWARE.md) | What gets detected and tuned: fingerprint, cameras, GPUs, 2-in-1s, power, login screen; tested machines |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit: setup, sync, the shared library, the apps, the shell extension, and how to add things |
 | [docs/REFERENCE.md](docs/REFERENCE.md) | Every `mk` command, tool, file, format, timer and path |

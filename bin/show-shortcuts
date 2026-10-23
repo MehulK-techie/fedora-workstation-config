@@ -439,7 +439,7 @@ class ShortcutsWindow(Adw.ApplicationWindow):
         GLib.idle_add(lambda: adj.set_value(scroll) and False)
 
     def _status_icon(self, state, note):
-        icon = {"ok": "emblem-ok-symbolic", "warn": "dialog-warning-symbolic",
+        icon = {"ok": "object-select-symbolic", "warn": "dialog-warning-symbolic",
                 "error": "dialog-error-symbolic", "off": "media-playback-pause-symbolic"}[state]
         image = Gtk.Image(icon_name=icon, tooltip_text=note)
         image.add_css_class(f"mk-{state}")

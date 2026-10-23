@@ -284,7 +284,7 @@ class CompanionWindow(Adw.ApplicationWindow):
         launchers = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER, margin_top=8, margin_bottom=12)
         for icon, label, tooltip, cb in (
             ("alarm-symbolic", "Focus timer", "Countdown with a celebration", self.open_timer),
-            ("emblem-documents-symbolic", "Obsidian", "Full notes app (Super+N)", self.open_obsidian),
+            ("accessories-text-editor-symbolic", "Obsidian", "Full notes app (Super+N)", self.open_obsidian),
         ):
             content = Adw.ButtonContent(icon_name=icon, label=label)
             button = Gtk.Button(child=content, tooltip_text=tooltip)

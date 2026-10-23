@@ -1,4 +1,5 @@
 # dconf path: /org/gnome/shell/extensions/touchpad-gesture-customization/
 [/]
+alttab-all-workspaces=true
 pinch-3-finger-gesture='VOLUME_CONTROL'
 pinch-4-finger-gesture='SHOW_DESKTOP'

@@ -255,6 +255,10 @@ gsettings set org.gnome.desktop.wm.keybindings switch-windows "['<Alt>Tab']"
 gsettings set org.gnome.desktop.wm.keybindings switch-windows-backward "['<Shift><Alt>Tab']"
 gsettings set org.gnome.shell.app-switcher current-workspace-only false
 gsettings set org.gnome.shell.window-switcher current-workspace-only false
+# Touchpad Gesture Customization rewrites the line above every time it starts
+# (login, unlock) from its own option, which defaults to current workspace only.
+ext_set touchpad-gesture-customization@coooolapps.com \
+    org.gnome.shell.extensions.touchpad-gesture-customization alttab-all-workspaces true
 
 # Windows-style split screen (Tiling Assistant): Super+arrows snap halves, and
 # Super+Left then Super+Up makes a quarter, as on Windows. After snapping, Snap

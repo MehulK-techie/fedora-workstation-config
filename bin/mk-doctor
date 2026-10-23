@@ -72,6 +72,11 @@ while IFS= read -r uuid; do
 done < <(gnome-extensions list --enabled 2>/dev/null)
 
 section "Keyboard shortcuts"
+if [[ "$(gsettings get org.gnome.shell.window-switcher current-workspace-only 2>/dev/null)" == "false" ]]; then
+    ok "Alt+Tab shows windows from all workspaces"
+else
+    warn "Alt+Tab only shows the current workspace" "Run: mk sync"
+fi
 # Every binding across GNOME's shortcut lists, so two actions on one key show up.
 all_bindings() {
     local schema key val path

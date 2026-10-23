@@ -154,7 +154,7 @@ fi
 if grep -qiw nvidia <<< "$GPU_INFO"; then
     ensure_pkgs libva-nvidia-driver
     if ! rpm -q akmod-nvidia &>/dev/null; then
-        WARNINGS+=("NVIDIA GPU found: the proprietary driver isn't installed automatically (Secure Boot needs key enrollment); see GUIDE.md")
+        WARNINGS+=("NVIDIA GPU found: the proprietary driver isn't installed automatically (Secure Boot needs key enrollment); see docs/GUIDE.md")
     fi
 fi
 

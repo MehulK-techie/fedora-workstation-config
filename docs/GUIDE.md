@@ -109,15 +109,16 @@ Log out and back in afterwards. Run `./setup.sh --help` for the options.
 
 | Change | Details |
 | :--- | :--- |
-| Command-line tools | Copies `bin/*` to `~/.local/bin`: `mk`, `ocr-snip`, `show-shortcuts`, `mk-scratchpad`, `camera-controls`. |
-| Extensions | Enables 8 extensions (see [Extensions_guide.md](Extensions_guide.md)) plus the small **MK** watermark in the top bar (`mk-indicator`). Any that are missing are installed from the repo's `extensions/` folder. Extensions you already enabled stay enabled. |
+| Command-line tools | Copies `bin/*` to `~/.local/bin`: `mk`, `mk-doctor`, `ocr-snip`, `show-shortcuts`, `mk-scratchpad`, `camera-controls`. |
+| Update check | A daily, low-priority background check (systemd user timer) that shows a notification when a new version of this repo is available. |
+| Extensions | Installs and enables the 10 extensions in `config/enabled-extensions.txt` plus the small **MK** mark in the top bar, then restores their saved settings from `config/extension-settings/`. Missing extensions are downloaded from extensions.gnome.org for your GNOME version. Extensions you already enabled stay enabled. See [EXTENSIONS.md](EXTENSIONS.md). |
 | Window shortcuts | Alt+Tab switches windows across all workspaces, Super+Tab switches apps, plus snap, maximize and workspace keys. Ctrl+Alt+arrows are left free for Zen Browser. |
 | Screenshots and power | `Print`, `Alt+Print`, `Shift+Print` / `Super+Shift+S`; Super+Backspace or Super+Shift+X opens the shut-down dialog. |
-| Look and feel | Blur on the top bar (off in the overview and lock screen), fractional scaling support, rounded dialogs (`~/.config/gnome-shell/gnome-shell.css`). |
+| Look and feel | Blur on the top bar (off in the overview and lock screen), fractional scaling support, rounded dialogs (`~/.config/gnome-shell/gnome-shell.css`), and 20 s instead of 5 s before GNOME calls a busy app "not responding". |
 | Calendar | Hides week numbers and **clears world clocks and weather locations** from the top-bar calendar. |
 | Custom shortcuts | Adds five shortcuts named `mk-…`. Your own custom shortcuts are kept. |
 
-The full shortcut list is in the [README](README.md#keyboard-shortcuts), and on your screen with **Super + /**.
+The full shortcut list is in the [README](../README.md#keyboard-shortcuts), and on your screen with **Super + /**.
 
 ### Run only part of it
 
@@ -125,7 +126,8 @@ The full shortcut list is in the [README](README.md#keyboard-shortcuts), and on 
 | :--- | :--- |
 | Only the desktop settings, no system changes | `./sync.sh` (no sudo) |
 | Everything except face unlock | `sudo ./setup.sh --no-face` |
-| Only face unlock (Howdy already installed) | `sudo ./register-face.sh` |
+| Only face unlock (Howdy already installed) | `mk face` |
+| Check that everything is healthy | `mk doctor` |
 
 ### Choose your apps
 
@@ -135,8 +137,11 @@ Edit `apps/dnf-packages.txt` (Fedora packages) or `apps/flatpaks.txt` (Flathub a
 
 ```bash
 mk update      # pulls the latest version and re-applies desktop settings
-mk check       # just tells you whether an update is available
+mk doctor      # health check: updates, codecs, GPU video, extensions, face unlock
+mk export      # saves your current extensions and settings into the repo
 ```
+
+A background check also notifies you once a day when a new version is available.
 
 All scripts are safe to run again: re-running never duplicates lines or settings.
 
@@ -148,7 +153,7 @@ From the repo folder you can use short commands instead of script names:
 | :--- | :--- |
 | `just setup` (or `just setup --no-face`) | `sudo ./setup.sh` |
 | `just sync` | `./sync.sh` |
-| `just face` | `sudo ./register-face.sh` |
+| `just face` | `mk face` |
 | `just export` | `mk export` |
 | `just update` | pull the latest version and re-apply settings |
 | `just check` | lint every script |
@@ -163,12 +168,14 @@ From the repo folder you can use short commands instead of script names:
 | :--- | :--- |
 | `setup.sh` | System provisioning (root). Ends by running `sync.sh` as the desktop user. |
 | `sync.sh` | **The only place desktop settings are defined.** Runs as your user. |
-| `register-face.sh` | Howdy enrollment: camera detection, PAM setup. |
+| `register-face.sh` | Face unlock wizard: camera detection, tuning, multi-model enrollment, PAM. |
 | `sync-shortcuts.sh` | Compatibility shim that runs `sync.sh`. |
-| `bin/` | Desktop tools copied to `~/.local/bin`. |
+| `bin/` | Desktop tools copied to `~/.local/bin`, including `mk` and `mk-doctor`. |
 | `apps/` | Package and Flatpak lists read by `setup.sh`. |
-| `extensions/` | Bundled extension copies, used only when an extension isn't installed. Includes this project's own `mk-indicator@mehulk`. |
-| `config/` | Snapshots of GNOME settings written by `mk export`, for reference. No script applies them. |
+| `extensions/` | This project's own `mk-indicator@mehulk`, plus offline copies used only when extensions.gnome.org can't provide a build. |
+| `config/enabled-extensions.txt`, `config/extension-settings/` | Which extensions to enable and their saved settings. Written by `mk export`, applied by `sync.sh`. |
+| `config/*.dconf` | Full GNOME settings snapshots written by `mk export`, for reference. No script applies them. |
+| `docs/` | This guide, [FACE-UNLOCK.md](FACE-UNLOCK.md), [EXTENSIONS.md](EXTENSIONS.md), [BUGS.md](BUGS.md). |
 | `scripts/update-repo.sh` | The engine behind `mk export`. |
 | `scripts/lint.sh` | `bash -n` + ShellCheck + Python syntax check for every script; used by `just check` and CI. |
 | `justfile` | Task shortcuts (`just setup`, `just check`, …). |
@@ -178,7 +185,7 @@ From the repo folder you can use short commands instead of script names:
 
 1. Fork the repo on GitHub and clone your fork.
 2. Change what you like:
-   - **Extensions:** edit the `ACTIVE_EXTENSIONS` list in `sync.sh`.
+   - **Extensions:** enable and tune them in Extension Manager, then run `mk export`. Or edit `config/enabled-extensions.txt` directly. Details in [EXTENSIONS.md](EXTENSIONS.md).
    - **Shortcuts:** add an `add_shortcut <slot> "<name>" "<command>" "<keys>"` line in `sync.sh`. Slots become `mk-<slot>`.
    - **Any GNOME setting:** add a `gsettings set …` line to the matching section of `sync.sh`. For keys that belong to an extension, use `ext_set <uuid> <schema> <key> <value>`.
 3. Run `./sync.sh` to apply, and `mk export` to snapshot your live settings into `config/`.
@@ -207,29 +214,9 @@ Never commit browser profile secrets (`logins.json`, `key4.db`, `cert9.db`, cook
 
 ## Face unlock
 
-Face unlock uses [Howdy](https://github.com/boltgolt/howdy). It runs entirely on your computer; nothing is uploaded.
+Run `mk face` (or `sudo ./register-face.sh`) and follow the prompts. The wizard picks the best camera, tunes Howdy for it, and records up to three face models in different lighting so unlock keeps working in a dim room or by a window. Other people can enroll with `mk face --user NAME`. Your password always keeps working.
 
-```bash
-cd ~/fedora-workstation-config
-sudo ./register-face.sh
-```
-
-What happens:
-
-1. The script lists your cameras. It prefers an **IR camera** (the kind used by Windows Hello). If you have several, it asks you to pick one by number.
-2. You look at the camera while Howdy records your face.
-3. Face unlock is added to the login screen and to `sudo`. Your password keeps working as a fallback.
-4. A test window opens. Close it with `Ctrl + C` in the Terminal.
-
-> **No IR camera?** The script still works with a normal webcam, but warns you: without IR, a photo of your face may be enough to unlock. Keep a strong password.
-
-Useful commands:
-
-```bash
-sudo howdy -U "$USER" add      # add another face model (glasses, different lighting)
-sudo howdy -U "$USER" list     # list your face models
-sudo howdy disable 1           # pause face unlock (use 0 to turn it back on)
-```
+Everything else, including multiple faces, lighting, security and troubleshooting, is in [FACE-UNLOCK.md](FACE-UNLOCK.md).
 
 ---
 
@@ -265,10 +252,12 @@ gsettings reset-recursively org.gnome.mutter.keybindings
 
 **Remove the MK top-bar watermark:** switch off *MK Workstation Indicator* in Extension Manager.
 
+**Turn off the daily update check:** `systemctl --user disable --now mk-update-check.timer`
+
 **Remove the desktop tools:**
 
 ```bash
-rm -f ~/.local/bin/{mk,ocr-snip,show-shortcuts,mk-scratchpad,camera-controls,close-workspace-apps,fix-alt-tab}
+rm -f ~/.local/bin/{mk,mk-doctor,ocr-snip,show-shortcuts,mk-scratchpad,camera-controls,close-workspace-apps,fix-alt-tab}
 rm -rf ~/.config/mk-workstation
 ```
 
@@ -280,6 +269,7 @@ Installed apps and repositories stay. Remove them with `sudo dnf remove <package
 
 | Message or problem | What to do |
 | :--- | :--- |
+| Not sure what's wrong | Run `mk doctor`. It checks the common problems and prints a fix for each. |
 | Anything went wrong during setup | Read `/var/log/mk-workstation-setup.log`. It has the full output of every run. |
 | `setup.sh requires root privileges` | Run it with `sudo ./setup.sh`. |
 | `sync.sh … Do NOT run with sudo` | Run `./sync.sh` without `sudo`. |
@@ -292,8 +282,8 @@ Installed apps and repositories stay. Remove them with `sudo dnf remove <package
 | `DNF package not installed: …` / `Flatpak failed to install: …` | That app isn't available for your system. Remove it from the list in `apps/`, or install an alternative. |
 | `Skipped … (… not installed or too old)` | That extension isn't installed, so its tweak was skipped. Install it with Extension Manager and run `./sync.sh` again. |
 | Extensions don't appear | Log out and back in. GNOME loads new extensions only at login. |
-| An extension shows as "outdated" | Its bundled copy doesn't support your GNOME version. Update it from Extension Manager. |
+| An extension shows as "outdated" or ERROR | It doesn't support your GNOME version yet. Update it in Extension Manager or switch it off; `mk doctor` lists them. |
 | OCR shortcut does nothing | Run `ocr-snip` in a Terminal to see the error. It needs `tesseract`, `zenity` and `wl-clipboard` (all in `apps/dnf-packages.txt`). |
 | `mk: command not found` | Open a new Terminal. If it persists, run `./sync.sh` from the repo folder. |
-| Face unlock stopped working after a Fedora upgrade | Run `sudo ./register-face.sh` again. It's safe to repeat. |
+| Face unlock problems | See [FACE-UNLOCK.md › Troubleshooting](FACE-UNLOCK.md#troubleshooting). |
 | Can't log in at all | Your password always works. If the login screen itself is broken, press `Ctrl+Alt+F3`, log in with your username and password, and run `sudo sed -i '/pam_howdy\.so/d' /etc/pam.d/gdm-password`. Then reboot. |

@@ -4,7 +4,7 @@
 Zero-touch IaC suite that turns stock Fedora Workstation (GNOME, Wayland) into the MK Workstation.
 Key files: setup.sh (root installer; runs sync.sh as the user), sync.sh (single source of all GNOME settings),
 register-face.sh (Howdy enrollment), scripts/update-repo.sh (`mk export`: dumps settings to config/),
-extensions/mk-indicator@mehulk (top-bar watermark). User-facing docs: README.md, GUIDE.md.
+extensions/mk-indicator@mehulk (top-bar watermark). User-facing docs: README.md, docs/ (GUIDE, FACE-UNLOCK, EXTENSIONS, BUGS).
 
 ## Rules
 - Never run sudo, setup.sh, register-face.sh, or anything touching /etc. I run those myself.

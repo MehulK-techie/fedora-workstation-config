@@ -114,6 +114,14 @@ remove_legacy_shortcuts() {
 
 echo "[+] Syncing MK Workstation User Configurations..."
 
+# Snapshot every desktop setting first, so `mk restore` can undo this run.
+BACKUP_DIR="$HOME/.config/mk-workstation/backups"
+mkdir -p "$BACKUP_DIR"
+dconf dump / > "$BACKUP_DIR/dconf-$(date +%Y%m%d-%H%M%S).ini"
+# Keep the 5 newest snapshots
+find "$BACKUP_DIR" -name 'dconf-*.ini' -printf '%T@ %p\n' | sort -rn | tail -n +6 | cut -d' ' -f2- | xargs -r rm -f --
+echo "    [+] Settings snapshot saved (undo with: mk restore)"
+
 # 1. Deploy local CLI tools and remember where the repo lives (used by `mk`)
 mkdir -p "$HOME/.local/bin" "$HOME/.config/mk-workstation"
 cp -f "$SCRIPT_DIR/bin/"* "$HOME/.local/bin/"

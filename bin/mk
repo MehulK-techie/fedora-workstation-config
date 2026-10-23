@@ -51,6 +51,23 @@ case "${1:-help}" in
         "$REPO_DIR/scripts/update-repo.sh"
         ;;
 
+    restore)
+        # Put back the desktop settings saved just before the last `mk sync`.
+        BACKUP_DIR="$HOME/.config/mk-workstation/backups"
+        snapshot="${2:-$(find "$BACKUP_DIR" -name 'dconf-*.ini' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n 1 | cut -d' ' -f2- || true)}"
+        if [[ -z "$snapshot" || ! -s "$snapshot" ]] || ! grep -q '^\[' "$snapshot"; then
+            echo "[-] No usable settings snapshot found in $BACKUP_DIR." >&2
+            exit 1
+        fi
+        echo "This replaces ALL your GNOME settings with the snapshot:"
+        echo "    $snapshot"
+        read -rp "Continue? [y/N]: " answer
+        [[ "$answer" =~ ^[yY] ]] || { echo "Nothing changed."; exit 0; }
+        dconf reset -f /
+        dconf load / < "$snapshot"
+        echo "✔ Settings restored. Log out and back in to reload extensions."
+        ;;
+
     doctor)
         "$HOME/.local/bin/mk-doctor"
         ;;
@@ -73,6 +90,7 @@ case "${1:-help}" in
         echo "  check      Show a notification if updates are available"
         echo "  sync       Re-apply MK desktop settings (shortcuts, extensions, tweaks)"
         echo "  export     Save this machine's GNOME settings into the repo (for your fork)"
+        echo "  restore    Undo the last sync: restore the settings snapshot it saved"
         echo "  doctor     Check system health: updates, codecs, extensions, face unlock"
         echo "  face       Set up face unlock (add --models N or --user NAME)"
         echo "  shortcuts  Open the interactive keyboard shortcuts cheat sheet"

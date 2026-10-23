@@ -161,6 +161,42 @@ case "${1:-help}" in
         "$HOME/.local/bin/show-shortcuts"
         ;;
 
+    fingerprint)
+        # mk fingerprint [enroll [FINGER] | list | delete | settings]
+        shift
+        if ! command -v fprintd-enroll &> /dev/null; then
+            echo "[-] fprintd isn't installed. Run: sudo dnf install fprintd fprintd-pam" >&2
+            exit 1
+        fi
+        case "${1:-enroll}" in
+            enroll)
+                finger="${2:-right-index-finger}"
+                echo "Enrolling $finger. Lift and touch the sensor each time it asks (about 8-12 times),"
+                echo "moving your finger slightly so the whole fingertip gets recorded."
+                fprintd-enroll -f "$finger" "$USER"
+                if ! authselect current 2> /dev/null | grep -q with-fingerprint; then
+                    echo "[*] Fingerprint login is switched off system-wide. Turn it on with: sudo ./setup.sh"
+                fi
+                echo "✔ Done. Add another finger with: mk fingerprint enroll left-index-finger"
+                echo "  Fingers: left-/right- thumb, index-finger, middle-finger, ring-finger, little-finger"
+                ;;
+            list) fprintd-list "$USER" ;;
+            delete)
+                read -rp "Delete ALL your enrolled fingerprints? [y/N]: " answer
+                [[ "$answer" =~ ^[yY] ]] && fprintd-delete "$USER"
+                ;;
+            settings) gnome-control-center users ;;
+            *)
+                echo "Usage: mk fingerprint [enroll [FINGER] | list | delete | settings]" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+
+    device)
+        PYTHONPATH="$HOME/.local/share/mk-workstation/lib" python3 -m mkworkstation device
+        ;;
+
     note|task|list)
         # Quick capture into the Companion: mk note "idea" · mk task "pay rent" 18:00
         PYTHONPATH="$HOME/.local/share/mk-workstation/lib" python3 -m mkworkstation "$@"
@@ -311,6 +347,8 @@ case "${1:-help}" in
         echo "  task       Add a task: mk task \"pay rent\" [when]   (when: 30m, 2h, 18:00, tomorrow 9:00)"
         echo "  remind     Same as task, with a reminder: mk remind \"stretch\" 45m"
         echo "  list       Show notes, tasks and their reminders"
+        echo "  device     What this computer has, and what MK tunes for it"
+        echo "  fingerprint  Enroll a finger for login and sudo (list, delete, settings)"
         echo "  focus      Start the focus timer: mk focus 25 \"Writing\" (also 1:30, 90s)"
         echo "  power      Smart power profiles on laptops: status, on, off"
         echo "  effects    Visual effects: full, lite (smooth on older machines) or auto"

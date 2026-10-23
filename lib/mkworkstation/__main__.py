@@ -5,6 +5,7 @@
   note TEXT [WHEN]          add a Companion note (first line is the title)
   task TEXT [WHEN]          add a Companion task
   list                      print notes, tasks and reminders
+  device                    what this computer has and what MK does about it
 WHEN: 30m, 2h, 1h30m, 18:00, 6pm, tomorrow, 'tomorrow 9:00'
 """
 import sys
@@ -53,6 +54,9 @@ if __name__ == "__main__":
             _add(command + "s", args)
         elif command == "list":
             _list()
+        elif command == "device":
+            from mkworkstation import device
+            print(device.report())
         else:
             print(__doc__.strip(), file=sys.stderr)
             sys.exit(2)

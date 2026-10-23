@@ -175,6 +175,40 @@ if (( INSTALL_FACE )) && command -v getenforce &>/dev/null && [[ "$(getenforce)"
     setsebool -P authlogin_camera 1 || WARNINGS+=("Could not set SELinux boolean authlogin_camera")
 fi
 
+# 7b. Hardware this computer actually has (detected, so any laptop gets what it needs)
+echo "==> Detecting hardware..."
+# Fingerprint reader: allow fingerprint for login and sudo. authselect writes
+# the PAM files itself and -b backs them up first. Enroll with `mk fingerprint`.
+if command -v fprintd-list &>/dev/null && gdbus call --system --dest net.reactivated.Fprint \
+        --object-path /net/reactivated/Fprint/Manager \
+        --method net.reactivated.Fprint.Manager.GetDevices 2>/dev/null | grep -q 'Device/'; then
+    echo "    Fingerprint reader found"
+    ensure_pkgs fprintd-pam
+    if ! authselect current 2>/dev/null | grep -q with-fingerprint; then
+        authselect enable-feature -b with-fingerprint \
+            || WARNINGS+=("Could not enable fingerprint login (authselect enable-feature with-fingerprint)")
+    fi
+    WARNINGS+=("Fingerprint reader ready: enroll a finger with 'mk fingerprint'")
+fi
+# 2-in-1 laptops: the sensor service GNOME uses for auto-rotation and tablet mode.
+case "$(hostnamectl chassis 2>/dev/null)" in
+    convertible|tablet)
+        echo "    2-in-1 detected: screen rotation and tablet mode"
+        ensure_pkgs iio-sensor-proxy
+        ;;
+esac
+# Login screen in your resolution and scaling, so logging in doesn't flash
+# through a display mode change between the login screen and the desktop.
+USER_MONITORS="$USER_HOME/.config/monitors.xml"
+GDM_MONITORS="/var/lib/gdm/.config/monitors.xml"
+if [[ -f "$USER_MONITORS" ]] && id gdm &>/dev/null && ! cmp -s "$USER_MONITORS" "$GDM_MONITORS"; then
+    echo "    Login screen: using your display layout"
+    [[ -f "$GDM_MONITORS" && ! -f "$GDM_MONITORS.bak" ]] && cp -a "$GDM_MONITORS" "$GDM_MONITORS.bak"
+    install -d -o gdm -g gdm -m 700 "$(dirname "$GDM_MONITORS")"
+    install -o gdm -g gdm -m 644 "$USER_MONITORS" "$GDM_MONITORS"
+    restorecon "$GDM_MONITORS" 2>/dev/null || true
+fi
+
 # 8. Firmware: report available updates, never flash automatically
 if command -v fwupdmgr &>/dev/null; then
     echo "==> Checking for firmware updates..."

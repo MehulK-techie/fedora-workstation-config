@@ -62,25 +62,42 @@ export default class MKIndicatorExtension extends Extension {
         // The dock auto-hides on the desktop, but Dash to Dock always shows it
         // in the overview, on top of window titles. Fade it out there too.
         this._overviewIds = [
-            Main.overview.connect('showing', () => this._setDocksShown(false)),
+            Main.overview.connect('showing', () => {
+                this._dockGlow?.resetMagnify();
+                this._setDocksShown(false);
+            }),
             Main.overview.connect('hiding', () => this._setDocksShown(true)),
         ];
 
-        // Dock icons glow in their app's own colour on hover.
-        this._dockGlow = new DockGlow();
-        this._dockGlow.enable();
+        // Dock icons glow in their app's own colour and magnify on hover.
+        // This extension stays loaded on the lock screen (metadata session-modes),
+        // so unlocking doesn't rebuild everything: pause the dock parts while
+        // locked and pick them up again after.
+        this._sessionId = Main.sessionMode.connect('updated', () => this._onSessionMode());
+        this._onSessionMode();
 
         // Blur my Shell can blur the top bar before the wallpaper is loaded at
         // login and then shows no blur until the next unlock. Rebuild its panel
-        // blur once the shell has finished starting up and settled.
+        // blur once, after the shell has finished starting up. Not on unlock:
+        // a second rebuild there was a visible hitch.
         if (Main.layoutManager._startingUp) {
             this._startupId = Main.layoutManager.connect('startup-complete', () => {
                 Main.layoutManager.disconnect(this._startupId);
                 this._startupId = 0;
                 this._scheduleBlurRefresh();
             });
-        } else {
-            this._scheduleBlurRefresh();
+        }
+    }
+
+    _onSessionMode() {
+        const locked = Main.sessionMode.isLocked;
+        this._indicator.visible = !locked;
+        if (locked && this._dockGlow) {
+            this._dockGlow.disable();
+            this._dockGlow = null;
+        } else if (!locked && !this._dockGlow) {
+            this._dockGlow = new DockGlow();
+            this._dockGlow.enable();
         }
     }
 
@@ -119,6 +136,10 @@ export default class MKIndicatorExtension extends Extension {
     }
 
     disable() {
+        if (this._sessionId) {
+            Main.sessionMode.disconnect(this._sessionId);
+            this._sessionId = 0;
+        }
         this._dockGlow?.disable();
         this._dockGlow = null;
         this._brandMonitor?.cancel();

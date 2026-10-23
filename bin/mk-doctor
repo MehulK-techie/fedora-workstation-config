@@ -125,6 +125,23 @@ else
     done
 fi
 
+if command -v fprintd-list &>/dev/null; then
+    fp=$(fprintd-list "$USER" 2>/dev/null || true)
+    if grep -q "Device at" <<< "$fp"; then
+        section "Fingerprint"
+        if grep -qE '^\s*- #[0-9]+:' <<< "$fp"; then
+            ok "$(grep -cE '^\s*- #[0-9]+:' <<< "$fp") finger(s) enrolled"
+        else
+            warn "Reader found, no finger enrolled" "Run: mk fingerprint"
+        fi
+        if authselect current 2>/dev/null | grep -q with-fingerprint; then
+            ok "Fingerprint login is on"
+        else
+            warn "Fingerprint login is off" "Run: sudo ./setup.sh"
+        fi
+    fi
+fi
+
 section "MK Workstation"
 repo=$(cat "$HOME/.config/mk-workstation/repo-path" 2>/dev/null || true)
 if [[ -d "$repo/.git" ]]; then

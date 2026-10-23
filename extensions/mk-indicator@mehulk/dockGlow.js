@@ -6,6 +6,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { DockMagnify } from './dockMagnify.js';
 
 const SAMPLE = 24;
 const colourCache = new Map();
@@ -107,6 +108,7 @@ function* appTiles(actor) {
 
 export class DockGlow {
     enable() {
+        this._magnify = new DockMagnify();
         this._docks = [];
         this._tiles = new Map();
         // Dash to Dock may start after us: look for its docks a few times.
@@ -138,7 +140,10 @@ export class DockGlow {
 
     _queueScan(dock) {
         GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-            this._scan(dock);
+            // The dock may have been destroyed meanwhile (screen lock, Dash to
+            // Dock reloading): only scan docks we still track.
+            if (this._docks?.some(d => d.actor === dock))
+                this._scan(dock);
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -154,6 +159,7 @@ export class DockGlow {
     }
 
     _hover(tile) {
+        this._magnify?.hover(tile);
         const icon = findOverviewIcon(tile);
         if (!icon)
             return;
@@ -171,7 +177,14 @@ export class DockGlow {
             'transition-duration: 220ms;');
     }
 
+    // Overview opening, screen locking: no magnified icons left behind.
+    resetMagnify() {
+        this._magnify?.reset(true);
+    }
+
     disable() {
+        this._magnify?.destroy();
+        this._magnify = null;
         if (this._findId) {
             GLib.source_remove(this._findId);
             this._findId = 0;

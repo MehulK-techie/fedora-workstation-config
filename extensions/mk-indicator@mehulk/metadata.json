@@ -1,7 +1,7 @@
 {
   "uuid": "mk-indicator@mehulk",
   "name": "MK Workstation Indicator",
-  "description": "MK Workstation: top-bar watermark, themed Alt+Tab, dock icons that glow in their app's colour, hover effects, and hides the dock in the overview.",
+  "description": "MK Workstation: top-bar tag, dock icons that glow in their app's colour and magnify on hover, themed Alt+Tab, and the dock tucked away in the overview.",
   "shell-version": [
     "45",
     "46",
@@ -9,5 +9,9 @@
     "48",
     "49",
     "50"
+  ],
+  "session-modes": [
+    "user",
+    "unlock-dialog"
   ]
 }

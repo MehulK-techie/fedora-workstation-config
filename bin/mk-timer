@@ -11,9 +11,11 @@ Alt+Tab or the dock) and counts down in the background. Launching it again
 shows the countdown. When the time is up, the celebration fills the screen.
 """
 import math
+import os
 import random
 import sys
 import time
+from pathlib import Path
 
 import gi
 
@@ -25,6 +27,41 @@ import cairo  # noqa: E402
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango, PangoCairo  # noqa: E402
 
 APP_ID = "io.github.mehulk.MkTimer"
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "mk-workstation"
+PREFS = CONFIG_DIR / "timer.conf"
+# Written while notifications are silenced, so a crash can't leave them off.
+DND_MARKER = CONFIG_DIR / "timer-silenced"
+
+
+def load_prefs():
+    prefs = {"SILENCE": "1"}
+    try:
+        for line in PREFS.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                key, value = line.split("=", 1)
+                prefs[key.strip()] = value.strip()
+    except OSError:
+        pass
+    return prefs
+
+
+def save_prefs(prefs):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    PREFS.write_text("# Focus timer preferences\n" + "".join(f"{k}={v}\n" for k, v in prefs.items()))
+
+
+def silence_notifications(on):
+    """Focus mode: hide notification banners while the timer runs."""
+    settings = Gio.Settings.new("org.gnome.desktop.notifications")
+    if on:
+        if not DND_MARKER.exists():
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            DND_MARKER.write_text("1" if settings.get_boolean("show-banners") else "0")
+        settings.set_boolean("show-banners", False)
+    elif DND_MARKER.exists():
+        settings.set_boolean("show-banners", DND_MARKER.read_text().strip() == "1")
+        DND_MARKER.unlink()
+    Gio.Settings.sync()
 CYAN = (0.0, 0.82, 1.0)
 AMBER = (1.0, 0.72, 0.2)
 RED = (1.0, 0.36, 0.45)
@@ -166,6 +203,15 @@ class TimerWindow(Adw.ApplicationWindow):
         self.task_entry.connect("activate", lambda *_: self._on_start())
         box.append(self.task_entry)
 
+        self.prefs = load_prefs()
+        silence_row = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER)
+        silence_row.append(Gtk.Label(label="Silence notifications while focusing"))
+        self.silence = Gtk.Switch(active=self.prefs.get("SILENCE") == "1",
+                                  valign=Gtk.Align.CENTER)
+        self.silence.connect("notify::active", self._on_silence_toggled)
+        silence_row.append(self.silence)
+        box.append(silence_row)
+
         self.start_btn = Gtk.Button(label="Start", halign=Gtk.Align.CENTER)
         self.start_btn.add_css_class("suggested-action")
         self.start_btn.add_css_class("mk-start")
@@ -274,6 +320,12 @@ class TimerWindow(Adw.ApplicationWindow):
         note.set_body("Running in the background. Open Focus Timer again to see the countdown.")
         note.set_default_action("app.show")
         self.get_application().send_notification("running", note)
+        if self.silence.get_active() and self.task != "Break":
+            silence_notifications(True)
+
+    def _on_silence_toggled(self, switch, _param):
+        self.prefs["SILENCE"] = "1" if switch.get_active() else "0"
+        save_prefs(self.prefs)
 
     def _check(self):
         if self.running and self.remaining() <= 0:
@@ -294,6 +346,7 @@ class TimerWindow(Adw.ApplicationWindow):
             self.stack.set_visible_child_name(page)
 
     def stop(self):
+        silence_notifications(False)
         if self.running:
             self.running = False
             self.get_application().release()
@@ -319,6 +372,7 @@ class TimerWindow(Adw.ApplicationWindow):
         self.total += seconds
 
     def finish(self):
+        silence_notifications(False)
         self.running = False
         self.done_at = time.monotonic()
         self.scene_state = {"coins": [], "confetti": [], "jumps": 0, "last_phase": 0.0}
@@ -593,6 +647,7 @@ class TimerApp(Adw.Application):
 
     def do_startup(self):
         Adw.Application.do_startup(self)
+        silence_notifications(False)  # after a crash mid-focus, turn them back on
         Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.PREFER_DARK)
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS)

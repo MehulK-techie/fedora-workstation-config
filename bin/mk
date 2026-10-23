@@ -161,6 +161,21 @@ case "${1:-help}" in
         "$HOME/.local/bin/show-shortcuts"
         ;;
 
+    note|task|list)
+        # Quick capture into the Companion: mk note "idea" · mk task "pay rent" 18:00
+        PYTHONPATH="$HOME/.local/share/mk-workstation/lib" python3 -m mkworkstation "$@"
+        ;;
+
+    remind)
+        # mk remind "stand up and stretch" 45m  (a task with a reminder)
+        shift
+        if (( $# < 2 )); then
+            echo "Usage: mk remind \"text\" WHEN   (WHEN: 30m, 2h, 18:00, 6pm, 'tomorrow 9:00')" >&2
+            exit 2
+        fi
+        PYTHONPATH="$HOME/.local/share/mk-workstation/lib" python3 -m mkworkstation task "$@"
+        ;;
+
     rename)
         # Rename the MK windows, notifications and top-bar tag on this computer.
         shift
@@ -184,8 +199,8 @@ case "${1:-help}" in
         read -rp "Continue? [y/N]: " answer
         [[ "$answer" =~ ^[yY] ]] || { echo "Nothing changed."; exit 0; }
 
-        systemctl --user disable --now mk-update-check.timer &>/dev/null || true
-        rm -f "$HOME/.config/systemd/user/mk-update-check.service" "$HOME/.config/systemd/user/mk-update-check.timer"
+        systemctl --user disable --now mk-update-check.timer mk-reminders.timer &>/dev/null || true
+        rm -f "$HOME/.config/systemd/user/"mk-update-check.{service,timer} "$HOME/.config/systemd/user/"mk-reminders.{service,timer}
         systemctl --user daemon-reload &>/dev/null || true
         rm -f "$HOME/.config/burn-my-windows/profiles/mk-glide.conf"
 
@@ -207,7 +222,7 @@ case "${1:-help}" in
         gnome-extensions disable mk-indicator@mehulk &>/dev/null || true
         rm -rf "$HOME/.local/share/gnome-shell/extensions/mk-indicator@mehulk"
         rm -rf "$HOME/.local/share/mk-workstation/lib" "$HOME/.local/share/mk-workstation/config"
-        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-timer ocr-snip show-shortcuts \
+        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-timer mk-reminders ocr-snip show-shortcuts \
             camera-controls fix-alt-tab close-workspace-apps; do
             rm -f "$HOME/.local/bin/$tool"
         done
@@ -233,6 +248,10 @@ case "${1:-help}" in
         echo "  doctor     Check system health: updates, codecs, extensions, face unlock"
         echo "  face       Set up face unlock (add --models N or --user NAME)"
         echo "  shortcuts  Keyboard shortcuts: see, change, add or reset them (also Super+/)"
+        echo "  note       Add a note to the Companion: mk note \"idea\" [when]"
+        echo "  task       Add a task: mk task \"pay rent\" [when]   (when: 30m, 2h, 18:00, tomorrow 9:00)"
+        echo "  remind     Same as task, with a reminder: mk remind \"stretch\" 45m"
+        echo "  list       Show notes, tasks and their reminders"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"
         ;;

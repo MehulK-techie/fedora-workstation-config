@@ -4,17 +4,20 @@
 Notes: add as many as you like, pin the important ones (they stay open at the
 top), reorder them, and the rest fold away until you open them.
 Tasks: tick them off, pin them, delete them; finished ones collect under Done.
-Everything saves as you type, to ~/.local/share/mk-workstation/companion.json.
+Any note or task can remind you: in N minutes, at a time, or daily/weekly.
+Reminders fire even when this window is closed (mk-reminders.timer).
+Everything saves as you type, to ~/.local/share/mk-workstation/companion.json;
+`mk note` / `mk task` add to it from a terminal and show up here at once.
 
-  mk-companion          open (or bring back) the window
-  mk-companion tasks    open on the task list
+  mk-companion            open (or bring back) the window
+  mk-companion tasks      open on the task list
+  mk-companion note ID    open a note (used by reminder notifications)
 """
-import json
 import os
 import subprocess
 import sys
 import time
-import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import gi
@@ -35,9 +38,10 @@ def _add_lib_path():
 
 _add_lib_path()
 import mkworkstation as mk  # noqa: E402
+from mkworkstation import companion as cstore  # noqa: E402
 
 APP_ID = "io.github.mehulk.MkCompanion"
-STORE = mk.DATA_DIR / "companion.json"
+STORE = cstore.STORE
 OLD_SCRATCHPAD = Path.home() / ".mk_scratchpad.md"
 OBSIDIAN = "md.obsidian.Obsidian"
 
@@ -52,6 +56,8 @@ CSS = b"""
 .mk-hero { font-size: 1.5em; font-weight: 800; }
 .mk-sub { opacity: 0.65; }
 .mk-launch { border-radius: 14px; padding: 10px 16px; }
+.mk-reminder-set { color: @accent_color; font-weight: 700; }
+.mk-preset { border-radius: 10px; }
 """
 
 
@@ -71,19 +77,23 @@ def ago(ts):
 
 
 class Store:
-    """The notes and tasks, saved as JSON. Imports the old scratchpad once."""
+    """Notes and tasks in memory, saved through mkworkstation.companion.
+    Imports the old scratchpad once."""
 
     def __init__(self):
-        self.notes, self.tasks = [], []
-        if STORE.exists():
-            try:
-                data = json.loads(STORE.read_text())
-                self.notes, self.tasks = data.get("notes", []), data.get("tasks", [])
-            except (OSError, ValueError):
-                pass
-        elif OLD_SCRATCHPAD.exists():
+        data = cstore.load()
+        self.notes, self.tasks = data["notes"], data["tasks"]
+        if not STORE.exists() and OLD_SCRATCHPAD.exists():
             self._import_scratchpad()
         self._save_id = 0
+        self.mtime = self._disk_mtime()
+
+    @staticmethod
+    def _disk_mtime():
+        try:
+            return STORE.stat().st_mtime_ns
+        except OSError:
+            return 0
 
     def _import_scratchpad(self):
         body = []
@@ -100,16 +110,30 @@ class Store:
         self.save_now()
 
     def add_note(self, title="", body=""):
-        note = {"id": uuid.uuid4().hex, "title": title, "body": body,
-                "pinned": False, "updated": now()}
+        note = cstore.new_note(title, body)
         self.notes.insert(0, note)
         return note
 
     def add_task(self, text, done=False):
-        task = {"id": uuid.uuid4().hex, "text": text, "done": done,
-                "pinned": False, "created": now()}
+        task = cstore.new_task(text, done)
         self.tasks.insert(0, task)
         return task
+
+    def merge_from_disk(self):
+        """Pick up items added elsewhere (mk note / mk task). Items already
+        here keep what you see in the window. True if anything was added."""
+        if self._disk_mtime() == self.mtime:
+            return False
+        self.mtime = self._disk_mtime()
+        data, added = cstore.load(), False
+        for kind in ("notes", "tasks"):
+            mine = getattr(self, kind)
+            known = {i["id"] for i in mine}
+            for item in reversed(data[kind]):
+                if item["id"] not in known:
+                    mine.insert(0, item)
+                    added = True
+        return added
 
     def save(self):
         """Save soon (typing doesn't write the file on every key)."""
@@ -119,10 +143,9 @@ class Store:
 
     def save_now(self):
         self._save_id = 0
-        STORE.parent.mkdir(parents=True, exist_ok=True)
-        tmp = STORE.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"notes": self.notes, "tasks": self.tasks}, indent=1))
-        tmp.replace(STORE)
+        self.merge_from_disk()
+        cstore.save({"notes": self.notes, "tasks": self.tasks})
+        self.mtime = self._disk_mtime()
         return GLib.SOURCE_REMOVE
 
 
@@ -140,6 +163,101 @@ def flat_button(icon, tooltip, callback):
     button.add_css_class("flat")
     button.add_css_class("circular")
     button.connect("clicked", lambda *_: callback())
+    return button
+
+
+def reminder_button(item, on_change):
+    """⏰ button with a popover: presets, "in h/min", "at HH:MM", repeat, clear."""
+    content = Adw.ButtonContent(icon_name="alarm-symbolic")
+    button = Gtk.MenuButton(child=content, valign=Gtk.Align.CENTER,
+                            tooltip_text="Remind me")
+    button.add_css_class("flat")
+
+    def show():
+        text = cstore.describe(item)
+        content.set_label(text)
+        if text:
+            button.add_css_class("mk-reminder-set")
+        else:
+            button.remove_css_class("mk-reminder-set")
+    show()
+
+    pop = Gtk.Popover()
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_top=10,
+                  margin_bottom=10, margin_start=10, margin_end=10)
+    heading = Gtk.Label(label="Remind me", xalign=0)
+    heading.add_css_class("heading")
+    box.append(heading)
+
+    repeat = Gtk.DropDown.new_from_strings(["Once", "Every day", "Every week"])
+    repeat.set_selected(["none", "daily", "weekly"].index(item.get("repeat", "none")))
+
+    def set_at(ts):
+        item["remind_at"] = ts
+        item["repeat"] = ["none", "daily", "weekly"][repeat.get_selected()]
+        show()
+        on_change()
+        pop.popdown()
+
+    grid = Gtk.Grid(column_spacing=6, row_spacing=6, column_homogeneous=True)
+    tomorrow9 = (datetime.now() + timedelta(days=1)).replace(hour=9, minute=0, second=0)
+    evening = datetime.now().replace(hour=18, minute=0, second=0)
+    presets = [("10 min", lambda: time.time() + 600), ("30 min", lambda: time.time() + 1800),
+               ("1 hour", lambda: time.time() + 3600), ("3 hours", lambda: time.time() + 10800),
+               ("This evening", lambda: evening.timestamp() if evening > datetime.now()
+                else (evening + timedelta(days=1)).timestamp()),
+               ("Tomorrow 9:00", lambda: tomorrow9.timestamp())]
+    for i, (label, when) in enumerate(presets):
+        b = Gtk.Button(label=label)
+        b.add_css_class("mk-preset")
+        b.connect("clicked", lambda *_, w=when: set_at(w()))
+        grid.attach(b, i % 2, i // 2, 1, 1)
+    box.append(grid)
+    box.append(Gtk.Separator())
+
+    def spin(lo, hi, value, step=1):
+        sp = Gtk.SpinButton.new_with_range(lo, hi, step)
+        sp.set_value(value)
+        return sp
+
+    after = Gtk.Box(spacing=6)
+    hours, minutes = spin(0, 72, 0), spin(0, 59, 25)
+    go_after = Gtk.Button(label="Set")
+    go_after.connect("clicked", lambda *_: set_at(
+        time.time() + hours.get_value_as_int() * 3600 + minutes.get_value_as_int() * 60))
+    for w in (Gtk.Label(label="In"), hours, Gtk.Label(label="h"), minutes,
+              Gtk.Label(label="min"), go_after):
+        after.append(w)
+    box.append(after)
+
+    at = Gtk.Box(spacing=6)
+    current = datetime.fromtimestamp(item["remind_at"]) if item.get("remind_at") else datetime.now()
+    hh, mm = spin(0, 23, current.hour), spin(0, 59, (current.minute // 5) * 5, 5)
+    go_at = Gtk.Button(label="Set")
+    go_at.connect("clicked", lambda *_: set_at(
+        cstore.parse_when(f"{hh.get_value_as_int()}:{mm.get_value_as_int():02d}")))
+    for w in (Gtk.Label(label="At"), hh, Gtk.Label(label=":"), mm, go_at):
+        at.append(w)
+    box.append(at)
+
+    row = Gtk.Box(spacing=6)
+    row.append(Gtk.Label(label="Repeat", hexpand=True, xalign=0))
+    row.append(repeat)
+    box.append(row)
+
+    def repeat_changed(*_):
+        if item.get("remind_at"):
+            item["repeat"] = ["none", "daily", "weekly"][repeat.get_selected()]
+            show()
+            on_change()
+    repeat.connect("notify::selected", repeat_changed)
+
+    clear = Gtk.Button(label="No reminder")
+    clear.add_css_class("destructive-action")
+    clear.connect("clicked", lambda *_: set_at(None))
+    box.append(clear)
+    pop.set_child(box)
+    button.set_popover(pop)
     return button
 
 
@@ -188,6 +306,21 @@ class CompanionWindow(Adw.ApplicationWindow):
         self.refresh_notes()
         self.refresh_tasks()
         self.connect("close-request", lambda *_: (self.store.save_now(), False)[1])
+        # `mk note` / `mk task` from a terminal: show new items straight away
+        self._store_monitor = Gio.File.new_for_path(str(STORE)).monitor_file(
+            Gio.FileMonitorFlags.NONE, None)
+        self._store_monitor.connect("changed", self._on_store_changed)
+
+    def _on_store_changed(self, *_):
+        if self.store.merge_from_disk():
+            self.refresh_notes()
+            self.refresh_tasks()
+
+    def open_note(self, note_id):
+        self.stack.set_visible_child_name("notes")
+        if any(n["id"] == note_id for n in self.store.notes):
+            self.open_notes.add(note_id)
+            self.refresh_notes(focus=note_id)
 
     # ---------- chrome ----------
     def refresh_title(self):
@@ -311,10 +444,14 @@ class CompanionWindow(Adw.ApplicationWindow):
         first = next((ln.strip() for ln in note["body"].splitlines() if ln.strip()), "")
         return first[:60] or "Untitled note"
 
+    def _note_subtitle(self, note):
+        when = cstore.describe(note)
+        return f"Edited {ago(note['updated'])}" + (f" · ⏰ {when}" if when else "")
+
     def _note_row(self, note):
         expanded = note["pinned"] or note["id"] in self.open_notes
         row = Adw.ExpanderRow(title=GLib.markup_escape_text(self._note_title(note)),
-                              subtitle=f"Edited {ago(note['updated'])}",
+                              subtitle=self._note_subtitle(note),
                               expanded=expanded)
         row.set_title_lines(1)
         if note["pinned"]:
@@ -352,7 +489,15 @@ class CompanionWindow(Adw.ApplicationWindow):
         row.connect("notify::expanded", lambda r, _p: (self.open_notes.add(note["id"])
                                                        if r.get_expanded()
                                                        else self.open_notes.discard(note["id"])))
-        box.append(entry)
+        top = Gtk.Box(spacing=6)
+        entry.set_hexpand(True)
+        top.append(entry)
+
+        def reminder_changed():
+            row.set_subtitle(self._note_subtitle(note))
+            self.store.save()
+        top.append(reminder_button(note, reminder_changed))
+        box.append(top)
         box.append(text)
         row.add_row(box)
         return row, entry
@@ -457,6 +602,7 @@ class CompanionWindow(Adw.ApplicationWindow):
         row.add_prefix(check)
         row.set_activatable_widget(check)
         if not task["done"]:
+            row.add_suffix(reminder_button(task, self.store.save))
             row.add_suffix(flat_button("view-pin-symbolic", "Unpin" if task["pinned"] else "Pin to top",
                                        lambda: self._toggle_task_pin(task)))
         row.add_suffix(flat_button("user-trash-symbolic", "Delete", lambda: self._delete_task(task)))
@@ -519,6 +665,9 @@ class CompanionApp(Adw.Application):
             self.window.connect("close-request", self._on_close)
         if args and args[0] == "tasks":
             self.window.stack.set_visible_child_name("tasks")
+        elif len(args) == 2 and args[0] == "note":
+            self.window.store.merge_from_disk()
+            self.window.open_note(args[1])
         self.window.refresh_title()
         self.window.present()
         return 0

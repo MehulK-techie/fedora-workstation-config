@@ -163,9 +163,35 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 UNIT
+# Companion reminders: a tiny check once a minute, so they fire even when the
+# Companion is closed, and catch up after sleep or a reboot (Persistent).
+# KillMode=process keeps the notification (and its Open/Snooze buttons) alive
+# after the check itself has finished.
+cat > "$UNIT_DIR/mk-reminders.service" << 'UNIT'
+[Unit]
+Description=Fire due Companion reminders
+
+[Service]
+Type=oneshot
+Nice=10
+KillMode=process
+ExecStart=%h/.local/bin/mk-reminders
+UNIT
+cat > "$UNIT_DIR/mk-reminders.timer" << 'UNIT'
+[Unit]
+Description=Check Companion reminders every minute
+
+[Timer]
+OnCalendar=*:*:00
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
 systemctl --user daemon-reload 2>/dev/null \
-    && systemctl --user enable --now mk-update-check.timer &>/dev/null \
-    || echo "    [*] Couldn't enable the daily update check (no systemd user session)"
+    && systemctl --user enable --now mk-update-check.timer mk-reminders.timer &>/dev/null \
+    || echo "    [*] Couldn't enable the update check and reminders (no systemd user session)"
 
 # Blur my Shell's panel blur after login is now refreshed from inside the shell
 # by mk-indicator, once startup has finished. Older login hacks toggled every

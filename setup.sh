@@ -6,7 +6,7 @@ set -euo pipefail
 
 usage() {
     cat << 'EOF'
-Usage: sudo ./setup.sh [--no-face]
+Usage: ./setup.sh [--no-face]     (asks for your password; sudo ./setup.sh works too)
 
 Installs packages, repositories, codecs and Flatpaks, then applies the MK
 desktop settings (sync.sh) for the user who ran sudo. Safe to run more than
@@ -26,9 +26,11 @@ for arg in "$@"; do
     esac
 done
 
+# ./setup.sh works too: it asks for your password and runs itself with sudo,
+# keeping you as the desktop user whose settings get applied.
 if [[ $EUID -ne 0 ]]; then
-    echo "[-] Error: setup.sh requires root privileges. Run with sudo." >&2
-    exit 1
+    echo "[*] setup.sh needs administrator rights; asking sudo..."
+    exec sudo --preserve-env=DISPLAY,WAYLAND_DISPLAY "$0" "$@"
 fi
 
 # shellcheck source=/dev/null
@@ -224,6 +226,24 @@ if [[ -f "$USER_MONITORS" ]] && id gdm &>/dev/null && ! cmp -s "$USER_MONITORS" 
     install -d -o gdm -g gdm -m 700 "$(dirname "$GDM_MONITORS")"
     install -o gdm -g gdm -m 644 "$USER_MONITORS" "$GDM_MONITORS"
     restorecon "$GDM_MONITORS" 2>/dev/null || true
+fi
+
+# 7b-2. Wrong-password lockout: 5 failed attempts within 15 minutes lock the
+# account for 5 minutes (pam_faillock, through authselect). Fingerprint and
+# face unlock still work while it's locked; the lock ends by itself, or
+# early with: faillock --user NAME --reset (as root).
+if authselect current &>/dev/null; then
+    echo "==> Login lockout after 5 failed passwords..."
+    if ! authselect current | grep -q with-faillock; then
+        authselect enable-feature -b with-faillock || WARNINGS+=("Could not enable with-faillock")
+    fi
+    FAILLOCK_CONF=/etc/security/faillock.conf
+    if [[ -f "$FAILLOCK_CONF" ]]; then
+        [[ -f "$FAILLOCK_CONF.bak" ]] || cp -a "$FAILLOCK_CONF" "$FAILLOCK_CONF.bak"
+        # Drop our keys wherever they are, then add them once: no duplicates on re-runs.
+        sed -i -E '/^[[:space:]]*(deny|unlock_time|fail_interval)[[:space:]]*=/d; /^# MK Workstation lockout$/d' "$FAILLOCK_CONF"
+        printf '# MK Workstation lockout\ndeny = 5\nfail_interval = 900\nunlock_time = 300\n' >> "$FAILLOCK_CONF"
+    fi
 fi
 
 # 7c. Smooth under heavy load: memory and disk-write tuning for a desktop.

@@ -17,6 +17,13 @@ python3-weasyprint
 python3-qrcode
 python3-pygments
 python3-pynacl
+# MK Notes image editor (crop, rotate, filters)
+python3-pillow
+# mk lock folder: encrypted folders, key kept in your login keyring
+gocryptfs
+libsecret
+# Compressed swap in RAM (Fedora's default; listed so it's never missing)
+zram-generator-defaults
 libcanberra-gtk3
 wl-clipboard
 grim

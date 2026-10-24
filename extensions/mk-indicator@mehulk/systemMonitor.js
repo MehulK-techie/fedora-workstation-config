@@ -289,6 +289,10 @@ export class SystemMonitor {
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Busiest right now'));
         this._procRows = [0, 1, 2, 3, 4].map(() => new Row(menu, ''));
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        // Optimize: drop file caches (asks your password; rarely needed, see
+        // `mk optimize`), or full speed with the Performance power mode.
+        menu.addAction('Free cached memory', () => this._run(['optimize', 'ram', '--notify']));
+        menu.addAction('Performance mode', () => this._run(['optimize', 'cpu', '--notify']));
         menu.addAction('Open System Monitor', () => {
             try {
                 Gio.AppInfo.create_from_commandline('gnome-system-monitor', null, Gio.AppInfoCreateFlags.NONE).launch([], null);
@@ -399,6 +403,14 @@ export class SystemMonitor {
             if (top[i])
                 row.set(`${top[i].cpu.toFixed(0)}%`, null, top[i].name);
         });
+    }
+
+    _run(args) {
+        try {
+            Gio.Subprocess.new([`${GLib.get_home_dir()}/.local/bin/mk`, ...args], Gio.SubprocessFlags.STDOUT_SILENCE);
+        } catch (e) {
+            console.warn(`mk-indicator: mk ${args.join(' ')}: ${e.message}`);
+        }
     }
 
     _paintSpark(area) {

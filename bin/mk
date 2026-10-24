@@ -377,8 +377,20 @@ case "${1:-help}" in
 
     power)
         # Smart power profiles on laptops: mk power [status | on | off]
+        # Profiles now: mk power comfort | quiet | performance
         shift
+        set_profile() {
+            # power-profiles-daemon or tuned-ppd: the same D-Bus API GNOME's
+            # Quick Settings › Power Mode uses (no password for the active user).
+            gdbus call --system --dest org.freedesktop.UPower.PowerProfiles \
+                --object-path /org/freedesktop/UPower/PowerProfiles \
+                --method org.freedesktop.DBus.Properties.Set \
+                org.freedesktop.UPower.PowerProfiles ActiveProfile "<'$1'>" > /dev/null
+        }
         case "${1:-status}" in
+            comfort|balanced) set_profile balanced && echo "✔ Comfort: balanced speed and battery" ;;
+            quiet|power-saver) set_profile power-saver && echo "✔ Quiet: slower, cooler, quieter, longest battery" ;;
+            performance) set_profile performance && echo "✔ Performance: full speed (warmer, louder, more power)" ;;
             status)
                 if [[ -x "$HOME/.local/bin/mk-power" ]]; then
                     "$HOME/.local/bin/mk-power" status
@@ -397,7 +409,7 @@ case "${1:-help}" in
                 echo "✔ Smart power off. Pick profiles yourself in Quick Settings."
                 ;;
             *)
-                echo "Usage: mk power [status | on | off]" >&2
+                echo "Usage: mk power [status | on | off | comfort | quiet | performance]" >&2
                 exit 2
                 ;;
         esac
@@ -619,6 +631,37 @@ case "${1:-help}" in
         fi
         ;;
 
+    optimize)
+        # mk optimize ram | cpu [--notify]
+        notify=0
+        [[ "${3:-}" == "--notify" || "${2:-}" == "--notify" ]] && notify=1
+        say() {
+            echo "$1"
+            (( notify )) && notify-send -i utilities-system-monitor-symbolic "MK" "$1" 2> /dev/null
+            return 0
+        }
+        mem_avail() { awk '/MemAvailable/ { printf "%.1f", $2 / 1048576 }' /proc/meminfo; }
+        case "${2:-}" in
+            ram)
+                # Linux keeps recently used files in spare memory (cache) and gives it
+                # back the moment an app needs it, so this rarely speeds anything up;
+                # it can help before starting something very large.
+                before=$(mem_avail)
+                if pkexec sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory'; then
+                    say "Memory: ${before} GB free before, $(mem_avail) GB free now (file caches dropped)."
+                else
+                    say "Memory: not changed (not confirmed)."
+                fi
+                ;;
+            cpu)
+                "$0" power performance > /dev/null && say "Processor: Performance mode. Busiest now:"
+                ps -eo pcpu=,comm= --sort=-pcpu | head -5 | awk '{ printf "  %5.1f%%  %s\n", $1, $2 }'
+                echo "Back to normal: mk power comfort"
+                ;;
+            *) echo "Usage: mk optimize ram | cpu" >&2; exit 2 ;;
+        esac
+        ;;
+
     speedtest)
         shift
         "$HOME/.local/bin/mk-speedtest" "$@"
@@ -716,7 +759,7 @@ KEYRING
         echo "  device     What this computer has, and what MK tunes for it"
         echo "  fingerprint  Enroll a finger for login and sudo (list, delete, settings)"
         echo "  focus      Start the focus timer: mk focus 25 \"Writing\" (also 1:30, 90s)"
-        echo "  power      Smart power profiles on laptops: status, on, off"
+        echo "  power      Smart power profiles on laptops: status, on, off; or comfort, quiet, performance"
         echo "  effects    Visual effects: full, lite (smooth on older machines) or auto"
         echo "  screensaver  Scenes when you step away: on, off, show, scene web|knight|matrix|aurora, delay N"
         echo "  notes      MK Notes: mk notes, mk notes today, mk notes serve (phone sync)"
@@ -726,6 +769,7 @@ KEYRING
         echo "  unlock     Open a locked folder (mk unlock ~/Folder) or stop locking an app (mk unlock app NAME)"
         echo "  speedtest  Ping, download and upload speed"
         echo "  nap        Which unused apps App Nap paused under memory or CPU pressure"
+        echo "  optimize   Free cached memory (ram) or switch to full speed (cpu)"
         echo "  users      Another person's account: mk users add NAME (their own settings and face)"
         echo "  guest      A Guest login with no password that starts empty every time: mk guest on|off"
         echo "  tour       A short walkthrough of the desktop (also Super+Shift+/)"

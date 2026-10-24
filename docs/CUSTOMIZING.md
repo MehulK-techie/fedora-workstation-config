@@ -19,7 +19,11 @@ There are two ways to customize:
 | Accent colour | `mk accent auto` (from your wallpaper) or `mk accent \#00c8ff` | `config/theme.conf` |
 | Mouse pointer | `CURSOR=Adwaita` (or any installed theme) in `~/.config/mk-workstation/theme.conf`, then `mk sync` | `config/theme.conf` |
 | Notes folder, phone sync, history | `~/.config/mk-workstation/notes.conf` | `config/notes.conf` |
-| Focus screensaver | Focus timer › Screensaver | `AMBIENT_STYLE` in `timer.conf` |
+| Screensaver | `mk screensaver scene web` (or knight, matrix, aurora, random), `mk screensaver delay 300`, `mk screensaver off` | `config/screensaver.conf` |
+| Focus timer's screen | Focus timer › Screensaver | `AMBIENT_STYLE` in `timer.conf` |
+| Greetings | `mk welcome lines` (your own), `mk welcome variety off`, `mk welcome birthday 07-14` | `config/greetings.conf`, `config/welcome.conf` |
+| Media tile | `MEDIA=off` or `TICKER=off` in `~/.config/mk-workstation/media.conf` | `config/media.conf` |
+| Zen Browser look | your own lines in the profile's `chrome/userChrome.css`, outside the MK block | `config/browser/zen-userChrome.css` |
 | Browser touchpad prefs | your profile's `user.js`, outside the MK block | `config/browser/user.js` |
 | Keyboard shortcuts | Super+/ › click a shortcut | `config/shortcuts.conf` |
 | Your own command shortcuts | Super+/ › **+** | `config/shortcuts.conf` (`custom:` lines) |

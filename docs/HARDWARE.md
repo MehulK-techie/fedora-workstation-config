@@ -51,6 +51,35 @@ offers both. `sudo` tries face first if you enabled face unlock for it,
 then fingerprint, then your password. Fingerprint data stays on the computer (in fprintd's store or on
 the reader itself) and is never part of this repository.
 
+### If the fingerprint doesn't work on the lock screen
+
+Run `mk fingerprint check`. It only reads, and reports:
+
+- which fingers are enrolled
+- whether GNOME's fingerprint login is on
+- which login services (PAM) use the reader
+- the reader's recent errors
+
+A common cause is two login services asking for the reader at the same
+moment: the fingerprint one, and the password one when it also includes
+`pam_fprintd`. One of them is then refused with "Device was already
+claimed". Send the output with a bug report, or compare it with
+`/etc/pam.d/gdm-fingerprint`. That's a system file, so change it with
+`authselect`, not by hand.
+
+## Heavy workloads
+
+`setup.sh` writes `/etc/sysctl.d/99-mk-desktop.conf` so the desktop stays
+responsive when memory or the disk is busy:
+
+- **When swap is zram** (compressed RAM, Fedora's default): swap early
+  (`vm.swappiness=180`, `vm.page-cluster=0`). That's cheaper than throwing
+  away cached files that then have to be read back from disk.
+- **Write data out in small batches** (256 MB / 64 MB) instead of up to 40%
+  of RAM, so a big copy can't freeze everything at once.
+
+Delete that file and reboot to go back to the kernel's defaults.
+
 ## Smooth login and unlock
 
 - **Login:** the login screen gets your display layout, so there's no mode

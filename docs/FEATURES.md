@@ -38,10 +38,11 @@ Credit for everything in the last two groups belongs to its authors; see
 
 | App | What it does | Open it |
 | :--- | :--- | :--- |
-| **MK Notes** | The notes app, laptop and phone: a folder of Markdown notes (`~/Notes`, opens in other Markdown apps too); edit, edit with live preview, or read; folders, pins, colours; a Tasks view of every checkbox; a daily-notes calendar; focus mode; your own theme, font, size, line length and spacing; `[[links]]`, backlinks, outline, graph view; #tags; checklists, callouts, tables; quick switcher and command palette; daily notes and templates; paste or capture screenshots, drop files; pen, highlighter and eraser with pressure (stylus, finger or mouse) on plain, lined, grid or dotted paper; PDF export; publish the vault as a website; version history; phone app with Wi-Fi sync (browser or Android app) | Super+N, `mk notes`, [docs/NOTES.md](NOTES.md) |
+| **MK Notes** | The notes app, laptop and phone: quick capture from anywhere (Super+Ctrl+N); a folder of Markdown notes (`~/Notes`, opens in other Markdown apps too); edit, edit with live preview, or read; folders, pins, colours; a Tasks view of every checkbox; a daily-notes calendar; focus mode; your own theme, font, size, line length and spacing; `[[links]]`, backlinks, outline, graph view; #tags; checklists, callouts, tables; quick switcher and command palette; daily notes and templates; paste or capture screenshots, drop files; pen, highlighter and eraser with pressure (stylus, finger or mouse) on plain, lined, grid or dotted paper; PDF export; publish the vault as a website; version history; phone app with encrypted Wi-Fi sync (browser or Android app); foldable callouts, PDF previews, coloured code | Super+N, `mk notes`, [docs/NOTES.md](NOTES.md) |
 | **Shortcuts window** | Every shortcut and gesture, live from GNOME; marks each working, clashing, unset or broken; change keys, add commands, reset | Super+/ |
 | **Companion** | Notes you pin, reorder and fold; tasks with progress; reminders (in N min, at a time, daily/weekly) that fire even when closed; morning brief; welcome greeting editor | Super+Shift+N |
-| **Focus timer** | Minutes and seconds; hides into a top-bar countdown; when you step away a screensaver plays over your work, Windows-classic style (Bubbles, Mystify, Starfield) or the full-screen Aurora view, your pick or a surprise; can silence notifications; pixel-robot celebration with fireworks | Companion › Focus timer, `mk focus 25` |
+| **Focus timer** | Minutes and seconds; hides into a top-bar countdown; step away and one of the screensaver scenes plays with a small countdown (or the classic Aurora with the big ring); can silence notifications; pixel-robot celebration with fireworks | Companion › Focus timer, `mk focus 25` |
+| **Screensaver** (`mk-screensaver`) | Plays a full-screen scene after a few idle minutes (3 by default): Web Hang (a masked hero swinging from a web over the city), Night Watch (a caped figure on a gargoyle in the rain, searchlight, lightning, bats), Neon Cascade (code rain decoding the time) or Aurora; never over a video or call; any touch ends it; GNOME still locks at its own time | `mk screensaver`, `config/screensaver.conf` |
 | **OCR snip** | Pick a screen area, get its text in the clipboard | Super+Shift+T |
 | **Camera controls** | Brightness, contrast, focus, exposure of your webcam | Super+C |
 | **Terminal capture** | Add notes and tasks with reminders without opening anything | `mk note`, `mk task`, `mk remind`, `mk list` |
@@ -51,14 +52,14 @@ Credit for everything in the last two groups belongs to its authors; see
 
 | Feature | What you see | Settings |
 | :--- | :--- | :--- |
-| Welcome light | After login, when the desktop is ready and the processor has calmed down: two comets of light run up the screen edges and meet at the top, the greeting lands with them (optionally spoken), and underneath: the date, your pinned tasks, your next reminder today and a low-battery hint; pinned tasks then get a notification with an Open button | Quick Settings › Welcome light, `mk welcome`, `config/welcome.conf` |
+| Welcome light | After login, when the desktop is ready and the processor has calmed down: two comets of light run up the screen edges and meet at the top, the greeting lands with them (optionally spoken) and is different each time (time of day, Monday/Friday/weekend, your birthday, back again, long time no see, or your own lines), and underneath: the date, your pinned tasks, your next reminder today and a low-battery hint; pinned tasks then get a notification with an Open button | Quick Settings › Welcome light, `mk welcome`, `config/welcome.conf` |
 | Dock magnification | The icon under the pointer grows, neighbours follow in a wave | `config/dock.conf` |
 | App-coloured dock glow | A soft circular tint in each app's own colour on hover | `dockGlow.js` |
-| System monitor | CPU sparkline and your chosen numbers in the top bar; a menu with processor, memory, swap, GPU, disk, temperatures, network, battery draw and time left, and the busiest apps; reads the kernel's counters every 2 s, nothing while locked | `config/monitor.conf` (`systemMonitor.js`) |
+| System monitor | CPU sparkline and your chosen numbers in the top bar; a menu with processor, memory, swap, GPU, disk, temperatures, battery draw and time left, the busiest apps, and an Internet section: active connection, live traffic graph and an on-demand speed test (ping, download, upload on a gauge, against Cloudflare's servers); reads the kernel's counters every 2 s, nothing while locked | `config/monitor.conf` (`systemMonitor.js`, `speedTest.js`) |
 | Timer countdown | Ring + time in the top bar while a focus timer runs; click to open | automatic |
-| Focus screensavers | Bubbles (soap bubbles that bounce off each other), Mystify (glowing polygons with echoes), Starfield (flying through stars over a dimmed desktop), drawn over your windows, gone at the first touch; 60 fps, small actors only | Focus timer › Screensaver, `AMBIENT_STYLE` in `timer.conf` (`focusSaver.js`) |
+| Media tile | Spotify or any MPRIS player: album art spinning like a record and the song scrolling by in the top bar; a menu with the art glowing in its own colour, seek bar, previous/play/next, and which speakers or headphones to use | `config/media.conf` (`mediaTile.js`) |
 | Wallpaper accent | The most vivid colour of your wallpaper tints Alt+Tab, the calendar, top-bar and dock hover, workspace thumbnails, the welcome line, the timer ring and GNOME's own accent (Files, Settings); follows wallpaper changes | `mk accent auto\|#hex\|status`, `config/theme.conf` (`accent.js`, `colour.js`) |
-| Alt+Tab, redesigned | Frosted card with a soft shadow; one ring in the accent colour glides after the selection on a spring, every frame, so a fast 3-finger swipe across several windows is one fluid motion; the others shrink and dim; pops in | automatic (`switcher.js`, `stylesheet.css`) |
+| Window switcher | Alt+Tab and the 3-finger swipe open a frosted, blurred grid of live window previews with app icons, titles and which desktop each is on; the accent ring glides to the selection; hover selects, click opens; 1–9 sends the selected window to that desktop; as fast as GNOME's own switcher | automatic (`windowGrid.js`, `switcher.js`) |
 | Calendar styling | Round day cells with an accent-coloured hover glow, glowing today, softer other-month days | `stylesheet.css` |
 | Pop-ups that don't collide | Workspace dots glide above the volume/brightness pop-up when both show | `osdStack.js` |
 | Dock out of the way | Hidden in the overview so window titles stay readable | automatic |
@@ -182,6 +183,9 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | `mk notes [today \| serve \| NOTE]` | MK Notes; `serve` = phone sync without the window |
 | `mk icon APP IMAGE\|reset` · `mk icon list` | Your own app icons |
 | `mk accent auto\|#hex\|status` | Accent colour from the wallpaper, or fixed |
+| `mk screensaver on\|off\|show\|scene\|delay` | Screensaver scenes |
+| `mk welcome variety\|birthday\|lines` | A different greeting each time; your birthday; your own lines |
+| `mk fingerprint check` | Why the reader might not answer on the lock screen |
 | `mk rename "Name" TAG` | Rename it |
 | `mk uninstall` | Remove MK from your account |
 | `just setup \| sync \| face \| export \| update \| save \| check \| overview \| screenshots` | The same for contributors |

@@ -29,6 +29,15 @@
 - **Calendar and Files styling** matching the workstation; workspace dots no longer overlap the volume pop-up.
 - Fixed: `sync.sh` aborting when `bin/` contained a `__pycache__` folder (found by a fresh-account test).
 - **Alt+Tab redesign:** frosted card, bright cyan ring on the selection, others shrink and dim, selection glides; smooth with 3-finger swipes too (switcher appears after 60 ms instead of 150 ms).
+- **Window switcher, rebuilt:** Alt+Tab and the 3-finger swipe open a frosted grid of live windows with icons, titles and desktop numbers; hover, click, 1–9 to send a window to another desktop.
+- **Screensaver** (`mk-screensaver`, `mk screensaver`): full-screen scenes after a few idle minutes: Web Hang, Night Watch, Neon Cascade, Aurora. The focus timer uses them too; the over-the-desktop Bubbles/Mystify/Starfield are gone.
+- **Speed test** in the system monitor (ping, download, upload on a gauge), with the active connection and a live traffic graph.
+- **Media tile** for Spotify and any MPRIS player: spinning album art, scrolling title, seek, controls, speaker choice (`config/media.conf`).
+- **A different greeting each time** (`config/greetings.conf`, `mk welcome variety|birthday|lines`); the voice says the line picked, rendered once and cached.
+- **MK Notes:** quick capture (Super+Ctrl+N into Inbox), foldable callouts, PDF previews (sandboxed), coloured code, **encrypted phone sync** (PyNaCl / TweetNaCl).
+- **Zen Browser** takes the desktop accent; redrawn app icons in GNOME's flat style; `docs/KEYBINDINGS.md`.
+- **Heavy loads:** zram-friendly swap and small write-back batches (`/etc/sysctl.d/99-mk-desktop.conf`, by setup.sh).
+- Fixed: a 292 ms freeze leaving the overview (the dock was re-laid out mid-animation); the Companion's MK Notes button did nothing. `mk fingerprint check` explains a lock screen that ignores the reader.
 - **System monitor in the top bar** (mk-indicator), replacing Astra Monitor: CPU sparkline, memory, temperatures, network, battery draw, busiest apps; reads the kernel's counters every 2 s.
 - **Welcome:** comet light that meets at the top, timed for when the desktop is ready; pinned tasks, next reminder and low battery under the greeting; pinned-task notification.
 - **Alt+Tab** as fast as GNOME's own (measured), and 3-finger swipes take the same finger travel per window however many are open.

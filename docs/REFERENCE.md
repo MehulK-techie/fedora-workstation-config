@@ -25,10 +25,12 @@ Every command, file and format. How the parts fit together is in
 | `mk sound [on\|off\|status]` | Laptop speaker tuning with EasyEffects |
 | `mk icon [list \| APP IMAGE \| APP reset]` | Your own icon for companion, notes, timer, shortcuts, camera or ocr |
 | `mk device` | What this computer has and what MK tunes for it ([HARDWARE.md](HARDWARE.md)) |
-| `mk fingerprint [enroll [FINGER]\|list\|delete\|settings]` | Fingerprint enrollment for login and sudo |
+| `mk fingerprint [enroll [FINGER]\|list\|delete\|settings\|check]` | Fingerprint enrollment for login and sudo; `check` reports why the lock screen may not use it |
 | `mk focus [DURATION] ["LABEL"]` | Start the focus timer in the background (`25`, `1:30`, `90s`) |
 | `mk power [status\|on\|off]` | Smart power profiles on laptops |
 | `mk effects [full\|lite\|auto]` | Show or set the visual effects profile |
+| `mk screensaver [on \| off \| show [SCENE] \| scene NAME \| delay SECONDS \| list]` | Screensaver scenes when you step away |
+| `mk welcome variety on\|off` · `birthday MM-DD` · `lines` | A different greeting each time; a birthday greeting; edit your own lines |
 | `mk accent [auto \| #rrggbb \| system on\|off \| status]` | Accent colour: from the wallpaper, or fixed; also sets GNOME's accent |
 | `mk rename "NAME" [TAG]` | Rename MK's windows, notifications and top-bar tag |
 | `mk check` | Notify if a new version of the repo is available (run daily by a timer) |
@@ -45,7 +47,8 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | :--- | :--- | :--- |
 | `show-shortcuts` | Super+/ | Shortcuts window |
 | `mk-companion [tasks \| note ID]` | Super+Shift+N | Notes, tasks, reminders, timer and MK Notes buttons |
-| `mk-notes [NOTE \| --daily \| --serve]` | Super+N | MK Notes |
+| `mk-notes [NOTE \| --daily \| --quick \| --serve]` | Super+N · Super+Alt+N · Super+Ctrl+N | MK Notes; today's note; quick capture into Inbox; phone sync only |
+| `mk-screensaver [show [SCENE] \| list]` | login | Watches for idle time and plays a scene; `show` plays one now |
 | `mk-timer [DURATION [LABEL]]` | via Companion | Focus timer; `mk-timer 25`, `mk-timer 1:30 "Reading"` start it in the background |
 | `mk-reminders [snooze ID SECONDS]` | timer | Fires due reminders and the morning brief |
 | `mk-power [status]` | service | Smart power profiles (laptops) |
@@ -70,11 +73,15 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `config/theme.conf` | `ACCENT=` (`auto` or `#rrggbb`), `SYSTEM_ACCENT=` (on/off), `CURSOR=` (cursor theme) | mk-indicator (`accent.js`), `mk accent`, `sync.sh` |
 | `config/notes.conf` | `NOTES_DIR=`, `SYNC=`, `SYNC_PORT=`, `HISTORY=`; look: `THEME=`, `FONT=`, `FONT_SIZE=`, `WIDTH=`, `SPACING=`, `FORMAT_BAR=`, `OPEN_IN=`, `SORT=` | `mk-notes` (Preferences writes them) |
 | `config/monitor.conf` | `PANEL=` (cpu, mem, temp, net, power), `INTERVAL=` (s) | mk-indicator system monitor |
+| `config/screensaver.conf` | `SCREENSAVER=` (on/off), `DELAY=` (s, 30+), `SCENE=` (random, aurora, web, knight, matrix) | `mk-screensaver`, `mk screensaver` |
+| `config/media.conf` | `MEDIA=` (on/off), `TICKER=` (on/off) | mk-indicator media tile |
+| `config/greetings.conf` | `[section]` then one greeting per line; sections morning, afternoon, evening, night, monday, friday, weekend, return, long, birthday, newyear, any | mk-indicator, `mk-voice prepare` (yours: `~/.config/mk-workstation/greetings.conf`) |
+| `config/browser/zen-userChrome.css` | CSS with `@ACCENT@` | `sync.sh` (marked block in each Zen profile's `chrome/userChrome.css`) |
 | `config/browser/user.js` | Firefox prefs (`user_pref(...)`) | `sync.sh` (marked block in each Firefox / Zen profile's `user.js`) |
 | `assets/notes-web/` | The phone app (HTML, JS, manifest) | `mk-notes` sync server, `scripts/build-apk.sh` |
 | `android/` | Android WebView wrapper for the phone app | `scripts/build-apk.sh` |
 | `config/dock.conf` | `MAGNIFY=`, `MAGNIFY_SPREAD=`, `MAGNIFY_MS=` | mk-indicator (dock magnification) |
-| `~/.config/mk-workstation/timer.conf` | `SILENCE=`, `AMBIENT=`, `AMBIENT_IDLE=` (s), `AMBIENT_STYLE=` (random, bubbles, mystify, starfield, aurora) | `mk-timer` (written by its window) |
+| `~/.config/mk-workstation/timer.conf` | `SILENCE=`, `AMBIENT=`, `AMBIENT_IDLE=` (s), `AMBIENT_STYLE=` (random, aurora, web, knight, matrix) | `mk-timer` (written by its window) |
 | `config/power.conf` | `ON_AC=`, `ON_BATTERY=`, `LOW_BATTERY=`, `LOW_PERCENT=` | `mk-power` |
 | `config/effects.conf` | `HEAVY=` UUIDs, `AUTO_LITE_BELOW_GB=` | `sync.sh` |
 | `config/enabled-extensions.txt` | one UUID per line | `sync.sh` |

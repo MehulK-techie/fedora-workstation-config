@@ -46,6 +46,12 @@ Menu › **Preferences** (Ctrl+,):
 - **Read**: the finished note; tick checkboxes and follow links.
 - **Focus mode** (F11): full screen, nothing but the text.
 
+## Quick capture
+
+**Super+Ctrl+N** from anywhere opens a small window. Type, press
+**Ctrl+Enter**, and it goes to the top of `Inbox.md` with the time. Esc
+closes it without saving.
+
 ## Writing
 
 | What | How |
@@ -57,7 +63,9 @@ Menu › **Preferences** (Ctrl+,):
 | Link to another note | Ctrl+K, or type `[[Note name]]`. A link to a note that doesn't exist yet creates it when you click the link |
 | Embed | `![[image.png]]` for a picture, `![[Other note]]` for another note's text |
 | Tags | `#project`. Nested tags work too: `#project/apollo` |
-| Callouts | `> [!note] Title`. Other kinds: `tip`, `warning`, `danger`, `question` |
+| Callouts | `> [!note] Title`. Other kinds: `tip`, `warning`, `danger`, `question`. `> [!tip]- Title` folds closed, `> [!tip]+ Title` folds open |
+| Code | Fenced code blocks (```` ```python ````) are coloured when Pygments is installed (`setup.sh` installs it) |
+| PDFs | Drop a PDF in, or write `![[file.pdf]]`: the note shows its first page, and a click opens it. The preview is made in a sandbox (bubblewrap), since a PDF can come from anywhere |
 | Tables, code, dividers | Use the buttons |
 | Edit or read | Ctrl+E. In the reading view you can tick checkboxes and click links and tags |
 
@@ -153,8 +161,13 @@ the same way Obsidian Sync handles it.
 - Only paired devices can sync. Each request is signed with the pairing
   key, the key itself is never sent, and a recorded request can't be
   replayed.
-- The notes themselves travel **unencrypted** over your Wi-Fi. Use phone
-  sync on your home network, not on public Wi-Fi.
+- **Encrypted** when the laptop has PyNaCl (`python3-pynacl`, installed by
+  `setup.sh`): everything that crosses the Wi-Fi, the list of notes included,
+  is sealed with a key derived from the pairing key. The phone's status line
+  says "encrypted". Once a phone has seen encryption it refuses unencrypted
+  replies, so nobody can quietly switch it off.
+- Without PyNaCl, notes travel **unencrypted** (still signed). Then use phone
+  sync on your home network only.
 - **New pairing key** in the Phone dialog unpairs every phone.
 
 ### Building the Android app

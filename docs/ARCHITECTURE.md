@@ -62,6 +62,7 @@ you can run `./bin/show-shortcuts` straight from a clone while hacking.
 | :--- | :--- | :--- |
 | `show-shortcuts` (Super+/) | GTK4 + libadwaita | Reads GNOME live and rebuilds whenever any keybinding schema, custom shortcut, extension list or the overrides file changes |
 | `mk-companion` (Super+Shift+N) | GTK4 + libadwaita | `~/.local/share/mk-workstation/companion.json`; merges items added by `mk note/task` while open |
+| `mk-screensaver` | GTK4 + cairo (`lib/mkworkstation/scenes.py`) | Mutter IdleMonitor `AddIdleWatch`; skips when an idle inhibitor (video, call) or the focus timer is active; full-screen window, 30 fps |
 | `mk-timer` | GTK4 + libadwaita + cairo | `~/.config/mk-workstation/timer.conf`; a marker file guarantees notifications are restored after focus mode |
 | `mk-reminders` | none | Run each minute by `mk-reminders.timer`; writes only `reminders-state.json` |
 | `camera-controls` | Tkinter | v4l2 controls of the webcam (`v4l2-ctl`) |
@@ -100,7 +101,9 @@ test with `journalctl --user -f -o cat /usr/bin/gnome-shell`.
 | `osdStack.js` | Keeps the workspace dots above the volume/brightness pop-up |
 | `accent.js` | Accent colour from the wallpaper: writes `~/.cache/mk-workstation/accent.css`, loads it over `stylesheet.css`, sets GNOME's accent |
 | `systemMonitor.js` | Top-bar system monitor: samples `/proc` and `/sys` (CPU, memory, hwmon temperatures, network, battery, `gpu_busy_percent`), sparkline and menu |
-| `focusSaver.js` | Focus-timer screensavers over the desktop (Bubbles, Mystify, Starfield): small actors moved per frame, shown when `timer.json` has `ambient` |
+| `windowGrid.js` | The window switcher grid over GNOME's own switcher: live clones, ring, pointer read from the stage (the switcher holds the grab), 1–9 to move windows |
+| `speedTest.js` | Internet section of the monitor: live graph, active connection, speed test (Soup 3, Cloudflare) |
+| `mediaTile.js` | MPRIS media tile: art (5 MB cap, image check), seek, controls, output sinks via `getMixerControl()` |
 | `colour.js` | RGB/HSV helpers and the dominant-hue histogram (dock glow, accent) |
 | `dockMagnify.js` | macOS-style magnification: magnified icons are clones on the UI layer (Dash to Dock clips its own icons), cosine falloff across neighbours |
 | `stylesheet.css` | Alt+Tab, hover transitions, overview captions, workspace thumbnails |

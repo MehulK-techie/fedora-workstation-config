@@ -252,6 +252,18 @@ if authselect current &>/dev/null; then
     fi
 fi
 
+# 7b-3. Shutting down: systemd asks every service and app to close (SIGTERM),
+# waits, then stops what's left (SIGKILL). Fedora waits up to 45 s per
+# service, which looks like a frozen power-off; 15 s is plenty for apps to
+# save and close cleanly. Our own drop-in files: delete them to undo.
+echo "==> Quicker, clean power-off (15 s for apps to close)..."
+for scope in system user; do
+    install -d "/etc/systemd/$scope.conf.d"
+    printf '# MK Workstation (setup.sh): apps get 15 s to close at power-off\n[Manager]\nDefaultTimeoutStopSec=15s\n' \
+        > "/etc/systemd/$scope.conf.d/90-mk-shutdown.conf"
+done
+systemctl daemon-reload
+
 # 7c. Smooth under heavy load: memory and disk-write tuning for a desktop.
 # Fedora swaps to zram (compressed RAM, very fast), so swapping early is cheap
 # and beats dropping cached files that then have to be read back from disk;

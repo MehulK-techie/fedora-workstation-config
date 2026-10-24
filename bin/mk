@@ -609,6 +609,16 @@ case "${1:-help}" in
         echo "Settings: ~/.config/mk-workstation/appnap.conf (defaults in config/appnap.conf)"
         ;;
 
+    users|guest)
+        # mk users add NAME | remove NAME | list ; mk guest on|off
+        if [[ "$1" == guest ]]; then
+            "$HOME/.local/bin/mk-users" guest "${2:-}"
+        else
+            shift
+            "$HOME/.local/bin/mk-users" "$@"
+        fi
+        ;;
+
     speedtest)
         shift
         "$HOME/.local/bin/mk-speedtest" "$@"
@@ -716,6 +726,8 @@ KEYRING
         echo "  unlock     Open a locked folder (mk unlock ~/Folder) or stop locking an app (mk unlock app NAME)"
         echo "  speedtest  Ping, download and upload speed"
         echo "  nap        Which unused apps App Nap paused under memory or CPU pressure"
+        echo "  users      Another person's account: mk users add NAME (their own settings and face)"
+        echo "  guest      A Guest login with no password that starts empty every time: mk guest on|off"
         echo "  tour       A short walkthrough of the desktop (also Super+Shift+/)"
         echo "  keyring    Why apps ask for the keyring password after fingerprint login, and the fixes"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"

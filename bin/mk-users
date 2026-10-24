@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# mk-users: a second person's account, and a guest account that starts fresh.
+#
+#   sudo mk-users add NAME [--admin]   a new account with its own settings and
+#                                      files; the MK setup applies itself at
+#                                      their first login
+#   sudo mk-users remove NAME          delete the account and its files (asks)
+#   sudo mk-users guest on|off         a "Guest" account: no password, no
+#                                      admin rights, and an empty home folder
+#                                      at every login (nothing a guest leaves
+#                                      behind survives)
+#   mk-users list                      people who can log in here
+#
+# Face unlock is per person: each enrolls their own face with
+#   sudo ./register-face.sh --user NAME
+# and fingerprints with `mk fingerprint` while logged in as themselves.
+#
+# System files touched (backed up once to .bak, never overwritten):
+#   /etc/pam.d/gdm-password      guest on: one pam_exec line that empties the
+#                                guest's home as their session starts
+#   /usr/local/libexec/mk-guest-reset, /etc/systemd/system/mk-guest-reset.service
+set -euo pipefail
+
+GUEST=guest
+RESET=/usr/local/libexec/mk-guest-reset
+UNIT=/etc/systemd/system/mk-guest-reset.service
+PAM=/etc/pam.d/gdm-password
+PAM_LINE="session     optional      pam_exec.so quiet $RESET"
+REPO="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." 2> /dev/null && pwd)"
+[[ -f "$REPO/sync.sh" ]] || REPO="$(cat "${SUDO_HOME:-$(getent passwd "${SUDO_USER:-root}" | cut -d: -f6)}/.config/mk-workstation/repo-path" 2> /dev/null || true)"
+
+need_root() {
+    if [[ $EUID -ne 0 ]]; then
+        exec sudo "$0" "$@"
+    fi
+}
+
+backup() {
+    [[ -f "$1" && ! -f "$1.bak" ]] && cp -a "$1" "$1.bak"
+    return 0
+}
+
+valid_name() {
+    [[ "$1" =~ ^[a-z_][a-z0-9_-]{0,30}$ ]] || { echo "[-] Use a short lowercase name (letters, digits, - or _)." >&2; exit 2; }
+}
+
+# The new person gets the MK desktop at their first login: a copy of the repo
+# in their home and a one-time autostart that runs sync.sh as them.
+first_login_sync() {
+    local user=$1 home
+    home=$(getent passwd "$user" | cut -d: -f6)
+    if [[ -n "$REPO" && -d "$REPO/.git" ]]; then
+        git clone --quiet "$REPO" "$home/MK" 2> /dev/null || cp -a "$REPO" "$home/MK"
+    elif [[ -n "$REPO" ]]; then
+        cp -a "$REPO" "$home/MK"
+    else
+        echo "[*] MK repo not found; $user can clone it and run ./sync.sh themselves."
+        return
+    fi
+    mkdir -p "$home/.config/autostart"
+    cat > "$home/.config/autostart/mk-first-sync.desktop" << DESKTOP
+[Desktop Entry]
+Type=Application
+Name=MK first-login setup
+Exec=bash -c '"$home/MK/sync.sh" > "$home/.cache/mk-first-sync.log" 2>&1; rm -f "$home/.config/autostart/mk-first-sync.desktop"'
+X-GNOME-Autostart-Delay=8
+NoDisplay=true
+DESKTOP
+    chown -R "$user:$user" "$home/MK" "$home/.config"
+}
+
+cmd_add() {
+    local name=${1:?Usage: sudo mk-users add NAME [--admin]} admin=${2:-}
+    valid_name "$name"
+    if id "$name" &> /dev/null; then
+        echo "[-] $name already exists." >&2
+        exit 1
+    fi
+    useradd -m -c "$name" "$name"
+    [[ "$admin" == "--admin" ]] && usermod -aG wheel "$name"
+    echo "Choose a password for $name:"
+    passwd "$name"
+    first_login_sync "$name"
+    echo "✔ $name can log in now (their own settings, files and apps' data)."
+    echo "  Face unlock for them: sudo ./register-face.sh --user $name"
+}
+
+cmd_remove() {
+    local name=${1:?Usage: sudo mk-users remove NAME}
+    valid_name "$name"
+    [[ "$name" != "${SUDO_USER:-}" ]] || { echo "[-] You can't remove the account you're using." >&2; exit 1; }
+    id "$name" &> /dev/null || { echo "[-] No account $name." >&2; exit 1; }
+    read -rp "Delete $name and ALL their files? This can't be undone. Type the name to confirm: " answer
+    [[ "$answer" == "$name" ]] || { echo "Cancelled."; exit 0; }
+    loginctl terminate-user "$name" 2> /dev/null || true
+    userdel -r "$name"
+    echo "✔ $name removed."
+}
+
+guest_on() {
+    if ! id "$GUEST" &> /dev/null; then
+        useradd -m -c "Guest" "$GUEST"
+    fi
+    passwd -d "$GUEST" > /dev/null   # log in without a password (no admin rights)
+    install -d /usr/local/libexec
+    cat > "$RESET" << 'SCRIPT'
+#!/bin/bash
+# MK guest account: an empty home folder at every login, and at boot.
+# Run by PAM (pam_exec, gdm-password session start) and mk-guest-reset.service.
+[[ "${PAM_USER:-guest}" == guest ]] || exit 0
+[[ -z "${PAM_TYPE:-}" || "$PAM_TYPE" == open_session ]] || exit 0
+pgrep -u guest > /dev/null && exit 0   # already logged in elsewhere: leave it
+rm -rf --one-file-system /home/guest
+cp -a /etc/skel /home/guest
+chown -R guest:guest /home/guest
+chmod 700 /home/guest
+restorecon -R /home/guest 2> /dev/null || true
+SCRIPT
+    chmod 755 "$RESET"
+    cat > "$UNIT" << UNITFILE
+[Unit]
+Description=MK: empty the guest account's home folder at boot
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=$RESET
+
+[Install]
+WantedBy=multi-user.target
+UNITFILE
+    systemctl daemon-reload
+    systemctl enable mk-guest-reset.service > /dev/null 2>&1
+    if [[ -f "$PAM" ]] && ! grep -qF "$RESET" "$PAM"; then
+        backup "$PAM"
+        # Before the other session lines, so the home is fresh before anything uses it.
+        sed -i "0,/^session/s#^session#$PAM_LINE\nsession#" "$PAM"
+    fi
+    "$RESET"
+    echo "✔ Guest account on: pick \"Guest\" on the login screen, no password."
+    echo "  Its home folder starts empty at every login. Turn off: sudo mk-users guest off"
+}
+
+guest_off() {
+    if [[ -f "$PAM" ]] && grep -qF "$RESET" "$PAM"; then
+        sed -i "\#pam_exec.so quiet $RESET#d" "$PAM"
+    fi
+    systemctl disable mk-guest-reset.service > /dev/null 2>&1 || true
+    rm -f "$UNIT" "$RESET"
+    systemctl daemon-reload
+    if id "$GUEST" &> /dev/null; then
+        loginctl terminate-user "$GUEST" 2> /dev/null || true
+        userdel -r "$GUEST" 2> /dev/null || userdel "$GUEST"
+    fi
+    echo "✔ Guest account removed."
+}
+
+cmd_list() {
+    getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 { printf "  %-16s %s\n", $1, $5 }'
+}
+
+case "${1:-}" in
+    add) need_root "$@"; shift; cmd_add "$@" ;;
+    remove) need_root "$@"; shift; cmd_remove "$@" ;;
+    guest)
+        need_root "$@"
+        case "${2:-}" in
+            on) guest_on ;;
+            off) guest_off ;;
+            *) echo "Usage: sudo mk-users guest on|off" >&2; exit 2 ;;
+        esac ;;
+    list) cmd_list ;;
+    *) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

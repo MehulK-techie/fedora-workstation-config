@@ -92,11 +92,10 @@
   box-shadow: 0 0 10px 0 rgba(0, 210, 255, 0.18);
 }
 
-/* dockMagnify.js: the magnified clone is the only layer, no tint or halo. */
+/* dockMagnify.js: the whole tile is magnified as one clone (its glow scales
+   with it); no style transition, which would paint a second, unscaled copy. */
 #dashtodockContainer .overview-tile.mk-magnified .overview-icon,
 #dashtodockContainer .overview-tile.mk-magnified:hover .overview-icon {
-  background-color: transparent;
-  box-shadow: none;
   transition-duration: 0ms;
 }
 

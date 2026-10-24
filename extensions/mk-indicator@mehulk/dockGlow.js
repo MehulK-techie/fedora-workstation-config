@@ -87,6 +87,13 @@ export class DockGlow {
             return GLib.SOURCE_CONTINUE;
         });
         this._attachDocks();
+        // Switching desktops rebuilds the dock (it shows only this desktop's
+        // apps): drop any magnified clones at once, and don't magnify until the
+        // switch has settled, so icons never jump or hang in the old places.
+        this._wsId = global.workspace_manager.connect('active-workspace-changed', () => {
+            this._magnify?.reset(true);
+            this._magnify?.suppress(450);
+        });
     }
 
     _attachDocks() {
@@ -134,8 +141,8 @@ export class DockGlow {
         const icon = findOverviewIcon(tile);
         if (!icon)
             return;
-        // With magnification the zoom itself is the hover feedback.
-        const colour = tile.hover && !this._magnify?.enabled ? appColour(tile.app) : null;
+        // The whole tile is magnified as one clone, so the glow scales with it.
+        const colour = tile.hover ? appColour(tile.app) : null;
         if (!colour) {
             icon.set_style(null);
             return;
@@ -155,6 +162,9 @@ export class DockGlow {
     }
 
     disable() {
+        if (this._wsId)
+            global.workspace_manager.disconnect(this._wsId);
+        this._wsId = 0;
         this._magnify?.destroy();
         this._magnify = null;
         if (this._findId) {

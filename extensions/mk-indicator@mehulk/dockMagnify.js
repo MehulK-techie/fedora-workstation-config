@@ -47,6 +47,7 @@ export class DockMagnify {
         this._focus = null;
         this._leaveId = 0;
         this._docks = [];           // [dock, [signal ids on dock or slider]]
+        this._boxes = new Set();    // dock icon boxes we listen to
     }
 
     // Follow the dock while it slides in or out: the clones live outside it,
@@ -57,6 +58,16 @@ export class DockMagnify {
         if (slider)
             ids.push([slider, slider.connect('notify::slide-x', () => this._syncSoon())]);
         ids.push([dock, dock.connect('hiding', () => this.reset(true))]);
+        // Icons added or removed (another desktop's apps): old positions are
+        // stale. connectObject lets go by itself when the box is destroyed.
+        const box = dock.dash?._box;
+        if (box && !this._boxes.has(box)) {
+            this._boxes.add(box);
+            box.connectObject(
+                'child-added', () => this.reset(true),
+                'child-removed', () => this.reset(true),
+                'destroy', () => this._boxes.delete(box), this);
+        }
         this._docks.push([dock, ids]);
     }
 
@@ -91,9 +102,14 @@ export class DockMagnify {
         return this.conf.MAGNIFY > 1.001;
     }
 
+    // No magnifying for MS milliseconds (a desktop switch is re-laying the dock out).
+    suppress(ms) {
+        this._quietUntil = GLib.get_monotonic_time() + ms * 1000;
+    }
+
     // Called by DockGlow whenever a dock tile's hover changes.
     hover(tile) {
-        if (!this.enabled)
+        if (!this.enabled || GLib.get_monotonic_time() < (this._quietUntil ?? 0))
             return;
         if (tile.hover) {
             if (this._leaveId) {
@@ -216,6 +232,9 @@ export class DockMagnify {
         }
         for (const [, ids] of this._docks)
             ids.forEach(([obj, id]) => obj.disconnect(id));
+        for (const box of this._boxes)
+            box.disconnectObject(this);
+        this._boxes.clear();
         this._docks = [];
         if (this._leaveId) {
             GLib.source_remove(this._leaveId);

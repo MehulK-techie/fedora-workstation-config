@@ -627,6 +627,13 @@ export class Welcome {
                 return GLib.SOURCE_REMOVE;
             });
         }
+        if (!force) {
+            this._fingerId = GLib.timeout_add(GLib.PRIORITY_LOW, duration + 2500, () => {
+                this._fingerId = 0;
+                this._checkFingerprint();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
         if (todo.pinned.length && !force) {
             this._remindId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, duration + 1200, () => {
                 this._remindId = 0;
@@ -649,6 +656,41 @@ export class Welcome {
         source.addNotification(notification);
     }
 
+    // A reader with no finger enrolled can't unlock anything. Readers that keep
+    // prints on the chip lose them when Windows Hello or a firmware update
+    // resets the chip, and nothing tells you: say so once per login.
+    _checkFingerprint() {
+        let proc;
+        try {
+            proc = Gio.Subprocess.new(['fprintd-list', GLib.get_user_name()],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+        } catch (e) {
+            return;  // no fprintd: no reader to worry about
+        }
+        proc.communicate_utf8_async(null, null, (p, res) => {
+            let out = '';
+            try {
+                [, out] = p.communicate_utf8_finish(res);
+            } catch (e) {
+                return;
+            }
+            if (!/has no fingers enrolled/.test(out ?? ''))
+                return;
+            const source = MessageTray.getSystemSource();
+            const notification = new MessageTray.Notification({
+                source,
+                title: 'Fingerprint: no finger enrolled',
+                body: 'The reader has no fingerprint saved for you, so the lock screen can\'t use it. ' +
+                    'This happens when Windows Hello or a firmware update resets the reader. ' +
+                    'Enroll again with: mk fingerprint',
+                gicon: new Gio.ThemedIcon({name: 'fingerprint-detection-symbolic'}),
+            });
+            notification.addAction('Enroll', () => run(['ptyxis', '--', 'bash', '-c',
+                `${BIN}/mk fingerprint; read -rp 'Press Enter to close'`]));
+            source.addNotification(notification);
+        });
+    }
+
     _onNotification() {
         const conf = welcomeConf();
         const banners = new Gio.Settings({schema_id: 'org.gnome.desktop.notifications'});
@@ -657,7 +699,7 @@ export class Welcome {
     }
 
     disable() {
-        for (const id of ['_voiceId', '_remindId', '_prepareId']) {
+        for (const id of ['_voiceId', '_remindId', '_prepareId', '_fingerId']) {
             if (this[id])
                 GLib.source_remove(this[id]);
             this[id] = 0;

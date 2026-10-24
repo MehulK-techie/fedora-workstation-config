@@ -21,13 +21,14 @@ HP ENVY x360 Convertible 13-ay0xxx  (convertible)
 
 | Hardware | How it's found | What MK does | Where |
 | :--- | :--- | :--- | :--- |
-| Fingerprint reader | fprintd lists a device | Turns on fingerprint for login and `sudo` (`authselect enable-feature -b with-fingerprint`, which backs up PAM first); `mk fingerprint` enrolls | `setup.sh` |
+| Fingerprint reader | fprintd lists a device | Turns on fingerprint for login, the lock screen and `sudo`, and keeps the password service off the reader (`scripts/fingerprint-pam.sh`, which backs up PAM first); `mk fingerprint` enrolls; a notice at login if no finger is enrolled | `setup.sh`, `scripts/fingerprint-pam.sh` |
 | Webcam (RGB or IR) | Video devices; IR in the name | Howdy face unlock; IR gets stricter defaults and `sudo` support, RGB asks first | `setup.sh`, `register-face.sh` |
 | GPU (Intel, AMD, NVIDIA) | `lspci` | The matching VA-API driver, so H.264/HEVC video decodes on the GPU | `setup.sh` |
 | Battery | `/sys/class/power_supply/BAT*` | Smart power profiles: performance on AC, balanced on battery, power-saver when low | `sync.sh`, `bin/mk-power` |
 | 2-in-1 / tablet | `hostnamectl chassis` | Installs `iio-sensor-proxy` for auto-rotation and tablet mode | `setup.sh` |
 | Weak hardware | RAM, cores, GPU rendering | `mk effects auto` switches off blur and window effects | `sync.sh`, `config/effects.conf` |
 | Touchpad | input devices | Tap to click, natural scrolling, 3- and 4-finger gestures | `sync.sh` |
+| Bluetooth / Airplane mode | `systemd-rfkill` masked | Unmasks it, so each radio's on/off state survives a reboot | `setup.sh` |
 | Your monitors | `~/.config/monitors.xml` | The login screen uses the same resolution and scaling, so logging in doesn't flicker | `setup.sh` |
 
 Everything above is skipped quietly on machines that don't have it.
@@ -53,19 +54,34 @@ the reader itself) and is never part of this repository.
 
 ### If the fingerprint doesn't work on the lock screen
 
-Run `mk fingerprint check`. It only reads, and reports:
+**First, check a finger is still enrolled** (`mk fingerprint list`). Readers
+that store prints on the chip itself (many Synaptics readers) lose them when
+the chip is reset: by Windows Hello on a dual-boot laptop, or by a firmware
+update. fprintd then deletes its record ("unknown to device") and the lock
+screen silently stops using the reader. MK shows a notice at login when this
+happens. Fix: `mk fingerprint` to enroll again. On a dual-boot laptop, enroll
+in Windows and Fedora on different fingers if the reader keeps forgetting.
+
+Then run `mk fingerprint check`. It only reads, and reports:
 
 - which fingers are enrolled
 - whether GNOME's fingerprint login is on
 - which login services (PAM) use the reader
 - the reader's recent errors
 
-A common cause is two login services asking for the reader at the same
-moment: the fingerprint one, and the password one when it also includes
-`pam_fprintd`. One of them is then refused with "Device was already
-claimed". Send the output with a bug report, or compare it with
-`/etc/pam.d/gdm-fingerprint`. That's a system file, so change it with
-`authselect`, not by hand.
+The other common cause is two login services asking for the reader at the
+same moment: `gdm-fingerprint` (GNOME's finger prompt) and `gdm-password`
+when it also includes `pam_fprintd`. One of them is then refused with
+"Device was already claimed". Fix:
+
+```bash
+sudo scripts/fingerprint-pam.sh
+```
+
+It turns on authselect's `with-fingerprint`, backs up
+`/etc/pam.d/gdm-password` to `gdm-password.bak` (once, never overwritten),
+comments out its `pam_fprintd` line, and restarts fprintd. `setup.sh` runs
+it too. Undo: `sudo cp -a /etc/pam.d/gdm-password.bak /etc/pam.d/gdm-password`.
 
 ## Heavy workloads
 

@@ -189,6 +189,11 @@ case "${1:-help}" in
             check)
                 # Why the reader might not answer on the lock screen. Only reads.
                 echo "Enrolled:"
+                if ! fprintd-list "$USER" 2> /dev/null | grep -q '^ - '; then
+                    echo "  none. The reader has no finger saved for you, so nothing can unlock with it."
+                    echo "  Readers that store prints on the chip lose them when Windows Hello (dual boot)"
+                    echo "  or a firmware update resets the chip. Enroll again: mk fingerprint"
+                fi
                 fprintd-list "$USER" 2> /dev/null | sed -n 's/^ - /  /p'
                 echo "GNOME fingerprint login: $(gsettings get org.gnome.login-screen enable-fingerprint-authentication 2> /dev/null)"
                 echo "authselect: $(authselect current 2> /dev/null | tr '\n' ' ')"
@@ -203,6 +208,7 @@ case "${1:-help}" in
                 echo "The lock screen asks for your finger through the gdm-fingerprint service."
                 echo "If gdm-password (your password, plus face unlock) uses the reader too, the two"
                 echo "ask at once and one is refused (\"Device was already claimed\")."
+                echo "Fix: sudo scripts/fingerprint-pam.sh (from the MK repo; backs up gdm-password first)."
                 ;;
             *)
                 echo "Usage: mk fingerprint [enroll [FINGER] | list | delete | settings | check]" >&2

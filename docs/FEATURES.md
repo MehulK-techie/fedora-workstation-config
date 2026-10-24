@@ -30,7 +30,7 @@ Credit for everything in the last two groups belongs to its authors; see
 | Effects profile | Heavy effects off on weak machines (auto) or on demand | `mk effects full\|lite\|auto` | `sync.sh`, `config/effects.conf` |
 | Smart power (laptops) | Performance on AC, balanced on battery, power-saver when low; only switches on changes | `mk power` | `bin/mk-power`, `config/power.conf` |
 | Face unlock wizard | Several face models in different light, IR-aware security, other users | `mk face` | `register-face.sh` |
-| Fingerprint enrollment | Enroll, list, delete fingers; login and sudo enabled by setup | `mk fingerprint` | `bin/mk`, `setup.sh` |
+| Fingerprint enrollment | Enroll, list, delete fingers; login, lock screen and sudo enabled by setup; a login notice when the reader has forgotten your finger | `mk fingerprint` | `bin/mk`, `setup.sh`, `scripts/fingerprint-pam.sh` |
 | Rename it | Your name in every MK window, notification and the top-bar tag | `mk rename "Name" TAG` | `config/brand.conf` |
 | Daily update check | Notifies when this repo has a new version | automatic | `mk-update-check.timer` |
 

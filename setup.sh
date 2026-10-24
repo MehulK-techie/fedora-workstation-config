@@ -177,18 +177,26 @@ fi
 
 # 7b. Hardware this computer actually has (detected, so any laptop gets what it needs)
 echo "==> Detecting hardware..."
-# Fingerprint reader: allow fingerprint for login and sudo. authselect writes
-# the PAM files itself and -b backs them up first. Enroll with `mk fingerprint`.
-if command -v fprintd-list &>/dev/null && gdbus call --system --dest net.reactivated.Fprint \
+# Fingerprint reader: login, lock screen and sudo. scripts/fingerprint-pam.sh
+# turns on authselect's with-fingerprint and keeps gdm-password off the reader
+# (backing it up first), so the lock screen's finger prompt isn't refused.
+if gdbus call --system --dest net.reactivated.Fprint \
         --object-path /net/reactivated/Fprint/Manager \
         --method net.reactivated.Fprint.Manager.GetDevices 2>/dev/null | grep -q 'Device/'; then
     echo "    Fingerprint reader found"
-    ensure_pkgs fprintd-pam
-    if ! authselect current 2>/dev/null | grep -q with-fingerprint; then
-        authselect enable-feature -b with-fingerprint \
-            || WARNINGS+=("Could not enable fingerprint login (authselect enable-feature with-fingerprint)")
+    "$SCRIPT_DIR/scripts/fingerprint-pam.sh" \
+        || WARNINGS+=("Fingerprint setup incomplete; see the messages above (sudo scripts/fingerprint-pam.sh)")
+    if ! sudo -u "$REAL_USER" fprintd-list "$REAL_USER" 2>/dev/null | grep -q '^ - '; then
+        WARNINGS+=("Fingerprint reader ready, but no finger is enrolled: run 'mk fingerprint'")
     fi
-    WARNINGS+=("Fingerprint reader ready: enroll a finger with 'mk fingerprint'")
+fi
+# Bluetooth and Airplane mode: systemd-rfkill keeps each radio's on/off
+# state across reboots. Masked, Bluetooth can come up blocked at every boot.
+if systemctl is-enabled systemd-rfkill.service 2>/dev/null | grep -q masked; then
+    echo "    Radios: unmasking systemd-rfkill (Bluetooth/Airplane state survives reboots)"
+    systemctl unmask systemd-rfkill.service systemd-rfkill.socket \
+        || WARNINGS+=("Could not unmask systemd-rfkill")
+    systemctl enable --now systemd-rfkill.socket 2>/dev/null || true
 fi
 # 2-in-1 laptops: the sensor service GNOME uses for auto-rotation and tablet mode.
 case "$(hostnamectl chassis 2>/dev/null)" in

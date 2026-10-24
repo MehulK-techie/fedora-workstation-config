@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Screensaver
+Comment=Pick the scene that plays when you step away, or shuffle them
+Exec=@BIN@/mk-screensaver settings
+Icon=io.github.mehulk.MkScreensaver
+Categories=Settings;DesktopSettings;
+Keywords=screensaver;scene;idle;spider;aurora;mk;
+StartupNotify=true
+StartupWMClass=io.github.mehulk.MkScreensaverSettings

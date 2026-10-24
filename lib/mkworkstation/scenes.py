@@ -2,8 +2,9 @@
 (when you step away from the computer) and by the focus timer.
 
   aurora   soft light drifting over a dark sky, rising sparks
-  web      a masked hero in red and blue hangs upside down from a web line,
-           swinging gently over a moonlit city (two parallax layers)
+  web      a brick-built masked hero in red and blue hangs upside down from a
+           web line over a moonlit city, a spider on the moon (two parallax
+           layers)
   knight   a caped figure crouches on a stone gargoyle in the rain; the cape
            moves in the wind, a searchlight sweeps the clouds, lightning
   matrix   neon code rain, with the time decoding itself in the middle
@@ -13,6 +14,7 @@ doesn't move (sky, skyline, moon) is drawn once into a cached surface, so a
 frame only paints what changes.
 """
 import math
+import os
 import random
 import time
 
@@ -29,11 +31,33 @@ def scene(name, label):
     return register
 
 
+LAST_FILE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+                         "mk-workstation", "scene-last")
+
+
+def choose(name):
+    """The scene name to show: NAME itself, or for random (shuffle) any scene
+    but the one shown last time, remembered across runs and apps."""
+    if name in SCENES:
+        return name
+    try:
+        with open(LAST_FILE) as f:
+            last = f.read().strip()
+    except OSError:
+        last = ""
+    name = random.choice([n for n in SCENES if n != last] or list(SCENES))
+    try:
+        os.makedirs(os.path.dirname(LAST_FILE), exist_ok=True)
+        with open(LAST_FILE, "w") as f:
+            f.write(name + "\n")
+    except OSError:
+        pass
+    return name
+
+
 def pick(name):
-    """A scene by name; random picks one of them."""
-    if name not in SCENES:
-        name = random.choice(list(SCENES))
-    return SCENES[name]()
+    """A scene by name; random picks one of them (never the last one)."""
+    return SCENES[choose(name)]()
 
 
 class Scene:
@@ -195,7 +219,9 @@ class WebHang(Scene):
             cr.set_source_rgba(1, 1, 1, rand.uniform(0.2, 0.8))
             cr.arc(rand.uniform(0, w), rand.uniform(0, h * 0.55), rand.uniform(0.4, 1.4), 0, 2 * math.pi)
             cr.fill()
-        moon(cr, w * 0.78, h * 0.2, min(w, h) * 0.08)
+        r = min(w, h) * 0.08
+        moon(cr, w * 0.78, h * 0.2, r)
+        spider_emblem(cr, w * 0.78, h * 0.2, r * 0.62, (0.12, 0.10, 0.16))  # the signal on the moon
         self.layers = None
 
     def _city(self, w, h):
@@ -243,94 +269,152 @@ class WebHang(Scene):
         caption(cr, w, h, [(time.strftime("%H:%M"), 44, 0.85), (time.strftime("%A, %d %B"), 16, 0.5)])
 
     def _hero(self, cr, s, t):
-        """Upside down: feet at the origin (on the web), head towards the ground."""
-        red, blue, dark = (0.80, 0.08, 0.12), (0.10, 0.22, 0.62), (0.05, 0.05, 0.08)
-        cr.scale(s, s)
-        sway = 0.08 * math.sin(t * 1.4 + 0.6)
+        """A plastic brick-style minifigure, upside down: feet at the origin (on
+        the web), head towards the ground. Flat blocks with a soft plastic
+        shine, the spider emblem on the chest."""
+        red, blue = (0.84, 0.10, 0.12), (0.12, 0.26, 0.70)
+        cr.scale(s * 1.3, s * 1.3)
+        sway = 0.10 * math.sin(t * 1.4 + 0.6)
 
-        def limb(x1, y1, x2, y2, width, color):
-            cr.set_source_rgb(*color)
-            cr.set_line_width(width)
-            cr.move_to(x1, y1)
-            cr.line_to(x2, y2)
-            cr.stroke()
+        def block(x, y, bw, bh, color, radius=4):
+            plastic(cr, x, y, bw, bh, color, radius)
 
-        cr.set_line_cap(cairo.LINE_CAP_ROUND)
-        # legs: one wrapped around the line, one bent
-        limb(-6, 0, -10, 70, 26, blue)
-        limb(-10, 70, -14, 130, 30, blue)
-        limb(10, 18, 34, 70, 26, blue)
-        limb(34, 70, 14, 130, 30, blue)
-        limb(-6, -2, -8, 18, 24, red)     # boots
-        limb(10, 16, 18, 34, 24, red)
-        # torso
-        cr.set_source_rgb(*red)
-        cr.move_to(-30, 128)
-        cr.curve_to(-38, 170, -36, 220, -26, 250)
-        cr.line_to(26, 250)
-        cr.curve_to(36, 220, 38, 170, 30, 128)
+        # boots and legs (two blocks, the web wrapped round the boots)
+        for side in (-1, 1):
+            x = -30 if side < 0 else 2
+            block(x, 0, 28, 14, red, 3)
+            block(x, 13, 28, 66, blue, 3)
+        cr.set_source_rgba(0.95, 0.97, 1, 0.9)  # web loops round the ankles
+        cr.set_line_width(2)
+        for k in range(3):
+            cr.move_to(-32, 3 + k * 4)
+            cr.line_to(32, 6 + k * 4)
+        cr.stroke()
+        block(-32, 78, 64, 16, blue, 3)  # hips
+        # torso: wider at the waist (here, near the hips), narrower at the shoulders
+        cr.save()
+        cr.move_to(-40, 94)
+        cr.line_to(40, 94)
+        cr.line_to(31, 172)
+        cr.line_to(-31, 172)
         cr.close_path()
-        cr.fill()
+        cr.clip()
+        block(-40, 94, 80, 78, red, 0)
         cr.set_source_rgb(*blue)  # side panels
         for side in (-1, 1):
-            cr.move_to(side * 30, 128)
-            cr.curve_to(side * 38, 170, side * 36, 215, side * 28, 240)
-            cr.line_to(side * 22, 236)
-            cr.curve_to(side * 26, 200, side * 26, 160, side * 22, 130)
+            cr.move_to(side * 40, 94)
+            cr.line_to(side * 28, 94)
+            cr.line_to(side * 22, 172)
+            cr.line_to(side * 31, 172)
             cr.close_path()
             cr.fill()
-        # suit lines
-        cr.set_source_rgba(*dark, 0.55)
-        cr.set_line_width(1.4)
-        for y in range(140, 250, 18):
-            cr.move_to(-24, y)
-            cr.curve_to(-8, y + 6, 8, y + 6, 24, y)
-        cr.move_to(0, 130)
-        cr.line_to(0, 250)
+        cr.set_source_rgba(0, 0, 0, 0.45)  # web pattern
+        cr.set_line_width(1.1)
+        for x in range(-30, 31, 12):
+            cr.move_to(x * 0.9, 94)
+            cr.line_to(x * 0.7, 172)
+        for y in range(104, 172, 14):
+            cr.move_to(-30, y)
+            cr.curve_to(-10, y + 5, 10, y + 5, 30, y)
         cr.stroke()
-        # arms hanging down, swaying a little
-        for side, phase in ((-1, 0), (1, 1.2)):
-            a = sway * (1 if side < 0 else -1) + 0.05 * math.sin(t * 1.4 + phase)
-            sx, sy = side * 30, 240
-            ex = sx + side * 14 + math.sin(a) * 90
-            ey = sy + math.cos(a) * 90
-            limb(sx, sy, ex, ey, 20, red)
-            limb(ex, ey, ex + math.sin(a) * 50, ey + math.cos(a) * 50, 18, red)
-            cr.set_source_rgb(*red)
-            cr.arc(ex + math.sin(a) * 58, ey + math.cos(a) * 58, 11, 0, 2 * math.pi)
-            cr.fill()
-        # head, mask and eye lenses (upside down: eyes below the forehead)
-        cr.save()
-        cr.translate(0, 290)
-        cr.rotate(sway * 0.6)
-        cr.set_source_rgb(*red)
-        cr.save()
-        cr.scale(1, 1.22)
-        cr.arc(0, 0, 34, 0, 2 * math.pi)
         cr.restore()
-        cr.fill()
-        cr.set_source_rgba(*dark, 0.5)
-        cr.set_line_width(1.2)
-        for k in range(8):  # mask seams radiating from the face's centre
-            ang = k * math.pi / 4
-            cr.move_to(0, 6)
-            cr.line_to(math.cos(ang) * 34, 6 + math.sin(ang) * 40)
-        for rr in (14, 26):
-            cr.arc(0, 6, rr, 0, 2 * math.pi)
-        cr.stroke()
-        for side in (-1, 1):  # lenses: white, outlined, angled
+        cr.save()  # the emblem, upside down with the figure
+        cr.translate(0, 142)
+        cr.rotate(math.pi)
+        spider_emblem(cr, 0, 0, 13, (0.05, 0.05, 0.07))
+        cr.restore()
+        # arms hang towards the ground and sway, C-shaped hands
+        for side, phase in ((-1, 0.0), (1, 1.3)):
+            a = sway * side + 0.06 * math.sin(t * 1.4 + phase)
             cr.save()
-            cr.translate(side * 13, 12)
-            cr.rotate(side * -0.45)
-            cr.scale(1, 0.62)
-            cr.arc(0, 0, 11, 0, 2 * math.pi)
+            cr.translate(side * 33, 164)
+            cr.rotate(-a - side * 0.25)
+            block(-9, 0, 18, 46, red, 8)
+            cr.translate(0, 50)
+            cr.set_source_rgb(*red)  # hand: a C opening downwards
+            cr.set_line_width(7)
+            cr.arc(0, 4, 8, -0.35 * math.pi, 1.35 * math.pi)
+            cr.stroke()
             cr.restore()
-            cr.set_source_rgb(0.97, 0.98, 1)
+        block(-10, 172, 20, 8, red, 2)  # neck
+        # head: a cylinder with a stud, mask and big white lenses
+        cr.save()
+        cr.translate(0, 180)
+        cr.rotate(sway * 0.5)
+        block(-27, 0, 54, 50, red, 12)
+        block(-15, 49, 30, 10, red, 3)  # the stud on top (below, upside down)
+        cr.set_source_rgba(0, 0, 0, 0.4)
+        cr.set_line_width(1)
+        for k in range(1, 4):
+            cr.move_to(-27, k * 12)
+            cr.curve_to(-9, k * 12 + 4, 9, k * 12 + 4, 27, k * 12)
+        cr.move_to(0, 0)
+        cr.line_to(0, 50)
+        cr.stroke()
+        for side in (-1, 1):  # lenses: upside down, so near the chin end
+            cr.save()
+            cr.translate(side * 11, 17)
+            cr.rotate(side * 0.4)
+            cr.scale(1, 0.7)
+            cr.arc(0, 0, 9, 0, 2 * math.pi)
+            cr.restore()
+            cr.set_source_rgb(0.98, 0.99, 1)
             cr.fill_preserve()
-            cr.set_source_rgb(*dark)
-            cr.set_line_width(3)
+            cr.set_source_rgb(0.05, 0.05, 0.07)
+            cr.set_line_width(2.5)
             cr.stroke()
         cr.restore()
+
+
+def plastic(cr, x, y, w, h, color, radius=4):
+    """A toy-brick block: flat colour, a soft shine down one side, a dark edge."""
+    def path():
+        r = min(radius, w / 2, h / 2)
+        cr.new_sub_path()
+        cr.arc(x + w - r, y + r, r, -math.pi / 2, 0)
+        cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
+        cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi)
+        cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
+        cr.close_path()
+    path()
+    cr.set_source_rgb(*color)
+    cr.fill()
+    shine = cairo.LinearGradient(x, 0, x + w, 0)
+    shine.add_color_stop_rgba(0, 1, 1, 1, 0.0)
+    shine.add_color_stop_rgba(0.22, 1, 1, 1, 0.28)
+    shine.add_color_stop_rgba(0.45, 1, 1, 1, 0.0)
+    shine.add_color_stop_rgba(1, 0, 0, 0, 0.22)
+    path()
+    cr.set_source(shine)
+    cr.fill()
+    path()
+    cr.set_source_rgba(0, 0, 0, 0.35)
+    cr.set_line_width(1)
+    cr.stroke()
+
+
+def spider_emblem(cr, x, y, size, color):
+    """A spider: round body, small head, eight bent legs. Points up."""
+    cr.save()
+    cr.translate(x, y)
+    cr.set_source_rgb(*color)
+    cr.save()
+    cr.scale(0.55, 1)
+    cr.arc(0, size * 0.25, size * 0.6, 0, 2 * math.pi)
+    cr.restore()
+    cr.fill()
+    cr.arc(0, -size * 0.5, size * 0.28, 0, 2 * math.pi)
+    cr.fill()
+    cr.set_line_width(max(1.0, size * 0.11))
+    cr.set_line_cap(cairo.LINE_CAP_ROUND)
+    cr.set_line_join(cairo.LINE_JOIN_ROUND)
+    for side in (-1, 1):
+        for k, (ky, kx, ty) in enumerate(((-0.2, 0.9, -1.2), (0.0, 1.1, -0.4), (0.2, 1.1, 0.6), (0.4, 0.9, 1.3))):
+            cr.move_to(side * size * 0.2, size * ky)
+            cr.line_to(side * size * kx, size * (ky - 0.35 if k < 2 else ky + 0.1))
+            cr.line_to(side * size * (kx + 0.35), size * ty)
+        cr.stroke()
+    cr.restore()
 
 
 # ---------------------------------------------------------------- knight

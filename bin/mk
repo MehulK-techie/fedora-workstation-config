@@ -440,7 +440,8 @@ case "${1:-help}" in
         ;;
 
     screensaver)
-        # mk screensaver [on | off | show [SCENE] | scene NAME | delay SECONDS | list]
+        # mk screensaver [settings | on | off | show [SCENE] | scene NAME | delay SECONDS | list]
+        # (no argument: the settings window with previews of every scene)
         shift
         conf="$HOME/.config/mk-workstation/screensaver.conf"
         set_saver() {
@@ -449,20 +450,22 @@ case "${1:-help}" in
             if grep -q "^$1=" "$conf"; then sed -i "s|^$1=.*|$1=$2|" "$conf"; else echo "$1=$2" >> "$conf"; fi
         }
         case "${1:-}" in
+            ''|settings) setsid -f "$HOME/.local/bin/mk-screensaver" settings > /dev/null 2>&1 ;;
             on|off) set_saver SCREENSAVER "$1"; echo "✔ Screensaver $1" ;;
             show) setsid -f "$HOME/.local/bin/mk-screensaver" show "${2:-random}" > /dev/null 2>&1 ;;
             list) "$HOME/.local/bin/mk-screensaver" list ;;
             scene)
                 case "${2:-}" in
-                    random|aurora|web|knight|matrix) set_saver SCENE "$2"; echo "✔ Scene: $2" ;;
-                    *) echo "Usage: mk screensaver scene random|aurora|web|knight|matrix" >&2; exit 2 ;;
+                    random|shuffle) set_saver SCENE random; echo "✔ Shuffle: a different scene each time" ;;
+                    aurora|web|knight|matrix) set_saver SCENE "$2"; echo "✔ Scene: $2" ;;
+                    *) echo "Usage: mk screensaver scene shuffle|aurora|web|knight|matrix" >&2; exit 2 ;;
                 esac
                 ;;
             delay)
                 [[ "${2:-}" =~ ^[0-9]+$ && "$2" -ge 30 ]] || { echo "Usage: mk screensaver delay SECONDS (30 or more)" >&2; exit 2; }
                 set_saver DELAY "$2"; echo "✔ Starts after $2 s without input"
                 ;;
-            *) echo "Usage: mk screensaver [on | off | show [SCENE] | scene NAME | delay SECONDS | list]" >&2; exit 2 ;;
+            *) echo "Usage: mk screensaver [settings | on | off | show [SCENE] | scene NAME | delay SECONDS | list]" >&2; exit 2 ;;
         esac
         ;;
 

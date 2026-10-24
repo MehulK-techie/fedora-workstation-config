@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Screensaver: a monitor showing a moonlit night -->
+  <rect x="52" y="100" width="24" height="14" fill="#77767b"/>
+  <rect x="36" y="112" width="56" height="8" rx="4" fill="#5e5c64"/>
+  <rect x="8" y="18" width="112" height="84" rx="10" fill="#3d3846"/>
+  <rect x="8" y="14" width="112" height="84" rx="10" fill="#5e5c64"/>
+  <rect x="16" y="22" width="96" height="68" rx="4" fill="#1a1a3a"/>
+  <path d="M16 74l14-10 10 6 14-14 12 10 10-8 14 12 22-6v26H16z" fill="#0b0b1e"/>
+  <circle cx="88" cy="40" r="11" fill="#f6f5f4"/>
+  <circle cx="84" cy="38" r="2.5" fill="#deddda"/>
+  <g fill="#ffffff"><circle cx="30" cy="32" r="1.5"/><circle cx="48" cy="44" r="1.2"/><circle cx="62" cy="30" r="1.5"/></g>
+</svg>

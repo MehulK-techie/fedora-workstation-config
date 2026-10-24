@@ -20,13 +20,16 @@
 #                                guest's home as their session starts
 #   /usr/local/libexec/mk-guest-reset, /etc/systemd/system/mk-guest-reset.service,
 #   /etc/systemd/logind.conf.d/mk-guest.conf (guest processes end at logout),
-#   /etc/ssh/sshd_config.d/50-mk-guest.conf (no SSH for the guest)
+#   /etc/ssh/sshd_config.d/50-mk-guest.conf (no SSH for the guest),
+#   /etc/polkit-1/rules.d/50-mk-guest.rules and cron.deny/at.deny (no jobs or
+#   lingering services that outlive the guest's session)
 set -euo pipefail
 
 GUEST=guest
 RESET=/usr/local/libexec/mk-guest-reset
 UNIT=/etc/systemd/system/mk-guest-reset.service
 LOGIND_DROPIN=/etc/systemd/logind.conf.d/mk-guest.conf
+POLKIT_RULE=/etc/polkit-1/rules.d/50-mk-guest.rules
 SSHD_DROPIN=/etc/ssh/sshd_config.d/50-mk-guest.conf
 PAM=/etc/pam.d/gdm-password
 PAM_LINE="session     optional      pam_exec.so quiet $RESET"
@@ -54,13 +57,22 @@ first_login_sync() {
     local user=$1 home
     home=$(getent passwd "$user" | cut -d: -f6)
     # A clone copies only what git tracks: never your untracked files, keys or
-    # anything else that happens to sit in your working copy.
-    if [[ -z "$REPO" || ! -d "$REPO/.git" ]] ||
-        ! git -c safe.directory="$REPO" clone --quiet "$REPO" "$home/MK" 2> /dev/null; then
+    # anything else in your working copy. It runs as the repo's owner (git's
+    # ownership check stays on), with --no-local so the new copy shares no
+    # hardlinked files with yours; only then is it handed to the new person.
+    local owner tmp
+    owner=$(stat -c %U "$REPO" 2> /dev/null || true)
+    tmp=$(mktemp -d)
+    chown "$owner" "$tmp" 2> /dev/null || true
+    if [[ -z "$REPO" || ! -d "$REPO/.git" || -z "$owner" ]] ||
+        ! runuser -u "$owner" -- git clone --no-local --quiet "$REPO" "$tmp/MK" 2> /dev/null; then
+        rm -rf "$tmp"
         echo "[*] Couldn't copy the MK repo for $user. At their first login they can run:"
         echo "    git clone https://github.com/MehulK-techie/fedora-workstation-config ~/MK && ~/MK/sync.sh"
         return
     fi
+    mv "$tmp/MK" "$home/MK"
+    rm -rf "$tmp"
     mkdir -p "$home/.config/autostart"
     cat > "$home/.config/autostart/mk-first-sync.desktop" << DESKTOP
 [Desktop Entry]
@@ -113,8 +125,13 @@ guest_on() {
 # Run by PAM (pam_exec, gdm-password session start) and mk-guest-reset.service.
 [[ "${PAM_USER:-guest}" == guest ]] || exit 0
 [[ -z "${PAM_TYPE:-}" || "$PAM_TYPE" == open_session ]] || exit 0
-# Nothing a guest left running survives: stop every guest process first (a
-# new login hasn't started any yet), then empty the home and their temp files.
+# Nothing a guest left behind survives: scheduled jobs and lingering first, then
+# every guest process (a new login hasn't started any yet), then the home and
+# their temp files.
+crontab -r -u guest 2> /dev/null || true
+find /var/spool/at /var/spool/cron -xdev -user guest -delete 2> /dev/null || true
+loginctl disable-linger guest 2> /dev/null || true
+rm -f /var/lib/systemd/linger/guest
 loginctl terminate-user guest 2> /dev/null || true
 pkill -KILL -u guest 2> /dev/null || true
 find /tmp /var/tmp /dev/shm -xdev -user guest -delete 2> /dev/null || true
@@ -143,6 +160,19 @@ UNITFILE
     # stay as they are). Takes effect after the next reboot.
     install -d "$(dirname "$LOGIND_DROPIN")"
     printf '[Login]\nKillUserProcesses=yes\nKillOnlyUsers=guest\n' > "$LOGIND_DROPIN"
+    # No scheduled jobs or lingering services for the guest: nothing outlives
+    # the session (the reset also clears any that slipped through).
+    for deny in /etc/cron.deny /etc/at.deny; do
+        grep -qx "$GUEST" "$deny" 2> /dev/null || echo "$GUEST" >> "$deny"
+    done
+    install -d "$(dirname "$POLKIT_RULE")"
+    cat > "$POLKIT_RULE" << 'RULE'
+// MK guest account: may not keep services running after logout (lingering).
+polkit.addRule(function (action, subject) {
+    if (action.id == "org.freedesktop.login1.set-self-linger" && subject.user == "guest")
+        return polkit.Result.NO;
+});
+RULE
     # No password means local logins only: never over SSH.
     if [[ -d "$(dirname "$SSHD_DROPIN")" ]]; then
         printf '# MK guest account: local logins only\nDenyUsers guest\n' > "$SSHD_DROPIN"
@@ -163,7 +193,10 @@ guest_off() {
         sed -i "\#pam_exec.so quiet $RESET#d" "$PAM"
     fi
     systemctl disable mk-guest-reset.service > /dev/null 2>&1 || true
-    rm -f "$UNIT" "$RESET" "$LOGIND_DROPIN" "$SSHD_DROPIN"
+    rm -f "$UNIT" "$RESET" "$LOGIND_DROPIN" "$SSHD_DROPIN" "$POLKIT_RULE"
+    for deny in /etc/cron.deny /etc/at.deny; do
+        [[ -f "$deny" ]] && sed -i "/^$GUEST\$/d" "$deny"
+    done
     systemctl try-reload-or-restart sshd.service 2> /dev/null || true
     systemctl daemon-reload
     if id "$GUEST" &> /dev/null; then

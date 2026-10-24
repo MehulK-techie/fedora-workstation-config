@@ -173,7 +173,19 @@ case "${1:-help}" in
                 finger="${2:-right-index-finger}"
                 echo "Enrolling $finger. Lift and touch the sensor each time it asks (about 8-12 times),"
                 echo "moving your finger slightly so the whole fingertip gets recorded."
-                fprintd-enroll -f "$finger" "$USER"
+                # GNOME asks for your password first (polkit). If that's refused
+                # or no prompt appears (SSH, some terminals), enroll through sudo.
+                out=$(fprintd-enroll -f "$finger" "$USER" 2>&1 | tee /dev/tty) || true
+                if grep -qiE "not authori[sz]ed|PermissionDenied" <<< "$out"; then
+                    echo "[*] The password prompt was refused or didn't appear. Trying again with sudo..."
+                    sudo fprintd-enroll -f "$finger" "$USER"
+                fi
+                if ! fprintd-list "$USER" 2> /dev/null | grep -q '^ - '; then
+                    echo "[-] No finger was saved. Run 'mk fingerprint' again; 'mk fingerprint check' shows why." >&2
+                    exit 1
+                fi
+                echo "Test it now: touch the sensor when asked."
+                fprintd-verify "$USER" || true
                 if ! authselect current 2> /dev/null | grep -q with-fingerprint; then
                     echo "[*] Fingerprint login is switched off system-wide. Turn it on with: sudo ./setup.sh"
                 fi

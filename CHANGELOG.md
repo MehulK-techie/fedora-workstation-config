@@ -3,6 +3,10 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **`mk lock`:** apps that ask for your fingerprint first; gocryptfs-encrypted folders that open after the same check (also Files › Scripts) and close on screen lock.
+- **App Nap:** frees the CPU and lets memory swap out from idle, minimized apps under pressure; focusing wakes them (`config/appnap.conf`, `mk nap`).
+- **MK Notes:** pictures inline in the editor; an image editor (rotate, flip, crop, resize, Thermal, Pop Art, Distort, Polaroid); PDFs suggested in `~/Documents/Notes`.
+- **`mk tour`**, **`mk speedtest`**, **`mk keyring`**, **`mk users add`**, **`mk guest on`**, and a few commands that aren't in the help.
 - **macOS feel:** trackpad gestures (4 fingers ←/→ workspaces, 3 fingers ←/→ windows, 3 fingers ↑ overview), 25% faster animations (Impatience), genie minimize (Magic Lamp), a subtle glide when windows open and close (Burn My Windows), Super+Ctrl+F full screen, Finder-style Files, sharp X11 apps at fractional scaling.
 - **Windows feel:** taskbar-style dock (click focuses or minimizes, thumbnails for apps with several windows, middle-click for a new window), Super+Ctrl+D new desktop (Shift takes the window along).
 - **Shortcuts window (Super+/, GTK4):** every shortcut and touchpad gesture read live from GNOME, each marked working, clashing (with what), unset or broken; click to change keys, + to add command shortcuts, per-shortcut and full reset. All defaults now live in `config/shortcuts.conf`; your changes in `~/.config/mk-workstation/shortcuts.conf` survive `mk sync`.
@@ -82,6 +86,11 @@
 - Docs: `docs/GUIDE.md`, `docs/FACE-UNLOCK.md`, `docs/EXTENSIONS.md`, `docs/BUGS.md` (full audit), `CONTRIBUTING.md`.
 
 ### Changed
+- **Screensavers:** Night Watch is a brick-built caped knight rim-lit by the searchlight; Web Hang hangs beside a skyscraper (no moon); Terminal Stream (was Neon Cascade) is hex rain in cyan and amber.
+- **Dock:** autohide only: hidden after unlock and wake until you push the bottom edge.
+- **Top-left menu:** shortcut hints beside Shut Down, Restart and Sleep (new Sleep shortcut, Ctrl+Alt+Page Down), read live from your keybindings.
+- **`./setup.sh`** asks for sudo itself; 5 failed passwords lock the account for 5 minutes.
+- **System monitor:** disk activity, temperatures in °C.
 - **Alt+Tab** is a compact card in the middle of the screen that appears at once (no full-screen grid, no fade, no 150 ms wait).
 - **Media tile:** the song title only, cut short with "…" (no scrolling); artist in the menu; More (album, player, outputs); fades out when playback stops.
 - **Welcome:** first start of a new day gets an energetic greeting, later starts that day a welcome back; birthday as `YYYY-MM-DD` too, with a once-a-day countdown (`BIRTHDAY_COUNTDOWN`).

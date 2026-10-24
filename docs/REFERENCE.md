@@ -33,6 +33,14 @@ Every command, file and format. How the parts fit together is in
 | `mk welcome variety on\|off` · `birthday [YYYY-]MM-DD` · `lines` | A different greeting each time; a birthday greeting and countdown; edit your own lines |
 | `mk accent [auto \| #rrggbb \| system on\|off \| status]` | Accent colour: from the wallpaper, or fixed; also sets GNOME's accent |
 | `mk rename "NAME" [TAG]` | Rename MK's windows, notifications and top-bar tag |
+| `mk lock app NAME` · `mk unlock app NAME` | The app's launcher asks for your fingerprint or password before it starts (polkit `auth_self`) · stop asking |
+| `mk lock PATH` · `mk unlock PATH` · `mk lock close PATH` · `mk unlock --remove PATH` · `mk lock list` | Encrypt a folder (first time) or close it · open it after the check · close it · decrypt it for good · list |
+| `mk users add NAME [--admin]` · `mk users remove NAME` · `mk users list` | Another account (sudo); the MK desktop applies itself at their first login |
+| `mk guest on\|off` | A Guest login: no password, no admin rights, home emptied at every login (sudo) |
+| `mk speedtest [--ping]` | Ping, jitter, download and upload (speed.cloudflare.com, about 35 MB) |
+| `mk nap` | Apps App Nap has paused |
+| `mk keyring [open]` | Why apps ask for the keyring after fingerprint or face login, and the two fixes |
+| `mk tour` | The walkthrough (also Super+Shift+/) |
 | `mk check` | Notify if a new version of the repo is available (run daily by a timer) |
 | `mk uninstall` | Remove MK's tools, shortcuts, timers and top-bar extension from your account |
 
@@ -56,6 +64,10 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `mk-sound [on\|off\|status]` | login | Speaker tuning profile |
 | `ocr-snip` | Super+Shift+T | Copy text from a screen area |
 | `camera-controls` | Super+C | Webcam brightness, contrast, focus… |
+| `mk-lock` | | `mk lock` (apps, folders, `run -- COMMAND`, `close-all`, `reapply`) |
+| `mk-users` | | `mk users`, `mk guest` |
+| `mk-speedtest` | | `mk speedtest` |
+| `mk-tour [--first-run]` | Super+Shift+/ | The walkthrough; `--first-run` shows it only once |
 | `mk-doctor` | | Same as `mk doctor` |
 | `mk-apps missing \| capture` | | Used by `mk update` / `mk save` |
 | `mk-scratchpad` | | Old name; opens the Companion |
@@ -72,7 +84,9 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` (`auto` or `#rrggbb`), `TASKS` (pinned tasks and next reminder under the greeting), `VARIETY`, `BIRTHDAY` (`MM-DD` or `YYYY-MM-DD`), `BIRTHDAY_COUNTDOWN` (on/off) | mk-indicator, mk-voice |
 | `config/theme.conf` | `ACCENT=` (`auto` or `#rrggbb`), `SYSTEM_ACCENT=` (on/off), `CURSOR=` (cursor theme) | mk-indicator (`accent.js`), `mk accent`, `sync.sh` |
 | `config/notes.conf` | `NOTES_DIR=`, `SYNC=`, `SYNC_PORT=`, `HISTORY=`; look: `THEME=`, `FONT=`, `FONT_SIZE=`, `WIDTH=`, `SPACING=`, `FORMAT_BAR=`, `OPEN_IN=`, `SORT=` | `mk-notes` (Preferences writes them) |
-| `config/monitor.conf` | `PANEL=` (cpu, mem, temp, net, power), `INTERVAL=` (s) | mk-indicator system monitor |
+| `config/monitor.conf` | `PANEL=` (cpu, mem, temp, net, disk, power), `INTERVAL=` (s) | mk-indicator system monitor |
+| `config/appnap.conf` | `APP_NAP=` (on/off), `MEM_THRESHOLD=` (%), `CPU_THRESHOLD=` (%), `IDLE_MINUTES=`, `NEVER=` (comma-separated app ids or parts) | mk-indicator App Nap |
+| `assets/polkit/io.github.mehulk.mk-lock.policy` | polkit action (`auth_self`) | `setup.sh` installs it; `mk-lock` asks it |
 | `config/screensaver.conf` | `SCREENSAVER=` (on/off), `DELAY=` (s, 30+), `SCENE=` (random, aurora, web, knight, matrix) | `mk-screensaver`, `mk screensaver` |
 | `config/media.conf` | `MEDIA=` (on/off), `TICKER=` (on/off: the song title beside the record), `PLAYERS=` (all/spotify) | mk-indicator media tile |
 | `config/greetings.conf` | `[section]` then one greeting per line; sections morning, afternoon, evening, night, monday, friday, weekend, return, long, birthday, newyear, any | mk-indicator, `mk-voice prepare` (yours: `~/.config/mk-workstation/greetings.conf`) |

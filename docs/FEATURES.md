@@ -43,6 +43,9 @@ Credit for everything in the last two groups belongs to its authors; see
 | **Companion** | Notes you pin, reorder and fold; tasks with progress; reminders (in N min, at a time, daily/weekly) that fire even when closed; morning brief; welcome greeting editor | Super+Shift+N |
 | **Focus timer** | Type a time (`25`, `1:30`, `90s`) and press Enter, or pick a preset; hides into a top-bar countdown; step away and one of the screensaver scenes plays with a small countdown (or the classic Aurora with the big ring; Surprise me never repeats the last one); can silence notifications; pixel-robot celebration with fireworks and a sound of your choice (Chime, Bell, Soft, Alarm clock or Silent) | Companion › Focus timer, `mk focus 25` |
 | **Screensaver** (`mk-screensaver`) | Plays a full-screen scene after a few idle minutes (3 by default), chosen in the Screensaver app from live previews or shuffled (never the same twice running): Web Hang (a brick-built masked hero hanging from a web beside a skyscraper), Night Watch (a brick-built caped knight on a gargoyle in the rain, rim-lit by a searchlight), Terminal Stream (hex code rain in cyan and amber decoding the time) or Aurora; never over a video or call; any touch ends it; GNOME still locks at its own time | `mk screensaver`, `config/screensaver.conf` |
+| **Tour** (`mk-tour`) | An 11-page walkthrough of the top bar, windows, desktops, shortcuts, Notes, Companion, screensaver, locks and the `mk` command, each with a button to try it; shown once at the first login | Super+Shift+/, `mk tour`, app grid |
+| **App and folder locks** (`mk-lock`) | Apps that ask for your fingerprint or password before they start; folders encrypted with gocryptfs that open only after the same check and close when the screen locks | `mk lock app NAME`, `mk lock ~/Folder`, Files › Scripts |
+| **Accounts** (`mk-users`) | A second person's account that gets the MK desktop at their first login; a Guest login with no password that starts empty every time | `mk users add NAME`, `mk guest on` |
 | **OCR snip** | Pick a screen area, get its text in the clipboard | Super+Shift+T |
 | **Camera controls** | Brightness, contrast, focus, exposure of your webcam | Super+C |
 | **Terminal capture** | Add notes and tasks with reminders without opening anything | `mk note`, `mk task`, `mk remind`, `mk list` |
@@ -56,13 +59,14 @@ Credit for everything in the last two groups belongs to its authors; see
 | Dock magnification | The icon under the pointer grows, neighbours follow in a wave | `config/dock.conf` |
 | App-coloured dock glow | A soft circular tint in each app's own colour on hover | `dockGlow.js` |
 | System monitor | CPU sparkline and your chosen numbers in the top bar; a menu with processor, memory, swap, GPU, disk, temperatures, battery draw and time left, the busiest apps, and an Internet section: active connection, live traffic graph and an on-demand speed test (ping, download, upload on a gauge, against Cloudflare's servers); reads the kernel's counters every 2 s, nothing while locked | `config/monitor.conf` (`systemMonitor.js`, `speedTest.js`) |
+| App Nap | Under memory (> 85%) or sustained CPU (> 90% for a minute) pressure, apps unused for 5 minutes with every window minimized or on another desktop are frozen (systemd cgroup freezer); focusing one wakes it instantly. Never: apps playing sound, terminals, editors, browsers, chat apps | `config/appnap.conf`, `mk nap` |
 | Timer countdown | Ring + time in the top bar while a focus timer runs; click to open | automatic |
 | Media tile | Spotify or any MPRIS player: album art spinning like a record and the song title (cut short with "…", never scrolling) in the top bar; a menu with the art glowing in its own colour, title and artist, seek bar, previous/play/next, More (album, player, which speakers or headphones to use) and Open player, which brings the player's window forward; fades out when playback stops | `config/media.conf` (`mediaTile.js`) |
 | Wallpaper accent | The most vivid colour of your wallpaper tints Alt+Tab, the calendar, top-bar and dock hover, workspace thumbnails, the welcome line, the timer ring and GNOME's own accent (Files, Settings); follows wallpaper changes | `mk accent auto\|#hex\|status`, `config/theme.conf` (`accent.js`, `colour.js`) |
 | Window switcher | Alt+Tab and the 3-finger swipe open a compact card in the middle of the screen (not full screen) with live window previews, app icons, titles and which desktop each is on; it appears at once, without GNOME's 150 ms wait or any fade; an accent ring marks the selection; hover selects, click opens; 1–9 sends the selected window to that desktop | automatic (`windowGrid.js`, `switcher.js`) |
 | Calendar styling | Round day cells with an accent-coloured hover glow, glowing today, softer other-month days | `stylesheet.css` |
 | Pop-ups that don't collide | Workspace dots glide above the volume/brightness pop-up when both show | `osdStack.js` |
-| Dock out of the way | Hidden in the overview so window titles stay readable | automatic |
+| Dock out of the way | Hidden in the overview so window titles stay readable, and hidden again right after unlocking or waking, until you push the pointer against the bottom edge | automatic |
 | Blur fix | Rebuilds the top-bar blur once after login so it always shows | automatic |
 | Top-bar tag | Your short tag (MK), following `mk rename` live | `config/brand.conf` |
 
@@ -186,6 +190,10 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | `mk screensaver` · `on\|off\|show\|scene\|delay` | The Screensaver settings window (live previews, Shuffle) · scenes from the terminal |
 | `mk welcome variety\|birthday\|lines` | A different greeting each time; your birthday; your own lines |
 | `mk fingerprint check` | Why the reader might not answer on the lock screen |
+| `mk lock app NAME` · `mk lock ~/Folder` · `mk unlock` | Fingerprint before an app starts · an encrypted folder |
+| `mk users add NAME` · `mk guest on\|off` | Another person's account · a Guest login that starts empty |
+| `mk speedtest` · `mk nap` · `mk keyring` | Speed test in the terminal · what App Nap paused · why apps ask for the keyring |
+| `mk tour` | The walkthrough again |
 | `mk rename "Name" TAG` | Rename it |
 | `mk uninstall` | Remove MK from your account |
 | `just setup \| sync \| face \| export \| update \| save \| check \| overview \| screenshots` | The same for contributors |

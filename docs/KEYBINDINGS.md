@@ -68,6 +68,7 @@ them live and lets you change any of them. Your changes go to
 | Shut down (asks first) | Ctrl+Alt+End |
 | Restart (asks first) | Ctrl+Alt+Home |
 | Sleep | Ctrl+Alt+Page Down |
+| Tour of the workstation | Super+Shift+/ |
 | System Monitor | Ctrl+Shift+Esc |
 
 ## Apps

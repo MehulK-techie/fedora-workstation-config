@@ -118,7 +118,11 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - **Focus timer:** type a time and press Enter, hides while it counts, a full-screen pixel celebration with a chime (or a sound you pick, or silence)
 - **Screensaver:** step away and a scene plays: a brick-built hero hanging beside a skyscraper, a brick-built caped knight in the rain, or a cyan-and-amber hex terminal decoding the time; pick one from live previews or shuffle in the Screensaver app (`mk screensaver`)
 - **Window switcher:** Alt+Tab and three-finger swipes open a compact card of live windows at once; 1–9 sends a window to that desktop
-- **Top bar:** a system monitor with an internet speed test, and a media tile for Spotify or any player (album art, seek, choose speakers)
+- **Top bar:** a system monitor (CPU, GPU, memory, disk activity, temperatures in °C) with an internet speed test (also `mk speedtest`), and a media tile for Spotify or any player (album art, seek, choose speakers)
+- **Locks:** `mk lock app Settings` makes an app ask for your fingerprint first; `mk lock ~/Private` encrypts a folder that opens only after the same check and closes when the screen locks
+- **App Nap:** when memory runs short, apps you left minimized for a while are paused and wake the moment you switch back
+- **Accounts:** `mk users add NAME` for a second person (their own settings and face), `mk guest on` for a Guest login that starts empty every time
+- **Tour:** `mk tour` or Super+Shift+/ walks through the desktop, with a button to try each thing
 - **A different greeting each time:** morning, Friday, your birthday, long time no see, or your own lines
 - **Make it yours:** rename it (`mk rename`), change any shortcut, app, extension or colour without touching code; see [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md). Hackers: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/REFERENCE.md](docs/REFERENCE.md)
 - OCR text-from-screen and webcam controls

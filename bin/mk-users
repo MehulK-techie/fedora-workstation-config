@@ -18,12 +18,16 @@
 # System files touched (backed up once to .bak, never overwritten):
 #   /etc/pam.d/gdm-password      guest on: one pam_exec line that empties the
 #                                guest's home as their session starts
-#   /usr/local/libexec/mk-guest-reset, /etc/systemd/system/mk-guest-reset.service
+#   /usr/local/libexec/mk-guest-reset, /etc/systemd/system/mk-guest-reset.service,
+#   /etc/systemd/logind.conf.d/mk-guest.conf (guest processes end at logout),
+#   /etc/ssh/sshd_config.d/50-mk-guest.conf (no SSH for the guest)
 set -euo pipefail
 
 GUEST=guest
 RESET=/usr/local/libexec/mk-guest-reset
 UNIT=/etc/systemd/system/mk-guest-reset.service
+LOGIND_DROPIN=/etc/systemd/logind.conf.d/mk-guest.conf
+SSHD_DROPIN=/etc/ssh/sshd_config.d/50-mk-guest.conf
 PAM=/etc/pam.d/gdm-password
 PAM_LINE="session     optional      pam_exec.so quiet $RESET"
 REPO="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." 2> /dev/null && pwd)"
@@ -49,12 +53,12 @@ valid_name() {
 first_login_sync() {
     local user=$1 home
     home=$(getent passwd "$user" | cut -d: -f6)
-    if [[ -n "$REPO" && -d "$REPO/.git" ]]; then
-        git clone --quiet "$REPO" "$home/MK" 2> /dev/null || cp -a "$REPO" "$home/MK"
-    elif [[ -n "$REPO" ]]; then
-        cp -a "$REPO" "$home/MK"
-    else
-        echo "[*] MK repo not found; $user can clone it and run ./sync.sh themselves."
+    # A clone copies only what git tracks: never your untracked files, keys or
+    # anything else that happens to sit in your working copy.
+    if [[ -z "$REPO" || ! -d "$REPO/.git" ]] ||
+        ! git -c safe.directory="$REPO" clone --quiet "$REPO" "$home/MK" 2> /dev/null; then
+        echo "[*] Couldn't copy the MK repo for $user. At their first login they can run:"
+        echo "    git clone https://github.com/MehulK-techie/fedora-workstation-config ~/MK && ~/MK/sync.sh"
         return
     fi
     mkdir -p "$home/.config/autostart"
@@ -109,7 +113,11 @@ guest_on() {
 # Run by PAM (pam_exec, gdm-password session start) and mk-guest-reset.service.
 [[ "${PAM_USER:-guest}" == guest ]] || exit 0
 [[ -z "${PAM_TYPE:-}" || "$PAM_TYPE" == open_session ]] || exit 0
-pgrep -u guest > /dev/null && exit 0   # already logged in elsewhere: leave it
+# Nothing a guest left running survives: stop every guest process first (a
+# new login hasn't started any yet), then empty the home and their temp files.
+loginctl terminate-user guest 2> /dev/null || true
+pkill -KILL -u guest 2> /dev/null || true
+find /tmp /var/tmp /dev/shm -xdev -user guest -delete 2> /dev/null || true
 rm -rf --one-file-system /home/guest
 cp -a /etc/skel /home/guest
 chown -R guest:guest /home/guest
@@ -131,6 +139,15 @@ WantedBy=multi-user.target
 UNITFILE
     systemctl daemon-reload
     systemctl enable mk-guest-reset.service > /dev/null 2>&1
+    # Guest processes end when the guest logs out (only theirs: other people's
+    # stay as they are). Takes effect after the next reboot.
+    install -d "$(dirname "$LOGIND_DROPIN")"
+    printf '[Login]\nKillUserProcesses=yes\nKillOnlyUsers=guest\n' > "$LOGIND_DROPIN"
+    # No password means local logins only: never over SSH.
+    if [[ -d "$(dirname "$SSHD_DROPIN")" ]]; then
+        printf '# MK guest account: local logins only\nDenyUsers guest\n' > "$SSHD_DROPIN"
+        systemctl try-reload-or-restart sshd.service 2> /dev/null || true
+    fi
     if [[ -f "$PAM" ]] && ! grep -qF "$RESET" "$PAM"; then
         backup "$PAM"
         # Before the other session lines, so the home is fresh before anything uses it.
@@ -146,7 +163,8 @@ guest_off() {
         sed -i "\#pam_exec.so quiet $RESET#d" "$PAM"
     fi
     systemctl disable mk-guest-reset.service > /dev/null 2>&1 || true
-    rm -f "$UNIT" "$RESET"
+    rm -f "$UNIT" "$RESET" "$LOGIND_DROPIN" "$SSHD_DROPIN"
+    systemctl try-reload-or-restart sshd.service 2> /dev/null || true
     systemctl daemon-reload
     if id "$GUEST" &> /dev/null; then
         loginctl terminate-user "$GUEST" 2> /dev/null || true
@@ -170,5 +188,5 @@ case "${1:-}" in
             *) echo "Usage: sudo mk-users guest on|off" >&2; exit 2 ;;
         esac ;;
     list) cmd_list ;;
-    *) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+    *) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 2 ;;
 esac

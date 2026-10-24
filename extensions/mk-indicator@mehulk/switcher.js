@@ -15,7 +15,9 @@ import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as SwitcherPopup from 'resource:///org/gnome/shell/ui/switcherPopup.js';
+import { WindowSwitcherPopup } from 'resource:///org/gnome/shell/ui/altTab.js';
 import { accentRGB } from './accent.js';
+import { WindowGrid } from './windowGrid.js';
 
 const popupProto = SwitcherPopup.SwitcherPopup.prototype;
 const listProto = SwitcherPopup.SwitcherList.prototype;
@@ -125,14 +127,26 @@ function addGlide(popup) {
     });
 }
 
+const windowProto = WindowSwitcherPopup.prototype;
+
 export class SwitcherAnimation {
     enable() {
         this._show = popupProto.show;
         this._highlight = listProto.highlight;
-        const show = this._show, highlight = this._highlight;
+        this._keys = windowProto._keyPressHandler;
+        const show = this._show, highlight = this._highlight, keys = this._keys;
 
         popupProto.show = function (...args) {
             const shown = show.apply(this, args);
+            // Window switching (Alt+Tab, 3-finger swipe): the MK grid instead
+            // of GNOME's strip. Super+Tab (apps) keeps the strip, restyled.
+            if (shown && this instanceof WindowSwitcherPopup && this._items?.length) {
+                this._switcherList.opacity = 0;
+                this._mkGrid = new WindowGrid(this);
+                this._switcherList._mkGrid = this._mkGrid;
+                this._mkGrid.select(this._selectedIndex);
+                return shown;
+            }
             // The ring isn't needed for the very first frame: build it right
             // after, so the switcher appears as fast as GNOME's own.
             if (shown) {
@@ -157,7 +171,19 @@ export class SwitcherAnimation {
 
         listProto.highlight = function (index, justOutline) {
             highlight.call(this, index, justOutline);
-            settle(this, index);
+            if (this._mkGrid)
+                this._mkGrid.select(index);
+            else
+                settle(this, index);
+        };
+
+        windowProto._keyPressHandler = function (keysym, action) {
+            const digit = keysym >= Clutter.KEY_1 && keysym <= Clutter.KEY_9 ? keysym - Clutter.KEY_1 + 1 : 0;
+            if (digit && this._mkGrid) {
+                this._mkGrid.moveSelected(digit);
+                return Clutter.EVENT_STOP;
+            }
+            return keys.call(this, keysym, action);
         };
     }
 
@@ -166,6 +192,8 @@ export class SwitcherAnimation {
             popupProto.show = this._show;
         if (this._highlight)
             listProto.highlight = this._highlight;
-        this._show = this._highlight = null;
+        if (this._keys)
+            windowProto._keyPressHandler = this._keys;
+        this._show = this._highlight = this._keys = null;
     }
 }

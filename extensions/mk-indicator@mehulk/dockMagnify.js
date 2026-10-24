@@ -2,8 +2,10 @@
 // neighbours grow a little less, in a smooth wave.
 //
 // Dash to Dock clips its icons to the dock, so scaling them in place would cut
-// them off. Instead each magnified icon is drawn as a clone on the shell's UI
-// layer, above the dock, while the real icon is hidden underneath. Settings:
+// them off. Instead each magnified dock item is drawn as a clone on the shell's
+// UI layer, above the dock, while the real one is hidden underneath. The whole
+// tile is cloned (icon, hover background, running dot), so nothing of the
+// original shows through as a second, unscaled layer. Settings:
 // config/dock.conf (MAGNIFY, MAGNIFY_SPREAD, MAGNIFY_MS); MAGNIFY=1 turns it off.
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -33,16 +35,10 @@ export function readDockConf() {
     return conf;
 }
 
-function overviewIcon(actor) {
-    if (actor.has_style_class_name?.('overview-icon'))
-        return actor;
-    for (const child of actor.get_children()) {
-        const found = overviewIcon(child);
-        if (found)
-            return found;
-    }
-    return null;
-}
+// Hidden but still under the pointer: Clutter never picks an actor at opacity
+// 0, so the tile would lose its hover and the zoom would flicker. 1 of 255 is
+// invisible and keeps it pickable. A Clone ignores its source's opacity.
+const HIDDEN = 1;
 
 export class DockMagnify {
     constructor() {
@@ -149,19 +145,20 @@ export class DockMagnify {
             return;
         }
         if (!entry) {
-            const icon = overviewIcon(tile);
-            if (!icon || !icon.get_stage())
+            const icon = tile;
+            if (!icon.get_stage())
                 return;
             const clone = new Clutter.Clone({source: icon, reactive: false});
             clone.pivot_point = new Graphene.Point({x: 0.5, y: 1});
             Main.layoutManager.uiGroup.add_child(clone);
             entry = {clone, icon, destroyId: tile.connect('destroy', () => this._drop(tile))};
             this._clones.set(tile, entry);
-            // One layer only: no hover tint or halo on the icon while it's
+            // One layer only: no hover tint or halo while it's
             // magnified (the clone would carry it, and St's style transition
             // left a second, unscaled copy of the halo under the clone).
             tile.add_style_class_name('mk-magnified');
-            icon.opacity = 0;
+            icon.remove_transition('opacity');
+            icon.opacity = HIDDEN;
         }
         const {clone, icon} = entry;
         const [x, y] = icon.get_transformed_position();
@@ -196,7 +193,8 @@ export class DockMagnify {
         this._clones.delete(tile);
         tile.disconnect(entry.destroyId);
         tile.remove_style_class_name('mk-magnified');
-        if (entry.icon.get_stage())
+        // Restore only our own change (Dash to Dock fades items it removes).
+        if (entry.icon.get_stage() && entry.icon.opacity === HIDDEN)
             entry.icon.opacity = 255;
         entry.clone.destroy();
     }

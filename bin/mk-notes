@@ -1887,7 +1887,7 @@ class NotesWindow(Adw.ApplicationWindow):
             url = self.server.pairing_url()
             url_row.set_subtitle(url)
             app_link = (f"mknotes://pair?server={GLib.uri_escape_string(self.server.url, None, False)}"
-                        f"&key={notes_sync.token()}")
+                        f"&key={notes_sync.token()}" + ("&enc=1" if notes_sync.secret_box() else ""))
             png, png_app = qr_png(url), qr_png(app_link)
             if png:
                 picture.set_paintable(Gdk.Texture.new_from_bytes(GLib.Bytes.new(png)))

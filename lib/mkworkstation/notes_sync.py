@@ -114,7 +114,8 @@ class Server:
         return f"http://{lan_address()}:{self.port}/"
 
     def pairing_url(self):
-        return f"{self.url}#key={token()}"
+        # enc=1: the phone must expect encryption from now on (no downgrade).
+        return f"{self.url}#key={token()}" + ("&enc=1" if secret_box() else "")
 
     def start(self):
         if self.httpd:
@@ -134,7 +135,9 @@ class Server:
                     body = body.encode()
                 box = secret_box() if self.path.startswith("/api/") and code == 200 else None
                 if box:
-                    body = bytes(box.encrypt(body))
+                    # The sealed reply names the request it answers, so a reply
+                    # can't be replayed as the answer to a different request.
+                    body = bytes(box.encrypt(f"{self.command} {self.path}\n".encode() + body))
                     ctype = "application/octet-stream"
                 self.send_response(code)
                 self.send_header("Content-Type", ctype)

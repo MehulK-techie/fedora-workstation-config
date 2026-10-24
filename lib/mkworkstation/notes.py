@@ -568,17 +568,28 @@ class Vault:
         folder.mkdir(parents=True, exist_ok=True)
         for stale in folder.glob(f"{prefix}-*.png"):  # an older version of this PDF
             stale.unlink(missing_ok=True)
-        sandbox = [bwrap, "--unshare-all", "--die-with-parent", "--new-session",
-                   "--ro-bind", "/usr", "/usr", "--symlink", "usr/lib64", "/lib64", "--symlink", "usr/lib", "/lib",
-                   "--symlink", "usr/bin", "/bin", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
-                   "--ro-bind", str(src), "/in.pdf", "--bind", str(folder), "/out"]
-        try:
-            subprocess.run(sandbox + [pdftoppm, "-png", "-f", "1", "-l", "1", "-singlefile", "-scale-to", "720",
-                                      "/in.pdf", f"/out/{thumb.stem}"],
-                           capture_output=True, timeout=20, check=True)
-        except (OSError, subprocess.SubprocessError):
-            return None
-        return thumb if thumb.exists() else None
+        import tempfile
+        with tempfile.TemporaryDirectory() as fresh:  # its own empty /out, never the cache
+            sandbox = [bwrap, "--unshare-all", "--die-with-parent", "--new-session",
+                       "--ro-bind", "/usr", "/usr", "--symlink", "usr/lib64", "/lib64", "--symlink", "usr/lib", "/lib",
+                       "--symlink", "usr/bin", "/bin", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+                       "--ro-bind", str(src), "/in.pdf", "--bind", fresh, "/out"]
+            try:
+                subprocess.run(sandbox + [pdftoppm, "-png", "-f", "1", "-l", "1", "-singlefile", "-scale-to", "720",
+                                          "/in.pdf", "/out/page"],
+                               capture_output=True, timeout=20, check=True)
+            except (OSError, subprocess.SubprocessError):
+                return None
+            made = Path(fresh) / "page.png"
+            try:
+                info = os.lstat(made)
+            except OSError:
+                return None
+            import stat as stat_mod
+            if not stat_mod.S_ISREG(info.st_mode) or info.st_size > 8 * 1024 * 1024:
+                return None
+            shutil.move(str(made), thumb)
+        return thumb
 
     def page(self, rel, text, dark=True, printing=False, look=None):
         """A full HTML page around render(). look: your reading preferences,
@@ -622,8 +633,11 @@ class Vault:
             body = body.replace(self.attachments.as_uri() + "/", "attachments/")
             # Only the PDF previews this page shows go out with it.
             for name in re.findall(re.escape(thumbs_uri) + r"([\w-]+\.png)", body):
+                source = self.meta_dir / "thumbs" / name
+                if source.is_symlink() or not source.is_file():
+                    continue  # only real files go out
                 (out / "thumbs").mkdir(exist_ok=True)
-                shutil.copy2(self.meta_dir / "thumbs" / name, out / "thumbs" / name)
+                shutil.copy2(source, out / "thumbs" / name, follow_symlinks=False)
             body = body.replace(thumbs_uri, "thumbs/")
             body = re.sub(r'href="mknote:([^"#]+)[^"]*"',
                           lambda m: f'href="{slug.get(self.resolve(html.unescape(m.group(1))) or "", "#")}"', body)

@@ -83,7 +83,10 @@ public class MainActivity extends Activity {
         Uri data = intent != null ? intent.getData() : null;
         if (data != null && "mknotes".equals(data.getScheme())) {
             String server = data.getQueryParameter("server"), key = data.getQueryParameter("key");
-            if (server != null && key != null) page += "#server=" + Uri.encode(server) + "&key=" + Uri.encode(key);
+            if (server != null && key != null) {
+                page += "#server=" + Uri.encode(server) + "&key=" + Uri.encode(key);
+                if ("1".equals(data.getQueryParameter("enc"))) page += "&enc=1";
+            }
         }
         return page;
     }

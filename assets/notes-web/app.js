@@ -108,6 +108,7 @@ const S = {server: '', key: '', pinned: [], colors: {}, files: new Map(), filter
 async function load() {
   S.server = (await DB.getKV('server')) || '';
   S.key = (await DB.getKV('key')) || '';
+  S.mustEncrypt = Boolean(await DB.getKV('mustEncrypt'));
   S.pinned = (await DB.getKV('pinned')) || [];
   S.colors = (await DB.getKV('colors')) || {};
   S.files = new Map((await DB.all()).map(f => [f.path, f]));
@@ -115,7 +116,7 @@ async function load() {
   const m = location.hash.match(/key=([\w-]+)/), sv = location.hash.match(/server=([^&]+)/);
   if (m) {
     // From the laptop's QR code (browser) or the Android app's mknotes:// link.
-    await pairChecked(sv ? decodeURIComponent(sv[1]) : !BUNDLED ? location.origin + '/' : S.server, m[1]);
+    await pairChecked(sv ? decodeURIComponent(sv[1]) : !BUNDLED ? location.origin + '/' : S.server, m[1], /enc=1/.test(location.hash));
     history.replaceState(null, '', location.pathname);
   } else if (!S.server && !BUNDLED) {
     S.server = location.origin + '/';
@@ -143,7 +144,7 @@ function privateLAN(url) {
     return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254);
   } catch (e) { return false; }
 }
-async function pairChecked(server, key) {
+async function pairChecked(server, key, enc = false) {
   if (!privateLAN(server)) { toast('That link isn\'t a laptop on your Wi-Fi: not paired'); return false; }
   const same = S.key === key && S.server.replace(/\/?$/, '/') === server.replace(/#.*$/, '').replace(/\/?$/, '/');
   if (same) return true;
@@ -157,15 +158,18 @@ async function pairChecked(server, key) {
       rec.base = ''; rec.dirty = true; await DB.put(rec);
     }
   }
-  await pair(server, key);
+  await pair(server, key, enc);
   return true;
 }
 
-async function pair(server, key) {
+async function pair(server, key, enc) {
   S.server = server.replace(/#.*$/, '').replace(/\/?$/, '/');
   S.key = key;
   await DB.setKV('server', S.server);
   await DB.setKV('key', S.key);
+  // A new pairing starts from what its QR code says about encryption.
+  S.mustEncrypt = Boolean(enc);
+  await DB.setKV('mustEncrypt', S.mustEncrypt);
 }
 
 const notes = () => [...S.files.values()].filter(f => f.kind === 'note' && !f.deleted);
@@ -218,7 +222,7 @@ function open_(bytes) {
 }
 
 async function api(method, path, body) {
-  if (body !== undefined && S.encrypted) {
+  if (body !== undefined && (S.encrypted || S.mustEncrypt)) {
     const raw = typeof body === 'string' ? new TextEncoder().encode(body) : new Uint8Array(await body.arrayBuffer());
     body = new Blob([seal(raw)]);
   }
@@ -228,15 +232,26 @@ async function api(method, path, body) {
     : new Uint8Array(await body.arrayBuffer());
   const sig = hmacSha1(S.key, `${method} /${path} ${stamp} ${hex(sha1(bytes))}`);
   const headers = {'X-MK-Time': stamp, 'X-MK-Sig': sig};
-  if (body !== undefined && S.encrypted) headers['X-MK-Enc'] = '1';
+  if (body !== undefined && (S.encrypted || S.mustEncrypt)) headers['X-MK-Enc'] = '1';
   const res = await fetch(S.server + path, {method, body, headers, cache: 'no-store'});
   if (res.status === 401) throw new Error('This phone isn\'t paired: open Settings');
   if (!res.ok && res.status !== 409) throw new Error(`Laptop said ${res.status}`);
-  // Read once, decrypt if sealed, and offer the usual json/text/blob.
+  // Read once, decrypt if sealed, and offer the usual json/text/blob. Once
+  // this laptop has encrypted, it always must: a plain reply is refused.
   const sealed = res.headers.get('X-MK-Enc') === '1';
+  if (res.ok && !sealed && S.mustEncrypt) throw new Error('reply was not encrypted; not trusting it');
   if (res.ok) S.encrypted = sealed;
+  if (sealed && !S.mustEncrypt) {
+    S.mustEncrypt = true;
+    await DB.setKV('mustEncrypt', true);
+  }
   let data = new Uint8Array(await res.arrayBuffer());
-  if (sealed) data = open_(data);
+  if (sealed) {
+    data = open_(data);
+    const nl = data.indexOf(10), answers = new TextDecoder().decode(data.slice(0, nl));
+    if (answers !== `${method} /${path}`) throw new Error('reply was for a different request');
+    data = data.slice(nl + 1);
+  }
   const type = sealed ? '' : res.headers.get('Content-Type') || '';
   return {
     status: res.status,
@@ -688,7 +703,7 @@ $('#settingsBtn').onclick = () => openSheet('settings');
 $('#pairBtn').onclick = async () => {
   const link = $('#pairLink').value.trim(), m = link.match(/key=([\w-]+)/);
   if (!m) { toast('Paste the whole link from the laptop'); return; }
-  if (!await pairChecked(link, m[1])) return;
+  if (!await pairChecked(link, m[1], /enc=1/.test(link))) return;
   $('#settings').classList.remove('on');
   sync(false);
 };

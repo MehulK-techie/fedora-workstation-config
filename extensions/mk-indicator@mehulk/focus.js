@@ -1,18 +1,26 @@
 // Windows come to the front when you ask for them. Apps often can't raise
 // their own window on Wayland (no activation token from a notification click
 // or a D-Bus call), so GNOME shows "<app> is ready" instead. If a window asks
-// for attention within 3 seconds of you clicking a notification or "Open
-// player", it is brought to the front. Windows asking at any other time still
-// get GNOME's usual "is ready" notification: nothing steals focus while you type.
+// for attention within 3 seconds of you clicking that app's notification or
+// "Open player", it is brought to the front, once. Other apps' windows, and
+// windows asking at any other time, still get GNOME's usual "is ready"
+// notification: nothing steals focus while you type.
 import GLib from 'gi://GLib';
+import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const WINDOW_US = 3 * 1000 * 1000;
-let expectUntil = 0;
+let expected = null;   // {app, until}
 
-// Call when the user just asked for some app's window.
-export function expectFocus() {
-    expectUntil = GLib.get_monotonic_time() + WINDOW_US;
+// Call when the user just asked for this app's window (a Shell.App).
+export function expectFocus(app) {
+    expected = app ? {app, until: GLib.get_monotonic_time() + WINDOW_US} : null;
+}
+
+// The app behind a notification: Fdo sources keep it in .app, GTK ones in ._app.
+function notificationApp(note) {
+    const source = note.source;
+    return source?.app ?? source?._app ?? null;
 }
 
 export class FocusHelper {
@@ -24,7 +32,7 @@ export class FocusHelper {
         const watch = source => {
             if (!this._sourceIds.has(source)) {
                 this._sourceIds.set(source, source.connect('notification-added', (_s, note) => {
-                    const id = note.connect('activated', () => expectFocus());
+                    const id = note.connect('activated', () => expectFocus(notificationApp(note)));
                     this._noteIds.set(note, id);
                     note.connect('destroy', () => this._noteIds.delete(note));
                 }));
@@ -43,9 +51,11 @@ export class FocusHelper {
     }
 
     _attention(win) {
-        if (GLib.get_monotonic_time() > expectUntil || win.skip_taskbar)
+        if (!expected || GLib.get_monotonic_time() > expected.until || win.skip_taskbar)
             return;
-        expectUntil = 0;
+        if (Shell.WindowTracker.get_default().get_window_app(win) !== expected.app)
+            return;
+        expected = null;
         Main.activateWindow(win);
     }
 

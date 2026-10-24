@@ -475,7 +475,6 @@ export class MediaTile {
             return;
         const name = this._current;
         this._button.menu.close();
-        expectFocus();
         this._bus.call(name, PATH, 'org.freedesktop.DBus.Properties', 'Get',
             new GLib.Variant('(ss)', ['org.mpris.MediaPlayer2', 'DesktopEntry']), null, Gio.DBusCallFlags.NONE,
             1000, null, (c, res) => {
@@ -486,6 +485,7 @@ export class MediaTile {
                     // no DesktopEntry: guess from the bus name below
                 }
                 const app = this._findApp(entry, name);
+                expectFocus(app);
                 if (app && app.get_n_windows() > 0) {
                     app.activate();
                     return;

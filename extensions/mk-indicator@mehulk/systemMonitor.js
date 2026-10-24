@@ -123,17 +123,29 @@ class Sampler {
                 tx += +m[3];
             }
         }
+        // Disk activity: sectors (512 bytes) read and written by whole disks,
+        // not partitions, loop devices, zram or device-mapper layers.
+        let dRead = 0, dWrite = 0;
+        for (const line of (read('/proc/diskstats') || '').split('\n')) {
+            const f = line.trim().split(/\s+/);
+            if (/^(nvme\d+n\d+|sd[a-z]+|vd[a-z]+|mmcblk\d+)$/.test(f[2] ?? '')) {
+                dRead += +f[5] * 512;
+                dWrite += +f[9] * 512;
+            }
+        }
         if (this._last) {
             const dt = Math.max(0.1, now - this._last.time);
+            s.diskRead = Math.max(0, (dRead - this._last.dRead) / dt);
+            s.diskWrite = Math.max(0, (dWrite - this._last.dWrite) / dt);
             const dTotal = total - this._last.total;
             s.cpu = dTotal > 0 ? Math.max(0, Math.min(100, 100 * (1 - (idle - this._last.idle) / dTotal))) : 0;
             s.down = Math.max(0, (rx - this._last.rx) / dt);
             s.up = Math.max(0, (tx - this._last.tx) / dt);
         } else {
             s.cpu = 0;
-            s.down = s.up = 0;
+            s.down = s.up = s.diskRead = s.diskWrite = 0;
         }
-        this._last = {time: now, total, idle, rx, tx};
+        this._last = {time: now, total, idle, rx, tx, dRead, dWrite};
         this.cpuHistory.push(s.cpu);
         if (this.cpuHistory.length > HISTORY)
             this.cpuHistory.shift();
@@ -268,6 +280,7 @@ export class SystemMonitor {
             swap: new Row(menu, 'Swap', true),
             gpu: new Row(menu, 'Graphics', true),
             disk: new Row(menu, 'Disk ( / )', true),
+            io: new Row(menu, 'Disk activity'),
         };
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._rows.temp = new Row(menu, 'Temperatures');
@@ -333,7 +346,9 @@ export class SystemMonitor {
             else if (key === 'mem')
                 parts.push(fmtBytes(s.memUsed).replace(' ', ''));
             else if (key === 'temp' && s.cpuTemp)
-                parts.push(`${Math.round(s.cpuTemp)}°`);
+                parts.push(`${Math.round(s.cpuTemp)}°C`);
+            else if (key === 'disk')
+                parts.push(`⇅${fmtRate(s.diskRead + s.diskWrite)}`);
             else if (key === 'net')
                 parts.push(`↓${fmtRate(s.down)}`);
             else if (key === 'power' && s.power && s.batteryStatus === 'Discharging')
@@ -368,9 +383,10 @@ export class SystemMonitor {
                 r.disk.hide(true);
             }
         }
+        r.io.set(`Read ${fmtRate(s.diskRead)}   Write ${fmtRate(s.diskWrite)}`);
         const temps = [['CPU', s.cpuTemp], ['GPU', s.gpuTemp], ['SSD', s.ssdTemp]].filter(t => t[1]);
         r.temp.hide(!temps.length);
-        r.temp.set(temps.map(([n, t]) => `${n} ${Math.round(t)}°`).join('   '));
+        r.temp.set(temps.map(([n, t]) => `${n} ${Math.round(t)} °C`).join('   '));
         r.power.hide(s.battery === undefined);
         if (s.battery !== undefined) {
             const draw = s.power ? ` · ${s.power.toFixed(1)} W` : '';

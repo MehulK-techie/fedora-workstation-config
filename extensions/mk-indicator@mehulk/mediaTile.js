@@ -1,0 +1,392 @@
+// Media tile in the top bar, for Spotify and any player that speaks MPRIS
+// (the standard Linux media interface): album art as a spinning record and
+// the song scrolling by; its menu has the art with a glow in the art's own
+// colour, a seek bar, controls, and which speakers or headphones to use.
+//
+// config/media.conf, yours in ~/.config/mk-workstation/media.conf:
+//   MEDIA=on|off      off removes the tile completely
+//   TICKER=on|off     the scrolling song name next to the record
+import Clutter from 'gi://Clutter';
+import GdkPixbuf from 'gi://GdkPixbuf';
+import Gio from 'gi://Gio';
+import Graphene from 'gi://Graphene';
+import GLib from 'gi://GLib';
+import Soup from 'gi://Soup?version=3.0';
+import St from 'gi://St';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import { Slider } from 'resource:///org/gnome/shell/ui/slider.js';
+import { getMixerControl } from 'resource:///org/gnome/shell/ui/status/volume.js';
+import { dominantHue, hsvToRgb } from './colour.js';
+
+const PREFIX = 'org.mpris.MediaPlayer2.';
+const PATH = '/org/mpris/MediaPlayer2';
+const PLAYER = 'org.mpris.MediaPlayer2.Player';
+const USER_CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'media.conf']);
+const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'media.conf']);
+const ART_DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'album-art']);
+
+export function mediaConf() {
+    const out = {MEDIA: 'on', TICKER: 'on'};
+    for (const path of [DEFAULT_CONF, USER_CONF]) {
+        try {
+            const [ok, bytes] = GLib.file_get_contents(path);
+            if (ok) {
+                for (const line of new TextDecoder().decode(bytes).split('\n')) {
+                    const m = line.match(/^\s*([A-Z_]+)\s*=\s*(\S*)/);
+                    if (m)
+                        out[m[1]] = m[2];
+                }
+            }
+        } catch (e) {
+            // defaults
+        }
+    }
+    return out;
+}
+
+const fmt = us => {
+    const s = Math.max(0, Math.floor(us / 1e6));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+export class MediaTile {
+    enable() {
+        this._conf = mediaConf();
+        if (this._conf.MEDIA === 'off')
+            return;
+        this._bus = Gio.DBus.session;
+        this._players = new Set();
+        this._meta = {};
+        this._status = 'Stopped';
+        this._session = new Soup.Session({timeout: 10});
+        GLib.mkdir_with_parents(ART_DIR, 0o755);
+
+        this._button = new PanelMenu.Button(0.5, 'Media', false);
+        this._button.add_style_class_name('mk-media');
+        const box = new St.BoxLayout({style: 'spacing: 8px;', y_align: Clutter.ActorAlign.CENTER});
+        this._disc = new St.Widget({style_class: 'mk-media-disc', width: 20, height: 20,
+            pivot_point: new Graphene.Point({x: 0.5, y: 0.5}), y_align: Clutter.ActorAlign.CENTER});
+        this._clip = new St.Widget({clip_to_allocation: true, width: 150, height: 20,
+            layout_manager: new Clutter.FixedLayout(), y_align: Clutter.ActorAlign.CENTER,
+            visible: this._conf.TICKER !== 'off'});
+        this._ticker = new St.Label({style_class: 'mk-media-ticker', y: 1});
+        this._clip.add_child(this._ticker);
+        box.add_child(this._disc);
+        box.add_child(this._clip);
+        this._button.add_child(box);
+        this._button.visible = false;
+        this._buildMenu();
+        Main.panel.addToStatusArea('mk-media', this._button, 1, 'right');
+        // The panel can go before we're disabled (logout): stop listening then.
+        this._button.connect('destroy', () => this._teardown());
+
+        this._spin = new Clutter.Timeline({actor: this._disc, duration: 4000, repeat_count: -1});
+        this._spin.connect('new-frame', (t, ms) => {
+            this._disc.rotation_angle_z = (ms / 4000) * 360;
+        });
+
+        this._nameId = this._bus.signal_subscribe('org.freedesktop.DBus', 'org.freedesktop.DBus',
+            'NameOwnerChanged', '/org/freedesktop/DBus', null, Gio.DBusSignalFlags.NONE,
+            (_c, _s, _p, _i, _sig, params) => {
+                const [name, , owner] = params.deep_unpack();
+                if (!name.startsWith(PREFIX))
+                    return;
+                if (owner)
+                    this._players.add(name);
+                else
+                    this._players.delete(name);
+                this._choose();
+            });
+        this._propsId = this._bus.signal_subscribe(null, 'org.freedesktop.DBus.Properties', 'PropertiesChanged',
+            PATH, null, Gio.DBusSignalFlags.NONE, (_c, sender) => {
+                if (this._current && sender === this._currentOwner)
+                    this._refresh();
+                else
+                    this._choose();
+            });
+        this._bus.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListNames',
+            null, null, Gio.DBusCallFlags.NONE, -1, null, (c, res) => {
+                try {
+                    for (const name of c.call_finish(res).deep_unpack()[0]) {
+                        if (name.startsWith(PREFIX))
+                            this._players.add(name);
+                    }
+                } catch (e) {
+                    return;
+                }
+                this._choose();
+            });
+    }
+
+    _buildMenu() {
+        const menu = this._button.menu;
+        menu.box.add_style_class_name('mk-media-menu');
+        const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        const col = new St.BoxLayout({vertical: true, x_expand: true, style: 'spacing: 10px;'});
+        this._art = new St.Widget({style_class: 'mk-media-art', width: 240, height: 240, x_align: Clutter.ActorAlign.CENTER});
+        col.add_child(this._art);
+        this._title = new St.Label({style_class: 'mk-media-title', x_align: Clutter.ActorAlign.CENTER});
+        this._artist = new St.Label({style_class: 'mk-media-artist', x_align: Clutter.ActorAlign.CENTER});
+        col.add_child(this._title);
+        col.add_child(this._artist);
+        this._slider = new Slider(0);
+        this._slider.accessible_name = 'Position';
+        this._slider.connect('drag-end', () => this._seek());
+        col.add_child(this._slider);
+        const times = new St.BoxLayout({x_expand: true});
+        this._elapsed = new St.Label({style_class: 'mk-media-time', x_expand: true});
+        this._length = new St.Label({style_class: 'mk-media-time'});
+        times.add_child(this._elapsed);
+        times.add_child(this._length);
+        col.add_child(times);
+        const controls = new St.BoxLayout({x_align: Clutter.ActorAlign.CENTER, style: 'spacing: 18px;'});
+        const control = (icon, method) => {
+            const b = new St.Button({style_class: 'mk-media-control', can_focus: true,
+                child: new St.Icon({icon_name: icon, icon_size: 20})});
+            b.connect('clicked', () => this._call(method));
+            controls.add_child(b);
+            return b;
+        };
+        control('media-skip-backward-symbolic', 'Previous');
+        this._playButton = control('media-playback-start-symbolic', 'PlayPause');
+        this._playButton.add_style_class_name('mk-media-play');
+        control('media-skip-forward-symbolic', 'Next');
+        col.add_child(controls);
+        item.add_child(col);
+        menu.addMenuItem(item);
+        this._outputs = new PopupMenu.PopupSubMenuMenuItem('Play on…', true);
+        this._outputs.icon.icon_name = 'audio-speakers-symbolic';
+        this._outputs.menu.connect('open-state-changed', (_m, open) => open && this._fillOutputs());
+        menu.addMenuItem(this._outputs);
+        this._openApp = menu.addAction('Open player', () => this._raise());
+        menu.connect('open-state-changed', (_m, open) => {
+            if (open && !this._posId) {
+                this._pollPosition();
+                this._posId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 1, () => {
+                    this._pollPosition();
+                    return GLib.SOURCE_CONTINUE;
+                });
+            } else if (!open && this._posId) {
+                GLib.source_remove(this._posId);
+                this._posId = 0;
+            }
+        });
+    }
+
+    // The playing player wins; Spotify first when several are paused.
+    _choose() {
+        if (!this._button)
+            return;
+        const names = [...this._players];
+        if (!names.length) {
+            this._current = null;
+            this._button.visible = false;
+            this._spin.stop();
+            return;
+        }
+        let pending = names.length;
+        const states = {};
+        for (const name of names) {
+            this._get(name, 'PlaybackStatus', value => {
+                states[name] = value;
+                if (--pending)
+                    return;
+                const playing = names.filter(n => states[n] === 'Playing');
+                const pick = playing.find(n => n.includes('spotify')) ?? playing[0] ??
+                    names.find(n => n.includes('spotify')) ?? names[0];
+                if (pick !== this._current) {
+                    this._current = pick;
+                    this._bus.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus',
+                        'GetNameOwner', new GLib.Variant('(s)', [pick]), null, Gio.DBusCallFlags.NONE, -1, null,
+                        (c, res) => {
+                            try {
+                                this._currentOwner = c.call_finish(res).deep_unpack()[0];
+                            } catch (e) {
+                                this._currentOwner = null;
+                            }
+                        });
+                }
+                this._refresh();
+            });
+        }
+    }
+
+    _get(name, prop, cb) {
+        this._bus.call(name, PATH, 'org.freedesktop.DBus.Properties', 'Get', new GLib.Variant('(ss)', [PLAYER, prop]),
+            null, Gio.DBusCallFlags.NONE, 1000, null, (c, res) => {
+                try {
+                    cb(c.call_finish(res).deep_unpack()[0].deep_unpack());
+                } catch (e) {
+                    cb(null);
+                }
+            });
+    }
+
+    _refresh() {
+        if (!this._current)
+            return;
+        this._bus.call(this._current, PATH, 'org.freedesktop.DBus.Properties', 'GetAll', new GLib.Variant('(s)', [PLAYER]),
+            null, Gio.DBusCallFlags.NONE, 1000, null, (c, res) => {
+                let props;
+                try {
+                    props = c.call_finish(res).recursiveUnpack()[0];
+                } catch (e) {
+                    return;
+                }
+                if (!this._button)
+                    return;
+                const meta = props.Metadata ?? {};
+                this._status = props.PlaybackStatus ?? 'Stopped';
+                const title = meta['xesam:title'] || '';
+                const artist = (meta['xesam:artist'] ?? []).join(', ');
+                this._meta = {title, artist, length: meta['mpris:length'] ?? 0, track: meta['mpris:trackid'],
+                    art: meta['mpris:artUrl']};
+                this._button.visible = Boolean(title);
+                this._title.text = title;
+                this._artist.text = artist;
+                this._length.text = this._meta.length ? fmt(this._meta.length) : '';
+                this._playButton.child.icon_name = this._status === 'Playing'
+                    ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
+                this._setTicker(artist ? `${title}  ·  ${artist}` : title);
+                if (this._status === 'Playing')
+                    this._spin.start();
+                else
+                    this._spin.stop();
+                this._loadArt(this._meta.art);
+            });
+    }
+
+    _setTicker(text) {
+        if (this._ticker.text === text)
+            return;
+        this._ticker.text = text;
+        this._ticker.remove_all_transitions();
+        this._ticker.x = 0;
+        const [, width] = this._ticker.get_preferred_width(-1);
+        const overflow = width - this._clip.width;
+        if (overflow > 0) {
+            // scroll to the end and back, pausing at each end
+            const loop = () => this._ticker?.ease({
+                x: -overflow, delay: 1500, duration: overflow * 28, mode: Clutter.AnimationMode.LINEAR,
+                onComplete: () => this._ticker?.ease({x: 0, delay: 1500, duration: 400,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUAD, onComplete: () => this._ticker?.text === text && loop()}),
+            });
+            loop();
+        }
+    }
+
+    // Album art: local files directly, web addresses downloaded once.
+    _loadArt(url) {
+        if (!url || url === this._artUrl)
+            return;
+        this._artUrl = url;
+        if (url.startsWith('file://')) {
+            this._setArt(Gio.File.new_for_uri(url).get_path());
+            return;
+        }
+        const name = GLib.compute_checksum_for_string(GLib.ChecksumType.SHA1, url, -1);
+        const path = GLib.build_filenamev([ART_DIR, name]);
+        if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
+            this._setArt(path);
+            return;
+        }
+        if (!url.startsWith('https://'))
+            return;
+        this._session.send_and_read_async(Soup.Message.new('GET', url), GLib.PRIORITY_LOW, null, (s, res) => {
+            try {
+                const bytes = s.send_and_read_finish(res);
+                GLib.file_set_contents(path, bytes.get_data());
+                if (this._artUrl === url)
+                    this._setArt(path);
+            } catch (e) {
+                // no art: the tile still works
+            }
+        });
+    }
+
+    _setArt(path) {
+        let glow = '79,211,255';
+        try {
+            const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 48, 48, true);
+            const hue = dominantHue(pixbuf, 0.3);
+            if (hue !== null)
+                glow = hsvToRgb(hue, 0.7, 1).join(',');
+        } catch (e) {
+            // keep the default glow
+        }
+        const uri = Gio.File.new_for_path(path).get_uri();
+        this._art.style = `background-image: url("${uri}"); background-size: cover; border-radius: 18px;
+            box-shadow: 0 10px 36px 4px rgba(${glow},0.45);`;
+        this._disc.style = `background-image: url("${uri}"); background-size: cover; border-radius: 10px;
+            border: 2px solid rgba(255,255,255,0.25);`;
+    }
+
+    _pollPosition() {
+        if (!this._current || !this._meta.length)
+            return;
+        this._get(this._current, 'Position', pos => {
+            if (pos === null || this._slider.dragging)
+                return;
+            this._slider.value = Math.min(1, pos / this._meta.length);
+            this._elapsed.text = fmt(pos);
+        });
+    }
+
+    _seek() {
+        if (!this._current || !this._meta.track || !this._meta.length)
+            return;
+        const target = Math.round(this._slider.value * this._meta.length);
+        this._bus.call(this._current, PATH, PLAYER, 'SetPosition',
+            new GLib.Variant('(ox)', [this._meta.track, target]), null, Gio.DBusCallFlags.NONE, 1000, null, null);
+        this._elapsed.text = fmt(target);
+    }
+
+    _call(method) {
+        if (this._current) {
+            this._bus.call(this._current, PATH, PLAYER, method, null, null, Gio.DBusCallFlags.NONE, 1000, null,
+                () => this._refresh());
+        }
+    }
+
+    _raise() {
+        if (this._current) {
+            this._bus.call(this._current, PATH, 'org.mpris.MediaPlayer2', 'Raise', null, null,
+                Gio.DBusCallFlags.NONE, 1000, null, null);
+        }
+    }
+
+    _fillOutputs() {
+        this._outputs.menu.removeAll();
+        const control = getMixerControl();
+        const current = control.get_default_sink();
+        for (const sink of control.get_sinks()) {
+            const item = new PopupMenu.PopupMenuItem(sink.get_description() || sink.get_name());
+            if (current && sink.get_id() === current.get_id())
+                item.setOrnament(PopupMenu.Ornament.CHECK);
+            item.connect('activate', () => control.set_default_sink(sink));
+            this._outputs.menu.addMenuItem(item);
+        }
+    }
+
+    disable() {
+        const button = this._button;
+        this._teardown();
+        button?.destroy();
+    }
+
+    _teardown() {
+        for (const id of ['_nameId', '_propsId']) {
+            if (this[id])
+                this._bus.signal_unsubscribe(this[id]);
+            this[id] = 0;
+        }
+        if (this._posId)
+            GLib.source_remove(this._posId);
+        this._posId = 0;
+        this._spin?.stop();
+        this._session?.abort();
+        this._button = null;
+    }
+}

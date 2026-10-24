@@ -11,6 +11,7 @@ import { SwitcherAnimation } from './switcher.js';
 import { OsdStack } from './osdStack.js';
 import { Accent } from './accent.js';
 import { SystemMonitor } from './systemMonitor.js';
+import { MediaTile } from './mediaTile.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -102,6 +103,8 @@ export default class MKIndicatorExtension extends Extension {
         this._osdStack.enable();
         this._sysMonitor = new SystemMonitor();
         this._sysMonitor.enable();
+        this._media = new MediaTile();
+        this._media.enable();
         this._sessionId = Main.sessionMode.connect('updated', () => this._onSessionMode());
         this._onSessionMode();
 
@@ -133,6 +136,8 @@ export default class MKIndicatorExtension extends Extension {
         this._indicator.visible = !locked;
         this._timerPill?.setLocked(locked);
         this._sysMonitor?.setLocked(locked);
+        if (this._media?._button)
+            this._media._button.visible = !locked && Boolean(this._media._meta?.title);
         if (locked && this._dockGlow) {
             this._dockGlow.disable();
             this._dockGlow = null;
@@ -181,6 +186,8 @@ export default class MKIndicatorExtension extends Extension {
         this._osdStack = null;
         this._sysMonitor?.disable();
         this._sysMonitor = null;
+        this._media?.disable();
+        this._media = null;
         this._accent?.disable();
         this._accent = null;
         this._brandMonitor?.cancel();

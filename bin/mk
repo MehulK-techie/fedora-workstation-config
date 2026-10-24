@@ -214,7 +214,7 @@ case "${1:-help}" in
     welcome)
         # mk welcome [on | off | test | title sir|maam|name|none | greeting "TEXT"
         #             | voice on|off|install|remove | notify on|off | edit
-        #             | variety on|off | birthday MM-DD | lines]
+        #             | variety on|off | birthday [YYYY-]MM-DD | lines]
         shift
         WELCOME_CONF="$HOME/.config/mk-workstation/welcome.conf"
         VOICE="$HOME/.local/bin/mk-voice"
@@ -256,15 +256,15 @@ case "${1:-help}" in
                 esac
                 ;;
             birthday)
-                [[ "${2:-}" =~ ^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$ ]] || { echo "Usage: mk welcome birthday MM-DD (e.g. 07-14)" >&2; exit 2; }
-                set_welcome BIRTHDAY "$2"; echo "✔ Noted. Expect something special on $2."
+                [[ "${2:-}" =~ ^([0-9]{4}-)?(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$ ]] || { echo "Usage: mk welcome birthday MM-DD or YYYY-MM-DD (e.g. 07-14)" >&2; exit 2; }
+                set_welcome BIRTHDAY "$2"; echo "✔ Noted. Expect something special on ${2: -5}, and a countdown until then (BIRTHDAY_COUNTDOWN=off hides it)."
                 ;;
             lines)
                 # Your own greetings: opens ~/.config/mk-workstation/greetings.conf
                 lines="$HOME/.config/mk-workstation/greetings.conf"
                 if [[ ! -f "$lines" ]]; then
                     mkdir -p "$(dirname "$lines")"
-                    printf '# Your own greetings: they join the built-in ones. {title} and {name} work.\n# Sections: morning afternoon evening night monday friday weekend return long birthday any\n\n[any]\n' > "$lines"
+                    printf '# Your own greetings: they join the built-in ones. {title} and {name} work.\n# Sections: morning afternoon evening night monday friday weekend firstlogin return long birthday any\n\n[any]\n' > "$lines"
                 fi
                 xdg-open "$lines" > /dev/null 2>&1 &
                 ;;
@@ -276,7 +276,7 @@ case "${1:-help}" in
             *)
                 echo "Usage: mk welcome [on | off | test | edit | title sir|maam|name|none"
                 echo "                  | greeting \"TEXT\" | voice on|off|install|remove | notify on|off"
-                echo "                  | variety on|off | birthday MM-DD | lines]"
+                echo "                  | variety on|off | birthday [YYYY-]MM-DD | lines]"
                 "$VOICE" status
                 ;;
         esac

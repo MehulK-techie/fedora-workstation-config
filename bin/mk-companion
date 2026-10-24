@@ -382,7 +382,7 @@ class CompanionWindow(Adw.ApplicationWindow):
         variety_row = Adw.SwitchRow(title="A different greeting each time",
                                     subtitle="Morning, evening, Fridays, your birthday… your line is in the mix",
                                     active=c.get("VARIETY", "on") != "off")
-        birthday_row = Adw.EntryRow(title="Your birthday (MM-DD, optional)", text=c.get("BIRTHDAY", ""))
+        birthday_row = Adw.EntryRow(title="Your birthday (MM-DD or YYYY-MM-DD, optional)", text=c.get("BIRTHDAY", ""))
         for row in (on_row, text_row, title_row, sub_row, voice_row, variety_row, birthday_row):
             group.add(row)
         preview = Gtk.Label(wrap=True)
@@ -405,7 +405,7 @@ class CompanionWindow(Adw.ApplicationWindow):
             wconf.set_value("VOICE", "on" if voice_row.get_active() else "off")
             wconf.set_value("VARIETY", "on" if variety_row.get_active() else "off")
             birthday = birthday_row.get_text().strip()
-            if not birthday or re.fullmatch(r"(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])", birthday):
+            if not birthday or re.fullmatch(r"(\d{4}-)?(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])", birthday):
                 wconf.set_value("BIRTHDAY", birthday)
             preview.set_label(f"“{wconf.greeting()}”")
         for row, signal in ((on_row, "notify::active"), (text_row, "changed"),

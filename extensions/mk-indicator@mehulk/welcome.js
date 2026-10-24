@@ -27,7 +27,7 @@ const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-worksta
 const TEST_FILE = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'welcome-test']);
 const DEFAULTS = {
     WELCOME: 'on', GREETING: 'Welcome back home, {title}.', TITLE: 'sir', SUBTITLE: 'on', VOICE: 'off',
-    EDGE_NOTIFY: 'off', COLOR_A: 'auto', COLOR_B: 'auto', TASKS: 'on', VARIETY: 'on', BIRTHDAY: '',
+    EDGE_NOTIFY: 'off', COLOR_A: 'auto', COLOR_B: 'auto', TASKS: 'on', VARIETY: 'on', BIRTHDAY: '', BIRTHDAY_COUNTDOWN: 'on',
 };
 const COMPANION = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'companion.json']);
 const GREETING_FILES = [GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'greetings.conf']),
@@ -355,6 +355,50 @@ function readJson(path, fallback) {
     }
 }
 
+// BIRTHDAY= is MM-DD or YYYY-MM-DD (the year is ignored). Returns [month, day].
+export function birthdayOf(conf) {
+    const m = (conf.BIRTHDAY || '').trim().match(/^(?:\d{4}-)?(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
+    return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+// "3 months and 12 days until your birthday", or null on the day itself or
+// without a birthday. A 29 February birthday counts as 28 February in
+// other years.
+export function birthdayCountdown(conf, now = GLib.DateTime.new_now_local()) {
+    const bd = birthdayOf(conf);
+    if (!bd)
+        return null;
+    const today = GLib.DateTime.new_local(now.get_year(), now.get_month(), now.get_day_of_month(), 0, 0, 0);
+    const on = year => {
+        const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+        const day = bd[0] === 2 && bd[1] === 29 && !leap ? 28 : bd[1];
+        return GLib.DateTime.new_local(year, bd[0], day, 0, 0, 0);
+    };
+    let next = on(today.get_year());
+    if (next.compare(today) < 0)
+        next = on(today.get_year() + 1);
+    if (next.compare(today) === 0)
+        return null;
+    let months = 0;
+    while (today.add_months(months + 1).compare(next) <= 0)
+        months++;
+    const days = Math.round(next.difference(today.add_months(months)) / GLib.TIME_SPAN_DAY);
+    const unit = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const parts = [months && unit(months, 'month'), days && unit(days, 'day')].filter(Boolean);
+    return `${parts.join(' and ')} until your birthday`;
+}
+
+// The first login after starting the computer on a new day gets an
+// energetic greeting; later starts that day get a "welcome back".
+function bootId() {
+    try {
+        const [, bytes] = GLib.file_get_contents('/proc/sys/kernel/random/boot_id');
+        return new TextDecoder().decode(bytes).trim();
+    } catch (e) {
+        return '';
+    }
+}
+
 // A greeting for right now: the time of day, the day of the week, an
 // occasion (your BIRTHDAY=MM-DD, New Year), coming back the same day, or
 // after a few days away; never one of the last few. VARIETY=off always
@@ -364,20 +408,25 @@ export function pickGreeting(conf = welcomeConf()) {
         return greetingText(conf);
     const pools = greetingPools();
     const history = readJson(HISTORY, {lines: []});
+    const boot = bootId();
     const now = GLib.DateTime.new_now_local();
     const today = now.format('%F'), md = now.format('%m-%d');
     const hour = now.get_hour(), weekday = now.get_day_of_week();  // 1 = Monday
     const away = history.last ? (now.to_unix() - history.last) / 86400 : 0;
     const timeOfDay = hour < 5 || hour >= 22 ? 'night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
     const dayPool = weekday === 1 ? 'monday' : weekday === 5 ? 'friday' : weekday >= 6 ? 'weekend' : null;
+    const bd = birthdayOf(conf);
+    const newBoot = Boolean(boot) && boot !== history.boot;
     let pool;
-    if (conf.BIRTHDAY && conf.BIRTHDAY === md)
+    if (bd && md === `${String(bd[0]).padStart(2, '0')}-${String(bd[1]).padStart(2, '0')}`)
         pool = pools.birthday;
     else if (md === '01-01')
         pool = pools.newyear;
     else if (away >= 3)
         pool = pools.long;
-    else if (history.day === today && Math.random() < 0.35)
+    else if (newBoot && history.day !== today)
+        pool = pools.firstlogin;
+    else if (newBoot || (history.day === today && Math.random() < 0.35))
         pool = pools.return;
     if (!pool?.length) {
         const roll = Math.random();
@@ -398,7 +447,7 @@ export function pickGreeting(conf = welcomeConf()) {
     try {
         GLib.mkdir_with_parents(GLib.path_get_dirname(HISTORY), 0o755);
         GLib.file_set_contents(HISTORY, JSON.stringify({
-            last: now.to_unix(), day: today, lines: [line, ...history.lines].slice(0, 6),
+            last: now.to_unix(), day: today, boot, lines: [line, ...history.lines].slice(0, 6),
         }));
     } catch (e) {
         // history is a nicety
@@ -415,17 +464,22 @@ class WelcomeToggle extends QuickSettings.QuickMenuToggle {
         this.checked = welcomeConf().WELCOME !== 'off';
         this.connect('notify::checked', () => writeUserKey('WELCOME', this.checked ? 'on' : 'off'));
         this.menu.setHeader('starred-symbolic', 'Welcome light', greetingText());
+        // The title choices fold into one row, so the menu stays short and
+        // "Edit greeting…" is never pushed off the screen.
+        this._titleMenu = new PopupMenu.PopupSubMenuMenuItem('Call me', true);
+        this._titleMenu.icon.icon_name = 'avatar-default-symbolic';
+        this.menu.addMenuItem(this._titleMenu);
         this._titleItems = TITLES.map(([key, label]) => {
             const item = new PopupMenu.PopupMenuItem(label);
             item.connect('activate', () => {
                 writeUserKey('TITLE', key);
                 this._sync();
+                this._titleMenu.setSubmenuShown(false);
                 run(['nice', `${BIN}/mk-voice`, 'prepare']);
             });
-            this.menu.addMenuItem(item);
+            this._titleMenu.menu.addMenuItem(item);
             return [key, item];
         });
-        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._voice = new PopupMenu.PopupSwitchMenuItem('Speak the greeting', welcomeConf().VOICE === 'on');
         this._voice.connect('toggled', (_i, state) => {
             writeUserKey('VOICE', state ? 'on' : 'off');
@@ -445,8 +499,11 @@ class WelcomeToggle extends QuickSettings.QuickMenuToggle {
     _sync() {
         const conf = welcomeConf();
         const current = (conf.TITLE || 'sir').toLowerCase().replace("ma'am", 'maam');
-        for (const [key, item] of this._titleItems)
+        for (const [key, item] of this._titleItems) {
             item.setOrnament(key === current ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
+            if (key === current)
+                this._titleMenu.label.text = `Call me: ${item.label.text}`;
+        }
         this._voice.setToggleState(conf.VOICE === 'on');
         this._variety.setToggleState(conf.VARIETY !== 'off');
         this.menu.setHeader('starred-symbolic', 'Welcome light', greetingText(conf));
@@ -534,6 +591,7 @@ export class Welcome {
         const conf = welcomeConf();
         if (!force && conf.WELCOME === 'off')
             return;
+        const firstToday = readJson(HISTORY, {}).day !== GLib.DateTime.new_now_local().format('%F');
         const greeting = pickGreeting(conf);
         const extra = [];
         const todo = conf.TASKS !== 'off' ? agenda() : {pinned: [], next: null};
@@ -543,6 +601,11 @@ export class Welcome {
         }
         if (todo.next)
             extra.push(`⏰ ${todo.next.at}  ${todo.next.text}`);
+        // The birthday countdown: at the first greeting of the day (and in
+        // "Play it now").
+        const countdown = conf.BIRTHDAY_COUNTDOWN !== 'off' ? birthdayCountdown(conf) : null;
+        if (countdown && (force || firstToday))
+            extra.push(`🎂 ${countdown}`);
         const battery = batteryHint();
         if (battery)
             extra.push(`🔋 ${battery}`);

@@ -12,6 +12,11 @@
   mk-lock folder remove PATH   decrypt PATH for good
   mk-lock folder list
   mk-lock close-all            close every open locked folder
+  mk-lock vault                open or close your vault: a hidden encrypted
+                               folder (~/.vault), made the first time
+  mk-lock password set|remove app APP | folder PATH
+                               a password of its own for that app or folder,
+                               typed instead of your fingerprint when you like
   mk-lock run -- COMMAND...    confirm it's you, then run COMMAND
   mk-lock reapply              re-lock apps after their launchers changed
 
@@ -27,9 +32,15 @@ How sure you can be:
     to the front.
 The confirmation is polkit's "auth_self" (io.github.mehulk.mk-lock.unlock,
 installed by setup.sh): fingerprint when a finger is enrolled, else password.
+An item password (mk-lock password set) is an alternative: for a folder it
+unlocks a copy of the folder's key sealed with that password (Argon2id +
+NaCl secretbox), so it's real encryption, not a check that can be skipped.
 """
 import base64
 import configparser
+import getpass
+import hashlib
+import json
 import os
 import secrets
 import shutil
@@ -49,6 +60,8 @@ ORIGINALS = DATA_HOME / "mk-workstation/lock-originals"
 USER_APPS = DATA_HOME / "applications"
 SELF = str(HOME / ".local/bin/mk-lock") if (HOME / ".local/bin/mk-lock").exists() else os.path.abspath(__file__)
 MARK = "X-MK-Locked"
+ITEMS = DATA_HOME / "mk-workstation/lock-items"   # item passwords (sealed keys / checks)
+VAULT = HOME / ".vault"
 
 
 def die(message, code=1):
@@ -67,6 +80,147 @@ def confirm_identity():
     if "not registered" in result.stderr or "does not exist" in result.stderr:
         die("The mk-lock polkit action isn't installed yet. Run: ./setup.sh")
     return False
+
+
+# ---------------------------------------------------------------- item passwords
+
+def _nacl():
+    try:
+        from nacl import pwhash, secret, utils
+        return pwhash, secret, utils
+    except ImportError:
+        die("Item passwords need PyNaCl: sudo dnf install python3-pynacl")
+
+
+def item_file(kind, ident):
+    return ITEMS / (hashlib.sha256(f"{kind}:{ident}".encode()).hexdigest()[:32] + ".json")
+
+
+def _box(password, salt):
+    pwhash, secret, _utils = _nacl()
+    key = pwhash.argon2id.kdf(secret.SecretBox.KEY_SIZE, password.encode(), salt,
+                              opslimit=pwhash.argon2id.OPSLIMIT_MODERATE, memlimit=pwhash.argon2id.MEMLIMIT_MODERATE)
+    return secret.SecretBox(key)
+
+
+def item_seal(kind, ident, password, payload):
+    """Store PAYLOAD (a folder key, or a fixed word for apps) sealed with PASSWORD."""
+    pwhash, _secret, utils = _nacl()
+    salt = utils.random(pwhash.argon2id.SALTBYTES)
+    sealed = _box(password, salt).encrypt(payload.encode())
+    ITEMS.mkdir(parents=True, exist_ok=True)
+    os.chmod(ITEMS, 0o700)
+    target = item_file(kind, ident)
+    target.write_text(json.dumps({"salt": base64.b64encode(salt).decode(),
+                                  "sealed": base64.b64encode(bytes(sealed)).decode()}))
+    os.chmod(target, 0o600)
+
+
+def item_open(kind, ident, password):
+    """The payload, or None for a wrong password."""
+    from nacl.exceptions import CryptoError
+    data = json.loads(item_file(kind, ident).read_text())
+    try:
+        return _box(password, base64.b64decode(data["salt"])).decrypt(base64.b64decode(data["sealed"])).decode()
+    except CryptoError:
+        return None
+
+
+def ask_password(title, text, allow_fingerprint=True):
+    """('password', pw), ('fingerprint', None) or (None, None) for cancel."""
+    if sys.stdin.isatty():
+        hint = " (empty: use your fingerprint instead)" if allow_fingerprint else ""
+        pw = getpass.getpass(f"{text}{hint}: ")
+        if not pw:
+            return ("fingerprint", None) if allow_fingerprint else (None, None)
+        return ("password", pw)
+    if not shutil.which("zenity"):
+        return ("fingerprint", None) if allow_fingerprint else (None, None)
+    argv = ["zenity", "--entry", "--hide-text", f"--title={title}", f"--text={text}"]
+    if allow_fingerprint:
+        argv.append("--extra-button=Use fingerprint")
+    result = subprocess.run(argv, capture_output=True, text=True)
+    if allow_fingerprint and result.stdout.strip() == "Use fingerprint":
+        return ("fingerprint", None)
+    if result.returncode != 0:
+        return (None, None)
+    return ("password", result.stdout.rstrip("\n"))
+
+
+def new_password(what):
+    if sys.stdin.isatty():
+        first = getpass.getpass(f"New password for {what}: ")
+        if len(first) < 6:
+            die("Use at least 6 characters.")
+        if getpass.getpass("Again: ") != first:
+            die("The two didn't match.")
+        return first
+    kind, pw = ask_password("MK Lock", f"New password for {what} (6+ characters)", allow_fingerprint=False)
+    if not pw or len(pw) < 6:
+        die("No password set (it needs at least 6 characters).")
+    return pw
+
+
+def unlock_app(app_id):
+    """True when it's you: the app's own password, or fingerprint/password via polkit."""
+    if item_file("app", app_id).exists():
+        for _attempt in range(3):
+            how, pw = ask_password("MK Lock", f"Password for {app_id}")
+            if how == "fingerprint":
+                break
+            if how is None:
+                return False
+            if item_open("app", app_id, pw) == "mk-lock":
+                return True
+            notify_gui("Wrong password")
+        else:
+            return False
+    return confirm_identity()
+
+
+def folder_key(path):
+    """The folder's key: its own password, or from the root key store after polkit."""
+    if item_file("folder", str(path)).exists():
+        for _attempt in range(3):
+            how, pw = ask_password("MK Lock", f"Password for {path.name}")
+            if how == "fingerprint":
+                break
+            if how is None:
+                die("Cancelled; the folder stays closed.")
+            key = item_open("folder", str(path), pw)
+            if key:
+                return key
+            print("Wrong password.", file=sys.stderr)
+            notify_gui("Wrong password")
+        else:
+            die("Wrong password three times; the folder stays closed.")
+    return key_lookup(path)
+
+
+def cmd_password(args):
+    if len(args) < 3 or args[0] not in ("set", "remove") or args[1] not in ("app", "folder"):
+        die("Usage: mk-lock password set|remove app APP | folder PATH", 2)
+    action, kind, target = args
+    if kind == "app":
+        ident = find_app(target) or target
+        if ident not in read_list(APPS_FILE):
+            die(f"{ident} isn't locked. Lock it first: mk lock app {target}")
+    else:
+        ident = str(Path(os.path.abspath(os.path.expanduser(target))))
+        if ident not in read_list(FOLDERS_FILE):
+            die(f"{ident} isn't a locked folder.")
+    if action == "remove":
+        item_file(kind, ident).unlink(missing_ok=True)
+        print(f"✔ {ident}: own password removed (fingerprint or your login password only).")
+        return
+    if kind == "folder":
+        payload = key_lookup(Path(ident))  # proves it's you before sealing the key again
+    else:
+        if not confirm_identity():
+            die("Not confirmed; nothing changed.")
+        payload = "mk-lock"
+    item_seal(kind, ident, new_password(ident), payload)
+    print(f"✔ {ident} can now also be opened with its own password.")
 
 
 def read_list(path):
@@ -148,7 +302,7 @@ def wrap(app_id):
     for section in entry.sections():
         if section == "Desktop Entry" or section.startswith("Desktop Action "):
             if entry.has_option(section, "Exec"):
-                entry.set(section, "Exec", f"{SELF} run -- {entry.get(section, 'Exec')}")
+                entry.set(section, "Exec", f"env MK_LOCK_APP={app_id} {SELF} run -- {entry.get(section, 'Exec')}")
     # D-Bus activation would skip Exec (and so the check): launch through Exec.
     entry.set("Desktop Entry", "DBusActivatable", "false")
     entry.set("Desktop Entry", MARK, "true")
@@ -258,14 +412,14 @@ def need_tools():
             die(f"{tool} isn't installed. Run: ./setup.sh (or sudo dnf install gocryptfs polkit fuse3)")
 
 
-def folder_add(path):
+def folder_add(path, ask=True):
     need_tools()
     if not path.is_dir() or path == HOME or HOME not in path.parents:
         die("Pick a folder inside your home folder (not your home folder itself).")
     if cipher_dir(path).exists() or is_open(path):
         die(f"{path} is already locked.")
     answer = input(f"Encrypt {path}? Its files move into an encrypted store; nothing is deleted until "
-                   "the copy is checked. [y/N]: ") if sys.stdin.isatty() else "y"
+                   "the copy is checked. [y/N]: ") if ask and sys.stdin.isatty() else "y"
     if not answer.lower().startswith("y"):
         return
     key = base64.b64encode(secrets.token_bytes(32)).decode()
@@ -299,7 +453,7 @@ def folder_open(path):
         return
     if not cipher_dir(path).is_dir():
         die(f"{path} isn't a locked folder.")
-    key = key_lookup(path)  # polkit asks for your fingerprint or password here
+    key = folder_key(path)  # its own password, or fingerprint/password through polkit
     path.mkdir(exist_ok=True)
     mount(path, key)
     print(f"✔ {path} is open. Close it with: mk lock close {path}")
@@ -317,7 +471,7 @@ def folder_remove(path):
     need_tools()
     if not cipher_dir(path).is_dir():
         die(f"{path} isn't a locked folder.")
-    key = key_lookup(path)  # polkit asks for your fingerprint or password here
+    key = folder_key(path)
     if is_open(path):
         unmount(path)
     with tempfile.TemporaryDirectory(prefix=".mklock-", dir=path.parent) as tmp:
@@ -331,8 +485,23 @@ def folder_remove(path):
         die(f"The decrypted copy didn't match; the encrypted store {cipher_dir(path)} was kept.")
     shutil.rmtree(cipher_dir(path))
     key_helper("delete", path)
+    item_file("folder", str(path)).unlink(missing_ok=True)
     write_list(FOLDERS_FILE, [f for f in read_list(FOLDERS_FILE) if f != str(path)])
     print(f"✔ {path} is a normal folder again.")
+
+
+def cmd_vault():
+    """~/.vault: made (empty, encrypted) the first time; then open or close.
+    Opened, it shows in Files."""
+    if not cipher_dir(VAULT).is_dir():
+        VAULT.mkdir(mode=0o700, exist_ok=True)
+        folder_add(VAULT, ask=False)
+    if is_open(VAULT):
+        folder_close(VAULT)
+        notify_gui("Vault closed")
+        return
+    folder_open(VAULT)
+    subprocess.Popen(["gio", "open", str(VAULT)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def notify_gui(text):
@@ -382,9 +551,11 @@ def main():
         command = args[2:] if len(args) > 1 and args[1] == "--" else args[1:]
         if not command:
             die("Usage: mk-lock run -- COMMAND...", 2)
-        if not confirm_identity():
+        app_id = os.environ.get("MK_LOCK_APP", "")
+        if not (unlock_app(app_id) if app_id else confirm_identity()):
             notify_gui(f"{Path(command[0]).name}: not confirmed")
             die(f"Not confirmed; {Path(command[0]).name} didn't start.")
+        os.environ.pop("MK_LOCK_APP", None)
         os.execvp(command[0], command)
     if args[0] == "app":
         cmd_app(args[1:])
@@ -396,6 +567,10 @@ def main():
                 folder_close(Path(folder))
     elif args[0] == "reapply":
         cmd_reapply()
+    elif args[0] == "password":
+        cmd_password(args[1:])
+    elif args[0] == "vault":
+        cmd_vault()
     else:
         die(f"Unknown command {args[0]!r}. See: mk-lock --help", 2)
     return 0

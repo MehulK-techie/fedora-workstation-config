@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Vault
+Comment=Your hidden encrypted folder: opens after your fingerprint, closes on click or screen lock
+Exec=@BIN@/mk-lock vault
+Icon=io.github.mehulk.MkVault
+Categories=Utility;Security;
+Keywords=vault;lock;private;secret;encrypt;mk;
+StartupNotify=false

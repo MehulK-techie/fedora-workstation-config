@@ -73,12 +73,15 @@ closes it without saving.
 ## Screenshots, pictures and drawings
 
 - **Paste:** Ctrl+V pastes an image from the clipboard (screenshots, "Copy
-  image" in a browser), or files copied in Files. A copied file path or
+  image" in a browser), read fresh with `wl-paste`, or files copied in Files. A copied file path or
   `file://` address is attached as the file itself, not pasted as text. The
   note gets `![[name.png]]`, which shows the picture in Read and in Edit with
   preview.
 - **See them while you write:** every `![[picture]]` line shows the picture
-  right under it in the editor.
+  right under it in the editor. Drag its right edge to resize it there; the
+  width is kept in the line (`![[picture.png|300]]`) and used when reading too.
+- **Zoom:** Ctrl+scroll, pinch on the touchpad, or Ctrl+plus / minus; Ctrl+0
+  goes back to 100%. Text, line length and pictures scale together.
 - **Edit a picture:** click it (or Ctrl+Shift+I on its line). Rotate (Ctrl+[
   and Ctrl+]), flip, crop (C, then drag), resize, and looks: Thermal, Pop Art,
   Distort and a vintage Polaroid with a paper frame. Save copy keeps the

@@ -17,6 +17,8 @@ import json
 import math
 import os
 import re
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -90,7 +92,7 @@ CSS = """
 # ======================================================================
 # Image editor: rotate, flip, crop, resize, Photo Booth looks, Polaroid
 # ======================================================================
-EMBED_LINE = re.compile(r"^\s*!\[\[([^\]|#]+?\.(?:png|jpe?g|gif|webp|bmp))(?:\|[^\]]*)?\]\]\s*$", re.I)
+EMBED_LINE = re.compile(r"^\s*!\[\[([^\]|#]+?\.(?:png|jpe?g|gif|webp|bmp))(?:\|(\d+)?[^\]]*)?\]\]\s*$", re.I)
 
 
 class ImageEditor(Adw.Window):
@@ -929,6 +931,17 @@ class NotesWindow(Adw.ApplicationWindow):
         link_click = Gtk.GestureClick(button=1)
         link_click.connect("released", self._on_editor_click)
         self.view.add_controller(link_click)
+        # Zoom: Ctrl+scroll, a touchpad pinch, Ctrl+plus/minus/0. Text, line
+        # length and inline pictures scale together; the note itself is unchanged.
+        self.zoom = 1.0
+        zoom_scroll = Gtk.EventControllerScroll(flags=Gtk.EventControllerScrollFlags.VERTICAL)
+        zoom_scroll.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        zoom_scroll.connect("scroll", self._on_zoom_scroll)
+        self.view.add_controller(zoom_scroll)
+        pinch = Gtk.GestureZoom()
+        pinch.connect("begin", lambda *_: setattr(self, "_pinch_start", self.zoom))
+        pinch.connect("scale-changed", lambda _g, scale: self.set_zoom(self._pinch_start * scale, quiet=True))
+        self.view.add_controller(pinch)
         # Pictures under their ![[image]] lines, right in the editor.
         self._inline = []          # (picture, line number)
         self._inline_id = 0
@@ -1001,6 +1014,9 @@ class NotesWindow(Adw.ApplicationWindow):
             ("draw", self.draw, ["<Control><Shift>p"]),
             ("attach", self.attach, []),
             ("edit-image", self.edit_image, ["<Control><Shift>i"]),
+            ("zoom-in", lambda: self.set_zoom(self.zoom * 1.1), ["<Control>plus", "<Control>equal"]),
+            ("zoom-out", lambda: self.set_zoom(self.zoom / 1.1), ["<Control>minus"]),
+            ("zoom-reset", lambda: self.set_zoom(1.0), ["<Control>0"]),
             ("pdf", self.export_pdf, ["<Control><Shift>e"]),
             ("history", self.show_history, []),
             ("rename", lambda: self.title.grab_focus(), ["F2"]),
@@ -1258,6 +1274,26 @@ class NotesWindow(Adw.ApplicationWindow):
         self._fill_info()
         self._queue_inline()
 
+    # ---------- zoom ----------
+    def _on_zoom_scroll(self, ctrl, _dx, dy):
+        if not ctrl.get_current_event_state() & Gdk.ModifierType.CONTROL_MASK:
+            return False
+        self.set_zoom(self.zoom * (0.9 if dy > 0 else 1.1))
+        return True
+
+    def set_zoom(self, zoom, quiet=False):
+        zoom = max(0.6, min(2.5, zoom))
+        if abs(zoom - self.zoom) < 0.01:
+            return
+        self.zoom = zoom
+        self.apply_look()
+        self._queue_inline()
+        if not quiet:
+            if getattr(self, "_zoom_toast", None):
+                self._zoom_toast.dismiss()
+            self._zoom_toast = Adw.Toast(title=f"Zoom {round(zoom * 100)}% · Ctrl+0 resets", timeout=1)
+            self.toast.add_toast(self._zoom_toast)
+
     # ---------- pictures inline in the editor ----------
     # Each ![[image.png]] line gets blank space below it (a text tag, so the
     # note's text is untouched and undo isn't affected) with the picture laid
@@ -1290,7 +1326,8 @@ class NotesWindow(Adw.ApplicationWindow):
                       and self.buffer.remove_tag(tag, start, end))
         if not self.rel:
             return GLib.SOURCE_REMOVE
-        width = max(160, min(520, self.view.get_width() - 96))
+        width = max(160, self.view.get_width() - 96)
+        default = min(width, 520 * self.zoom)
         for line_no in range(self.buffer.get_line_count()):
             ok, it = self.buffer.get_iter_at_line(line_no)
             line_end = it.copy()
@@ -1310,23 +1347,70 @@ class NotesWindow(Adw.ApplicationWindow):
             texture = self._inline_texture(path) if path and path.is_file() else None
             if not texture:
                 continue
-            w = min(width, texture.get_width())
+            # ![[name|300]] sets its width (the reading view honours it too).
+            wanted = int(match.group(2)) * self.zoom if match.group(2) else default
+            w = round(min(width, wanted, texture.get_width() * max(1.0, self.zoom)))
             h = round(w * texture.get_height() / max(1, texture.get_width()))
             tag_name = f"mk-inline-{h}"
             tag = table.lookup(tag_name) or self.buffer.create_tag(tag_name, pixels_below_lines=h + 14)
             self.buffer.apply_tag(tag, it, line_end)
             picture = Gtk.Picture(paintable=texture, can_shrink=True, content_fit=Gtk.ContentFit.CONTAIN,
-                                  css_classes=["mk-inline-image"], tooltip_text=f"{name} · click to edit",
+                                  css_classes=["mk-inline-image"],
+                                  tooltip_text=f"{name} · click to edit · drag the right edge to resize",
                                   cursor=Gdk.Cursor.new_from_name("pointer"), overflow=Gtk.Overflow.HIDDEN)
             picture.set_size_request(w, h)
             click = Gtk.GestureClick()
             click.connect("released", lambda *_a, p=path, n=line_no: self.edit_image(p, n))
             picture.add_controller(click)
+            # Resize in place: drag near the right edge; the width goes into the line.
+            edge = Gtk.EventControllerMotion()
+            edge.connect("motion", lambda _c, x, _y, pic=picture: pic.set_cursor(Gdk.Cursor.new_from_name(
+                "ew-resize" if x > pic.get_width() - 18 else "pointer")))
+            picture.add_controller(edge)
+            drag = Gtk.GestureDrag()
+            drag.connect("drag-begin", self._resize_begin, picture, click)
+            drag.connect("drag-update", self._resize_update, picture, texture)
+            drag.connect("drag-end", self._resize_end, picture, line_no)
+            picture.add_controller(drag)
             self.view.add_overlay(picture, 0, 0)
             self._inline.append((picture, line_no))
         # Positions are known once the text has been laid out with the new spacing.
         GLib.idle_add(self._place_inline)
         return GLib.SOURCE_REMOVE
+
+    def _resize_begin(self, gesture, x, _y, picture, click):
+        if x < picture.get_width() - 18:
+            gesture.set_state(Gtk.EventSequenceState.DENIED)  # an ordinary click: edit
+            return
+        click.reset()
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        picture._mk_start = picture.get_size_request()[0]
+
+    def _resize_update(self, _g, dx, _dy, picture, texture):
+        start = getattr(picture, "_mk_start", None)
+        if start is None:
+            return
+        w = max(60, min(self.view.get_width() - 96, round(start + dx)))
+        picture.set_size_request(w, round(w * texture.get_height() / max(1, texture.get_width())))
+
+    def _resize_end(self, _g, _dx, _dy, picture, line_no):
+        if getattr(picture, "_mk_start", None) is None:
+            return
+        picture._mk_start = None
+        width = round(picture.get_size_request()[0] / self.zoom)
+        ok, start = self.buffer.get_iter_at_line(line_no)
+        end = start.copy()
+        if not end.ends_line():
+            end.forward_to_line_end()
+        line = self.buffer.get_text(start, end, False)
+        match = EMBED_LINE.match(line)
+        if not match:
+            return
+        new = re.sub(r"!\[\[([^\]|#]+?)(?:\|[^\]]*)?\]\]", lambda m: f"![[{m.group(1)}|{width}]]", line, count=1)
+        self.buffer.begin_user_action()
+        self.buffer.delete(start, end)
+        self.buffer.insert(start, new)
+        self.buffer.end_user_action()
 
     def _place_inline(self):
         for picture, line_no in self._inline:
@@ -1631,10 +1715,39 @@ class NotesWindow(Adw.ApplicationWindow):
     # image's address as text), then text. Text that is nothing but paths or
     # file:// addresses of existing files attaches those files, so a copied
     # file never lands in the note as "/home/…/Image.png".
+    @staticmethod
+    def _wl_paste_image():
+        """The clipboard's image, read fresh with wl-paste (Wayland): never an
+        older picture GTK may still hold. (bytes, ext) or None."""
+        if not os.environ.get("WAYLAND_DISPLAY") or not shutil.which("wl-paste"):
+            return None
+        try:
+            types = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True,
+                                   timeout=2).stdout.split()
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if "text/uri-list" in types or "x-special/gnome-copied-files" in types:
+            return None  # copied files: handled as files
+        for mime, ext in (("image/png", ".png"), ("image/jpeg", ".jpg"), ("image/webp", ".webp")):
+            if mime in types:
+                try:
+                    data = subprocess.run(["wl-paste", "--no-newline", "-t", mime], capture_output=True,
+                                          timeout=5).stdout
+                except (OSError, subprocess.SubprocessError):
+                    return None
+                return (data, ext) if data else None
+        return None
+
     def _on_paste(self, view):
         clipboard = self.get_clipboard()
         formats = clipboard.get_formats()
         view.stop_emission_by_name("paste-clipboard")
+        image = self._wl_paste_image()
+        if image:
+            rel = self.vault.save_attachment(image[0], image[1])
+            self._insert_attachment(rel)
+            self.toast.add_toast(Adw.Toast(title="Image pasted", timeout=2))
+            return
         if formats.contain_gtype(Gdk.FileList):
             def got_files(c, res):
                 try:
@@ -1870,7 +1983,9 @@ class NotesWindow(Adw.ApplicationWindow):
             conf["THEME"], Adw.ColorScheme.DEFAULT))
         look = self._look()
         spacing = SPACINGS.get(conf["SPACING"], SPACINGS["comfortable"])[1]
-        css = (f".mk-editor, .mk-editor text {{ font-family: {look['font']}; font-size: {look['size']}px; }}")
+        zoom = getattr(self, "zoom", 1.0)
+        css = (f".mk-editor, .mk-editor text {{ font-family: {look['font']}; "
+               f"font-size: {look['size'] * zoom:.1f}px; }}")
         if not getattr(self, "_look_css", None):
             self._look_css = Gtk.CssProvider()
             Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), self._look_css,
@@ -1879,7 +1994,9 @@ class NotesWindow(Adw.ApplicationWindow):
         self.view.set_pixels_below_lines(int(look["size"] * (spacing - 1.2)))
         self.view.set_pixels_inside_wrap(int(look["size"] * (spacing - 1.25)))
         width = WIDTHS.get(conf["WIDTH"], WIDTHS["medium"])[1]
-        self.clamp.set_maximum_size(width or 10000)
+        self.clamp.set_maximum_size(int(width * zoom) if width else 10000)
+        if getattr(self, "web", None):
+            self.web.set_zoom_level(zoom)
         self.formatbar.set_visible(conf["FORMAT_BAR"] != "off" and not getattr(self, "focused", False))
         self._rendered = None
         if self.reading or getattr(self, "splitting", False):
@@ -2122,16 +2239,41 @@ class NotesWindow(Adw.ApplicationWindow):
             def done(error):
                 if error:
                     self.toast.add_toast(Adw.Toast(title=f"PDF failed: {error}"))
-                else:
-                    self._last_pdf = target.get_uri()
-                    self.toast.add_toast(Adw.Toast(title=f"Saved {target.get_basename()}", button_label="Open",
-                                                   action_name="win.open-last-pdf", timeout=5))
+                    return
+                self._last_pdf = target.get_uri()
+                self.toast.add_toast(Adw.Toast(title=f"Saved {target.get_basename()}", button_label="Open",
+                                               action_name="win.open-last-pdf", timeout=5))
+                note = Gio.Notification.new("PDF ready")
+                note.set_body(target.get_basename())
+                note.set_default_action_and_target("app.open-uri", GLib.Variant("s", target.get_uri()))
+                self.get_application().send_notification("pdf", note)
 
             def fallback():
-                # Without WeasyPrint: the system print dialog (choose "Print to File").
-                self.mode.set_active_name("read")
-                WebKit.PrintOperation.new(self.web).run_dialog(self)
-                self.toast.add_toast(Adw.Toast(title="For one-click PDFs: sudo dnf install python3-weasyprint"))
+                # No WeasyPrint yet: offer to install it (once), then export,
+                # instead of the print dialog.
+                ask = Adw.AlertDialog(heading="Install PDF export?",
+                                      body="MK Notes makes PDFs with WeasyPrint, which isn't installed yet "
+                                           "(about 10 MB). Install it now? Your password is asked once.")
+                ask.add_response("cancel", "Cancel")
+                ask.add_response("install", "Install and export")
+                ask.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
+
+                def answered(dlg, res):
+                    if dlg.choose_finish(res) != "install":
+                        return
+                    self.toast.add_toast(Adw.Toast(title="Installing PDF export…", timeout=3))
+
+                    def install():
+                        ok = subprocess.run(["pkexec", "dnf", "install", "-y", "python3-weasyprint"],
+                                            capture_output=True).returncode == 0
+                        if ok:
+                            import importlib
+                            importlib.invalidate_caches()
+                            work()
+                        else:
+                            GLib.idle_add(done, "WeasyPrint couldn't be installed (sudo dnf install python3-weasyprint)")
+                    threading.Thread(target=install, daemon=True).start()
+                ask.choose(self, None, answered)
             threading.Thread(target=work, daemon=True).start()
         if not self.lookup_action("open-last-pdf"):
             action = Gio.SimpleAction.new("open-last-pdf", None)
@@ -2454,6 +2596,10 @@ class NotesApp(Adw.Application):
         provider.load_from_string(CSS)
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider,
                                                   Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        # Notifications' click (e.g. "PDF ready"): open what they point at.
+        open_uri_action = Gio.SimpleAction.new("open-uri", GLib.VariantType.new("s"))
+        open_uri_action.connect("activate", lambda _a, uri: Gio.AppInfo.launch_default_for_uri(uri.get_string(), None))
+        self.add_action(open_uri_action)
 
     def do_command_line(self, command_line):
         args = command_line.get_arguments()[1:]

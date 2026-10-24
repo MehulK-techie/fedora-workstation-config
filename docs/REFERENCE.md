@@ -95,7 +95,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `assets/notes-web/` | The phone app (HTML, JS, manifest) | `mk-notes` sync server, `scripts/build-apk.sh` |
 | `android/` | Android WebView wrapper for the phone app | `scripts/build-apk.sh` |
 | `config/dock.conf` | `MAGNIFY=`, `MAGNIFY_SPREAD=`, `MAGNIFY_MS=` | mk-indicator (dock magnification) |
-| `~/.config/mk-workstation/timer.conf` | `SILENCE=`, `AMBIENT=`, `AMBIENT_IDLE=` (s), `AMBIENT_STYLE=` (random, aurora, web, knight, matrix) | `mk-timer` (written by its window) |
+| `~/.config/mk-workstation/timer.conf` | `SILENCE=`, `AMBIENT=`, `AMBIENT_IDLE=` (s), `SOUND=` (none, chime, bell, soft, alarm); the scene comes from `screensaver.conf` | `mk-timer` (written by its window) |
 | `config/power.conf` | `ON_AC=`, `ON_BATTERY=`, `LOW_BATTERY=`, `LOW_PERCENT=` | `mk-power` |
 | `config/effects.conf` | `HEAVY=` UUIDs, `AUTO_LITE_BELOW_GB=` | `sync.sh` |
 | `config/enabled-extensions.txt` | one UUID per line | `sync.sh` |

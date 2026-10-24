@@ -133,11 +133,13 @@ class Server:
                     body = json.dumps(body).encode()
                 elif isinstance(body, str):
                     body = body.encode()
-                box = secret_box() if self.path.startswith("/api/") and code == 200 else None
+                box = secret_box() if self.path.startswith("/api/") and code in (200, 409) else None
                 if box:
-                    # The sealed reply names the request it answers, so a reply
-                    # can't be replayed as the answer to a different request.
-                    body = bytes(box.encrypt(f"{self.command} {self.path}\n".encode() + body))
+                    # The sealed reply names the exact request it answers (its
+                    # path with the phone's random n= and its signature), so an
+                    # old reply can't be replayed as the answer to a new one.
+                    echo = f"{self.command} {self.path} {self.headers.get('X-MK-Sig', '')}\n"
+                    body = bytes(box.encrypt(echo.encode() + body))
                     ctype = "application/octet-stream"
                 self.send_response(code)
                 self.send_header("Content-Type", ctype)

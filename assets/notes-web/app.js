@@ -239,7 +239,7 @@ async function api(method, path, body) {
   // Read once, decrypt if sealed, and offer the usual json/text/blob. Once
   // this laptop has encrypted, it always must: a plain reply is refused.
   const sealed = res.headers.get('X-MK-Enc') === '1';
-  if (res.ok && !sealed && S.mustEncrypt) throw new Error('reply was not encrypted; not trusting it');
+  if ((res.ok || res.status === 409) && !sealed && S.mustEncrypt) throw new Error('reply was not encrypted; not trusting it');
   if (res.ok) S.encrypted = sealed;
   if (sealed && !S.mustEncrypt) {
     S.mustEncrypt = true;
@@ -249,7 +249,7 @@ async function api(method, path, body) {
   if (sealed) {
     data = open_(data);
     const nl = data.indexOf(10), answers = new TextDecoder().decode(data.slice(0, nl));
-    if (answers !== `${method} /${path}`) throw new Error('reply was for a different request');
+    if (answers !== `${method} /${path} ${sig}`) throw new Error('reply was for a different request');
     data = data.slice(nl + 1);
   }
   const type = sealed ? '' : res.headers.get('Content-Type') || '';

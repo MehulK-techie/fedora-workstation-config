@@ -1,1 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16285a"/><stop offset="1" stop-color="#0a1330"/></linearGradient><linearGradient id="ac" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fd3ff"/><stop offset="1" stop-color="#7c4dff"/></linearGradient><filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bg)"/><rect x="8.5" y="8.5" width="111" height="111" rx="27.5" fill="none" stroke="#4fd3ff" stroke-opacity="0.35"/><g filter="url(#glow)"><circle cx="64" cy="64" r="28" fill="none" stroke="url(#ac)" stroke-width="7"/><circle cx="64" cy="64" r="13" fill="none" stroke="#e6f4ff" stroke-width="5"/><circle cx="58" cy="58" r="4" fill="#ffffff"/><path d="M84 38l6-6" stroke="#4fd3ff" stroke-width="5" stroke-linecap="round"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Camera controls: a webcam on a stand -->
+  <path d="M44 112h40l-6-14H50z" fill="#5e5c64"/>
+  <rect x="58" y="88" width="12" height="14" fill="#77767b"/>
+  <circle cx="64" cy="58" r="40" fill="#241f31"/>
+  <circle cx="64" cy="54" r="40" fill="#3d3846"/>
+  <circle cx="64" cy="54" r="24" fill="#1c71d8"/>
+  <circle cx="64" cy="54" r="14" fill="#0b2e5c"/>
+  <circle cx="57" cy="47" r="5" fill="#99c1f1"/>
+  <circle cx="92" cy="30" r="4" fill="#2ec27e"/>
+</svg>

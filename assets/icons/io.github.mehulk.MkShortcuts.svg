@@ -1,1 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16285a"/><stop offset="1" stop-color="#0a1330"/></linearGradient><linearGradient id="ac" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fd3ff"/><stop offset="1" stop-color="#7c4dff"/></linearGradient><filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bg)"/><rect x="8.5" y="8.5" width="111" height="111" rx="27.5" fill="none" stroke="#4fd3ff" stroke-opacity="0.35"/><g filter="url(#glow)"><rect x="30" y="40" width="68" height="52" rx="12" fill="none" stroke="url(#ac)" stroke-width="6"/><path d="M30 80h68" stroke="#4fd3ff" stroke-opacity="0.45" stroke-width="4"/><path d="M70 50l-14 22" stroke="#e6f4ff" stroke-width="6" stroke-linecap="round"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Shortcuts: a keyboard -->
+  <rect x="8" y="34" width="112" height="70" rx="12" fill="#5e5c64"/>
+  <rect x="8" y="30" width="112" height="70" rx="12" fill="#9a9996"/>
+  <g fill="#f6f5f4">
+    <rect x="18" y="40" width="16" height="14" rx="3"/><rect x="38" y="40" width="16" height="14" rx="3"/>
+    <rect x="58" y="40" width="16" height="14" rx="3"/><rect x="78" y="40" width="16" height="14" rx="3"/>
+    <rect x="98" y="40" width="12" height="14" rx="3"/>
+    <rect x="18" y="58" width="22" height="14" rx="3"/><rect x="44" y="58" width="16" height="14" rx="3"/>
+    <rect x="64" y="58" width="16" height="14" rx="3"/><rect x="84" y="58" width="26" height="14" rx="3"/>
+    <rect x="18" y="76" width="16" height="14" rx="3"/><rect x="38" y="76" width="52" height="14" rx="3"/>
+    <rect x="94" y="76" width="16" height="14" rx="3"/>
+  </g>
+  <rect x="58" y="40" width="16" height="14" rx="3" fill="#3584e4"/>
+  <path d="M69 43l-6 8" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

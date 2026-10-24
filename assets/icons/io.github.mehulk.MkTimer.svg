@@ -1,1 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16285a"/><stop offset="1" stop-color="#0a1330"/></linearGradient><linearGradient id="ac" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fd3ff"/><stop offset="1" stop-color="#7c4dff"/></linearGradient><filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bg)"/><rect x="8.5" y="8.5" width="111" height="111" rx="27.5" fill="none" stroke="#4fd3ff" stroke-opacity="0.35"/><g filter="url(#glow)"><circle cx="64" cy="66" r="30" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="8"/><path d="M64 36 A30 30 0 1 1 34 66" fill="none" stroke="url(#ac)" stroke-width="8" stroke-linecap="round"/><circle cx="34" cy="66" r="5.5" fill="#ffffff"/><path d="M64 52v15l9 7" fill="none" stroke="#e6f4ff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Focus timer: a stopwatch -->
+  <rect x="56" y="8" width="16" height="12" rx="3" fill="#5e5c64"/>
+  <rect x="50" y="4" width="28" height="8" rx="4" fill="#77767b"/>
+  <circle cx="64" cy="72" r="48" fill="#a51d2d"/>
+  <circle cx="64" cy="68" r="48" fill="#e01b24"/>
+  <circle cx="64" cy="68" r="38" fill="#ffffff"/>
+  <path d="M64 30a38 38 0 0 1 32.9 19z" fill="#ffbe6f"/>
+  <g stroke="#c0bfbc" stroke-width="3" stroke-linecap="round">
+    <path d="M64 34v6M64 96v6M30 68h6M92 68h6"/>
+  </g>
+  <path d="M64 68L82 52" stroke="#241f31" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="64" cy="68" r="5" fill="#241f31"/>
+</svg>

@@ -121,7 +121,7 @@ A compact card in the middle of the screen; it appears at once.
 | Ctrl+F · Ctrl+Shift+T | Search · Tasks |
 | Ctrl+Shift+D | Today's note |
 | Ctrl+B · Ctrl+I · Ctrl+H · Ctrl+L · Ctrl+K | Bold · italic · heading · checklist · link |
-| Ctrl+Shift+S · Ctrl+Shift+P | Insert a screenshot · draw |
+| Ctrl+Shift+S · Ctrl+Shift+P · Ctrl+Shift+I | Insert a screenshot · draw · edit the picture on this line |
 | Ctrl+Shift+E · Ctrl+G · Ctrl+T | PDF · graph · template |
 | Ctrl+, · F2 · F9 | Preferences · rename · sidebar |
 | Quick note window: Ctrl+Enter · Esc | Save to Inbox · close |

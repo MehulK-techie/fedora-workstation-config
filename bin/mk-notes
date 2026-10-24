@@ -81,8 +81,201 @@ CSS = """
 .mk-formatbar .mk-swatch { min-width: 16px; min-height: 16px; border-radius: 8px; margin: 0 2px; }
 .mk-swatch.active { box-shadow: 0 0 0 2px @accent_color; }
 .mk-status { font-size: 0.85em; opacity: 0.55; }
+.mk-inline-image { border-radius: 10px; }
+.mk-crop { background: none; }
 """ + "".join(f".mk-c{i} {{ background: {c}; }}\n" for i, c in enumerate(c for _n, c in COLORS)) \
     + "".join(f".mk-ink{i} {{ background: {c}; border: 1px solid alpha(gray, .5); }}\n" for i, c in enumerate(INK))
+
+
+# ======================================================================
+# Image editor: rotate, flip, crop, resize, Photo Booth looks, Polaroid
+# ======================================================================
+EMBED_LINE = re.compile(r"^\s*!\[\[([^\]|#]+?\.(?:png|jpe?g|gif|webp|bmp))(?:\|[^\]]*)?\]\]\s*$", re.I)
+
+
+class ImageEditor(Adw.Window):
+    """Edits a copy: the original attachment is never changed. on_saved(name)
+    gets the new attachment's file name."""
+    PREVIEW = 1100
+
+    def __init__(self, parent, path, on_saved):
+        super().__init__(transient_for=parent, modal=True, title="Edit image",
+                         default_width=980, default_height=760)
+        from PIL import Image  # noqa: F401 - checked by the caller
+        from mkworkstation import photo
+        self.photo = photo
+        self.path = path
+        self.on_saved = on_saved
+        self.base = photo.rgb(Image.open(path))
+        self.look = None
+        self.drag = None
+        self.preview = None
+
+        view = Adw.ToolbarView()
+        head = Adw.HeaderBar()
+        cancel = Gtk.Button(label="Cancel")
+        cancel.connect("clicked", lambda *_: self.close())
+        head.pack_start(cancel)
+        save = Gtk.Button(label="Save copy", css_classes=["suggested-action"],
+                          tooltip_text="Saves a new image and points the note at it; the original stays")
+        save.connect("clicked", lambda *_: self.save())
+        head.pack_end(save)
+        view.add_top_bar(head)
+
+        self.picture = Gtk.Picture(content_fit=Gtk.ContentFit.CONTAIN, can_shrink=True, hexpand=True, vexpand=True)
+        self.overlay_area = Gtk.DrawingArea(css_classes=["mk-crop"], hexpand=True, vexpand=True)
+        self.overlay_area.set_draw_func(self._draw_crop)
+        overlay = Gtk.Overlay(child=self.picture, margin_start=12, margin_end=12, margin_top=12)
+        overlay.add_overlay(self.overlay_area)
+        drag = Gtk.GestureDrag()
+        drag.connect("drag-begin", self._crop_begin)
+        drag.connect("drag-update", self._crop_update)
+        drag.connect("drag-end", self._crop_end)
+        self.overlay_area.add_controller(drag)
+
+        tools = Gtk.Box(spacing=6, halign=Gtk.Align.CENTER, margin_top=10)
+        for icon, tip, cb in (("object-rotate-left-symbolic", "Rotate left (Ctrl+[)", lambda: self._edit(lambda i: photo.rotate(i, False))),
+                              ("object-rotate-right-symbolic", "Rotate right (Ctrl+])", lambda: self._edit(lambda i: photo.rotate(i, True))),
+                              ("object-flip-horizontal-symbolic", "Flip (Ctrl+F)", lambda: self._edit(photo.flip))):
+            b = Gtk.Button(icon_name=icon, tooltip_text=tip, css_classes=["circular"])
+            b.connect("clicked", lambda _b, c=cb: c())
+            tools.append(b)
+        self.crop_btn = Gtk.ToggleButton(icon_name="edit-cut-symbolic", tooltip_text="Crop: drag over the picture (C)",
+                                         css_classes=["circular"])
+        self.crop_btn.connect("toggled", self._crop_toggled)
+        tools.append(self.crop_btn)
+        tools.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=8, margin_end=8))
+        tools.append(Gtk.Label(label="Size"))
+        self.scale = Gtk.SpinButton.new_with_range(5, 400, 5)
+        self.scale.set_value(100)
+        self.scale.set_tooltip_text("Saved size, in percent")
+        tools.append(self.scale)
+        self.size_label = Gtk.Label(css_classes=["dim-label"])
+        self.scale.connect("value-changed", lambda *_: self._update_size())
+        tools.append(self.size_label)
+
+        looks = Gtk.Box(spacing=6, halign=Gtk.Align.CENTER, margin_top=8, margin_bottom=14)
+        group = None
+        for key, label in [(None, "Original")] + [(k, f.label) for k, f in photo.FILTERS.items()]:
+            b = Gtk.ToggleButton(label=label, css_classes=["pill"], active=key is None)
+            if group:
+                b.set_group(group)
+            group = group or b
+            self.original_btn = group
+            b.connect("toggled", lambda btn, k=key: btn.get_active() and self._set_look(k))
+            looks.append(b)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(overlay)
+        box.append(tools)
+        box.append(looks)
+        view.set_content(box)
+        self.set_content(view)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._on_key)
+        self.add_controller(keys)
+        self._refresh()
+
+    # ----- edits
+    def _edit(self, fn):
+        self.base = fn(self.base)
+        self._refresh()
+
+    def _set_look(self, key):
+        self.look = key
+        self._refresh()
+
+    def _refresh(self):
+        small = self.base.copy()
+        small.thumbnail((self.PREVIEW, self.PREVIEW))
+        self.preview = self.photo.apply(small, self.look) if self.look else small
+        import io
+        buf = io.BytesIO()
+        self.preview.save(buf, "PNG")
+        self.picture.set_paintable(Gdk.Texture.new_from_bytes(GLib.Bytes.new(buf.getvalue())))
+        self._update_size()
+        self.overlay_area.queue_draw()
+
+    def _update_size(self):
+        k = self.scale.get_value() / 100
+        self.size_label.set_text(f"{round(self.base.width * k)} × {round(self.base.height * k)}")
+
+    # ----- crop: drag a rectangle over the picture
+    def _shown_rect(self):
+        """Where the picture's image sits inside the widget (CONTAIN fit)."""
+        w, h = self.overlay_area.get_width(), self.overlay_area.get_height()
+        iw, ih = self.preview.size if self.preview else (1, 1)
+        k = min(w / iw, h / ih)
+        return (w - iw * k) / 2, (h - ih * k) / 2, k
+
+    def _crop_toggled(self, btn):
+        # Crop the photo itself: Pop Art and Polaroid change its layout, so the
+        # look goes back to Original while you crop (pick it again after).
+        if btn.get_active() and self.look:
+            self.original_btn.set_active(True)
+
+    def _crop_begin(self, _g, x, y):
+        if self.crop_btn.get_active():
+            self.drag = [x, y, x, y]
+
+    def _crop_update(self, _g, dx, dy):
+        if self.drag:
+            self.drag[2], self.drag[3] = self.drag[0] + dx, self.drag[1] + dy
+            self.overlay_area.queue_draw()
+
+    def _crop_end(self, _g, _dx, _dy):
+        if not self.drag:
+            return
+        ox, oy, k = self._shown_rect()
+        full = self.base.width / self.preview.width  # preview pixels to full-size pixels
+        x0, y0, x1, y1 = self.drag
+        box = ((x0 - ox) / k * full, (y0 - oy) / k * full, (x1 - ox) / k * full, (y1 - oy) / k * full)
+        self.drag = None
+        self.crop_btn.set_active(False)
+        self._edit(lambda i: self.photo.crop(i, box))
+
+    def _draw_crop(self, _area, cr, w, h):
+        if not self.drag:
+            return
+        x0, y0, x1, y1 = self.drag
+        cr.set_source_rgba(0, 0, 0, 0.45)
+        cr.rectangle(0, 0, w, h)
+        cr.rectangle(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
+        cr.set_fill_rule(1)  # even-odd: darken outside the selection
+        cr.fill()
+        cr.set_source_rgba(1, 1, 1, 0.9)
+        cr.set_line_width(2)
+        cr.rectangle(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
+        cr.stroke()
+
+    def _on_key(self, _c, keyval, _code, state):
+        ctrl = state & Gdk.ModifierType.CONTROL_MASK
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+        elif ctrl and keyval == Gdk.KEY_bracketleft:
+            self._edit(lambda i: self.photo.rotate(i, False))
+        elif ctrl and keyval == Gdk.KEY_bracketright:
+            self._edit(lambda i: self.photo.rotate(i, True))
+        elif ctrl and keyval == Gdk.KEY_f:
+            self._edit(self.photo.flip)
+        elif ctrl and keyval == Gdk.KEY_s:
+            self.save()
+        elif keyval in (Gdk.KEY_c, Gdk.KEY_C) and not ctrl:
+            self.crop_btn.set_active(not self.crop_btn.get_active())
+        else:
+            return False
+        return True
+
+    def save(self):
+        import io
+        out = self.photo.apply(self.base, self.look) if self.look else self.base
+        if self.scale.get_value() != 100:
+            out = self.photo.resize(out, self.scale.get_value())
+        jpeg = Path(self.path).suffix.lower() in (".jpg", ".jpeg")
+        buf = io.BytesIO()
+        out.save(buf, "JPEG" if jpeg else "PNG", **({"quality": 92} if jpeg else {}))
+        self.on_saved(buf.getvalue(), ".jpg" if jpeg else ".png", f"{Path(self.path).stem}-edited")
+        self.close()
 
 
 # ======================================================================
@@ -736,6 +929,10 @@ class NotesWindow(Adw.ApplicationWindow):
         link_click = Gtk.GestureClick(button=1)
         link_click.connect("released", self._on_editor_click)
         self.view.add_controller(link_click)
+        # Pictures under their ![[image]] lines, right in the editor.
+        self._inline = []          # (picture, line number)
+        self._inline_id = 0
+        self._textures = {}        # path -> (mtime, texture)
         # The text keeps a comfortable line length however wide the window is.
         self.clamp = Adw.ClampScrollable(child=self.view, maximum_size=760, tightening_threshold=600)
         self.editor_scroll = Gtk.ScrolledWindow(child=self.clamp, vexpand=True, hexpand=True)
@@ -803,6 +1000,7 @@ class NotesWindow(Adw.ApplicationWindow):
             ("screenshot", self.screenshot, ["<Control><Shift>s"]),
             ("draw", self.draw, ["<Control><Shift>p"]),
             ("attach", self.attach, []),
+            ("edit-image", self.edit_image, ["<Control><Shift>i"]),
             ("pdf", self.export_pdf, ["<Control><Shift>e"]),
             ("history", self.show_history, []),
             ("rename", lambda: self.title.grab_focus(), ["F2"]),
@@ -1058,6 +1256,126 @@ class NotesWindow(Adw.ApplicationWindow):
         if self.reading or getattr(self, "splitting", False):
             self._render()
         self._fill_info()
+        self._queue_inline()
+
+    # ---------- pictures inline in the editor ----------
+    # Each ![[image.png]] line gets blank space below it (a text tag, so the
+    # note's text is untouched and undo isn't affected) with the picture laid
+    # over that space. Click a picture to edit it.
+    def _queue_inline(self):
+        if self._inline_id:
+            GLib.source_remove(self._inline_id)
+        self._inline_id = GLib.timeout_add(250, self._layout_inline)
+
+    def _inline_texture(self, path):
+        mtime = path.stat().st_mtime
+        cached = self._textures.get(path)
+        if cached and cached[0] == mtime:
+            return cached[1]
+        try:
+            texture = Gdk.Texture.new_from_filename(str(path))
+        except GLib.Error:
+            return None
+        self._textures[path] = (mtime, texture)
+        return texture
+
+    def _layout_inline(self):
+        self._inline_id = 0
+        for picture, _line in self._inline:
+            self.view.remove(picture)
+        self._inline = []
+        table = self.buffer.get_tag_table()
+        start, end = self.buffer.get_bounds()
+        table.foreach(lambda tag: tag.get_property("name") and tag.get_property("name").startswith("mk-inline-")
+                      and self.buffer.remove_tag(tag, start, end))
+        if not self.rel:
+            return GLib.SOURCE_REMOVE
+        width = max(160, min(520, self.view.get_width() - 96))
+        for line_no in range(self.buffer.get_line_count()):
+            ok, it = self.buffer.get_iter_at_line(line_no)
+            line_end = it.copy()
+            if not line_end.ends_line():
+                line_end.forward_to_line_end()
+            match = EMBED_LINE.match(self.buffer.get_text(it, line_end, False))
+            if not match:
+                continue
+            name = match.group(1).strip()
+            try:
+                path = self.vault.path(f"attachments/{name}")
+                if not path.is_file():
+                    rel = self.vault.resolve(name)
+                    path = self.vault.path(rel) if rel else None
+            except ValueError:
+                path = None
+            texture = self._inline_texture(path) if path and path.is_file() else None
+            if not texture:
+                continue
+            w = min(width, texture.get_width())
+            h = round(w * texture.get_height() / max(1, texture.get_width()))
+            tag_name = f"mk-inline-{h}"
+            tag = table.lookup(tag_name) or self.buffer.create_tag(tag_name, pixels_below_lines=h + 14)
+            self.buffer.apply_tag(tag, it, line_end)
+            picture = Gtk.Picture(paintable=texture, can_shrink=True, content_fit=Gtk.ContentFit.CONTAIN,
+                                  css_classes=["mk-inline-image"], tooltip_text=f"{name} · click to edit",
+                                  cursor=Gdk.Cursor.new_from_name("pointer"), overflow=Gtk.Overflow.HIDDEN)
+            picture.set_size_request(w, h)
+            click = Gtk.GestureClick()
+            click.connect("released", lambda *_a, p=path, n=line_no: self.edit_image(p, n))
+            picture.add_controller(click)
+            self.view.add_overlay(picture, 0, 0)
+            self._inline.append((picture, line_no))
+        # Positions are known once the text has been laid out with the new spacing.
+        GLib.idle_add(self._place_inline)
+        return GLib.SOURCE_REMOVE
+
+    def _place_inline(self):
+        for picture, line_no in self._inline:
+            ok, it = self.buffer.get_iter_at_line(line_no)
+            if not ok:
+                continue
+            y, height = self.view.get_line_yrange(it)
+            _w, h = picture.get_size_request()
+            self.view.move_overlay(picture, self.view.get_left_margin(), y + height - h - 8)
+        return GLib.SOURCE_REMOVE
+
+    def edit_image(self, path=None, line_no=None):
+        """Open the image editor for a picture (or the one on the cursor's line)."""
+        if path is None:
+            it = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+            line_no = it.get_line()
+            ok, start = self.buffer.get_iter_at_line(line_no)
+            end = start.copy()
+            if not end.ends_line():
+                end.forward_to_line_end()
+            match = EMBED_LINE.match(self.buffer.get_text(start, end, False))
+            if not match:
+                self.toast.add_toast(Adw.Toast(title="Put the cursor on an ![[image]] line first"))
+                return
+            rel = self.vault.resolve(match.group(1).strip())
+            path = self.vault.path(rel) if rel else None
+            if not path:
+                return
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.toast.add_toast(Adw.Toast(title="The image editor needs Pillow: sudo dnf install python3-pillow"))
+            return
+
+        def saved(data, ext, stem):
+            rel = self.vault.save_attachment(data, ext, stem)
+            new_name = Path(rel).name
+            ok, start = self.buffer.get_iter_at_line(line_no)
+            end = start.copy()
+            if not end.ends_line():
+                end.forward_to_line_end()
+            line = self.buffer.get_text(start, end, False)
+            if EMBED_LINE.match(line):
+                self.buffer.begin_user_action()
+                self.buffer.delete(start, end)
+                self.buffer.insert(start, re.sub(r"!\[\[[^\]|#]+", f"![[{new_name}", line, count=1))
+                self.buffer.end_user_action()
+            self.toast.add_toast(Adw.Toast(title=f"Saved {new_name}; the original is kept", timeout=3))
+        ImageEditor(self, str(path), saved).present()
 
     def _update_meta(self):
         if not self.rel:
@@ -1075,6 +1393,7 @@ class NotesWindow(Adw.ApplicationWindow):
         if self.loading or not self.rel:
             return
         self.dirty = True
+        self._queue_inline()
         if getattr(self, "splitting", False):
             if getattr(self, "_preview_id", 0):
                 GLib.source_remove(self._preview_id)
@@ -1776,6 +2095,13 @@ class NotesWindow(Adw.ApplicationWindow):
             return
         self._save_now()
         dialog = Gtk.FileDialog(title="Export to PDF", initial_name=f"{Path(self.rel).stem}.pdf")
+        # Straight to a PDF file (no print dialog), suggested in ~/Documents/Notes.
+        docs = Path(GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS) or Path.home() / "Documents") / "Notes"
+        try:
+            docs.mkdir(parents=True, exist_ok=True)
+            dialog.set_initial_folder(Gio.File.new_for_path(str(docs)))
+        except OSError:
+            pass
 
         def chosen(d, res):
             try:

@@ -77,6 +77,12 @@ closes it without saving.
   `file://` address is attached as the file itself, not pasted as text. The
   note gets `![[name.png]]`, which shows the picture in Read and in Edit with
   preview.
+- **See them while you write:** every `![[picture]]` line shows the picture
+  right under it in the editor.
+- **Edit a picture:** click it (or Ctrl+Shift+I on its line). Rotate (Ctrl+[
+  and Ctrl+]), flip, crop (C, then drag), resize, and looks: Thermal, Pop Art,
+  Distort and a vintage Polaroid with a paper frame. Save copy keeps the
+  original and points the note at the new picture.
 - **Capture:** the camera button (Ctrl+Shift+S) hides the window while you pick
   an area, then puts the picture in your note.
 - **Drop:** drag files onto the editor.
@@ -116,7 +122,8 @@ closes it without saving.
 
 ## PDF, website and history
 
-- **Export to PDF** (Ctrl+Shift+E): A4, light theme, with pictures, drawings,
+- **Export to PDF** (Ctrl+Shift+E): straight to a PDF file, no print dialog.
+  It suggests `~/Documents/Notes/`; A4, light theme, with pictures, drawings,
   checkboxes and callouts.
   - It needs WeasyPrint. `setup.sh` installs it; you can also run
     `sudo dnf install python3-weasyprint`.
@@ -199,7 +206,7 @@ same key.
 | Ctrl+F | Search |
 | Ctrl+Shift+D | Today's note (also Super+Alt+N anywhere) |
 | Ctrl+B · Ctrl+I · Ctrl+H · Ctrl+L · Ctrl+K | Bold · italic · heading · checklist · link |
-| Ctrl+Shift+S · Ctrl+Shift+P | Screenshot · draw |
+| Ctrl+Shift+S · Ctrl+Shift+P · Ctrl+Shift+I | Screenshot · draw · edit the picture on this line |
 | Ctrl+Shift+E | Export to PDF |
 | Ctrl+G · Ctrl+T | Graph · insert template |
 | F2 · F9 | Rename · show or hide the sidebar |

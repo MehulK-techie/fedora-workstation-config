@@ -209,6 +209,33 @@ if [[ -f "$USER_MONITORS" ]] && id gdm &>/dev/null && ! cmp -s "$USER_MONITORS" 
     restorecon "$GDM_MONITORS" 2>/dev/null || true
 fi
 
+# 7c. Smooth under heavy load: memory and disk-write tuning for a desktop.
+# Fedora swaps to zram (compressed RAM, very fast), so swapping early is cheap
+# and beats dropping cached files that then have to be read back from disk;
+# small dirty-write limits stop big copies from stalling everything at once.
+# Our own file (sorts last, so it wins); remove it to go back to the defaults.
+echo "==> Tuning memory and disk writes for a responsive desktop..."
+SYSCTL_FILE="/etc/sysctl.d/99-mk-desktop.conf"
+cat > "$SYSCTL_FILE" << 'SYSCTL'
+# MK Workstation: responsive desktop under heavy load (setup.sh writes this file)
+# zram swap is fast: swap anonymous memory before evicting the file cache
+vm.swappiness = 180
+# read one page at a time from zram, not 8 (it has no seek cost)
+vm.page-cluster = 0
+# keep directory and inode caches a bit longer
+vm.vfs_cache_pressure = 50
+# write back in small batches: no multi-second stalls after a big copy
+vm.dirty_bytes = 268435456
+vm.dirty_background_bytes = 67108864
+SYSCTL
+if swapon --show=NAME --noheadings 2> /dev/null | grep -q zram; then
+    sysctl --system > /dev/null && echo "    [+] Applied (zram swap found)"
+else
+    # Without zram, swapping goes to disk: keep the kernel's usual eagerness.
+    sed -i 's/^vm.swappiness = 180/vm.swappiness = 60/; s/^vm.page-cluster = 0/vm.page-cluster = 3/' "$SYSCTL_FILE"
+    sysctl --system > /dev/null && echo "    [+] Applied (disk swap: swappiness 60)"
+fi
+
 # 8. Firmware: report available updates, never flash automatically
 if command -v fwupdmgr &>/dev/null; then
     echo "==> Checking for firmware updates..."

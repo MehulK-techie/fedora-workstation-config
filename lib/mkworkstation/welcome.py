@@ -1,8 +1,9 @@
 """Welcome greeting and its voice (shared by mk welcome, the Companion and
 mk-voice; the shell extension reads the same welcome.conf).
 
-The spoken greeting is rendered once to ~/.cache/mk-workstation/welcome.wav
-and only re-rendered when the text or voice changes, so login plays it at once.
+Each greeting is rendered once to ~/.cache/mk-workstation/voice/<hash>.wav and
+reused, so login plays it at once; `mk-voice prepare` renders every line the
+welcome can pick (greetings.conf) in the background.
 Voices, best first:
   - Piper neural TTS with a British male voice ("Alan"), if installed with
     `mk welcome voice install` (~260 MB in ~/.local/share/mk-workstation/voice)
@@ -25,8 +26,8 @@ from . import CONFIG_DIR, DATA_DIR, DEFAULTS_DIR
 USER_CONF = CONFIG_DIR / "welcome.conf"
 DEFAULT_CONF = DEFAULTS_DIR / "welcome.conf"
 CACHE_DIR = Path(GLib.get_user_cache_dir()) / "mk-workstation"
-WAV = CACHE_DIR / "welcome.wav"
-STAMP = CACHE_DIR / "welcome.wav.key"
+VOICE_CACHE = CACHE_DIR / "voice"
+GREETING_FILES = (DEFAULTS_DIR / "greetings.conf", CONFIG_DIR / "greetings.conf")
 VOICE_DIR = DATA_DIR / "voice"
 PIPER = VOICE_DIR / "venv/bin/piper"
 MODEL = VOICE_DIR / "en_GB-alan-medium.onnx"
@@ -68,13 +69,13 @@ def first_name():
     return (name.split()[0] if name and name != "Unknown" else GLib.get_user_name()).strip()
 
 
-def greeting(c=None):
-    """The greeting with {title} and {name} filled in."""
+def greeting(c=None, text=None):
+    """The greeting (or text) with {title} and {name} filled in."""
     c = c or conf()
     title = TITLES.get(c.get("TITLE", "sir").lower(), c.get("TITLE", ""))
     if title is None:
         title = first_name()
-    text = c["GREETING"]
+    text = text or c["GREETING"]
     if not title:
         text = text.replace(", {title}", "").replace(" {title}", "").replace("{title}", "")
     return text.replace("{title}", title).replace("{name}", first_name()).strip()
@@ -86,16 +87,32 @@ def engine():
     return "espeak" if shutil.which("espeak-ng") else None
 
 
+def pool_lines(c=None):
+    """Every greeting the welcome can pick, filled in (greetings.conf + yours)."""
+    c = c or conf()
+    lines = [c["GREETING"]]
+    for path in GREETING_FILES:
+        try:
+            for line in Path(path).read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith(("#", "[")):
+                    lines.append(line)
+        except OSError:
+            pass
+    return list(dict.fromkeys(greeting(c, line) for line in lines))
+
+
 def render(text=None, force=False):
-    """Render the spoken greeting to WAV (skipped if already up to date)."""
+    """Render a greeting to WAV once; later calls reuse it."""
     text = text or greeting()
     eng = engine()
     if not eng:
         return None
     key = hashlib.sha1(f"{eng}|{text}".encode()).hexdigest()
-    if not force and WAV.exists() and STAMP.exists() and STAMP.read_text() == key:
-        return WAV
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    wav = VOICE_CACHE / f"{key}.wav"
+    if not force and wav.exists():
+        return wav
+    VOICE_CACHE.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         raw = Path(tmp) / "raw.wav"
         if eng == "piper":
@@ -106,16 +123,24 @@ def render(text=None, force=False):
                             "-w", str(raw), text], capture_output=True, timeout=30, check=True)
         if shutil.which("sox"):
             pitch = "-40" if eng == "piper" else "-20"
-            subprocess.run(["sox", str(raw), str(WAV), "gain", "-4", "pitch", pitch, "bass", "+2",
+            subprocess.run(["sox", str(raw), str(wav), "gain", "-4", "pitch", pitch, "bass", "+2",
                             "treble", "+2", "reverb", "18", "50", "70", "norm", "-2", "pad", "0", "0.4"],
                            capture_output=True, timeout=30, check=True)
         else:
-            shutil.copy(raw, WAV)
-    STAMP.write_text(key)
-    return WAV
+            shutil.copy(raw, wav)
+    return wav
 
 
-def play(path=WAV):
+def prepare():
+    """Render every line in advance (skips ones already done)."""
+    done = 0
+    for line in pool_lines():
+        if render(line):
+            done += 1
+    return done
+
+
+def play(path):
     for player in ("pw-play", "paplay", "aplay"):
         if shutil.which(player):
             subprocess.Popen([player, str(path)], stdout=subprocess.DEVNULL,
@@ -124,8 +149,8 @@ def play(path=WAV):
     return False
 
 
-def say(force=False):
-    path = render(force=force)
+def say(text=None, force=False):
+    path = render(text, force=force)
     return bool(path) and play(path)
 
 

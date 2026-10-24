@@ -27,9 +27,12 @@ const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-worksta
 const TEST_FILE = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'welcome-test']);
 const DEFAULTS = {
     WELCOME: 'on', GREETING: 'Welcome back home, {title}.', TITLE: 'sir', SUBTITLE: 'on', VOICE: 'off',
-    EDGE_NOTIFY: 'off', COLOR_A: 'auto', COLOR_B: 'auto', TASKS: 'on',
+    EDGE_NOTIFY: 'off', COLOR_A: 'auto', COLOR_B: 'auto', TASKS: 'on', VARIETY: 'on', BIRTHDAY: '',
 };
 const COMPANION = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'companion.json']);
+const GREETING_FILES = [GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'greetings.conf']),
+    GLib.build_filenamev([CONFIG_DIR, 'greetings.conf'])];
+const HISTORY = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'greet-history.json']);
 
 function readConf(path) {
     const conf = {};
@@ -319,6 +322,90 @@ export function greetingText(conf = welcomeConf()) {
     return text.replaceAll('{title}', title).replaceAll('{name}', first).trim();
 }
 
+// Lines from greetings.conf (MK's, then yours), by section.
+function greetingPools() {
+    const pools = {};
+    for (const path of GREETING_FILES) {
+        let section = 'any';
+        try {
+            const [ok, bytes] = GLib.file_get_contents(path);
+            if (!ok)
+                continue;
+            for (const raw of new TextDecoder().decode(bytes).split('\n')) {
+                const line = raw.trim();
+                const head = line.match(/^\[(\w+)\]$/);
+                if (head)
+                    section = head[1].toLowerCase();
+                else if (line && !line.startsWith('#'))
+                    (pools[section] ??= []).push(line);
+            }
+        } catch (e) {
+            // a missing file adds nothing
+        }
+    }
+    return pools;
+}
+
+function readJson(path, fallback) {
+    try {
+        const [ok, bytes] = GLib.file_get_contents(path);
+        return ok ? JSON.parse(new TextDecoder().decode(bytes)) : fallback;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+// A greeting for right now: the time of day, the day of the week, an
+// occasion (your BIRTHDAY=MM-DD, New Year), coming back the same day, or
+// after a few days away; never one of the last few. VARIETY=off always
+// gives your GREETING= line.
+export function pickGreeting(conf = welcomeConf()) {
+    if (conf.VARIETY === 'off')
+        return greetingText(conf);
+    const pools = greetingPools();
+    const history = readJson(HISTORY, {lines: []});
+    const now = GLib.DateTime.new_now_local();
+    const today = now.format('%F'), md = now.format('%m-%d');
+    const hour = now.get_hour(), weekday = now.get_day_of_week();  // 1 = Monday
+    const away = history.last ? (now.to_unix() - history.last) / 86400 : 0;
+    const timeOfDay = hour < 5 || hour >= 22 ? 'night' : hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+    const dayPool = weekday === 1 ? 'monday' : weekday === 5 ? 'friday' : weekday >= 6 ? 'weekend' : null;
+    let pool;
+    if (conf.BIRTHDAY && conf.BIRTHDAY === md)
+        pool = pools.birthday;
+    else if (md === '01-01')
+        pool = pools.newyear;
+    else if (away >= 3)
+        pool = pools.long;
+    else if (history.day === today && Math.random() < 0.35)
+        pool = pools.return;
+    if (!pool?.length) {
+        const roll = Math.random();
+        pool = roll < 0.5 ? pools[timeOfDay] : roll < 0.7 && dayPool ? pools[dayPool] : null;
+        if (!pool?.length)
+            pool = [...(pools.any ?? []), conf.GREETING];
+    }
+    const fill = lines => [...new Set(lines.map(line => greetingText({...conf, GREETING: line})))];
+    const fresh = lines => fill(lines).filter(line => !history.lines.includes(line));
+    // A small pool that has run out falls back to everything for this time of day.
+    const wide = [...(pools[timeOfDay] ?? []), ...(dayPool ? pools[dayPool] ?? [] : []), ...(pools.any ?? []), conf.GREETING];
+    let choices = fresh(pool);
+    if (!choices.length)
+        choices = fresh(wide);
+    if (!choices.length)
+        choices = fill(wide);
+    const line = choices[Math.floor(Math.random() * choices.length)] || greetingText(conf);
+    try {
+        GLib.mkdir_with_parents(GLib.path_get_dirname(HISTORY), 0o755);
+        GLib.file_set_contents(HISTORY, JSON.stringify({
+            last: now.to_unix(), day: today, lines: [line, ...history.lines].slice(0, 6),
+        }));
+    } catch (e) {
+        // history is a nicety
+    }
+    return line;
+}
+
 // Quick Settings: click to switch the welcome on or off; the arrow opens
 // choices for how you're addressed, the voice, a preview and editing.
 const WelcomeToggle = GObject.registerClass(
@@ -333,7 +420,7 @@ class WelcomeToggle extends QuickSettings.QuickMenuToggle {
             item.connect('activate', () => {
                 writeUserKey('TITLE', key);
                 this._sync();
-                run([`${BIN}/mk-voice`, 'render']);
+                run(['nice', `${BIN}/mk-voice`, 'prepare']);
             });
             this.menu.addMenuItem(item);
             return [key, item];
@@ -343,9 +430,12 @@ class WelcomeToggle extends QuickSettings.QuickMenuToggle {
         this._voice.connect('toggled', (_i, state) => {
             writeUserKey('VOICE', state ? 'on' : 'off');
             if (state)
-                run([`${BIN}/mk-voice`, 'render']);
+                run(['nice', `${BIN}/mk-voice`, 'prepare']);
         });
         this.menu.addMenuItem(this._voice);
+        this._variety = new PopupMenu.PopupSwitchMenuItem('A different greeting each time', welcomeConf().VARIETY !== 'off');
+        this._variety.connect('toggled', (_i, state) => writeUserKey('VARIETY', state ? 'on' : 'off'));
+        this.menu.addMenuItem(this._variety);
         this.menu.addAction('Play it now', () => onPreview());
         this.menu.addAction('Edit greeting…', () => run([`${BIN}/mk-companion`, 'welcome']));
         this.menu.connect('open-state-changed', (_m, open) => open && this._sync());
@@ -358,6 +448,7 @@ class WelcomeToggle extends QuickSettings.QuickMenuToggle {
         for (const [key, item] of this._titleItems)
             item.setOrnament(key === current ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
         this._voice.setToggleState(conf.VOICE === 'on');
+        this._variety.setToggleState(conf.VARIETY !== 'off');
         this.menu.setHeader('starred-symbolic', 'Welcome light', greetingText(conf));
         this.subtitle = this.checked ? greetingText(conf) : null;
     }
@@ -443,7 +534,7 @@ export class Welcome {
         const conf = welcomeConf();
         if (!force && conf.WELCOME === 'off')
             return;
-        const greeting = greetingText(conf);
+        const greeting = pickGreeting(conf);
         const extra = [];
         const todo = conf.TASKS !== 'off' ? agenda() : {pinned: [], next: null};
         if (todo.pinned.length) {
@@ -461,7 +552,15 @@ export class Welcome {
             // spoken as the words appear, not before
             this._voiceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.round(duration * 0.28), () => {
                 this._voiceId = 0;
-                run([`${BIN}/mk-voice`, 'say']);
+                run([`${BIN}/mk-voice`, 'say', greeting]);
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        if (conf.VOICE === 'on') {
+            // Render the other greetings in the background for next time.
+            this._prepareId = GLib.timeout_add(GLib.PRIORITY_LOW, duration + 4000, () => {
+                this._prepareId = 0;
+                run(['nice', `${BIN}/mk-voice`, 'prepare']);
                 return GLib.SOURCE_REMOVE;
             });
         }
@@ -495,7 +594,7 @@ export class Welcome {
     }
 
     disable() {
-        for (const id of ['_voiceId', '_remindId']) {
+        for (const id of ['_voiceId', '_remindId', '_prepareId']) {
             if (this[id])
                 GLib.source_remove(this[id]);
             this[id] = 0;

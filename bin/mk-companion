@@ -14,6 +14,7 @@ Everything saves as you type, to ~/.local/share/mk-workstation/companion.json;
   mk-companion note ID    open a note (used by reminder notifications)
 """
 import os
+import re
 import subprocess
 import sys
 import time
@@ -378,7 +379,11 @@ class CompanionWindow(Adw.ApplicationWindow):
         title_row.set_selected(next((i for i, t in enumerate(titles) if t[0] == current), 0))
         sub_row = Adw.SwitchRow(title="Show the date and time", active=c["SUBTITLE"] != "off")
         voice_row = Adw.SwitchRow(title="Speak it", active=c["VOICE"] == "on")
-        for row in (on_row, text_row, title_row, sub_row, voice_row):
+        variety_row = Adw.SwitchRow(title="A different greeting each time",
+                                    subtitle="Morning, evening, Fridays, your birthday… your line is in the mix",
+                                    active=c.get("VARIETY", "on") != "off")
+        birthday_row = Adw.EntryRow(title="Your birthday (MM-DD, optional)", text=c.get("BIRTHDAY", ""))
+        for row in (on_row, text_row, title_row, sub_row, voice_row, variety_row, birthday_row):
             group.add(row)
         preview = Gtk.Label(wrap=True)
         preview.add_css_class("title-4")
@@ -398,10 +403,15 @@ class CompanionWindow(Adw.ApplicationWindow):
             wconf.set_value("TITLE", titles[title_row.get_selected()][0])
             wconf.set_value("SUBTITLE", "on" if sub_row.get_active() else "off")
             wconf.set_value("VOICE", "on" if voice_row.get_active() else "off")
+            wconf.set_value("VARIETY", "on" if variety_row.get_active() else "off")
+            birthday = birthday_row.get_text().strip()
+            if not birthday or re.fullmatch(r"(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])", birthday):
+                wconf.set_value("BIRTHDAY", birthday)
             preview.set_label(f"“{wconf.greeting()}”")
         for row, signal in ((on_row, "notify::active"), (text_row, "changed"),
                             (title_row, "notify::selected"), (sub_row, "notify::active"),
-                            (voice_row, "notify::active")):
+                            (voice_row, "notify::active"), (variety_row, "notify::active"),
+                            (birthday_row, "changed")):
             row.connect(signal, save)
         preview.set_label(f"“{wconf.greeting()}”")
 

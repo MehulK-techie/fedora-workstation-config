@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Spoken welcome greeting.
 
-  mk-voice say        speak the greeting (renders it first if it changed)
+  mk-voice say [TEXT] speak the greeting, or TEXT (rendered once, then cached)
+  mk-voice prepare    render every greeting the welcome can pick, in advance
   mk-voice render     re-render the greeting audio
   mk-voice install    install the natural British voice (Piper, ~260 MB, no sudo)
   mk-voice remove     remove it again (back to espeak-ng)
@@ -28,7 +29,9 @@ if __name__ == "__main__":
     command = sys.argv[1] if len(sys.argv) > 1 else "status"
     try:
         if command == "say":
-            welcome.say()
+            welcome.say(" ".join(sys.argv[2:]) or None)
+        elif command == "prepare":
+            print(f"✔ {welcome.prepare()} greetings ready")
         elif command == "render":
             print(welcome.render(force=True) or "No voice engine (install espeak-ng)")
         elif command == "install":

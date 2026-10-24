@@ -195,7 +195,8 @@ case "${1:-help}" in
 
     welcome)
         # mk welcome [on | off | test | title sir|maam|name|none | greeting "TEXT"
-        #             | voice on|off|install|remove | notify on|off | edit]
+        #             | voice on|off|install|remove | notify on|off | edit
+        #             | variety on|off | birthday MM-DD | lines]
         shift
         WELCOME_CONF="$HOME/.config/mk-workstation/welcome.conf"
         VOICE="$HOME/.local/bin/mk-voice"
@@ -212,23 +213,43 @@ case "${1:-help}" in
             on|off) set_welcome WELCOME "$1"; echo "✔ Welcome light $1" ;;
             title)
                 case "${2:-}" in
-                    sir|maam|name|none) set_welcome TITLE "$2"; "$VOICE" render > /dev/null; "$VOICE" status | head -n 1 ;;
+                    sir|maam|name|none) set_welcome TITLE "$2"; (nice "$VOICE" prepare > /dev/null 2>&1 &); "$VOICE" status | head -n 1 ;;
                     *) echo "Usage: mk welcome title sir|maam|name|none" >&2; exit 2 ;;
                 esac
                 ;;
             greeting)
                 [[ -n "${2:-}" ]] || { echo "Usage: mk welcome greeting \"Welcome back home, {title}.\"" >&2; exit 2; }
-                set_welcome GREETING "${2//|/}"; "$VOICE" render > /dev/null; "$VOICE" status | head -n 1
+                set_welcome GREETING "${2//|/}"; (nice "$VOICE" prepare > /dev/null 2>&1 &); "$VOICE" status | head -n 1
                 ;;
             voice)
                 case "${2:-on}" in
-                    on|off) set_welcome VOICE "${2:-on}"; echo "✔ Spoken greeting ${2:-on}"; [[ "${2:-on}" == on ]] && "$VOICE" render > /dev/null ;;
+                    on|off) set_welcome VOICE "${2:-on}"; echo "✔ Spoken greeting ${2:-on}"; [[ "${2:-on}" == on ]] && (nice "$VOICE" prepare > /dev/null 2>&1 &) ;;
                     install) "$VOICE" install && set_welcome VOICE on ;;
                     remove) "$VOICE" remove ;;
                     *) echo "Usage: mk welcome voice on|off|install|remove" >&2; exit 2 ;;
                 esac
                 ;;
             notify) set_welcome EDGE_NOTIFY "${2:-on}"; echo "✔ Edge light for notifications ${2:-on}" ;;
+            variety)
+                case "${2:-on}" in
+                    on) set_welcome VARIETY on; echo "✔ A different greeting each time (your own lines: ~/.config/mk-workstation/greetings.conf)" ;;
+                    off) set_welcome VARIETY off; echo "✔ Always your GREETING line" ;;
+                    *) echo "Usage: mk welcome variety on|off" >&2; exit 2 ;;
+                esac
+                ;;
+            birthday)
+                [[ "${2:-}" =~ ^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$ ]] || { echo "Usage: mk welcome birthday MM-DD (e.g. 07-14)" >&2; exit 2; }
+                set_welcome BIRTHDAY "$2"; echo "✔ Noted. Expect something special on $2."
+                ;;
+            lines)
+                # Your own greetings: opens ~/.config/mk-workstation/greetings.conf
+                lines="$HOME/.config/mk-workstation/greetings.conf"
+                if [[ ! -f "$lines" ]]; then
+                    mkdir -p "$(dirname "$lines")"
+                    printf '# Your own greetings: they join the built-in ones. {title} and {name} work.\n# Sections: morning afternoon evening night monday friday weekend return long birthday any\n\n[any]\n' > "$lines"
+                fi
+                xdg-open "$lines" > /dev/null 2>&1 &
+                ;;
             edit) setsid -f "$HOME/.local/bin/mk-companion" welcome > /dev/null 2>&1 ;;
             test)
                 mkdir -p "$HOME/.cache/mk-workstation"
@@ -236,7 +257,8 @@ case "${1:-help}" in
                 ;;
             *)
                 echo "Usage: mk welcome [on | off | test | edit | title sir|maam|name|none"
-                echo "                  | greeting \"TEXT\" | voice on|off|install|remove | notify on|off]"
+                echo "                  | greeting \"TEXT\" | voice on|off|install|remove | notify on|off"
+                echo "                  | variety on|off | birthday MM-DD | lines]"
                 "$VOICE" status
                 ;;
         esac

@@ -128,10 +128,9 @@ closes it without saving.
 - **Export to PDF** (Ctrl+Shift+E): straight to a PDF file, no print dialog.
   It suggests `~/Documents/Notes/`; A4, light theme, with pictures, drawings,
   checkboxes and callouts.
-  - It needs WeasyPrint. `setup.sh` installs it; you can also run
-    `sudo dnf install python3-weasyprint`.
-  - Without WeasyPrint, the system print dialog opens instead. Choose
-    "Print to File".
+  - It needs WeasyPrint, which `setup.sh` installs. If it's missing, MK
+    Notes offers to install it (your password, once) and then exports: no
+    print dialog. A notification says when the PDF is ready; click to open.
 - **Publish vault as website:** writes a folder of HTML pages with a note
   list and working links. Upload it to GitHub Pages, Netlify or any web
   host. This is Obsidian Publish without the subscription.

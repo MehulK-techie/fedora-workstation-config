@@ -273,9 +273,9 @@ footer()
 new_page("switching", "Moving between apps")
 y = kicker_title(cr, "Moving between apps", "Every window, live, one swipe away")
 h = image(cr, "alttab", M, y + 10, 560, crop=(0, 0, 1920, 1080))
-caption(cr, "Alt+Tab or three fingers: a frosted grid of live windows, the ring glides to the one you want", M, y + 16 + h, 560)
+caption(cr, "Alt+Tab or three fingers: a compact card of live windows that appears at once", M, y + 16 + h, 560)
 points(cr, [
-    ("A grid, not a strip", "live previews, app icons, titles, and which desktop each is on"),
+    ("Compact and instant", "live previews, app icons, titles, which desktop; no full-screen overlay, no delay"),
     ("Three fingers", "swipe through them; each window takes the same finger travel"),
     ("Move as you go", "press 1–9 to send the selected window to that desktop"),
     ("Mouse too", "point at a window to pick it, click to open it"),
@@ -396,7 +396,7 @@ px = M + 220 + mh * 470 / 620 + 22
 points(cr, [
     ("System monitor", "a tiny CPU graph and temperature; click for memory, disk, battery draw"),
     ("Speed test", "ping, download and upload on a gauge, whenever you ask"),
-    ("Your music", "spinning album art, the song scrolling by, seek, skip, pick speakers"),
+    ("Your music", "spinning album art and the song title, seek, skip, pick speakers"),
     ("Clipboard history", "Super+V brings back anything you copied"),
 ], px, y + 14, W - M - px, size=10, gap=10)
 footer()

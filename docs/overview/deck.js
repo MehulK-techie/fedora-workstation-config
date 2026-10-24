@@ -84,7 +84,7 @@ const NOTES = {
   "The features you'd normally pay for": "Sync to your phone over Wi-Fi, PDF export, publishing as a website and version history are built in, plus a tasks view, a daily-notes calendar, focus mode and your own look.",
   "Screensavers worth stepping away for": "Step away for a few minutes and a scene plays: a masked hero swinging from a web over the city, a caped figure in the rain, or code rain that decodes the time. A video or call keeps it away; any touch brings you back.",
   "Everything you check, one click away": "The top bar has a light system monitor with a speed test, a media tile for Spotify or any player with seek and speaker choice, and clipboard history on Super+V.",
-  "Every window, live, one swipe away": "Alt+Tab and the three-finger swipe open a frosted grid of live windows. Each window takes the same finger travel, the mouse works too, and 1 to 9 sends the selected window to that desktop.",
+  "Every window, live, one swipe away": "Alt+Tab and the three-finger swipe open a compact card of live windows, at once. Each window takes the same finger travel, the mouse works too, and 1 to 9 sends the selected window to that desktop.",
   "Installed and ready on first login": "The apps people ask for are there on first login, including Joplin, ONLYOFFICE, Zen and VS Code. The app lists are plain text files you can edit.",
   "It looks at your hardware, then tunes for it": "It checks the hardware first: fingerprint or face unlock where there's a reader, power profiles on battery, speaker tuning, touch and 2-in-1 support, the right video driver.",
   "Your hands already know these": "Shortcuts follow Windows and macOS habits. Super+/ shows every one live and lets you change any key.",
@@ -159,8 +159,8 @@ row(s, "software-update-available", "After", "one command, a coffee, a finished 
 pres.addSection({ title: "Your desktop" });
 s = content("Your desktop", "Moving between apps", "Every window, live, one swipe away");
 shot(s, "alttab", 0.5, 1.4, 5.6, 3.15);
-caption(s, "A frosted grid of live windows; the ring glides to your pick", 0.5, 4.65, 5.6);
-row(s, "view-grid", "A grid, not a strip", "previews, titles, which desktop", 6.4, 1.45, 3.1);
+caption(s, "A compact card of live windows that appears at once", 0.5, 4.65, 5.6);
+row(s, "view-grid", "Live previews", "titles, icons, which desktop", 6.4, 1.45, 3.1);
 row(s, "input-touchpad", "Three fingers", "same finger travel per window", 6.4, 2.3, 3.1);
 row(s, "view-dual", "Move as you go", "1–9 sends it to that desktop", 6.4, 3.15, 3.1);
 row(s, "system-run", "As fast as GNOME", "measured, frame for frame", 6.4, 4.0, 3.1);

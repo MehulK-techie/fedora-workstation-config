@@ -162,7 +162,7 @@ case "${1:-help}" in
         ;;
 
     fingerprint)
-        # mk fingerprint [enroll [FINGER] | list | delete | settings]
+        # mk fingerprint [enroll [FINGER] | list | delete | settings | check]
         shift
         if ! command -v fprintd-enroll &> /dev/null; then
             echo "[-] fprintd isn't installed. Run: sudo dnf install fprintd fprintd-pam" >&2
@@ -186,8 +186,26 @@ case "${1:-help}" in
                 [[ "$answer" =~ ^[yY] ]] && fprintd-delete "$USER"
                 ;;
             settings) gnome-control-center users ;;
+            check)
+                # Why the reader might not answer on the lock screen. Only reads.
+                echo "Enrolled:"
+                fprintd-list "$USER" 2> /dev/null | sed -n 's/^ - /  /p'
+                echo "GNOME fingerprint login: $(gsettings get org.gnome.login-screen enable-fingerprint-authentication 2> /dev/null)"
+                echo "authselect: $(authselect current 2> /dev/null | tr '\n' ' ')"
+                echo "Login services that use the reader (pam_fprintd):"
+                for f in /etc/pam.d/*; do
+                    grep -qE '^[^#]*pam_fprintd' "$f" 2> /dev/null && echo "  $(basename "$f"): $(grep -E '^[^#]*pam_fprintd' "$f" | head -1 | tr -s ' ')"
+                done
+                echo "  (gdm-password includes: $(grep -oE 'substack +[a-z-]+|include +[a-z-]+' /etc/pam.d/gdm-password 2> /dev/null | tr '\n' ' '))"
+                echo "Recent reader errors this boot:"
+                journalctl -b --no-pager -o short 2> /dev/null | grep -iE "fprintd.*(denied|error|fail|claimed)|pam_fprintd" | tail -5 | sed 's/^/  /'
+                echo
+                echo "The lock screen asks for your finger through the gdm-fingerprint service."
+                echo "If gdm-password (your password, plus face unlock) uses the reader too, the two"
+                echo "ask at once and one is refused (\"Device was already claimed\")."
+                ;;
             *)
-                echo "Usage: mk fingerprint [enroll [FINGER] | list | delete | settings]" >&2
+                echo "Usage: mk fingerprint [enroll [FINGER] | list | delete | settings | check]" >&2
                 exit 2
                 ;;
         esac

@@ -15,6 +15,7 @@ webkitgtk6.0
 python3-markdown
 python3-weasyprint
 python3-qrcode
+python3-pygments
 libcanberra-gtk3
 wl-clipboard
 grim

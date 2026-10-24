@@ -10,6 +10,7 @@ version history for every note, and sync with your phone over Wi-Fi.
   mk-notes                open the window
   mk-notes NOTE           open a note (a path inside the vault, or a title)
   mk-notes --daily        open today's note
+  mk-notes --quick        a small floating window to jot something into Inbox
   mk-notes --serve        phone sync only, no window
 """
 import json
@@ -1974,6 +1975,49 @@ draw();
 </script></body></html>"""
 
 
+class QuickWindow(Adw.Window):
+    """Quick capture: type, Ctrl+Enter, gone. It lands at the top of Inbox.md."""
+
+    def __init__(self, app, vault):
+        super().__init__(application=app, title="Quick note", default_width=460, default_height=280)
+        self.vault = vault
+        view = Adw.ToolbarView()
+        head = Adw.HeaderBar(title_widget=Adw.WindowTitle(title="Quick note", subtitle="Goes to Inbox"))
+        save = Gtk.Button(label="Save", css_classes=["suggested-action"])
+        save.connect("clicked", lambda *_: self.save())
+        head.pack_end(save)
+        view.add_top_bar(head)
+        self.text = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, left_margin=16, right_margin=16,
+                                 top_margin=12, bottom_margin=12, css_classes=["mk-editor"])
+        view.set_content(Gtk.ScrolledWindow(child=self.text, vexpand=True))
+        hint = Gtk.Label(label="Ctrl+Enter save  ·  Esc close", css_classes=["mk-status"], margin_bottom=8)
+        view.add_bottom_bar(hint)
+        self.set_content(view)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._key)
+        self.add_controller(keys)
+        self.text.grab_focus()
+
+    def _key(self, _c, keyval, _code, state):
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and state & Gdk.ModifierType.CONTROL_MASK:
+            self.save()
+            return True
+        return False
+
+    def save(self):
+        buf = self.text.get_buffer()
+        text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        if text.strip():
+            self.vault.quick_add(text)
+            app = self.get_application()
+            if app.window:
+                app.window.refresh()
+        self.close()
+
+
 class NotesApp(Adw.Application):
     def __init__(self, target=None):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
@@ -1989,6 +2033,10 @@ class NotesApp(Adw.Application):
 
     def do_command_line(self, command_line):
         args = command_line.get_arguments()[1:]
+        if args[:1] == ["--quick"]:
+            vault = self.window.vault if self.window else nv.Vault()
+            QuickWindow(self, vault).present()
+            return 0
         if self.window is None:
             self.window = NotesWindow(self)
         if args:

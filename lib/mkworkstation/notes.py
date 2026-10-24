@@ -16,6 +16,7 @@ import os
 import re
 import secrets
 import shutil
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -31,6 +32,24 @@ TASK = re.compile(r"^(\s*[-*+] )\[( |x|X)\]", re.M)
 HEADING = re.compile(r"^(#{1,6})\s+(.*)$", re.M)
 HISTORY_EVERY = 300      # seconds between saved versions of one note
 HISTORY_KEEP = 60        # versions kept per note
+
+
+# Code blocks are coloured when Pygments is installed (python3-pygments).
+try:
+    import pygments  # noqa: F401
+    MD_EXTENSIONS = ["extra", "sane_lists", "nl2br", "toc", "codehilite"]
+    MD_CONFIG = {"codehilite": {"guess_lang": False, "css_class": "hl"}}
+except ImportError:
+    MD_EXTENSIONS = ["extra", "sane_lists", "nl2br", "toc"]
+    MD_CONFIG = {}
+
+
+def code_css(dark):
+    if "codehilite" not in MD_EXTENSIONS:
+        return ""
+    from pygments.formatters import HtmlFormatter
+    css = HtmlFormatter(style="monokai" if dark else "friendly").get_style_defs(".hl")
+    return css
 
 
 def load_conf():
@@ -349,6 +368,22 @@ class Vault:
             self.write(rel, f"# {day:%A, %d %B %Y}\n\n## Tasks\n- [ ] \n\n## Notes\n")
         return rel
 
+    def quick_add(self, text, rel="Inbox.md"):
+        """Quick capture: add a timestamped entry to the top of Inbox.md."""
+        text = text.strip()
+        if not text:
+            return None
+        current = self.read(rel) if self.path(rel).exists() else "# Inbox\n\nQuick notes land here (Super+Ctrl+N).\n\n"
+        first, *more = text.splitlines()
+        entry = f"- **{datetime.now():%d %b %H:%M}** {first}" + "".join(f"\n  {line}" for line in more) + "\n"
+        newest = re.search(r"^- \*\*", current, flags=re.M)  # newest first, under the intro
+        if newest:
+            current = current[:newest.start()] + entry + current[newest.start():]
+        else:
+            current = current.rstrip("\n") + "\n\n" + entry
+        self.write(rel, current)
+        return rel
+
     def tasks(self):
         """Every checkbox in the vault: (rel, number, text, done), open ones first.
         number is what toggle_task() takes."""
@@ -451,6 +486,12 @@ class Vault:
                 inner = self.render(dest, self.read(dest), depth + 1)
                 return "\n\n" + slot(f'<div class="embed"><div class="embed-title">{html.escape(Path(dest).stem)}'
                                       f'</div>{inner}</div>') + "\n\n"
+            if embed and dest and dest.lower().endswith(".pdf"):
+                thumb = self.pdf_thumbnail(dest)
+                name = html.escape(Path(dest).name)
+                preview = f'<img src="{html.escape(thumb.as_uri())}" alt="{name}">' if thumb else ""
+                return "\n\n" + slot(f'<a class="pdf" href="{html.escape(self.path(dest).as_uri())}">{preview}'
+                                      f'<span>📄 {name}</span></a>') + "\n\n"
             if embed and dest:
                 return slot(f'<a class="file" href="{html.escape(self.path(dest).as_uri())}">'
                             f'📎 {html.escape(Path(dest).name)}</a>')
@@ -474,13 +515,18 @@ class Vault:
                 r"^((?![ \t]*(?:[-*+]|\d+\.)[ \t]).*\S.*)\n(?=[ \t]*(?:[-*+]|\d+\.)[ \t])", r"\1\n\n", part, flags=re.M))
             source = outside_code(source, lambda part: WIKILINK.sub(wiki, TASK.sub(task, part)))
 
-            def callout(m):  # Obsidian callouts: > [!note] Title
-                kind, title, rest = m.group(1).lower(), m.group(2).strip(), m.group(3)
+            def callout(m):  # Obsidian callouts: > [!note] Title; [!note]- folds, [!note]+ folds open
+                kind, fold, title, rest = m.group(1).lower(), m.group(2), m.group(3).strip(), m.group(4)
                 inner = to_html(re.sub(r"^> ?", "", rest, flags=re.M))
+                label = html.escape(title or kind.title())
+                if fold:
+                    return "\n\n" + slot(f'<details class="callout callout-{html.escape(kind)}"{" open" if fold == "+" else ""}>'
+                                          f'<summary class="callout-title">{label}</summary>{inner}</details>') + "\n\n"
                 return "\n\n" + slot(f'<div class="callout callout-{html.escape(kind)}"><div class="callout-title">'
-                                      f'{html.escape(title or kind.title())}</div>{inner}</div>') + "\n\n"
-            source = re.sub(r"^> \[!(\w+)\][+-]? ?(.*)\n?((?:>.*\n?)*)", callout, source, flags=re.M)
-            return markdown.markdown(source, extensions=["extra", "sane_lists", "nl2br", "toc", NoRawHTML()])
+                                      f'{label}</div>{inner}</div>') + "\n\n"
+            source = re.sub(r"^> \[!(\w+)\]([+-]?) ?(.*)\n?((?:>.*\n?)*)", callout, source, flags=re.M)
+            return markdown.markdown(source, extensions=MD_EXTENSIONS + [NoRawHTML()],
+                                     extension_configs=MD_CONFIG)
 
         out = to_html(re.sub(r"^---\n.*?\n---\n", "", text, count=1, flags=re.S))  # without front matter
         # Links only to the web, mail, other notes and tags: no javascript:, no file:.
@@ -501,6 +547,26 @@ class Vault:
         return re.sub(r'<img src="(?!file:|https?:|data:)([^"]+)"',
                       lambda m: f'<img src="{base}{m.group(1)}"', out)
 
+    def pdf_thumbnail(self, rel):
+        """First page of a PDF as a picture (cached; needs pdftoppm)."""
+        src = self.path(rel)
+        try:
+            key = hashlib.sha1(f"{rel}|{src.stat().st_mtime}".encode()).hexdigest()[:16]
+        except OSError:
+            return None
+        thumb = self.meta_dir / "thumbs" / f"{key}.png"
+        if thumb.exists():
+            return thumb
+        if not shutil.which("pdftoppm"):
+            return None
+        thumb.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            subprocess.run(["pdftoppm", "-png", "-f", "1", "-l", "1", "-singlefile", "-scale-to", "720",
+                            str(src), str(thumb.with_suffix(""))], capture_output=True, timeout=20, check=True)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return thumb if thumb.exists() else None
+
     def page(self, rel, text, dark=True, printing=False, look=None):
         """A full HTML page around render(). look: your reading preferences,
         {"font": CSS font list, "size": px, "width": px or 0, "spacing": line height}."""
@@ -509,10 +575,10 @@ class Vault:
             body = f'<h1 class="note-title">{html.escape(Path(rel).stem)}</h1>' + re.sub(
                 r'<input type="checkbox"[^>]*?( checked)?>',
                 lambda m: '<span class="box">☑</span>' if m.group(1) else '<span class="box">☐</span>', body)
-        extra = ""
+        extra = code_css(dark and not printing)
         if look and not printing:
             width = f"max-width: {int(look['width'])}px;" if look.get("width") else "max-width: none;"
-            extra = (f"body {{ font-family: {look['font']}; font-size: {int(look['size'])}px; "
+            extra += (f"body {{ font-family: {look['font']}; font-size: {int(look['size'])}px; "
                      f"line-height: {float(look['spacing'])}; {width} }}")
         return PAGE.format(title=html.escape(Path(rel).stem), body=body, nonce=secrets.token_hex(8), extra=extra,
                            scheme="dark" if dark else "light", printing="print" if printing else "")
@@ -535,9 +601,14 @@ class Vault:
         if (out / "attachments").exists():
             shutil.rmtree(out / "attachments")
         shutil.copytree(self.attachments, out / "attachments")
+        if (out / "thumbs").exists():
+            shutil.rmtree(out / "thumbs")
+        if (self.meta_dir / "thumbs").is_dir():
+            shutil.copytree(self.meta_dir / "thumbs", out / "thumbs")
         for note in notes:
             body = self.render(note["rel"], self.read(note["rel"]))
             body = body.replace(self.attachments.as_uri() + "/", "attachments/")
+            body = body.replace((self.meta_dir / "thumbs").as_uri() + "/", "thumbs/")
             body = re.sub(r'href="mknote:([^"#]+)[^"]*"',
                           lambda m: f'href="{slug.get(self.resolve(html.unescape(m.group(1))) or "", "#")}"', body)
             page = PAGE.format(title=html.escape(note["title"]), scheme="light", printing="", nonce=secrets.token_hex(8), extra="",
@@ -619,6 +690,13 @@ li:has(> input:checked) {{ text-decoration: line-through; opacity: .55; }}
 .callout-warning, .callout-caution {{ --accent: #f0a020; }} .callout-danger, .callout-bug {{ --accent: #ff5577; }}
 .callout-tip, .callout-success {{ --accent: #2ecc8f; }} .callout-question {{ --accent: #a070ff; }}
 .callout-title {{ font-weight: 700; }}
+details.callout > summary {{ cursor: pointer; list-style: none; }}
+details.callout > summary::before {{ content: "▸ "; opacity: .6; }}
+details.callout[open] > summary::before {{ content: "▾ "; }}
+a.pdf {{ display: inline-block; text-decoration: none; border-radius: 12px; overflow: hidden; max-width: 340px;
+  border: 1px solid light-dark(#d8dee8, #2c3546); }}
+a.pdf img {{ display: block; width: 100%; border-radius: 0; }}
+a.pdf span {{ display: block; padding: 8px 12px; color: inherit; font-size: .9em; }}
 .embed {{ border-left: 2px solid var(--accent); padding-left: 14px; margin: 1em 0; }}
 .embed-title {{ font-size: .8em; opacity: .6; text-transform: uppercase; letter-spacing: .05em; }}
 nav {{ float: left; width: 200px; margin-left: -240px; font-size: .9em; }}

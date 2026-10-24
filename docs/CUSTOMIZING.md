@@ -21,8 +21,9 @@ There are two ways to customize:
 | Notes folder, phone sync, history | `~/.config/mk-workstation/notes.conf` | `config/notes.conf` |
 | Screensaver | `mk screensaver scene web` (or knight, matrix, aurora, random), `mk screensaver delay 300`, `mk screensaver off` | `config/screensaver.conf` |
 | Focus timer's screen | Focus timer › Screensaver | `AMBIENT_STYLE` in `timer.conf` |
+| Screensaver | The Screensaver app (or `mk screensaver`): live previews of every scene, pick one or Shuffle; the focus timer uses the same choice | `config/screensaver.conf` |
 | Greetings | `mk welcome lines` (your own), `mk welcome variety off`, `mk welcome birthday 07-14` | `config/greetings.conf`, `config/welcome.conf` |
-| Media tile | `MEDIA=off` or `TICKER=off` in `~/.config/mk-workstation/media.conf` | `config/media.conf` |
+| Media tile | `MEDIA=off`, `TICKER=off` or `PLAYERS=spotify` in `~/.config/mk-workstation/media.conf`; or the Spotify only switch under More | `config/media.conf` |
 | Zen Browser look | your own lines in the profile's `chrome/userChrome.css`, outside the MK block | `config/browser/zen-userChrome.css` |
 | Browser touchpad prefs | your profile's `user.js`, outside the MK block | `config/browser/user.js` |
 | Keyboard shortcuts | Super+/ › click a shortcut | `config/shortcuts.conf` |

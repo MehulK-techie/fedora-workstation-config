@@ -8,6 +8,11 @@
 // config/media.conf, yours in ~/.config/mk-workstation/media.conf:
 //   MEDIA=on|off      off removes the tile completely
 //   TICKER=on|off     the song title next to the record (off: the record only)
+//   PLAYERS=all|spotify  every player, or Spotify only (also a switch under More)
+//
+// Browsers (YouTube and the like) play short muted previews as you scroll past
+// thumbnails, each one a "player". A browser only shows here after it has
+// played the same thing for 4 seconds, so previews never take over the tile.
 import Clutter from 'gi://Clutter';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
@@ -33,7 +38,7 @@ const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-worksta
 const ART_DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'album-art']);
 
 export function mediaConf() {
-    const out = {MEDIA: 'on', TICKER: 'on'};
+    const out = {MEDIA: 'on', TICKER: 'on', PLAYERS: 'all'};
     for (const path of [DEFAULT_CONF, USER_CONF]) {
         try {
             const [ok, bytes] = GLib.file_get_contents(path);
@@ -52,6 +57,28 @@ export function mediaConf() {
 }
 
 const ART_MAX = 5 * 1024 * 1024;
+const BROWSER_STEADY_MS = 4000;
+const BROWSERS = /chrom|firefox|brave|edge|opera|vivaldi|zen|librewolf|epiphany|falkon|qutebrowser|plasma-browser/i;
+
+function writeUserKey(key, value) {
+    const values = {};
+    try {
+        const [ok, bytes] = GLib.file_get_contents(USER_CONF);
+        if (ok) {
+            for (const line of new TextDecoder().decode(bytes).split('\n')) {
+                const m = line.match(/^\s*([A-Z_]+)\s*=\s*(\S*)/);
+                if (m)
+                    values[m[1]] = m[2];
+            }
+        }
+    } catch (e) {
+        // a new file
+    }
+    values[key] = value;
+    GLib.mkdir_with_parents(GLib.path_get_dirname(USER_CONF), 0o755);
+    GLib.file_set_contents(USER_CONF, '# Your media tile settings (mk-indicator)\n' +
+        Object.entries(values).map(([k, v]) => `${k}=${v}`).join('\n') + '\n');
+}
 
 // Only decode real images: PNG, JPEG or WebP, by their first bytes.
 function isImage(bytes) {
@@ -127,12 +154,7 @@ export class MediaTile {
                 this._choose();
             });
         this._propsId = this._bus.signal_subscribe(null, 'org.freedesktop.DBus.Properties', 'PropertiesChanged',
-            PATH, null, Gio.DBusSignalFlags.NONE, (_c, sender) => {
-                if (this._current && sender === this._currentOwner)
-                    this._refresh();
-                else
-                    this._choose();
-            });
+            PATH, null, Gio.DBusSignalFlags.NONE, () => this._choose());
         this._bus.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListNames',
             null, null, Gio.DBusCallFlags.NONE, -1, null, (c, res) => {
                 try {
@@ -209,42 +231,91 @@ export class MediaTile {
         });
     }
 
-    // The playing player wins; Spotify first when several are paused.
+    // Which player the tile shows. Playing beats paused, Spotify first, the
+    // one already shown stays while it plays. A browser counts only after the
+    // same title has played for BROWSER_STEADY_MS (not a hover preview), and
+    // a paused browser only if it's the one already shown. PLAYERS=spotify
+    // leaves only Spotify.
     _choose() {
         if (!this._button)
             return;
-        const names = [...this._players];
+        const spotifyOnly = this._conf.PLAYERS === 'spotify';
+        const names = [...this._players].filter(n => !spotifyOnly || n.includes('spotify'));
         if (!names.length) {
-            this._current = null;
-            this._showTile(false);
-            this._spin.stop();
+            this._noPlayer();
             return;
         }
         let pending = names.length;
-        const states = {};
+        const info = {};
         for (const name of names) {
-            this._get(name, 'PlaybackStatus', value => {
-                states[name] = value;
+            this._getAll(name, props => {
+                info[name] = props;
                 if (--pending)
                     return;
-                const playing = names.filter(n => states[n] === 'Playing');
-                const pick = playing.find(n => n.includes('spotify')) ?? playing[0] ??
-                    names.find(n => n.includes('spotify')) ?? names[0];
-                if (pick !== this._current) {
-                    this._current = pick;
-                    this._bus.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus',
-                        'GetNameOwner', new GLib.Variant('(s)', [pick]), null, Gio.DBusCallFlags.NONE, -1, null,
-                        (c, res) => {
-                            try {
-                                this._currentOwner = c.call_finish(res).deep_unpack()[0];
-                            } catch (e) {
-                                this._currentOwner = null;
-                            }
-                        });
-                }
-                this._refresh();
+                this._decide(names.filter(n => info[n]), info);
             });
         }
+    }
+
+    _decide(names, info) {
+        const now = GLib.get_monotonic_time() / 1000;
+        this._seen ??= new Map();
+        for (const name of names) {
+            const key = `${info[name].PlaybackStatus}\n${info[name].Metadata?.['xesam:title'] ?? ''}`;
+            if (this._seen.get(name)?.key !== key)
+                this._seen.set(name, {key, since: now});
+        }
+        for (const name of [...this._seen.keys()]) {
+            if (!names.includes(name))
+                this._seen.delete(name);
+        }
+        const browser = n => BROWSERS.test(n.slice(PREFIX.length));
+        const title = n => info[n].Metadata?.['xesam:title'] ?? '';
+        const steady = n => !browser(n) || now - this._seen.get(n).since >= BROWSER_STEADY_MS ||
+            (n === this._current && title(n) === this._meta.title);
+        const playing = names.filter(n => info[n].PlaybackStatus === 'Playing' && steady(n));
+        const paused = names.filter(n => info[n].PlaybackStatus === 'Paused' &&
+            (!browser(n) || (n === this._current && title(n) === this._meta.title)));
+        const spotify = list => list.find(n => n.includes('spotify'));
+        const pick = spotify(playing) ?? (playing.includes(this._current) ? this._current : playing[0]) ??
+            spotify(paused) ?? (paused.includes(this._current) ? this._current : paused[0]) ?? null;
+
+        // A browser that has just started: look again once it's been steady.
+        const waiting = names.filter(n => browser(n) && info[n].PlaybackStatus === 'Playing' && !steady(n));
+        if (waiting.length && !this._recheckId) {
+            const wait = Math.max(...waiting.map(n => BROWSER_STEADY_MS - (now - this._seen.get(n).since)));
+            this._recheckId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.ceil(wait) + 50, () => {
+                this._recheckId = 0;
+                this._choose();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        if (!pick) {
+            this._noPlayer();
+            return;
+        }
+        if (pick !== this._current) {
+            this._current = pick;
+            this._artUrl = null;
+        }
+        this._apply(info[pick]);
+    }
+
+    _noPlayer() {
+        this._current = null;
+        this._showTile(false);
+        this._spin.stop();
+    }
+
+    _getAll(name, cb) {
+        this._bus.call(name, PATH, 'org.freedesktop.DBus.Properties', 'GetAll', new GLib.Variant('(s)', [PLAYER]),
+            null, Gio.DBusCallFlags.NONE, 1000, null, (c, res) => {
+                try {
+                    cb(c.call_finish(res).recursiveUnpack()[0]);
+                } catch (e) {
+                    cb(null);
+                }
+            });
     }
 
     _get(name, prop, cb) {
@@ -259,37 +330,30 @@ export class MediaTile {
     }
 
     _refresh() {
-        if (!this._current)
+        this._choose();
+    }
+
+    _apply(props) {
+        if (!this._button)
             return;
-        this._bus.call(this._current, PATH, 'org.freedesktop.DBus.Properties', 'GetAll', new GLib.Variant('(s)', [PLAYER]),
-            null, Gio.DBusCallFlags.NONE, 1000, null, (c, res) => {
-                let props;
-                try {
-                    props = c.call_finish(res).recursiveUnpack()[0];
-                } catch (e) {
-                    return;
-                }
-                if (!this._button)
-                    return;
-                const meta = props.Metadata ?? {};
-                this._status = props.PlaybackStatus ?? 'Stopped';
-                const title = meta['xesam:title'] || '';
-                const artist = (meta['xesam:artist'] ?? []).join(', ');
-                this._meta = {title, artist, length: meta['mpris:length'] ?? 0, track: meta['mpris:trackid'],
-                    art: meta['mpris:artUrl'], album: meta['xesam:album'] || ''};
-                this._showTile(this._status !== 'Stopped' && Boolean(title));
-                this._title.text = title;
-                this._artist.text = artist;
-                this._length.text = this._meta.length ? fmt(this._meta.length) : '';
-                this._playButton.child.icon_name = this._status === 'Playing'
-                    ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
-                this._ticker.text = title;
-                if (this._status === 'Playing')
-                    this._spin.start();
-                else
-                    this._spin.stop();
-                this._loadArt(this._meta.art);
-            });
+        const meta = props.Metadata ?? {};
+        this._status = props.PlaybackStatus ?? 'Stopped';
+        const title = meta['xesam:title'] || '';
+        const artist = (meta['xesam:artist'] ?? []).join(', ');
+        this._meta = {title, artist, length: meta['mpris:length'] ?? 0, track: meta['mpris:trackid'],
+            art: meta['mpris:artUrl'], album: meta['xesam:album'] || ''};
+        this._showTile(this._status !== 'Stopped' && Boolean(title));
+        this._title.text = title;
+        this._artist.text = artist;
+        this._length.text = this._meta.length ? fmt(this._meta.length) : '';
+        this._playButton.child.icon_name = this._status === 'Playing'
+            ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
+        this._ticker.text = title;
+        if (this._status === 'Playing')
+            this._spin.start();
+        else
+            this._spin.stop();
+        this._loadArt(this._meta.art);
     }
 
     // Fade in when something plays, fade out when playback stops or the
@@ -523,6 +587,13 @@ export class MediaTile {
             item.label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             menu.addMenuItem(item);
         }
+        const only = new PopupMenu.PopupSwitchMenuItem('Spotify only', this._conf.PLAYERS === 'spotify');
+        only.connect('toggled', (_i, state) => {
+            this._conf.PLAYERS = state ? 'spotify' : 'all';
+            writeUserKey('PLAYERS', this._conf.PLAYERS);
+            this._choose();
+        });
+        menu.addMenuItem(only);
         const control = getMixerControl();
         const current = control.get_default_sink();
         const sinks = control.get_sinks();
@@ -549,9 +620,11 @@ export class MediaTile {
                 this._bus.signal_unsubscribe(this[id]);
             this[id] = 0;
         }
-        if (this._posId)
-            GLib.source_remove(this._posId);
-        this._posId = 0;
+        for (const id of ['_posId', '_recheckId']) {
+            if (this[id])
+                GLib.source_remove(this[id]);
+            this[id] = 0;
+        }
         this._spin?.stop();
         this._session?.abort();
         this._button = null;

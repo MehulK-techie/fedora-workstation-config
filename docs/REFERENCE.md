@@ -74,7 +74,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `config/notes.conf` | `NOTES_DIR=`, `SYNC=`, `SYNC_PORT=`, `HISTORY=`; look: `THEME=`, `FONT=`, `FONT_SIZE=`, `WIDTH=`, `SPACING=`, `FORMAT_BAR=`, `OPEN_IN=`, `SORT=` | `mk-notes` (Preferences writes them) |
 | `config/monitor.conf` | `PANEL=` (cpu, mem, temp, net, power), `INTERVAL=` (s) | mk-indicator system monitor |
 | `config/screensaver.conf` | `SCREENSAVER=` (on/off), `DELAY=` (s, 30+), `SCENE=` (random, aurora, web, knight, matrix) | `mk-screensaver`, `mk screensaver` |
-| `config/media.conf` | `MEDIA=` (on/off), `TICKER=` (on/off: the song title beside the record) | mk-indicator media tile |
+| `config/media.conf` | `MEDIA=` (on/off), `TICKER=` (on/off: the song title beside the record), `PLAYERS=` (all/spotify) | mk-indicator media tile |
 | `config/greetings.conf` | `[section]` then one greeting per line; sections morning, afternoon, evening, night, monday, friday, weekend, return, long, birthday, newyear, any | mk-indicator, `mk-voice prepare` (yours: `~/.config/mk-workstation/greetings.conf`) |
 | `config/browser/zen-userChrome.css` | CSS with `@ACCENT@` | `sync.sh` (marked block in each Zen profile's `chrome/userChrome.css`) |
 | `config/browser/user.js` | Firefox prefs (`user_pref(...)`) | `sync.sh` (marked block in each Firefox / Zen profile's `user.js`) |

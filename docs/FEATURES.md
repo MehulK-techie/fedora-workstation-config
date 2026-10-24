@@ -151,7 +151,7 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | Frog | Grab text from images |
 | Cameractrls, Kamoso, Guvcview | Webcam settings and capture |
 | Flip Clock | Full-screen clock |
-| Flameshot, gThumb | Screenshots with annotations; image viewer |
+| Flameshot, Loupe | Screenshots with annotations; image viewer |
 | EasyEffects | Audio equalizer and effects |
 | Fedora Media Writer | Make bootable USB sticks |
 | Distrobox, Android tools | Other Linux distros in containers; adb/fastboot |

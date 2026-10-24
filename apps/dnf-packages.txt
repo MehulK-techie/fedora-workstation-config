@@ -31,7 +31,12 @@ gnome-shell-extension-dash-to-dock
 gnome-shell-extension-places-menu
 gnome-shell-extension-blur-my-shell
 gnome-shell-extension-appindicator
+# Files: Space previews files (sushi), Loupe opens images, File Roller
+# handles archives, nautilus-extensions lets apps add to Files' menus
 sushi
+loupe
+file-roller
+nautilus-extensions
 
 # --- Multimedia codecs (RPM Fusion; ffmpeg itself is swapped in by setup.sh) ----
 gstreamer1-plugins-bad-freeworld
@@ -54,7 +59,6 @@ playerctl
 brightnessctl
 
 # --- Photos, screenshots, camera and audio -------------------------------------
-gthumb
 kamoso
 flameshot
 guvcview

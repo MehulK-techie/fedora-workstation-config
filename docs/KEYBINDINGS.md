@@ -98,6 +98,8 @@ them live and lets you change any of them. Your changes go to
 
 ## In the window switcher (Alt+Tab or 3 fingers)
 
+A compact card in the middle of the screen; it appears at once.
+
 | Keys | Does |
 | :--- | :--- |
 | Tab · Shift+Tab · arrows | Next · previous window |
@@ -122,10 +124,32 @@ them live and lets you change any of them. Your changes go to
 | Ctrl+Shift+E · Ctrl+G · Ctrl+T | PDF · graph · template |
 | Ctrl+, · F2 · F9 | Preferences · rename · sidebar |
 | Quick note window: Ctrl+Enter · Esc | Save to Inbox · close |
+| Ctrl+V · drag a file in | Paste or drop an image or file: it's attached and shown, not pasted as a path |
+| Ctrl+click | Open a web address or `[[link]]` while editing |
 
 ## Screensaver and focus timer
 
 | Keys | Does |
 | :--- | :--- |
 | Any key, click or pointer move | End the screensaver |
+| Type a time, Enter (timer window) | Start: `25`, `25m`, `1:30` or `90s` |
 | Space (timer window) | Pause / resume |
+
+## Files (Nautilus)
+
+GNOME Files' own keys; MK adds Space previews (sushi), Loupe for images
+and File Roller for archives.
+
+| Keys | Does |
+| :--- | :--- |
+| Ctrl+L · `/` · `~` | Type a location · start at / · start at your home folder |
+| Ctrl+X · Ctrl+C · Ctrl+V | Cut · copy · paste (cut and paste moves the files) |
+| Ctrl+. | Open the folder in a terminal (also right-click › Open in Console) |
+| F2 | Rename; with several files selected, rename them all at once (patterns, numbering, find and replace) |
+| Space | Quick preview |
+| Ctrl+T · Ctrl+Page Up/Down | New tab · switch tabs |
+| Ctrl+H | Show or hide hidden files |
+
+Files has no split (dual-pane) view. For two folders side by side, open a
+second window (Ctrl+N) and tile them with Super+Left and Super+Right, or
+drag files between tabs.

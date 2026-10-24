@@ -585,6 +585,14 @@ gsettings set org.gnome.desktop.peripherals.touchpad natural-scroll true
 gsettings set org.gnome.desktop.peripherals.touchpad disable-while-typing true
 gsettings set org.gnome.desktop.peripherals.touchpad disable-while-typing-timeout 300
 gsettings set org.gnome.desktop.peripherals.touchpad tap-and-drag true
+# Two-finger scrolling (not the edge strip), right-click with two fingers
+# anywhere on the pad instead of the bottom-right corner, the libinput
+# pointer curve; speed is left as you set it.
+gsettings set org.gnome.desktop.peripherals.touchpad two-finger-scrolling-enabled true
+gsettings set org.gnome.desktop.peripherals.touchpad edge-scrolling-enabled false
+gsettings set org.gnome.desktop.peripherals.touchpad click-method 'fingers'
+gsettings set org.gnome.desktop.peripherals.touchpad tap-and-drag-lock false
+gsettings set org.gnome.desktop.peripherals.touchpad accel-profile 'default'
 gsettings set org.gnome.desktop.interface show-battery-percentage true
 gsettings set org.gnome.desktop.interface clock-show-weekday true
 gsettings set org.gnome.settings-daemon.plugins.color night-light-enabled true

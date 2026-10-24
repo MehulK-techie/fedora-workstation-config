@@ -159,7 +159,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | Gaming | Lutris, GameMode, Gamescope, MangoHud, vkBasalt |
 | Development | VS Code, Distrobox, Android tools, GCC, Make, Node.js, pip |
 | Terminal | btop, fastfetch, fzf, ripgrep, zoxide, ncdu, just, chezmoi, 7-Zip, unrar |
-| Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, gThumb, Kamoso, Media Writer |
+| Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, Loupe (images), Kamoso, Media Writer |
 
 **Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Clipboard Indicator, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Magic Lamp (genie minimize), Impatience (25% faster animations), AppIndicator (tray icons), Caffeine (keep awake), and MK's own top-bar extension (system monitor, welcome light, focus timer, Alt+Tab glide, wallpaper accent).
 

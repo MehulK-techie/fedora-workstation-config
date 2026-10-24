@@ -131,6 +131,15 @@ if [[ -f "$SCRIPT_DIR/apps/dnf-packages.txt" ]]; then
     done
 fi
 
+# Apps MK replaced: gThumb (Loupe, GNOME's image viewer, opens images now).
+REMOVE_PKGS=(gthumb)
+for pkg in "${REMOVE_PKGS[@]}"; do
+    if rpm -q "$pkg" &>/dev/null; then
+        echo "==> Removing $pkg (replaced)..."
+        dnf remove -y "$pkg" || WARNINGS+=("Could not remove $pkg")
+    fi
+done
+
 # 5. Multimedia codecs & hardware video decoding (RPM Fusion)
 echo "==> Enabling full multimedia codecs..."
 if rpm -q ffmpeg-free &>/dev/null && ! rpm -q ffmpeg &>/dev/null; then

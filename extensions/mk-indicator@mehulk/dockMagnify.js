@@ -157,6 +157,10 @@ export class DockMagnify {
             Main.layoutManager.uiGroup.add_child(clone);
             entry = {clone, icon, destroyId: tile.connect('destroy', () => this._drop(tile))};
             this._clones.set(tile, entry);
+            // One layer only: no hover tint or halo on the icon while it's
+            // magnified (the clone would carry it, and St's style transition
+            // left a second, unscaled copy of the halo under the clone).
+            tile.add_style_class_name('mk-magnified');
             icon.opacity = 0;
         }
         const {clone, icon} = entry;
@@ -191,6 +195,7 @@ export class DockMagnify {
             return;
         this._clones.delete(tile);
         tile.disconnect(entry.destroyId);
+        tile.remove_style_class_name('mk-magnified');
         if (entry.icon.get_stage())
             entry.icon.opacity = 255;
         entry.clone.destroy();

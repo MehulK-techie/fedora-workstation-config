@@ -92,6 +92,14 @@
   box-shadow: 0 0 10px 0 rgba(0, 210, 255, 0.18);
 }
 
+/* dockMagnify.js: the magnified clone is the only layer, no tint or halo. */
+#dashtodockContainer .overview-tile.mk-magnified .overview-icon,
+#dashtodockContainer .overview-tile.mk-magnified:hover .overview-icon {
+  background-color: transparent;
+  box-shadow: none;
+  transition-duration: 0ms;
+}
+
 .window-caption {
   background-color: rgba(10, 16, 34, 0.85);
   border-radius: 12px;

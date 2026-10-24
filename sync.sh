@@ -494,6 +494,13 @@ gsettings_remove org.gnome.shell disabled-extensions "${ACTIVE_EXTENSIONS[@]}" "
 gsettings_remove org.gnome.shell enabled-extensions space-bar@luchrioh
 # Astra Monitor: replaced by mk-indicator's own lighter system monitor.
 gsettings_remove org.gnome.shell enabled-extensions monitor@astraext.github.io
+# MacOS Dock: a second dock whose magnification fought Dash to Dock's
+# (doubled icons). Dash to Dock + mk-indicator's magnification replace it.
+gsettings_remove org.gnome.shell enabled-extensions macos-dock@vinnytherobot.github.io
+if [[ -d "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io" ]]; then
+    gnome-extensions uninstall macos-dock@vinnytherobot.github.io 2>/dev/null \
+        || rm -rf "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io"
+fi
 
 # 3. Window Management & Multitasking (All Workspaces, Zero Lag)
 # Every keyboard shortcut lives in config/shortcuts.conf (applied in step 9).

@@ -134,7 +134,8 @@ export class DockGlow {
         const icon = findOverviewIcon(tile);
         if (!icon)
             return;
-        const colour = tile.hover ? appColour(tile.app) : null;
+        // With magnification the zoom itself is the hover feedback.
+        const colour = tile.hover && !this._magnify?.enabled ? appColour(tile.app) : null;
         if (!colour) {
             icon.set_style(null);
             return;

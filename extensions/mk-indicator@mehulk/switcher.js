@@ -145,6 +145,10 @@ export class SwitcherAnimation {
                 this._mkGrid = new WindowGrid(this);
                 this._switcherList._mkGrid = this._mkGrid;
                 this._mkGrid.select(this._selectedIndex);
+                // Instant: skip GNOME's 150 ms wait before the switcher shows.
+                // (The 3-finger swipe shows it itself, when the swipe starts.)
+                if (!this._switcherList.has_style_class_name('gie-alttab-quick-transition'))
+                    this._showImmediately?.();
                 return shown;
             }
             // The ring isn't needed for the very first frame: build it right

@@ -1,21 +1,22 @@
-// MK window switcher (Alt+Tab and the 3-finger swipe): the screen dims and
-// every window appears as a live preview in a grid, with its app icon, title
-// and which desktop it's on; one glowing ring glides to the selected window.
+// MK window switcher (Alt+Tab and the 3-finger swipe): a compact card in the
+// middle of the screen, not a full-screen overlay. Each window is a small live
+// preview with its app icon, title and which desktop it's on; a ring marks
+// the selected one. It appears at once (no fade, no delay) and the desktop
+// behind stays as it is.
 // Hover a card to select it, click to open it; 1-9 sends the selected window
 // to that desktop without leaving the switcher.
 //
 // GNOME's own switcher still runs underneath (keyboard, gestures, screen
 // readers, W/F4 to close, Q to quit): this only replaces what you see.
 import Clutter from 'gi://Clutter';
-import GLib from 'gi://GLib';
 import Pango from 'gi://Pango';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { accentRGB } from './accent.js';
 
-const GAP = 22, PAD = 6;
-const FOLLOW = 45; // ring spring: settles in ~65 ms
+const GAP = 12, PAD = 4, MARGIN = 16;
+const THUMB_W = 200, MAX_COLS = 6;
 
 export class WindowGrid {
     constructor(popup) {
@@ -25,37 +26,22 @@ export class WindowGrid {
         this._monitor = monitor;
 
         this.actor = new St.Widget({
-            reactive: false, opacity: 0, x: monitor.x, y: monitor.y, width: monitor.width, height: monitor.height,
-            style_class: 'mk-switch-backdrop', layout_manager: new Clutter.FixedLayout(),
+            reactive: false, opacity: 0, style_class: 'mk-switch-panel',
+            layout_manager: new Clutter.FixedLayout(),
         });
         // GNOME's switcher holds the input grab, so the pointer is read here,
         // before it's dispatched: hover selects, click opens, a click outside
         // closes. Keys go to GNOME's switcher as always.
         this._eventId = global.stage.connect('captured-event', (_s, event) => this._onEvent(event));
-        // Frosted: what's behind is blurred and dimmed, so the cards stand out.
-        this.actor.add_effect(new Shell.BlurEffect({radius: 36, brightness: 0.55, mode: Shell.BlurMode.BACKGROUND}));
+        // Frosted card only: the blur covers the card, not the screen.
+        this.actor.add_effect(new Shell.BlurEffect({radius: 24, brightness: 0.8, mode: Shell.BlurMode.BACKGROUND}));
         Main.uiGroup.add_child(this.actor);
         Main.uiGroup.set_child_above_sibling(this.actor, popup);
 
-        this._layout();
         this._ring = new St.Widget({style_class: 'mk-switch-ring', reactive: false});
         this._paintRing();
         this.actor.add_child(this._ring);
-        this._hint = new St.Label({style_class: 'mk-switch-hint',
-            text: 'Enter open  ·  W close  ·  1–9 move to desktop  ·  Esc cancel'});
-        this.actor.add_child(this._hint);
-        this._hint.set_position(Math.round((monitor.width - this._hint.get_preferred_width(-1)[1]) / 2),
-            monitor.height - 64);
-
-        this._pos = null;
-        let last = GLib.get_monotonic_time();
-        this._timeline = new Clutter.Timeline({actor: this.actor, duration: 1000, repeat_count: -1});
-        this._timeline.connect('new-frame', () => {
-            const now = GLib.get_monotonic_time();
-            this._follow(Math.min(0.05, (now - last) / 1e6));
-            last = now;
-        });
-        this._timeline.start();
+        this._layout();
 
         // Follow the popup's own visibility (the swipe shows it a moment later).
         this._opacityId = popup.connect('notify::opacity', () => this._sync());
@@ -64,56 +50,51 @@ export class WindowGrid {
     }
 
     _sync() {
-        const visible = this._popup.opacity > 0;
-        if (visible && !this._shown) {
+        if (this._popup.opacity > 0 && !this._shown) {
             this._shown = true;
-            const gesture = this._popup._switcherList?.has_style_class_name('gie-alttab-quick-transition');
-            this.actor.remove_all_transitions();
-            this.actor.ease({opacity: 255, duration: gesture ? 90 : 140, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-            this._grid.set_pivot_point(0.5, 0.5);
-            this._grid.set_scale(gesture ? 1 : 0.97, gesture ? 1 : 0.97);
-            this._grid.ease({scale_x: 1, scale_y: 1, duration: 160, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            this.actor.opacity = 255;
+            this._placeRing();
         }
     }
 
-    // Card size from how many windows there are: big for a few, smaller for many.
+    // Columns: one row for up to MAX_COLS windows, then more rows. Thumbnails
+    // shrink only when even that doesn't fit the screen.
     _layout() {
-        const {width: mw, height: mh} = this._monitor;
+        const {x: mx, y: my, width: mw, height: mh} = this._monitor;
         const n = Math.max(1, this._windows.length);
-        const aspect = mw / mh;
-        let cols = 1, tw = 0, th = 0;
-        for (let c = 1; c <= n; c++) {
-            const rows = Math.ceil(n / c);
-            const w = Math.min(380, (mw * 0.86 - (c - 1) * GAP) / c - 2 * PAD - 16);
-            const h = Math.min(w / aspect, (mh * 0.72 - (rows - 1) * GAP) / rows - 2 * PAD - 48);
-            const cw = h * aspect;
-            if (Math.min(w, cw) > tw) {
-                tw = Math.min(w, cw);
-                th = tw / aspect;
-                cols = c;
-            }
-        }
-        tw = Math.max(150, Math.round(tw));
-        th = Math.max(90, Math.round(th));
-        const cardW = tw + 2 * 10, cardH = th + 2 * 10 + 30;
+        const cols = Math.min(n, MAX_COLS);
         const rows = Math.ceil(n / cols);
-        const gridW = cols * cardW + (cols - 1) * GAP, gridH = rows * cardH + (rows - 1) * GAP;
-        this._grid = new St.Widget({layout_manager: new Clutter.FixedLayout(), width: gridW, height: gridH,
-            x: Math.round((mw - gridW) / 2), y: Math.round((mh - gridH) / 2 - 20)});
-        this.actor.add_child(this._grid);
+        const aspect = mw / mh;
+        const cardChrome = 2 * 8, labelH = 26;
+        let tw = Math.min(THUMB_W, (mw * 0.9 - 2 * MARGIN - (cols - 1) * GAP) / cols - cardChrome);
+        let th = tw / aspect;
+        const maxTh = (mh * 0.8 - 2 * MARGIN - (rows - 1) * GAP) / rows - cardChrome - labelH;
+        if (th > maxTh) {
+            th = maxTh;
+            tw = th * aspect;
+        }
+        tw = Math.round(tw);
+        th = Math.round(th);
+        const cardW = tw + cardChrome, cardH = th + cardChrome + labelH;
+        const lastRow = n - (rows - 1) * cols;
         this._cards = this._windows.map((win, i) => {
             const card = this._card(win, i, tw, th);
-            card.set_position((i % cols) * (cardW + GAP) + (i >= (rows - 1) * cols ? (cols - (n - (rows - 1) * cols)) * (cardW + GAP) / 2 : 0),
-                Math.floor(i / cols) * (cardH + GAP));
+            const row = Math.floor(i / cols);
+            const shift = row === rows - 1 ? (cols - lastRow) * (cardW + GAP) / 2 : 0;
+            card.set_position(MARGIN + (i % cols) * (cardW + GAP) + shift, MARGIN + row * (cardH + GAP));
             card.set_size(cardW, cardH);
-            this._grid.add_child(card);
+            this.actor.add_child(card);
             return card;
         });
+        const w = 2 * MARGIN + cols * cardW + (cols - 1) * GAP;
+        const h = 2 * MARGIN + rows * cardH + (rows - 1) * GAP;
+        this.actor.set_size(w, h);
+        this.actor.set_position(mx + Math.round((mw - w) / 2), my + Math.round((mh - h) / 2));
     }
 
     _card(win, index, tw, th) {
         const card = new St.Bin({style_class: 'mk-switch-card'});
-        const box = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
+        const box = new St.BoxLayout({vertical: true, style: 'spacing: 6px;'});
         const thumb = new St.Widget({style_class: 'mk-switch-thumb', width: tw, height: th,
             layout_manager: new Clutter.BinLayout(), clip_to_allocation: true});
         const actor = win.get_compositor_private();
@@ -124,7 +105,7 @@ export class WindowGrid {
             thumb.add_child(new Clutter.Clone({source: actor, width: aw * scale, height: ah * scale,
                 x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER}));
         } else if (app) {
-            const big = app.create_icon_texture(Math.min(96, th * 0.6));
+            const big = app.create_icon_texture(Math.min(64, th * 0.6));
             big.set_x_align(Clutter.ActorAlign.CENTER);
             big.set_y_align(Clutter.ActorAlign.CENTER);
             big.opacity = 170;
@@ -133,7 +114,7 @@ export class WindowGrid {
         box.add_child(thumb);
         const row = new St.BoxLayout({style: 'spacing: 8px;', x_expand: true});
         if (app)
-            row.add_child(app.create_icon_texture(18));
+            row.add_child(app.create_icon_texture(16));
         const title = new St.Label({text: win.get_title() || app?.get_name() || '', x_expand: true,
             style_class: 'mk-switch-title', y_align: Clutter.ActorAlign.CENTER});
         title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
@@ -187,33 +168,24 @@ export class WindowGrid {
 
     _paintRing() {
         const c = accentRGB().join(',');
-        this._ring.style = `border-radius: 22px; border: 2px solid rgba(${c},0.95);
-            background-color: rgba(${c},0.10); box-shadow: 0 0 22px 0 rgba(${c},0.35);`;
+        this._ring.style = `border-radius: 16px; border: 2px solid rgba(${c},0.95);
+            background-color: rgba(${c},0.10);`;
+    }
+
+    // Instant: the ring jumps to the selected card, no glide.
+    _placeRing() {
+        const card = this._cards?.[this._popup._selectedIndex];
+        if (!card)
+            return;
+        this._ring.set_position(card.x - PAD, card.y - PAD);
+        this._ring.set_size(card.width + 2 * PAD, card.height + 2 * PAD);
     }
 
     select(index) {
         this._cards?.forEach((card, i) => {
-            const on = i === index;
-            card.remove_transition('opacity');
-            card.ease({opacity: on ? 255 : 205, duration: 90, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            card.opacity = i === index ? 255 : 190;
         });
-    }
-
-    _follow(dt) {
-        const card = this._cards?.[this._popup._selectedIndex];
-        if (!card)
-            return;
-        const [gx, gy] = this._grid.get_position();
-        const target = [gx + card.x - PAD, gy + card.y - PAD, card.width + 2 * PAD, card.height + 2 * PAD];
-        if (!this._pos) {
-            this._pos = target;
-        } else {
-            const k = 1 - Math.exp(-FOLLOW * dt);
-            this._pos = this._pos.map((v, i) => v + (target[i] - v) * k);
-        }
-        this._ring.set_position(Math.round(this._pos[0]), Math.round(this._pos[1]));
-        if (Math.abs(this._ring.width - this._pos[2]) > 0.75 || Math.abs(this._ring.height - this._pos[3]) > 0.75)
-            this._ring.set_size(Math.round(this._pos[2]), Math.round(this._pos[3]));
+        this._placeRing();
     }
 
     // 1-9: send the selected window to that desktop (adding desktops if needed).
@@ -229,14 +201,13 @@ export class WindowGrid {
         const badge = this._cards[index]._badge;
         badge.text = `${number}`;
         badge.set_pivot_point(0.5, 0.5);
-        badge.set_scale(1.5, 1.5);
-        badge.ease({scale_x: 1, scale_y: 1, duration: 220, mode: Clutter.AnimationMode.EASE_OUT_BACK});
+        badge.set_scale(1.3, 1.3);
+        badge.ease({scale_x: 1, scale_y: 1, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
     }
 
     destroy() {
         if (!this.actor)
             return;
-        this._timeline?.stop();
         if (this._eventId)
             global.stage.disconnect(this._eventId);
         this._eventId = 0;
@@ -244,7 +215,6 @@ export class WindowGrid {
             this._popup.disconnect(this._opacityId);
         const actor = this.actor;
         this.actor = this._cards = null;
-        actor.ease({opacity: 0, duration: 90, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            onComplete: () => actor.destroy()});
+        actor.destroy();
     }
 }

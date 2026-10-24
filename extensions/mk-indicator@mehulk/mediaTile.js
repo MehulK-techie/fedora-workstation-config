@@ -116,6 +116,7 @@ export class MediaTile {
         this._status = 'Stopped';
         this._session = new Soup.Session({timeout: 10});
         GLib.mkdir_with_parents(ART_DIR, 0o755);
+        this._pruneArt();
 
         this._button = new PanelMenu.Button(0.5, 'Media', false);
         this._button.add_style_class_name('mk-media');
@@ -379,6 +380,24 @@ export class MediaTile {
         }
     }
 
+    // The art cache keeps the newest 200 pictures (YouTube Music, Netflix and
+    // other streaming sites change art every track); older ones are deleted.
+    _pruneArt() {
+        try {
+            const dir = Gio.File.new_for_path(ART_DIR);
+            const files = [];
+            const e = dir.enumerate_children('standard::name,time::modified', Gio.FileQueryInfoFlags.NONE, null);
+            let info;
+            while ((info = e.next_file(null)))
+                files.push([info.get_modification_date_time()?.to_unix() ?? 0, info.get_name()]);
+            files.sort((x, y) => y[0] - x[0]);
+            for (const [, fname] of files.slice(200))
+                dir.get_child(fname).delete(null);
+        } catch (e) {
+            // a missing or unreadable cache: nothing to prune
+        }
+    }
+
     // Album art: local files directly, web addresses downloaded once.
     _loadArt(url) {
         if (!url || url === this._artUrl)
@@ -531,27 +550,34 @@ export class MediaTile {
         });
     }
 
-    // Open player: bring its window to the front. Through GNOME first (the
-    // app's own window, works for Spotify on Wayland, where MPRIS Raise often
-    // does nothing), then MPRIS Raise for players GNOME doesn't know.
+    // Open player: bring the player itself to the front. The player is asked
+    // first (MPRIS Raise): a browser then shows the very tab that's playing,
+    // rather than just its last window. Spotify on Wayland often can't raise
+    // itself; if its app isn't in front half a second later, GNOME activates
+    // it (and starts it when it has no window). The focus helper lets the
+    // raised window through GNOME's focus-stealing protection.
     _raise() {
         if (!this._current || this._locked)
             return;
         const name = this._current;
         this._button.menu.close();
-        this._bus.call(name, PATH, 'org.freedesktop.DBus.Properties', 'Get',
-            new GLib.Variant('(ss)', ['org.mpris.MediaPlayer2', 'DesktopEntry']), null, Gio.DBusCallFlags.NONE,
+        this._bus.call(name, PATH, 'org.freedesktop.DBus.Properties', 'GetAll',
+            new GLib.Variant('(s)', ['org.mpris.MediaPlayer2']), null, Gio.DBusCallFlags.NONE,
             1000, null, (c, res) => {
-                let entry = '';
+                let root = {};
                 try {
-                    entry = c.call_finish(res).deep_unpack()[0].deep_unpack();
+                    root = c.call_finish(res).recursiveUnpack()[0];
                 } catch (e) {
-                    // no DesktopEntry: guess from the bus name below
+                    // no root properties: guess from the bus name below
                 }
-                const app = this._findApp(entry, name);
+                const app = this._findApp(root.DesktopEntry ?? '', name);
                 expectFocus(app);
-                if (app && app.get_n_windows() > 0) {
-                    app.activate();
+                const fallback = () => {
+                    if (app && Shell.WindowTracker.get_default().focus_app !== app)
+                        app.activate();
+                };
+                if (root.CanRaise === false) {
+                    fallback();
                     return;
                 }
                 this._bus.call(name, PATH, 'org.mpris.MediaPlayer2', 'Raise', null, null,
@@ -559,8 +585,14 @@ export class MediaTile {
                         try {
                             cc.call_finish(r);
                         } catch (e) {
-                            app?.activate();  // not running as a window: start it
+                            fallback();
+                            return;
                         }
+                        this._raiseCheckId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                            this._raiseCheckId = 0;
+                            fallback();
+                            return GLib.SOURCE_REMOVE;
+                        });
                     });
             });
     }
@@ -620,7 +652,7 @@ export class MediaTile {
                 this._bus.signal_unsubscribe(this[id]);
             this[id] = 0;
         }
-        for (const id of ['_posId', '_recheckId']) {
+        for (const id of ['_posId', '_recheckId', '_raiseCheckId']) {
             if (this[id])
                 GLib.source_remove(this[id]);
             this[id] = 0;

@@ -147,6 +147,26 @@ export default class MKIndicatorExtension extends Extension {
             this._dockGlow = new DockGlow();
             this._dockGlow.enable();
         }
+        if (!locked && this._wasLocked)
+            this._hideDocksSoon();
+        this._wasLocked = locked;
+    }
+
+    // After unlocking (and waking from sleep, which unlocks), Dash to Dock
+    // rebuilds its docks and can leave them shown. Hide them once the new
+    // docks exist, unless the pointer is on one: the dock then appears only
+    // when you push the pointer against the screen edge.
+    _hideDocksSoon() {
+        if (this._unlockDockId)
+            GLib.source_remove(this._unlockDockId);
+        this._unlockDockId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 700, () => {
+            this._unlockDockId = 0;
+            for (const dock of this._docks()) {
+                if (dock.autohideEnabled && !dock._box?.hover && !Main.overview.visible)
+                    dock.hideDock?.();
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _refreshBlur() {
@@ -199,6 +219,10 @@ export default class MKIndicatorExtension extends Extension {
         if (this._startupId) {
             Main.layoutManager.disconnect(this._startupId);
             this._startupId = 0;
+        }
+        if (this._unlockDockId) {
+            GLib.source_remove(this._unlockDockId);
+            this._unlockDockId = 0;
         }
         if (this._greetId) {
             GLib.source_remove(this._greetId);

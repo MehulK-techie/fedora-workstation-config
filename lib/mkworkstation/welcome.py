@@ -108,7 +108,8 @@ def render(text=None, force=False):
     eng = engine()
     if not eng:
         return None
-    key = hashlib.sha1(f"{eng}|{text}".encode()).hexdigest()
+    # v2: the natural voice is no longer pitched down or given reverb.
+    key = hashlib.sha1(f"v2|{eng}|{text}".encode()).hexdigest()
     wav = VOICE_CACHE / f"{key}.wav"
     if not force and wav.exists():
         return wav
@@ -116,15 +117,21 @@ def render(text=None, force=False):
     with tempfile.TemporaryDirectory() as tmp:
         raw = Path(tmp) / "raw.wav"
         if eng == "piper":
-            subprocess.run([str(PIPER), "-m", str(MODEL), "-f", str(raw)], input=text,
+            # A touch slower than Piper's default, with a short pause between
+            # sentences: calm, not hurried.
+            subprocess.run([str(PIPER), "-m", str(MODEL), "-f", str(raw), "--length_scale", "1.08",
+                            "--sentence_silence", "0.25"], input=text,
                            text=True, capture_output=True, timeout=60, check=True)
         else:
             subprocess.run(["espeak-ng", "-v", "en-gb-x-rp", "-s", "148", "-p", "38", "-g", "3",
                             "-w", str(raw), text], capture_output=True, timeout=30, check=True)
         if shutil.which("sox"):
-            pitch = "-40" if eng == "piper" else "-20"
-            subprocess.run(["sox", str(raw), str(wav), "gain", "-4", "pitch", pitch, "bass", "+2",
-                            "treble", "+2", "reverb", "18", "50", "70", "norm", "-2", "pad", "0", "0.4"],
+            # Piper already sounds natural: only even out the volume. Pitch
+            # shifting and reverb made it sound processed and distorted. The
+            # robotic espeak voice gets a gentle warm-up instead.
+            effects = (["gain", "-3", "norm", "-1"] if eng == "piper" else
+                       ["gain", "-4", "pitch", "-20", "bass", "+2", "treble", "+1", "norm", "-2"])
+            subprocess.run(["sox", str(raw), str(wav), *effects, "pad", "0", "0.3"],
                            capture_output=True, timeout=30, check=True)
         else:
             shutil.copy(raw, wav)
@@ -140,12 +147,27 @@ def prepare():
     return done
 
 
+def wait_for_audio(seconds=12):
+    """Right after login PipeWire may not be up yet: wait for it (a little)."""
+    import time
+    for _ in range(int(seconds * 4)):
+        try:
+            if subprocess.run(["pactl", "info"], capture_output=True, timeout=2).returncode == 0:
+                return True
+        except (OSError, subprocess.SubprocessError):
+            return True  # no pactl: just try to play
+        time.sleep(0.25)
+    return False
+
+
 def play(path):
+    wait_for_audio()
     for player in ("pw-play", "paplay", "aplay"):
         if shutil.which(player):
-            subprocess.Popen([player, str(path)], stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=True)
-            return True
+            # Waited for, not started and forgotten: under systemd-run the unit
+            # lives until the greeting has been spoken.
+            return subprocess.run([player, str(path)], stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL).returncode == 0
     return False
 
 

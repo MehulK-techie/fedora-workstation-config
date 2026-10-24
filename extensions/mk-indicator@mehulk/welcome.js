@@ -615,7 +615,11 @@ export class Welcome {
             // spoken as the words appear, not before
             this._voiceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.round(duration * 0.28), () => {
                 this._voiceId = 0;
-                run([`${BIN}/mk-voice`, 'say', greeting]);
+                // Its own systemd user unit, ordered after PipeWire: right after
+                // a cold boot the audio server may still be starting.
+                run(['systemd-run', '--user', '--quiet', '--collect', '--no-block',
+                    '-p', 'After=pipewire.service pipewire-pulse.service wireplumber.service',
+                    '-p', 'Wants=pipewire-pulse.service', `${BIN}/mk-voice`, 'say', greeting]);
                 return GLib.SOURCE_REMOVE;
             });
         }

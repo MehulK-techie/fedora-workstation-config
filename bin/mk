@@ -596,6 +596,7 @@ case "${1:-help}" in
                 echo "Locked folders:"; "$LOCK" folder list | sed 's/^/  /'
                 echo "Lock more: mk lock app NAME · mk lock ~/Folder" ;;
             "lock close") "$LOCK" folder close "${2:?Usage: mk lock close PATH}" ;;
+            "lock password") shift; "$LOCK" password "$@" ;;
             "lock open") "$LOCK" folder open "${2:?Usage: mk lock open PATH}" ;;
             "unlock --remove") "$LOCK" folder remove "${2:?Usage: mk unlock --remove PATH}" ;;
             unlock\ *) "$LOCK" folder open "$1" ;;
@@ -665,6 +666,10 @@ case "${1:-help}" in
     security|scan)
         shift
         "$HOME/.local/bin/mk-security" "$@"
+        ;;
+
+    vault)
+        "$HOME/.local/bin/mk-lock" vault
         ;;
 
     speedtest)
@@ -772,6 +777,7 @@ KEYRING
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
         echo "  lock       Fingerprint before an app starts, or an encrypted folder: mk lock app NAME, mk lock ~/Folder"
         echo "  unlock     Open a locked folder (mk unlock ~/Folder) or stop locking an app (mk unlock app NAME)"
+        echo "  vault      Open or close your hidden encrypted folder (~/.vault)"
         echo "  security   Security check with a score: firewall, updates, rootkits, viruses, Lynis (fix NAME applies a fix)"
         echo "  speedtest  Ping, download and upload speed"
         echo "  nap        Which unused apps App Nap paused under memory or CPU pressure"

@@ -198,6 +198,23 @@ open(path, "w").write((text + "\n\n" if text else "") + block)
 PY
 done
 
+# Zen Browser: the desktop accent and compact tabs (config/browser/zen-userChrome.css).
+ACCENT_RGB=$(grep -om1 'rgba([0-9]*,[0-9]*,[0-9]*' "$HOME/.cache/mk-workstation/accent.css" 2> /dev/null | sed 's/rgba(//' || true)
+for profile in "$HOME"/.var/app/app.zen_browser.zen/.zen/*/ "$HOME"/.zen/*/; do
+    [[ -f "$profile/prefs.js" ]] || continue
+    mkdir -p "$profile/chrome"
+    touch "$profile/chrome/userChrome.css"
+    python3 - "$profile/chrome/userChrome.css" "$SCRIPT_DIR/config/browser/zen-userChrome.css" "${ACCENT_RGB:-47,128,255}" << 'PY'
+import re, sys
+path, source, accent = sys.argv[1:]
+text = open(path).read()
+text = re.sub(r"/\* >>> MK Workstation.*?/\* <<< MK Workstation \*/\n?", "", text, flags=re.S).rstrip("\n")
+block = ("/* >>> MK Workstation (managed by sync.sh; edit config/browser/zen-userChrome.css) */\n"
+         + open(source).read().replace("@ACCENT@", accent) + "/* <<< MK Workstation */\n")
+open(path, "w").write((text + "\n\n" if text else "") + block)
+PY
+done
+
 # Cursor: Bibata Modern Classic (GPL-3.0, github.com/ful1e5/Bibata_Cursor), a
 # sleek black pointer with a white edge that suits the dark desktop. Pinned
 # release and checksum; CURSOR= in config/theme.conf (or yours) picks another

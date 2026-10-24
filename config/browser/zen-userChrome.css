@@ -1,0 +1,9 @@
+/* MK Workstation for Zen Browser: your desktop's accent colour (taken from
+   your wallpaper, `mk accent`) and slightly more compact tabs. sync.sh keeps
+   this in a marked block of each Zen profile's chrome/userChrome.css; Zen
+   reads it when it starts. */
+:root {
+  --zen-primary-color: rgb(@ACCENT@) !important;
+  --zen-colors-primary: rgb(@ACCENT@) !important;
+}
+.tabbrowser-tab { min-height: 34px !important; }

@@ -18,3 +18,5 @@ user_pref("browser.gesture.pinch.out", "cmd_fullZoomEnlarge");
 // GPU rendering and video decoding: smoother scrolling, cooler laptop.
 user_pref("gfx.webrender.all", true);
 user_pref("media.ffmpeg.vaapi.enabled", true);
+// Let Zen read chrome/userChrome.css (the MK accent block)
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);

@@ -42,7 +42,7 @@ Credit for everything in the last two groups belongs to its authors; see
 | **Shortcuts window** | Every shortcut and gesture, live from GNOME; marks each working, clashing, unset or broken; change keys, add commands, reset | Super+/ |
 | **Companion** | Notes you pin, reorder and fold; tasks with progress; reminders (in N min, at a time, daily/weekly) that fire even when closed; morning brief; welcome greeting editor | Super+Shift+N |
 | **Focus timer** | Type a time (`25`, `1:30`, `90s`) and press Enter, or pick a preset; hides into a top-bar countdown; step away and one of the screensaver scenes plays with a small countdown (or the classic Aurora with the big ring; Surprise me never repeats the last one); can silence notifications; pixel-robot celebration with fireworks and a sound of your choice (Chime, Bell, Soft, Alarm clock or Silent) | Companion › Focus timer, `mk focus 25` |
-| **Screensaver** (`mk-screensaver`) | Plays a full-screen scene after a few idle minutes (3 by default): Web Hang (a masked hero swinging from a web over the city), Night Watch (a caped figure on a gargoyle in the rain, searchlight, lightning, bats), Neon Cascade (code rain decoding the time) or Aurora; never over a video or call; any touch ends it; GNOME still locks at its own time | `mk screensaver`, `config/screensaver.conf` |
+| **Screensaver** (`mk-screensaver`) | Plays a full-screen scene after a few idle minutes (3 by default), chosen in the Screensaver app from live previews or shuffled (never the same twice running): Web Hang (a brick-built masked hero hanging from a web over the city, a spider on the moon), Night Watch (a caped figure on a gargoyle in the rain, searchlight, lightning, bats), Neon Cascade (code rain decoding the time) or Aurora; never over a video or call; any touch ends it; GNOME still locks at its own time | `mk screensaver`, `config/screensaver.conf` |
 | **OCR snip** | Pick a screen area, get its text in the clipboard | Super+Shift+T |
 | **Camera controls** | Brightness, contrast, focus, exposure of your webcam | Super+C |
 | **Terminal capture** | Add notes and tasks with reminders without opening anything | `mk note`, `mk task`, `mk remind`, `mk list` |
@@ -183,7 +183,7 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | `mk notes [today \| serve \| NOTE]` | MK Notes; `serve` = phone sync without the window |
 | `mk icon APP IMAGE\|reset` · `mk icon list` | Your own app icons |
 | `mk accent auto\|#hex\|status` | Accent colour from the wallpaper, or fixed |
-| `mk screensaver on\|off\|show\|scene\|delay` | Screensaver scenes |
+| `mk screensaver` · `on\|off\|show\|scene\|delay` | The Screensaver settings window (live previews, Shuffle) · scenes from the terminal |
 | `mk welcome variety\|birthday\|lines` | A different greeting each time; your birthday; your own lines |
 | `mk fingerprint check` | Why the reader might not answer on the lock screen |
 | `mk rename "Name" TAG` | Rename it |

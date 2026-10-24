@@ -1,0 +1,178 @@
+#!/bin/bash
+# mk-security-scan: the root half of `mk security` (installed by setup.sh to
+# /usr/local/libexec, run through pkexec: polkit asks for your fingerprint or
+# password first). It only reads, unless asked for one of the fixes listed in
+# fix() below, by name.
+#
+# Output, one line each (read by mk-security):
+#   FINDING|high|medium|low|ID|title|detail|fix command
+#   PASS|title
+#   LYNIS|hardening index
+#   NOTE|text
+set -uo pipefail
+export LC_ALL=C
+
+if [[ $EUID -ne 0 ]]; then
+    echo "mk-security-scan runs as root (through pkexec, from mk security)" >&2
+    exit 1
+fi
+uid=${PKEXEC_UID:-0}
+home=$(getent passwd "$uid" | cut -d: -f6)
+
+finding() { printf 'FINDING|%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "$5"; }
+pass() { printf 'PASS|%s\n' "$1"; }
+note() { printf 'NOTE|%s\n' "$1"; }
+
+scan() {
+    # --- the basics Fedora ships with
+    if [[ "$(getenforce 2> /dev/null)" == "Enforcing" ]]; then
+        pass "SELinux is enforcing"
+    else
+        finding high selinux "SELinux isn't enforcing" "It confines services so a hacked one can't take over the system" "mk security fix selinux"
+    fi
+    if systemctl is-active -q firewalld; then
+        zone=$(firewall-cmd --get-default-zone 2> /dev/null)
+        pass "Firewall is on (zone: ${zone:-?})"
+    else
+        finding high firewall "The firewall is off" "Anything listening on the network can be reached" "mk security fix firewall"
+    fi
+    if mokutil --sb-state 2> /dev/null | grep -q enabled; then
+        pass "Secure Boot is on"
+    else
+        finding low secureboot "Secure Boot is off" "Boot-level malware isn't blocked; turn it on in the firmware (BIOS) settings" ""
+    fi
+    if lsblk -rno FSTYPE 2> /dev/null | grep -q crypto_LUKS; then
+        pass "The disk is encrypted"
+    else
+        finding medium encryption "The disk isn't encrypted" "A lost or stolen laptop gives away every file; only a reinstall with encryption fixes this" ""
+    fi
+    # --- updates
+    sec=$(dnf -q updateinfo list --security 2> /dev/null | grep -c . || true)
+    if (( sec > 0 )); then
+        finding high updates "$sec security update(s) waiting" "Known holes stay open until they're installed" "mk security fix updates"
+    else
+        pass "No security updates waiting"
+    fi
+    # --- accounts and remote access
+    roots=$(awk -F: '$3 == 0 && $1 != "root" { print $1 }' /etc/passwd | paste -sd ' ')
+    if [[ -n "$roots" ]]; then
+        finding high uid0 "Extra all-powerful accounts: $roots" "Only root should have user id 0" ""
+    else
+        pass "Only root has administrator user id 0"
+    fi
+    empty=$(awk -F: '($2 == "" ) { print $1 }' /etc/shadow | grep -vx guest | paste -sd ' ')
+    if [[ -n "$empty" ]]; then
+        finding high emptypw "Accounts without a password: $empty" "Anyone at the keyboard can log in as them" ""
+    else
+        pass "Every account has a password (except an MK guest account, if on)"
+    fi
+    if systemctl is-active -q sshd; then
+        if sshd -T 2> /dev/null | grep -qx 'permitrootlogin yes'; then
+            finding high sshroot "SSH accepts root logins" "Attackers try root first" "mk security fix ssh"
+        fi
+        if sshd -T 2> /dev/null | grep -qx 'passwordauthentication yes'; then
+            finding medium sshpw "SSH accepts passwords" "Keys can't be guessed; passwords can. Use ssh keys, then fix" "mk security fix ssh"
+        fi
+        note "SSH server is running (turn it off if you don't log in remotely: sudo systemctl disable --now sshd)"
+    fi
+    # --- network: what listens beyond this computer
+    open=$(ss -Htulpn 2> /dev/null | awk '$5 !~ /^(127\.|\[::1\]|::1|\[?::ffff:127\.)/ { split($5, a, ":"); p = a[length(a)]; match($0, /users:\(\("([^"]+)"/, m); print p "/" $1 " (" m[1] ")" }' | sort -u | paste -sd, | sed 's/,/, /g')
+    if [[ -n "$open" ]]; then
+        finding low ports "Listening to the network: $open" "Each one is a door; the firewall decides who gets in" ""
+    else
+        pass "Nothing listens to the network"
+    fi
+    # --- your home folder
+    if [[ -n "$home" && -d "$home" ]]; then
+        ww=$(find "$home" -xdev -type f -perm -0002 -not -path '*/.cache/*' 2> /dev/null | head -100000 | wc -l)
+        if (( ww > 0 )); then
+            # Behind a private home folder (700) nobody else can reach them: low.
+            level=medium
+            [[ "$(stat -c %a "$home")" == 700 ]] && level=low
+            finding "$level" worldwrite "$ww file(s) in your home anyone could change" "Usually copied from another system (e.g. a browser profile); safe to fix" "mk security fix permissions"
+        else
+            pass "No files in your home that anyone can change"
+        fi
+        if [[ "$(stat -c %a "$home")" =~ [1-7]$ ]]; then
+            finding medium homeperm "Other accounts can look into your home folder" "Your files are visible to every user on this computer" "mk security fix permissions"
+        fi
+    fi
+    # --- rootkit checks
+    if command -v rkhunter > /dev/null; then
+        [[ -s /var/lib/rkhunter/db/rkhunter.dat ]] || rkhunter --propupd --nocolors > /dev/null 2>&1
+        warn=$(rkhunter --check --sk --nocolors --rwo 2> /dev/null | grep -c '^Warning' || true)
+        if (( warn > 0 )); then
+            finding medium rkhunter "rkhunter: $warn warning(s)" "Often harmless after updates; read: sudo rkhunter --check --sk --rwo" ""
+        else
+            pass "rkhunter found nothing"
+        fi
+    else
+        note "rkhunter isn't installed (sudo dnf install rkhunter)"
+    fi
+    if command -v chkrootkit > /dev/null; then
+        hits=$(chkrootkit -q 2> /dev/null | grep -v -E '^$|not (infected|found)|nothing found' | grep -c -i -E 'infected|suspicious|warning' || true)
+        if (( hits > 0 )); then
+            finding high chkrootkit "chkrootkit: $hits suspicious result(s)" "Read: sudo chkrootkit -q" ""
+        else
+            pass "chkrootkit found nothing"
+        fi
+    else
+        note "chkrootkit isn't installed (sudo dnf install chkrootkit)"
+    fi
+    # --- viruses in the usual places files arrive
+    if command -v clamscan > /dev/null; then
+        command -v freshclam > /dev/null && freshclam --quiet > /dev/null 2>&1
+        targets=()
+        for d in "$home/Downloads" "$home/Desktop" /tmp; do [[ -d "$d" ]] && targets+=("$d"); done
+        infected=$(clamscan -r -i --no-summary --max-filesize=200M "${targets[@]}" 2> /dev/null | grep -c 'FOUND$' || true)
+        if (( infected > 0 )); then
+            finding high malware "ClamAV: $infected infected file(s) in Downloads, Desktop or /tmp" "Details: clamscan -r -i ~/Downloads ~/Desktop" ""
+        else
+            pass "ClamAV found nothing in Downloads, Desktop or /tmp"
+        fi
+    else
+        note "ClamAV isn't installed (sudo dnf install clamav clamav-freshclam)"
+    fi
+    # --- lynis: the broad hardening audit
+    if command -v lynis > /dev/null; then
+        lynis audit system --quick --no-colors --quiet > /dev/null 2>&1
+        index=$(awk -F= '/^hardening_index=/ { print $2 }' /var/log/lynis-report.dat 2> /dev/null)
+        [[ -n "$index" ]] && printf 'LYNIS|%s\n' "$index"
+        warns=$(grep -c '^warning\[\]=' /var/log/lynis-report.dat 2> /dev/null || true)
+        (( warns > 0 )) && note "Lynis: $warns warning(s), $(grep -c '^suggestion\[\]=' /var/log/lynis-report.dat) suggestion(s) (sudo lynis show details, or /var/log/lynis-report.dat)"
+    else
+        note "Lynis isn't installed (sudo dnf install lynis)"
+    fi
+}
+
+fix() {
+    case "$1" in
+        selinux)
+            setenforce 1
+            sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+            echo "SELinux is enforcing (now and after reboots)." ;;
+        firewall)
+            systemctl enable --now firewalld
+            echo "Firewall on." ;;
+        updates)
+            dnf upgrade -y --security
+            echo "Security updates installed." ;;
+        ssh)
+            install -d /etc/ssh/sshd_config.d
+            printf '# MK security fix\nPermitRootLogin no\nPasswordAuthentication no\n' > /etc/ssh/sshd_config.d/40-mk-hardening.conf
+            systemctl try-reload-or-restart sshd
+            echo "SSH: no root logins, keys only (undo: delete /etc/ssh/sshd_config.d/40-mk-hardening.conf)." ;;
+        permissions)
+            [[ -n "$home" && -d "$home" ]] || exit 1
+            chmod 700 "$home"
+            find "$home" -xdev -type f -perm -0002 -not -path '*/.cache/*' -exec chmod o-w {} +
+            echo "Home folder private; nobody else can change your files." ;;
+        *) echo "Unknown fix: $1" >&2; exit 2 ;;
+    esac
+}
+
+case "${1:-scan}" in
+    scan) scan ;;
+    fix) fix "${2:-}" ;;
+    *) echo "Usage: mk-security-scan [scan | fix NAME]" >&2; exit 2 ;;
+esac

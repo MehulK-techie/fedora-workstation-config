@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# mk security: a health check for this computer's security, with a score.
+#
+#   mk security            scan (asks for your fingerprint or password first)
+#   mk security fix NAME   apply one fix the report suggests
+#                          (selinux, firewall, updates, ssh, permissions)
+#
+# What it checks: SELinux, firewall, Secure Boot, disk encryption, waiting
+# security updates, accounts, SSH, what listens to the network, permissions in
+# your home folder, and, when installed, rkhunter and chkrootkit (rootkits),
+# ClamAV (viruses in Downloads, Desktop and /tmp) and Lynis (a broad
+# hardening audit). The scan itself is read-only; fixes run only when you ask.
+# The checks run as root through pkexec (/usr/local/libexec/mk-security-scan,
+# installed by setup.sh).
+set -uo pipefail
+
+HELPER=${MK_SECURITY_HELPER:-/usr/local/libexec/mk-security-scan}  # override: tests only
+if [[ -t 1 ]]; then
+    red=$'\e[38;5;203m' amber=$'\e[38;5;214m' yellow=$'\e[38;5;228m' green=$'\e[38;5;114m'
+    dim=$'\e[2m' bold=$'\e[1m' off=$'\e[0m'
+else
+    red='' amber='' yellow='' green='' dim='' bold='' off=''
+fi
+
+if [[ ! -x "$HELPER" ]]; then
+    echo "The scanner isn't installed yet. Run: ./setup.sh (from the MK repo)" >&2
+    exit 1
+fi
+
+case "${1:-scan}" in
+    fix)
+        name=${2:?Usage: mk security fix selinux|firewall|updates|ssh|permissions}
+        [[ "$name" =~ ^(selinux|firewall|updates|ssh|permissions)$ ]] || { echo "Unknown fix: $name" >&2; exit 2; }
+        exec pkexec "$HELPER" fix "$name"
+        ;;
+    scan) ;;
+    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Usage: mk security [scan | fix NAME]" >&2; exit 2 ;;
+esac
+
+echo "${bold}MK security check${off}  ${dim}(confirm it's you; the scan takes a minute or two)${off}"
+report=$(pkexec "$HELPER" scan) || { echo "Not confirmed, or the scan failed." >&2; exit 1; }
+
+score=100 lynis="" fixes=()
+passes=() findings=() notes=()
+while IFS="|" read -r kind a _ c d e; do
+    case "$kind" in
+        PASS) passes+=("$a") ;;
+        NOTE) notes+=("$a") ;;
+        LYNIS) lynis=$a ;;
+        FINDING)
+            case "$a" in
+                high) score=$(( score - 15 )); colour=$red; label="HIGH  " ;;
+                medium) score=$(( score - 7 )); colour=$amber; label="MEDIUM" ;;
+                *) score=$(( score - 2 )); colour=$yellow; label="LOW   " ;;
+            esac
+            findings+=("${colour}${label}${off}  ${bold}${c}${off}"$'\n'"        ${dim}${d}${off}")
+            [[ -n "$e" ]] && fixes+=("$e")
+            ;;
+    esac
+done <<< "$report"
+
+# With Lynis, the score blends in its hardening index (0-100).
+(( score < 0 )) && score=0
+if [[ -n "$lynis" ]]; then
+    score=$(( (score * 2 + lynis) / 3 ))
+fi
+if (( score >= 85 )); then colour=$green verdict="Good"
+elif (( score >= 65 )); then colour=$amber verdict="Fair: worth fixing the items below"
+else colour=$red verdict="Needs attention"
+fi
+
+echo
+printf '  Score  %s%s%d / 100%s  %s\n' "$colour" "$bold" "$score" "$off" "$verdict"
+[[ -n "$lynis" ]] && printf '  %s(includes Lynis hardening index %s)%s\n' "$dim" "$lynis" "$off"
+echo
+for f in "${findings[@]}"; do printf '  %s\n' "$f"; done
+(( ${#findings[@]} )) && echo
+for p in "${passes[@]}"; do printf '  %s✔%s %s\n' "$green" "$off" "$p"; done
+if (( ${#notes[@]} )); then
+    echo
+    for n in "${notes[@]}"; do printf '  %s• %s%s\n' "$dim" "$n" "$off"; done
+fi
+if (( ${#fixes[@]} )); then
+    echo
+    echo "${bold}Fix with:${off}"
+    printf '%s\n' "${fixes[@]}" | sort -u | sed 's/^/  /'
+fi

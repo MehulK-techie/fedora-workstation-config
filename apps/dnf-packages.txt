@@ -21,6 +21,13 @@ python3-pynacl
 python3-pillow
 # mk lock folder: encrypted folders (keys kept root-only, released after a fingerprint/password check)
 gocryptfs
+# mk security: hardening audit, rootkit checks, virus scanner (ClamAV's
+# definitions are about 200 MB; delete these lines to skip them)
+lynis
+rkhunter
+chkrootkit
+clamav
+clamav-freshclam
 # Compressed swap in RAM (Fedora's default; listed so it's never missing)
 zram-generator-defaults
 libcanberra-gtk3

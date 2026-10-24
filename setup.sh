@@ -138,6 +138,8 @@ fi
 install -m 644 "$SCRIPT_DIR/assets/polkit/io.github.mehulk.mk-lock.policy" /usr/share/polkit-1/actions/
 # Its root-only key store for locked folders (keys released after that check).
 install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-lock-key" /usr/local/libexec/mk-lock-key
+# mk security: its root half (read-only scan; fixes only when asked by name).
+install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-security-scan" /usr/local/libexec/mk-security-scan
 
 # Apps MK replaced: gThumb (Loupe, GNOME's image viewer, opens images now).
 REMOVE_PKGS=(gthumb)

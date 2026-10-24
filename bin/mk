@@ -662,6 +662,11 @@ case "${1:-help}" in
         esac
         ;;
 
+    security|scan)
+        shift
+        "$HOME/.local/bin/mk-security" "$@"
+        ;;
+
     speedtest)
         shift
         "$HOME/.local/bin/mk-speedtest" "$@"
@@ -767,6 +772,7 @@ KEYRING
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
         echo "  lock       Fingerprint before an app starts, or an encrypted folder: mk lock app NAME, mk lock ~/Folder"
         echo "  unlock     Open a locked folder (mk unlock ~/Folder) or stop locking an app (mk unlock app NAME)"
+        echo "  security   Security check with a score: firewall, updates, rootkits, viruses, Lynis (fix NAME applies a fix)"
         echo "  speedtest  Ping, download and upload speed"
         echo "  nap        Which unused apps App Nap paused under memory or CPU pressure"
         echo "  optimize   Free cached memory (ram) or switch to full speed (cpu)"

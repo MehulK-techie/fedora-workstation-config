@@ -136,8 +136,7 @@ export default class MKIndicatorExtension extends Extension {
         this._indicator.visible = !locked;
         this._timerPill?.setLocked(locked);
         this._sysMonitor?.setLocked(locked);
-        if (this._media?._button)
-            this._media._button.visible = !locked && Boolean(this._media._meta?.title);
+        this._media?.setLocked(locked);
         if (locked && this._dockGlow) {
             this._dockGlow.disable();
             this._dockGlow = null;

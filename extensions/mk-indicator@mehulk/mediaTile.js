@@ -46,6 +46,28 @@ export function mediaConf() {
     return out;
 }
 
+const ART_MAX = 5 * 1024 * 1024;
+
+// Only decode real images: PNG, JPEG or WebP, by their first bytes.
+function isImage(bytes) {
+    const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    return (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) ||
+        (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) ||
+        (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45);
+}
+
+function fileLooksLikeImage(path) {
+    try {
+        const stream = Gio.File.new_for_path(path).read(null);
+        const head = stream.read_bytes(16, null).get_data();
+        stream.close(null);
+        const info = Gio.File.new_for_path(path).query_info('standard::size,standard::type', 0, null);
+        return info.get_file_type() === Gio.FileType.REGULAR && info.get_size() <= ART_MAX && isImage(head);
+    } catch (e) {
+        return false;
+    }
+}
+
 const fmt = us => {
     const s = Math.max(0, Math.floor(us / 1e6));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -243,7 +265,7 @@ export class MediaTile {
                 const artist = (meta['xesam:artist'] ?? []).join(', ');
                 this._meta = {title, artist, length: meta['mpris:length'] ?? 0, track: meta['mpris:trackid'],
                     art: meta['mpris:artUrl']};
-                this._button.visible = Boolean(title);
+                this._button.visible = !this._locked && Boolean(title);
                 this._title.text = title;
                 this._artist.text = artist;
                 this._length.text = this._meta.length ? fmt(this._meta.length) : '';
@@ -294,19 +316,62 @@ export class MediaTile {
         }
         if (!url.startsWith('https://'))
             return;
-        this._session.send_and_read_async(Soup.Message.new('GET', url), GLib.PRIORITY_LOW, null, (s, res) => {
+        // Read at most 5 MB, and only if the server says it's an image.
+        const msg = Soup.Message.new('GET', url);
+        this._session.send_async(msg, GLib.PRIORITY_LOW, null, (s, res) => {
+            let input;
             try {
-                const bytes = s.send_and_read_finish(res);
-                GLib.file_set_contents(path, bytes.get_data());
+                input = s.send_finish(res);
+            } catch (e) {
+                return;
+            }
+            const type = msg.get_response_headers().get_content_type()[0] ?? '';
+            if (msg.get_status() !== Soup.Status.OK || !type.startsWith('image/')) {
+                input.close_async(GLib.PRIORITY_LOW, null, null);
+                return;
+            }
+            const chunks = [];
+            let size = 0;
+            const read = () => input.read_bytes_async(64 * 1024, GLib.PRIORITY_LOW, null, (st, r) => {
+                let bytes;
+                try {
+                    bytes = st.read_bytes_finish(r);
+                } catch (e) {
+                    return;
+                }
+                const n = bytes.get_size();
+                if (n > 0 && size + n <= ART_MAX) {
+                    chunks.push(bytes.get_data());
+                    size += n;
+                    read();
+                    return;
+                }
+                input.close_async(GLib.PRIORITY_LOW, null, null);
+                if (n > 0)
+                    return;  // larger than 5 MB: no art
+                const all = new Uint8Array(size);
+                let at = 0;
+                for (const c of chunks) {
+                    all.set(c, at);
+                    at += c.length;
+                }
+                if (!isImage(all))
+                    return;
+                try {
+                    GLib.file_set_contents(path, all);
+                } catch (e) {
+                    return;
+                }
                 if (this._artUrl === url)
                     this._setArt(path);
-            } catch (e) {
-                // no art: the tile still works
-            }
+            });
+            read();
         });
     }
 
     _setArt(path) {
+        if (!this._button || !fileLooksLikeImage(path))
+            return;
         let glow = '79,211,255';
         try {
             const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 48, 48, true);
@@ -343,15 +408,25 @@ export class MediaTile {
         this._elapsed.text = fmt(target);
     }
 
+    // Hidden on the lock screen, whatever the player does meanwhile.
+    setLocked(locked) {
+        this._locked = locked;
+        if (!this._button)
+            return;
+        if (locked)
+            this._button.menu.close();
+        this._button.visible = !locked && Boolean(this._meta?.title);
+    }
+
     _call(method) {
-        if (this._current) {
+        if (this._current && !this._locked) {
             this._bus.call(this._current, PATH, PLAYER, method, null, null, Gio.DBusCallFlags.NONE, 1000, null,
                 () => this._refresh());
         }
     }
 
     _raise() {
-        if (this._current) {
+        if (this._current && !this._locked) {
             this._bus.call(this._current, PATH, 'org.mpris.MediaPlayer2', 'Raise', null, null,
                 Gio.DBusCallFlags.NONE, 1000, null, null);
         }

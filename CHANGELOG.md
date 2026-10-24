@@ -82,6 +82,12 @@
 - Docs: `docs/GUIDE.md`, `docs/FACE-UNLOCK.md`, `docs/EXTENSIONS.md`, `docs/BUGS.md` (full audit), `CONTRIBUTING.md`.
 
 ### Changed
+- **Alt+Tab** is a compact card in the middle of the screen that appears at once (no full-screen grid, no fade, no 150 ms wait).
+- **Media tile:** the song title only, cut short with "…" (no scrolling); artist in the menu; More (album, player, outputs); fades out when playback stops.
+- **Welcome:** first start of a new day gets an energetic greeting, later starts that day a welcome back; birthday as `YYYY-MM-DD` too, with a once-a-day countdown (`BIRTHDAY_COUNTDOWN`).
+- **Focus timer:** type a time and press Enter; sound when done (Chime, Bell, Soft, Alarm clock, Silent); Surprise me never repeats the last scene.
+- **Notification clicks** bring that app's window forward instead of "is ready".
+- **Files:** Loupe and File Roller replace gThumb; touchpad two-finger right-click and scrolling; `systemd-rfkill` unmasked so Bluetooth state survives reboots.
 - Third-party extensions are no longer bundled (licensing); `extensions/` keeps only mk-indicator and WACK Shell.
 - Removed: the broken RPM spec, `close-workspace-apps`, `fix-alt-tab`.
 - `sync.sh` is the single source of desktop settings; `setup.sh` runs it as the desktop user.
@@ -91,6 +97,11 @@
 - Docs moved to `docs/`.
 
 ### Fixed
+- **Fingerprint on the lock screen:** `scripts/fingerprint-pam.sh` (run by setup) keeps `gdm-password` off the reader so it no longer competes with `gdm-fingerprint`; a login notice when the reader has forgotten your finger (on-chip readers reset by Windows Hello or firmware).
+- **Dock magnification** shows one layer: no unscaled halo under the magnified icon. The MacOS Dock extension is removed.
+- **MK Notes:** pasted or dropped images and files are attached (`![[name]]`), never pasted as `/home/…` paths; links open in the browser.
+- **Welcome menu** no longer grows off the screen: title choices fold into one row.
+- **Media tile:** Play/Pause and Open player work with players that refuse PlayPause or can't raise themselves on Wayland.
 - Stutter when minimizing or restoring with the 4-finger pinch: Magic Lamp played its genie after the gesture's own animation. `sync.sh` patches it to honour GNOME's skip-effect request.
 - WACK Shell logging an error and stack trace on every dock movement on GNOME 50.
 - Window titles in the overview hidden behind the dock: the dock still auto-hides on the desktop and now also fades out in the overview.

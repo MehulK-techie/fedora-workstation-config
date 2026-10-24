@@ -117,7 +117,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - **Smooth on any machine:** `mk effects lite` (or `auto` on weak hardware) turns off blur and window effects; `full` brings them back
 - **Focus timer:** type a time and press Enter, hides while it counts, a full-screen pixel celebration with a chime (or a sound you pick, or silence)
 - **Screensaver:** step away and a scene plays: a masked hero swinging over the city, a caped figure in the rain, or code rain decoding the time (`mk screensaver`)
-- **Window switcher:** Alt+Tab and three-finger swipes open a frosted grid of live windows; 1–9 sends a window to that desktop
+- **Window switcher:** Alt+Tab and three-finger swipes open a compact card of live windows at once; 1–9 sends a window to that desktop
 - **Top bar:** a system monitor with an internet speed test, and a media tile for Spotify or any player (album art, seek, choose speakers)
 - **A different greeting each time:** morning, Friday, your birthday, long time no see, or your own lines
 - **Make it yours:** rename it (`mk rename`), change any shortcut, app, extension or colour without touching code; see [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md). Hackers: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/REFERENCE.md](docs/REFERENCE.md)

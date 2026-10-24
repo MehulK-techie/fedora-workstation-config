@@ -30,7 +30,7 @@ Every command, file and format. How the parts fit together is in
 | `mk power [status\|on\|off]` | Smart power profiles on laptops |
 | `mk effects [full\|lite\|auto]` | Show or set the visual effects profile |
 | `mk screensaver [on \| off \| show [SCENE] \| scene NAME \| delay SECONDS \| list]` | Screensaver scenes when you step away |
-| `mk welcome variety on\|off` · `birthday MM-DD` · `lines` | A different greeting each time; a birthday greeting; edit your own lines |
+| `mk welcome variety on\|off` · `birthday [YYYY-]MM-DD` · `lines` | A different greeting each time; a birthday greeting and countdown; edit your own lines |
 | `mk accent [auto \| #rrggbb \| system on\|off \| status]` | Accent colour: from the wallpaper, or fixed; also sets GNOME's accent |
 | `mk rename "NAME" [TAG]` | Rename MK's windows, notifications and top-bar tag |
 | `mk check` | Notify if a new version of the repo is available (run daily by a timer) |
@@ -69,12 +69,12 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `config/gtk/files.css` | GTK 4 CSS scoped to `.nautilus-window` | `sync.sh` (marked block in `~/.config/gtk-4.0/gtk.css`) |
 | `assets/icons/*.svg`, `assets/applications/*.desktop` | App icons and launchers (`@BIN@` becomes `~/.local/bin`) | `sync.sh` |
 | `assets/sound/MK Laptop Speakers.json` | EasyEffects output preset | `mk sound` |
-| `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` (`auto` or `#rrggbb`), `TASKS` (pinned tasks and next reminder under the greeting) | mk-indicator, mk-voice |
+| `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` (`auto` or `#rrggbb`), `TASKS` (pinned tasks and next reminder under the greeting), `VARIETY`, `BIRTHDAY` (`MM-DD` or `YYYY-MM-DD`), `BIRTHDAY_COUNTDOWN` (on/off) | mk-indicator, mk-voice |
 | `config/theme.conf` | `ACCENT=` (`auto` or `#rrggbb`), `SYSTEM_ACCENT=` (on/off), `CURSOR=` (cursor theme) | mk-indicator (`accent.js`), `mk accent`, `sync.sh` |
 | `config/notes.conf` | `NOTES_DIR=`, `SYNC=`, `SYNC_PORT=`, `HISTORY=`; look: `THEME=`, `FONT=`, `FONT_SIZE=`, `WIDTH=`, `SPACING=`, `FORMAT_BAR=`, `OPEN_IN=`, `SORT=` | `mk-notes` (Preferences writes them) |
 | `config/monitor.conf` | `PANEL=` (cpu, mem, temp, net, power), `INTERVAL=` (s) | mk-indicator system monitor |
 | `config/screensaver.conf` | `SCREENSAVER=` (on/off), `DELAY=` (s, 30+), `SCENE=` (random, aurora, web, knight, matrix) | `mk-screensaver`, `mk screensaver` |
-| `config/media.conf` | `MEDIA=` (on/off), `TICKER=` (on/off) | mk-indicator media tile |
+| `config/media.conf` | `MEDIA=` (on/off), `TICKER=` (on/off: the song title beside the record) | mk-indicator media tile |
 | `config/greetings.conf` | `[section]` then one greeting per line; sections morning, afternoon, evening, night, monday, friday, weekend, return, long, birthday, newyear, any | mk-indicator, `mk-voice prepare` (yours: `~/.config/mk-workstation/greetings.conf`) |
 | `config/browser/zen-userChrome.css` | CSS with `@ACCENT@` | `sync.sh` (marked block in each Zen profile's `chrome/userChrome.css`) |
 | `config/browser/user.js` | Firefox prefs (`user_pref(...)`) | `sync.sh` (marked block in each Firefox / Zen profile's `user.js`) |

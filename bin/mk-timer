@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """MK focus timer: a glowing countdown ring, and a little pixel celebration
-instead of an alarm sound when the time is up.
+with a sound of your choice (or none) when the time is up.
 
   mk-timer                 pick a time
   mk-timer 25              start 25 minutes now
@@ -98,7 +98,7 @@ def idle_inhibited():
 
 
 def load_prefs():
-    prefs = {"SILENCE": "1", "AMBIENT": "1", "AMBIENT_IDLE": "45", "AMBIENT_STYLE": "random"}
+    prefs = {"SILENCE": "1", "AMBIENT": "1", "AMBIENT_IDLE": "45", "AMBIENT_STYLE": "random", "SOUND": "chime"}
     try:
         for line in PREFS.read_text().splitlines():
             if "=" in line and not line.startswith("#"):
@@ -192,10 +192,13 @@ def fmt(seconds):
 
 
 def parse_duration(text):
-    """'25' -> 25 min, '1:30' -> 1 min 30 s, '90s' -> 90 s."""
-    text = text.strip().lower()
+    """'25' or '25m' -> 25 min, '1:30' -> 1 min 30 s, '90s' -> 90 s."""
+    text = text.strip().lower().replace(" ", "")
     if text.endswith("s") and text[:-1].isdigit():
         return int(text[:-1])
+    for unit in ("min", "m"):
+        if text.endswith(unit) and text[:-len(unit)].isdigit():
+            return int(text[:-len(unit)]) * 60
     if ":" in text:
         m, s = text.split(":", 1)
         return int(m) * 60 + int(s)
@@ -214,6 +217,31 @@ def draw_text(cr, text, font, x, y, rgba, center=True):
 
 # The focus screen's scene (lib/mkworkstation/scenes.py, shared with mk-screensaver).
 AMBIENT_STYLES = (("random", "Surprise me"),) + tuple((name, cls.label) for name, cls in scenes.SCENES.items())
+
+# The sound when the time is up: GNOME's own sounds (sound-theme-freedesktop).
+SOUND_DIR = Path("/usr/share/sounds/freedesktop/stereo")
+SOUNDS = (("none", "Silent", None), ("chime", "Chime", "complete.oga"), ("bell", "Bell", "bell.oga"),
+          ("soft", "Soft", "message.oga"), ("alarm", "Alarm clock", "alarm-clock-elapsed.oga"))
+
+
+def play_sound(key):
+    """Play a SOUNDS entry in the background; quietly nothing if it can't."""
+    name = next((file for k, _, file in SOUNDS if k == key), None)
+    if not name or not (SOUND_DIR / name).is_file():
+        return
+    for player in (["pw-play"], ["paplay"], ["canberra-gtk-play", "-f"]):
+        try:
+            Gio.Subprocess.new(player + [str(SOUND_DIR / name)],
+                               Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE)
+            return
+        except GLib.Error:
+            continue
+
+
+def surprise(last):
+    """Surprise me: any scene but the one shown last time."""
+    names = [name for name in scenes.SCENES if name != last] or list(scenes.SCENES)
+    return random.choice(names)
 
 
 class TimerWindow(Adw.ApplicationWindow):
@@ -252,6 +280,14 @@ class TimerWindow(Adw.ApplicationWindow):
         title = Gtk.Label(label="How long do you want to focus?")
         title.add_css_class("title-3")
         box.append(title)
+
+        # Focused when the window opens: type a time and press Enter, no
+        # clicking. 25 = 25 min, 1:30 = 1 min 30 s, 90s = 90 s.
+        self.duration_entry = Gtk.Entry(placeholder_text="Type a time: 25, 1:30 or 90s, then Enter",
+                                        halign=Gtk.Align.CENTER, width_chars=34, xalign=0.5)
+        self.duration_entry.connect("activate", lambda *_: self._on_duration_typed())
+        self.duration_entry.connect("changed", lambda e: e.remove_css_class("error"))
+        box.append(self.duration_entry)
 
         spins = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER)
         self.min_spin = self._spin(0, 600, 25)
@@ -301,6 +337,15 @@ class TimerWindow(Adw.ApplicationWindow):
         self.ambient_switch.bind_property("active", style_row, "sensitive",
                                           GObject.BindingFlags.SYNC_CREATE)
         box.append(style_row)
+        sound_row = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER)
+        sound_row.append(Gtk.Label(label="Sound when done"))
+        self.sound_drop = Gtk.DropDown.new_from_strings([label for _, label, _ in SOUNDS])
+        sound_keys = [key for key, _, _ in SOUNDS]
+        current = self.prefs.get("SOUND", "chime")
+        self.sound_drop.set_selected(sound_keys.index(current) if current in sound_keys else 1)
+        self.sound_drop.connect("notify::selected", self._on_sound_chosen)
+        sound_row.append(self.sound_drop)
+        box.append(sound_row)
 
         self.start_btn = Gtk.Button(label="Start", halign=Gtk.Align.CENTER)
         self.start_btn.add_css_class("suggested-action")
@@ -309,6 +354,7 @@ class TimerWindow(Adw.ApplicationWindow):
         box.append(self.start_btn)
         for spin in (self.min_spin, self.sec_spin):
             spin.connect("value-changed", self._update_start_sensitive)
+            spin.connect("activate", lambda *_: self._on_start())
         return box
 
     def _build_run(self):
@@ -441,6 +487,11 @@ class TimerWindow(Adw.ApplicationWindow):
         self.prefs["AMBIENT_STYLE"] = AMBIENT_STYLES[drop.get_selected()][0]
         save_prefs(self.prefs)
 
+    def _on_sound_chosen(self, drop, _param):
+        self.prefs["SOUND"] = SOUNDS[drop.get_selected()][0]
+        save_prefs(self.prefs)
+        play_sound(self.prefs["SOUND"])  # a preview of the choice
+
     def _on_silence_toggled(self, switch, _param):
         self.prefs["SILENCE"] = "1" if switch.get_active() else "0"
         save_prefs(self.prefs)
@@ -471,10 +522,17 @@ class TimerWindow(Adw.ApplicationWindow):
             self.close()
         else:
             self.stack.set_visible_child_name(page)
+            if page == "setup":
+                self.duration_entry.grab_focus()
 
     def enter_ambient(self):
         self._ambient_since = time.monotonic()
         style = self.prefs.get("AMBIENT_STYLE", "random")
+        if style not in scenes.SCENES:
+            # Surprise me: a different scene from last time, remembered across runs.
+            style = surprise(self.prefs.get("LAST_SCENE"))
+            self.prefs["LAST_SCENE"] = style
+            save_prefs(self.prefs)
         # Aurora is the classic focus screen with the big ring; the others are
         # the screensaver scenes with a small countdown.
         self._scene = None if style == "aurora" else scenes.pick(style)
@@ -553,6 +611,7 @@ class TimerWindow(Adw.ApplicationWindow):
         self.set_visible(True)
         self.fullscreen()
         self.scene.add_tick_callback(self._scene_tick)
+        play_sound(self.prefs.get("SOUND", "chime"))
         app = self.get_application()
         note = Gio.Notification.new("Time's up!")
         note.set_body(f"{self.task or 'Focus session'} · {fmt(self.total)} done")
@@ -582,9 +641,25 @@ class TimerWindow(Adw.ApplicationWindow):
         self.start_btn.set_sensitive(total > 0)
 
     def _on_start(self):
+        if self.duration_entry.get_text().strip():
+            self._on_duration_typed()
+            return
+        for spin in (self.min_spin, self.sec_spin):
+            spin.update()  # a number typed into a box counts without leaving it
         total = self.min_spin.get_value_as_int() * 60 + self.sec_spin.get_value_as_int()
         if total > 0:
             self.start(total, self.task_entry.get_text())
+
+    def _on_duration_typed(self):
+        try:
+            total = parse_duration(self.duration_entry.get_text())
+        except ValueError:
+            total = 0
+        if not 0 < total <= 600 * 60:
+            self.duration_entry.add_css_class("error")
+            return
+        self.duration_entry.set_text("")
+        self.start(total, self.task_entry.get_text())
 
     def _on_key(self, _ctrl, keyval, _code, _state):
         page = self.stack.get_visible_child_name()
@@ -910,6 +985,8 @@ class TimerApp(Adw.Application):
                 return
         self.window.set_visible(True)
         self.window.present()
+        if self.window.stack.get_visible_child_name() == "setup":
+            self.window.duration_entry.grab_focus()
 
 
 def main():

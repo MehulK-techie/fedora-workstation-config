@@ -61,6 +61,7 @@ closes it without saving.
 | Heading | Ctrl+H cycles through `#`, `##` and `###` |
 | Checklist | Ctrl+L. Enter continues the list, and Enter on an empty item ends it |
 | Link to another note | Ctrl+K, or type `[[Note name]]`. A link to a note that doesn't exist yet creates it when you click the link |
+| Open a link while editing | Ctrl+click a web address or `[[link]]`. Web links open in your default browser (as `xdg-open` does) |
 | Embed | `![[image.png]]` for a picture, `![[Other note]]` for another note's text |
 | Tags | `#project`. Nested tags work too: `#project/apollo` |
 | Callouts | `> [!note] Title`. Other kinds: `tip`, `warning`, `danger`, `question`. `> [!tip]- Title` folds closed, `> [!tip]+ Title` folds open |
@@ -71,7 +72,11 @@ closes it without saving.
 
 ## Screenshots, pictures and drawings
 
-- **Paste:** Ctrl+V pastes an image from the clipboard, or files copied in Files.
+- **Paste:** Ctrl+V pastes an image from the clipboard (screenshots, "Copy
+  image" in a browser), or files copied in Files. A copied file path or
+  `file://` address is attached as the file itself, not pasted as text. The
+  note gets `![[name.png]]`, which shows the picture in Read and in Edit with
+  preview.
 - **Capture:** the camera button (Ctrl+Shift+S) hides the window while you pick
   an area, then puts the picture in your note.
 - **Drop:** drag files onto the editor.
@@ -203,7 +208,6 @@ same key.
 
 - iPhone app. The browser version works on an iPhone, but there's no App
   Store build.
-- Encrypted sync, or sync over the internet. Sync works on the same Wi-Fi
-  only.
+- Sync over the internet. Sync works on the same Wi-Fi only.
 - Password-locked notes.
 - Plugins and Canvas (a whiteboard of cards).

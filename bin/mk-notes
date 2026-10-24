@@ -46,6 +46,18 @@ _add_lib_path()
 from mkworkstation import notes as nv  # noqa: E402
 from mkworkstation import notes_sync  # noqa: E402
 
+
+def open_uri(uri):
+    """Web and mail links: your default browser or mail app (xdg-open)."""
+    try:
+        Gio.AppInfo.launch_default_for_uri(uri, None)
+    except GLib.Error:
+        try:
+            Gio.Subprocess.new(["xdg-open", uri], Gio.SubprocessFlags.NONE)
+        except GLib.Error:
+            pass
+
+
 APP_ID = "io.github.mehulk.MkNotes"
 COLORS = [("Red", "#ff6b6b"), ("Orange", "#ffa94d"), ("Yellow", "#ffd43b"),
           ("Green", "#51cf66"), ("Blue", "#4dabf7"), ("Purple", "#b197fc")]
@@ -714,9 +726,16 @@ class NotesWindow(Adw.ApplicationWindow):
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self._on_editor_key)
         self.view.add_controller(keys)
+        # Capture phase: ahead of the text view's own drop handling, which
+        # would insert a dragged file's path as text.
         drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        drop.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         drop.connect("drop", self._on_drop)
         self.view.add_controller(drop)
+        # Ctrl+click a web address or [[link]] in the editor to open it.
+        link_click = Gtk.GestureClick(button=1)
+        link_click.connect("released", self._on_editor_click)
+        self.view.add_controller(link_click)
         # The text keeps a comfortable line length however wide the window is.
         self.clamp = Adw.ClampScrollable(child=self.view, maximum_size=760, tightening_threshold=600)
         self.editor_scroll = Gtk.ScrolledWindow(child=self.clamp, vexpand=True, hexpand=True)
@@ -1288,25 +1307,102 @@ class NotesWindow(Adw.ApplicationWindow):
         name = Path(rel).name
         self.insert(f"\n![[{name}]]\n" if image else f"![[{name}]]")
 
+    # Paste, best first: copied files (Files, the file chooser), then an
+    # image (screenshots, "Copy image" in a browser, which also offers the
+    # image's address as text), then text. Text that is nothing but paths or
+    # file:// addresses of existing files attaches those files, so a copied
+    # file never lands in the note as "/home/…/Image.png".
     def _on_paste(self, view):
         clipboard = self.get_clipboard()
         formats = clipboard.get_formats()
+        view.stop_emission_by_name("paste-clipboard")
         if formats.contain_gtype(Gdk.FileList):
-            view.stop_emission_by_name("paste-clipboard")
-            clipboard.read_value_async(Gdk.FileList, GLib.PRIORITY_DEFAULT, None,
-                                       lambda c, res: self._add_files(c.read_value_finish(res).get_files()))
-        elif formats.contain_gtype(Gdk.Texture) and not formats.contain_mime_type("text/plain"):
-            view.stop_emission_by_name("paste-clipboard")
-
+            def got_files(c, res):
+                try:
+                    self._add_files(c.read_value_finish(res).get_files())
+                except GLib.Error:
+                    self._paste_text(c)
+            clipboard.read_value_async(Gdk.FileList, GLib.PRIORITY_DEFAULT, None, got_files)
+        elif formats.contain_gtype(Gdk.Texture):
             def got(c, res):
                 try:
                     texture = c.read_texture_finish(res)
                 except GLib.Error:
+                    self._paste_text(c)
                     return
                 rel = self.vault.save_attachment(texture.save_to_png_bytes().get_data(), ".png")
                 self._insert_attachment(rel)
                 self.toast.add_toast(Adw.Toast(title="Image pasted", timeout=2))
             clipboard.read_texture_async(None, got)
+        else:
+            self._paste_text(clipboard)
+
+    def _paste_text(self, clipboard):
+        def got(c, res):
+            try:
+                text = c.read_text_finish(res)
+            except GLib.Error:
+                return
+            if not text:
+                return
+            files = self._files_in_text(text)
+            if files:
+                self._add_files(files)
+            elif self.view.get_editable():
+                self.buffer.begin_user_action()
+                self.buffer.delete_selection(True, True)
+                self.buffer.insert_interactive_at_cursor(text, -1, True)
+                self.buffer.end_user_action()
+                self.view.scroll_mark_onscreen(self.buffer.get_insert())
+        clipboard.read_text_async(None, got)
+
+    @staticmethod
+    def _files_in_text(text):
+        """Gio.Files when every line is a path or file:// address of an existing file."""
+        lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+        if not lines or len(lines) > 50:
+            return []
+        files = []
+        for line in lines:
+            if line.startswith("file://"):
+                gfile = Gio.File.new_for_uri(line)
+            elif line.startswith(("/", "~/")):
+                gfile = Gio.File.new_for_path(os.path.expanduser(line))
+            else:
+                return []
+            path = gfile.get_path()
+            if not path or not os.path.isfile(path):
+                return []
+            files.append(gfile)
+        return files
+
+    def _on_editor_click(self, gesture, _n, x, y):
+        if not gesture.get_current_event_state() & Gdk.ModifierType.CONTROL_MASK:
+            return
+        bx, by = self.view.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(x), int(y))
+        ok, where = self.view.get_iter_at_location(bx, by)
+        if not ok:
+            return
+        line_start = where.copy()
+        line_start.set_line_offset(0)
+        line_end = where.copy()
+        if not line_end.ends_line():
+            line_end.forward_to_line_end()
+        line = self.buffer.get_text(line_start, line_end, True)
+        column = where.get_line_offset()
+        for match in re.finditer(r"\[\[([^\]|#]+)[^\]]*\]\]|(https?://|mailto:)[^\s<>()\[\]]+", line):
+            if match.start() <= column <= match.end():
+                if match.group(1):
+                    target = match.group(1).strip()
+                    rel = self.vault.resolve(target)
+                    if not rel:
+                        rel = self.vault.create("", target)
+                        self.refresh()
+                    self.open_note(rel)
+                else:
+                    open_uri(match.group(0).rstrip(".,;:!?'\""))
+                gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+                return
 
     def _on_drop(self, _target, value, _x, _y):
         self._add_files(value.get_files())
@@ -1580,7 +1676,9 @@ class NotesWindow(Adw.ApplicationWindow):
                            self.vault.path(self.rel).parent.as_uri() + "/")
 
     def _on_policy(self, _web, decision, kind):
-        if kind != WebKit.PolicyDecisionType.NAVIGATION_ACTION:
+        # NEW_WINDOW_ACTION: links meant for a new tab (middle click,
+        # target=_blank); they open in the browser the same way.
+        if kind not in (WebKit.PolicyDecisionType.NAVIGATION_ACTION, WebKit.PolicyDecisionType.NEW_WINDOW_ACTION):
             return False
         uri = decision.get_navigation_action().get_request().get_uri()
         if uri.startswith(("about:", "file:")) and decision.get_navigation_action().get_navigation_type() == WebKit.NavigationType.OTHER:
@@ -1596,7 +1694,7 @@ class NotesWindow(Adw.ApplicationWindow):
         elif uri.startswith("mktag:"):
             self.search.set_text(f"tag:{uri[6:]}")
         elif uri.startswith(("http:", "https:", "mailto:")):
-            Gio.AppInfo.launch_default_for_uri(uri, None)
+            open_uri(uri)
         elif uri.startswith("file:"):
             self._open_attachment(Gio.File.new_for_uri(uri))
         return True

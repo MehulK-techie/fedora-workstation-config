@@ -15,6 +15,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { accentRGB } from './accent.js';
+import { InternetSection } from './speedTest.js';
 
 const USER_CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'monitor.conf']);
 const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'monitor.conf']);
@@ -270,8 +271,8 @@ export class SystemMonitor {
         };
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._rows.temp = new Row(menu, 'Temperatures');
-        this._rows.net = new Row(menu, 'Network');
         this._rows.power = new Row(menu, 'Battery');
+        this._internet = new InternetSection(menu);
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Busiest right now'));
         this._procRows = [0, 1, 2, 3, 4].map(() => new Row(menu, ''));
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -341,6 +342,7 @@ export class SystemMonitor {
         this._text.text = parts.join('  ');
         this._spark.visible = this._conf.PANEL.includes('cpu');
         this._spark.queue_repaint();
+        this._internet?.feed(s.down, s.up);
         if (open)
             this._fillMenu(s);
     }
@@ -369,7 +371,6 @@ export class SystemMonitor {
         const temps = [['CPU', s.cpuTemp], ['GPU', s.gpuTemp], ['SSD', s.ssdTemp]].filter(t => t[1]);
         r.temp.hide(!temps.length);
         r.temp.set(temps.map(([n, t]) => `${n} ${Math.round(t)}°`).join('   '));
-        r.net.set(`↓ ${fmtRate(s.down)}   ↑ ${fmtRate(s.up)}`);
         r.power.hide(s.battery === undefined);
         if (s.battery !== undefined) {
             const draw = s.power ? ` · ${s.power.toFixed(1)} W` : '';
@@ -418,6 +419,8 @@ export class SystemMonitor {
         this._monitor = null;
         if (this._openId)
             this._button?.menu.disconnect(this._openId);
+        this._internet?.destroy();
+        this._internet = null;
         this._button?.destroy();
         this._button = null;
         this._sampler = null;

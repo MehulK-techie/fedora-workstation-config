@@ -17,8 +17,10 @@
 
 How sure you can be:
   * Folders are really encrypted: the files on disk are unreadable without
-    the key. The key is kept in your login keyring, and opening a folder
-    asks for your fingerprint or password first (polkit).
+    the key. The key is kept by root (mk-lock-key, /var/lib/mk-lock), and
+    hands it out only after polkit asks for your fingerprint or password, so
+    other programs in your unlocked session can't open the folder either.
+    While a folder is open, anything running as you can read its files.
   * Apps are a gate, not a vault: the app's launcher (app grid, dock, search)
     asks first. Someone at your unlocked desktop could still start the
     program from a terminal, and an app that's already running just comes
@@ -37,6 +39,7 @@ import tempfile
 from pathlib import Path
 
 ACTION = "io.github.mehulk.mk-lock.unlock"
+KEY_HELPER = "/usr/local/libexec/mk-lock-key"
 HOME = Path.home()
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "mk-workstation"
 DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
@@ -210,17 +213,29 @@ def cipher_dir(path):
     return path.parent / f".{path.name}.mklock"
 
 
+def key_helper(action, path, key=None):
+    """The root-only key store, through pkexec: polkit asks for your
+    fingerprint or password before it runs (every time)."""
+    if not os.path.exists(KEY_HELPER):
+        die("The mk-lock key store isn't installed yet. Run: ./setup.sh")
+    result = subprocess.run(["pkexec", KEY_HELPER, action, str(path)], input=key,
+                            capture_output=True, text=True)
+    if result.returncode in (126, 127):
+        die("Not confirmed; nothing changed.")
+    if result.returncode != 0:
+        die(f"Key store: {result.stderr.strip() or 'failed'}")
+    return result.stdout
+
+
 def key_store(path, key):
-    subprocess.run(["secret-tool", "store", "--label", f"MK lock: {path}", "mk-lock-path", str(path)],
-                   input=key, text=True, check=True)
+    key_helper("store", path, key)
 
 
 def key_lookup(path):
-    result = subprocess.run(["secret-tool", "lookup", "mk-lock-path", str(path)],
-                            capture_output=True, text=True)
-    if result.returncode != 0 or not result.stdout:
-        die(f"The key for {path} isn't in your keyring (is the keyring unlocked?)")
-    return result.stdout
+    key = key_helper("get", path)
+    if not key:
+        die(f"No key stored for {path}.")
+    return key
 
 
 def is_open(path):
@@ -238,9 +253,9 @@ def unmount(path):
 
 
 def need_tools():
-    for tool in ("gocryptfs", "secret-tool", "fusermount3"):
+    for tool in ("gocryptfs", "pkexec", "fusermount3"):
         if not shutil.which(tool):
-            die(f"{tool} isn't installed. Run: ./setup.sh (or sudo dnf install gocryptfs libsecret fuse3)")
+            die(f"{tool} isn't installed. Run: ./setup.sh (or sudo dnf install gocryptfs polkit fuse3)")
 
 
 def folder_add(path):
@@ -254,10 +269,10 @@ def folder_add(path):
     if not answer.lower().startswith("y"):
         return
     key = base64.b64encode(secrets.token_bytes(32)).decode()
+    key_store(path, key)  # asks for your fingerprint or password; keeps the key root-only
     cipher = cipher_dir(path)
     cipher.mkdir()
     subprocess.run(["gocryptfs", "-q", "-init", "-passfile", "/dev/stdin", str(cipher)], input=key, text=True, check=True)
-    key_store(path, key)
     with tempfile.TemporaryDirectory(prefix=".mklock-", dir=path.parent) as tmp:
         mount(path, key, tmp)
         try:
@@ -284,10 +299,9 @@ def folder_open(path):
         return
     if not cipher_dir(path).is_dir():
         die(f"{path} isn't a locked folder.")
-    if not confirm_identity():
-        die("Not confirmed; the folder stays closed.")
+    key = key_lookup(path)  # polkit asks for your fingerprint or password here
     path.mkdir(exist_ok=True)
-    mount(path, key_lookup(path))
+    mount(path, key)
     print(f"✔ {path} is open. Close it with: mk lock close {path}")
 
 
@@ -303,9 +317,7 @@ def folder_remove(path):
     need_tools()
     if not cipher_dir(path).is_dir():
         die(f"{path} isn't a locked folder.")
-    if not confirm_identity():
-        die("Not confirmed; nothing changed.")
-    key = key_lookup(path)
+    key = key_lookup(path)  # polkit asks for your fingerprint or password here
     if is_open(path):
         unmount(path)
     with tempfile.TemporaryDirectory(prefix=".mklock-", dir=path.parent) as tmp:
@@ -318,7 +330,7 @@ def folder_remove(path):
     if not same:
         die(f"The decrypted copy didn't match; the encrypted store {cipher_dir(path)} was kept.")
     shutil.rmtree(cipher_dir(path))
-    subprocess.run(["secret-tool", "clear", "mk-lock-path", str(path)], check=False)
+    key_helper("delete", path)
     write_list(FOLDERS_FILE, [f for f in read_list(FOLDERS_FILE) if f != str(path)])
     print(f"✔ {path} is a normal folder again.")
 

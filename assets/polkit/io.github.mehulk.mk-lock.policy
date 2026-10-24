@@ -16,4 +16,17 @@
       <allow_active>auth_self</allow_active>
     </defaults>
   </action>
+  <!-- The key of a locked folder: mk-lock-key (root-only key store) runs only
+       after you confirm it's you, and hands out only your own keys. -->
+  <action id="io.github.mehulk.mk-lock.key">
+    <description>Open a locked folder</description>
+    <message>Confirm it's you to open this locked folder</message>
+    <icon_name>changes-prevent-symbolic</icon_name>
+    <defaults>
+      <allow_any>auth_self</allow_any>
+      <allow_inactive>auth_self</allow_inactive>
+      <allow_active>auth_self</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/libexec/mk-lock-key</annotate>
+  </action>
 </policyconfig>

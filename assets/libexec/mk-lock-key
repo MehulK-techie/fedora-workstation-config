@@ -1,0 +1,29 @@
+#!/bin/bash
+# mk-lock-key: keeps the keys of folders locked with `mk lock`, readable by
+# root only (/var/lib/mk-lock/UID/, 0600). Runs through pkexec, so polkit asks
+# for the caller's fingerprint or password (auth_self, every time) before a key
+# is handed out. Programs in an unlocked session can't read keys without that.
+#   pkexec /usr/local/libexec/mk-lock-key get|store|delete PATH
+# (store reads the key on stdin). Keys are per user: the caller's own only.
+set -euo pipefail
+uid=${PKEXEC_UID:-}
+if [[ ! "$uid" =~ ^[0-9]+$ ]]; then
+    echo "mk-lock-key: run it through pkexec" >&2
+    exit 2
+fi
+action=${1:-}
+path=${2:-}
+[[ -n "$path" ]] || { echo "Usage: mk-lock-key get|store|delete PATH" >&2; exit 2; }
+dir=/var/lib/mk-lock/$uid
+# The folder's path only names the key file (hashed): no path reaches the disk.
+file="$dir/$(printf '%s' "$path" | sha256sum | cut -c1-64).key"
+case "$action" in
+    get) cat "$file" ;;
+    store)
+        install -d -m 700 -o root -g root /var/lib/mk-lock "$dir"
+        umask 077
+        head -c 4096 > "$file"
+        ;;
+    delete) rm -f "$file" ;;
+    *) echo "Usage: mk-lock-key get|store|delete PATH" >&2; exit 2 ;;
+esac

@@ -195,7 +195,7 @@ guest_off() {
     systemctl disable mk-guest-reset.service > /dev/null 2>&1 || true
     rm -f "$UNIT" "$RESET" "$LOGIND_DROPIN" "$SSHD_DROPIN" "$POLKIT_RULE"
     for deny in /etc/cron.deny /etc/at.deny; do
-        [[ -f "$deny" ]] && sed -i "/^$GUEST\$/d" "$deny"
+        if [[ -f "$deny" ]]; then sed -i "/^$GUEST\$/d" "$deny"; fi
     done
     systemctl try-reload-or-restart sshd.service 2> /dev/null || true
     systemctl daemon-reload

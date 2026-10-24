@@ -16,6 +16,7 @@ python3-markdown
 python3-weasyprint
 python3-qrcode
 python3-pygments
+python3-pynacl
 libcanberra-gtk3
 wl-clipboard
 grim

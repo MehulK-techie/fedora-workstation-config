@@ -198,16 +198,52 @@ function uniquePath(folder, title) {
 }
 
 // ---------- sync ----------
+// With the laptop's encryption on (PyNaCl), messages both ways are sealed
+// with a key derived from the pairing key (NaCl secretbox, via tweetnacl).
+function secretKey() {
+  return nacl.hash(new TextEncoder().encode(S.key)).slice(0, 32);
+}
+function seal(bytes) {
+  const nonce = nacl.randomBytes(24);
+  const box = nacl.secretbox(bytes, nonce, secretKey());
+  const out = new Uint8Array(24 + box.length);
+  out.set(nonce);
+  out.set(box, 24);
+  return out;
+}
+function open_(bytes) {
+  const plain = nacl.secretbox.open(bytes.slice(24), bytes.slice(0, 24), secretKey());
+  if (!plain) throw new Error('could not decrypt (pair this phone again)');
+  return plain;
+}
+
 async function api(method, path, body) {
+  if (body !== undefined && S.encrypted) {
+    const raw = typeof body === 'string' ? new TextEncoder().encode(body) : new Uint8Array(await body.arrayBuffer());
+    body = new Blob([seal(raw)]);
+  }
   const stamp = String(Math.floor(Date.now() / 1000)) + '', nonce = Math.random().toString(36).slice(2, 8);
   path += (path.includes('?') ? '&' : '?') + 'n=' + nonce;  // two requests in one second still differ
   const bytes = body === undefined ? new Uint8Array() : typeof body === 'string' ? new TextEncoder().encode(body)
     : new Uint8Array(await body.arrayBuffer());
   const sig = hmacSha1(S.key, `${method} /${path} ${stamp} ${hex(sha1(bytes))}`);
-  const res = await fetch(S.server + path, {method, body, headers: {'X-MK-Time': stamp, 'X-MK-Sig': sig}, cache: 'no-store'});
+  const headers = {'X-MK-Time': stamp, 'X-MK-Sig': sig};
+  if (body !== undefined && S.encrypted) headers['X-MK-Enc'] = '1';
+  const res = await fetch(S.server + path, {method, body, headers, cache: 'no-store'});
   if (res.status === 401) throw new Error('This phone isn\'t paired: open Settings');
   if (!res.ok && res.status !== 409) throw new Error(`Laptop said ${res.status}`);
-  return res;
+  // Read once, decrypt if sealed, and offer the usual json/text/blob.
+  const sealed = res.headers.get('X-MK-Enc') === '1';
+  if (res.ok) S.encrypted = sealed;
+  let data = new Uint8Array(await res.arrayBuffer());
+  if (sealed) data = open_(data);
+  const type = sealed ? '' : res.headers.get('Content-Type') || '';
+  return {
+    status: res.status,
+    json: async () => JSON.parse(new TextDecoder().decode(data)),
+    text: async () => new TextDecoder().decode(data),
+    blob: async () => new Blob([data], type ? {type} : {}),
+  };
 }
 
 async function sync(quiet = true) {
@@ -269,7 +305,7 @@ async function sync(quiet = true) {
     S.pinned = manifest.pinned || []; S.colors = manifest.colors || {};
     await DB.setKV('pinned', S.pinned); await DB.setKV('colors', S.colors);
     await DB.setKV('lastSync', Date.now());
-    status(`Synced ${when(Date.now())}`);
+    status(`Synced ${when(Date.now())}${S.encrypted ? ' · encrypted' : ' · not encrypted (laptop: install python3-pynacl)'}`);
     if (!quiet) toast('Synced with your laptop');
   } catch (e) {
     status(navigator.onLine ? `Not synced: ${e.message.includes('fetch') ? 'laptop not reachable' : e.message}` : 'Offline: changes are kept on the phone');

@@ -6,6 +6,12 @@ in ~/.config/mk-workstation/notes-token (shown as a QR code in MK Notes ›
 Phone). It runs while MK Notes runs with Phone sync on, or with
 `mk-notes --serve`.
 
+With PyNaCl installed (python3-pynacl), every API message both ways is also
+encrypted (NaCl secretbox, XSalsa20-Poly1305, key = first 32 bytes of
+SHA-512 of the pairing key) and marked X-MK-Enc: 1; the phone uses the same
+with tweetnacl. Without it, sync still works, signed but readable on the
+Wi-Fi, and the phone shows that.
+
 Every API request is signed with the key (HMAC-SHA1 of "METHOD PATH TIME
 BODY-SHA1" in X-MK-Sig, the time in X-MK-Time), so nothing can be changed on
 the way; the key itself never crosses the network and
@@ -35,6 +41,14 @@ from urllib.parse import parse_qs, urlparse
 
 from . import notes
 
+try:
+    from nacl.encoding import RawEncoder
+    from nacl.exceptions import CryptoError
+    from nacl.hash import sha512
+    from nacl.secret import SecretBox
+except ImportError:  # sync still works, unencrypted (signed)
+    SecretBox = None
+
 TOKEN_FILE = notes.CONFIG_DIR / "notes-token"
 MAX_UPLOAD = 50 * 1024 * 1024
 CLOCK_SKEW = 600  # seconds a phone's clock may differ from the laptop's
@@ -58,6 +72,13 @@ def token():
     TOKEN_FILE.touch(mode=0o600)
     TOKEN_FILE.write_text(value + "\n")
     return value
+
+
+def secret_box():
+    """The shared box for encrypting sync messages, or None without PyNaCl."""
+    if SecretBox is None:
+        return None
+    return SecretBox(sha512(token().encode(), encoder=RawEncoder)[:32])
 
 
 def new_token():
@@ -111,12 +132,19 @@ class Server:
                     body = json.dumps(body).encode()
                 elif isinstance(body, str):
                     body = body.encode()
+                box = secret_box() if self.path.startswith("/api/") and code == 200 else None
+                if box:
+                    body = bytes(box.encrypt(body))
+                    ctype = "application/octet-stream"
                 self.send_response(code)
                 self.send_header("Content-Type", ctype)
+                if box:
+                    self.send_header("X-MK-Enc", "1")
                 self.send_header("Content-Length", str(len(body)))
                 # The Android app loads its page from the phone, not from here.
                 self.send_header("Access-Control-Allow-Origin", "*")
-                self.send_header("Access-Control-Allow-Headers", "X-MK-Time, X-MK-Sig, Content-Type")
+                self.send_header("Access-Control-Allow-Headers", "X-MK-Time, X-MK-Sig, X-MK-Enc, Content-Type")
+                self.send_header("Access-Control-Expose-Headers", "X-MK-Enc")
                 self.send_header("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
@@ -186,6 +214,15 @@ class Server:
                 data = self.rfile.read(length)
                 if not self._authorised(data):
                     return self._send(401, {"error": "pairing key needed"})
+                box = secret_box()
+                if box:
+                    # Encryption available: never accept a plain upload (no downgrade).
+                    if self.headers.get("X-MK-Enc") != "1":
+                        return self._send(400, {"error": "encryption required"})
+                    try:
+                        data = box.decrypt(data)
+                    except CryptoError:
+                        return self._send(400, {"error": "could not decrypt"})
                 try:
                     rel = self._target(query)
                 except ValueError as e:

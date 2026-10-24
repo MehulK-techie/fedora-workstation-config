@@ -262,6 +262,7 @@ them live and lets you change any of them.
 | Shut down / restart menu | Super+Backspace · Super+Shift+X | GNOME |
 | Shut down (asks first) | Ctrl+Alt+End | GNOME |
 | Restart (asks first) | Ctrl+Alt+Home | GNOME |
+| Sleep | Ctrl+Alt+Page Down | GNOME |
 | System Monitor | Ctrl+Shift+Esc | App |
 
 **Apps**

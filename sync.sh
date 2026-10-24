@@ -445,6 +445,20 @@ if [[ -f "$GESTURE_ALTTAB" ]] && ! grep -q 'MK: same travel per window' "$GESTUR
     sed -i 's#this._progress = Math.clamp(this._progress + delta / distance, 0, 1);#this._progress = Math.clamp(this._progress + delta / distance * 6 / Math.max(3, (this._switcher?._items.length ?? 4) + 2 * dummyWinCount), 0, 1); // MK: same travel per window#' "$GESTURE_ALTTAB"
     echo "    [+] Patched 3-finger Alt+Tab for even finger travel per window (after logging in again)"
 fi
+# WACK Shell's top-left menu: shortcut hints beside every item it can match
+# (Shut Down, Restart, Lock, Log Out...), read live from your keybindings, and
+# one beside Sleep too (WACK has no Sleep hint of its own: patched in).
+ext_set wack-shell@rinzler69-wastaken.github.com org.gnome.shell.extensions.wack-shell show-menu-shortcuts true
+ext_set wack-shell@rinzler69-wastaken.github.com org.gnome.shell.extensions.wack-shell menu-shortcut-amount 1
+WACK_MENU="$USER_EXT_DIR/wack-shell@rinzler69-wastaken.github.com/panelComponents.js"
+if [[ -f "$WACK_MENU" ]] && ! grep -q 'MK: sleep hint' "$WACK_MENU" &&
+    grep -q "} else if (action === 'settings') {" "$WACK_MENU" &&
+    grep -q 'SystemActions.getDefault().activateSuspend();' "$WACK_MENU"; then
+    # 0,/re/: first match only, the user-defined branch where name, cmd and binding exist.
+    sed -i "0,/} else if (action === 'settings') {/s#} else if (action === 'settings') {#} else if (action === 'sleep') { // MK: sleep hint\n                    if (name === 'sleep' || name === 'suspend' || cmd.includes('suspend')) {\n                        return formatShortcut(binding, isMac);\n                    }\n                } else if (action === 'settings') {#" "$WACK_MENU"
+    perl -0pi -e "s#(SystemActions\.getDefault\(\)\.activateSuspend\(\);\n\s*\})\)\);#\1, getShortcut('sleep'), isDark));#" "$WACK_MENU"
+    echo "    [+] Top-left menu: Sleep shows its shortcut (after logging in again)"
+fi
 # Burn My Windows: a short, subtle "Glide" when windows open and close. The MK
 # profile is high priority, so it wins over the default profile (Fire).
 BMW_PROFILE="$HOME/.config/burn-my-windows/profiles/mk-glide.conf"

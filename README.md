@@ -224,7 +224,7 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | | `Super+Alt+←/→` · `Super+Alt+1…4` | Previous/next workspace · go to workspace |
 | | `Super+Shift+A` · `Super+M` | Quick settings · notifications |
 | | `Super+L` · `Super+Backspace` | Lock · shut down / restart |
-| | `Ctrl+Alt+End` · `Ctrl+Alt+Home` | Shut down · restart (both ask first) |
+| | `Ctrl+Alt+End` · `Ctrl+Alt+Home` · `Ctrl+Alt+PgDn` | Shut down · restart (both ask first) · sleep |
 | **Apps** | `Super+N` · `Super+Alt+N` · `Super+Ctrl+N` · `Super+B` | MK Notes · today's note · quick note · web browser |
 | **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Shortcuts window · Companion (notes, tasks, timer) · camera controls |
 | **Touchpad** | 4 fingers ←/→ · 3 fingers ←/→ | Switch workspaces (Spaces) · switch windows, on every workspace |

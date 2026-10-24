@@ -67,6 +67,7 @@ them live and lets you change any of them. Your changes go to
 | Shut down / restart | power-off |
 | Shut down (asks first) | Ctrl+Alt+End |
 | Restart (asks first) | Ctrl+Alt+Home |
+| Sleep | Ctrl+Alt+Page Down |
 | System Monitor | Ctrl+Shift+Esc |
 
 ## Apps

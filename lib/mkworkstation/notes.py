@@ -548,21 +548,34 @@ class Vault:
                       lambda m: f'<img src="{base}{m.group(1)}"', out)
 
     def pdf_thumbnail(self, rel):
-        """First page of a PDF as a picture (cached; needs pdftoppm)."""
+        """First page of a PDF as a picture (cached). The PDF may have come from
+        the phone or a download, so pdftoppm runs in a bubblewrap sandbox: no
+        network, read-only system, and only this file and the cache folder.
+        Without bwrap (or pdftoppm) there's no picture, just the link."""
         src = self.path(rel)
         try:
-            key = hashlib.sha1(f"{rel}|{src.stat().st_mtime}".encode()).hexdigest()[:16]
+            stamp = src.stat().st_mtime
         except OSError:
             return None
-        thumb = self.meta_dir / "thumbs" / f"{key}.png"
+        prefix = hashlib.sha1(rel.encode()).hexdigest()[:12]
+        folder = self.meta_dir / "thumbs"
+        thumb = folder / f"{prefix}-{hashlib.sha1(str(stamp).encode()).hexdigest()[:8]}.png"
         if thumb.exists():
             return thumb
-        if not shutil.which("pdftoppm"):
+        bwrap, pdftoppm = shutil.which("bwrap"), shutil.which("pdftoppm")
+        if not bwrap or not pdftoppm:
             return None
-        thumb.parent.mkdir(parents=True, exist_ok=True)
+        folder.mkdir(parents=True, exist_ok=True)
+        for stale in folder.glob(f"{prefix}-*.png"):  # an older version of this PDF
+            stale.unlink(missing_ok=True)
+        sandbox = [bwrap, "--unshare-all", "--die-with-parent", "--new-session",
+                   "--ro-bind", "/usr", "/usr", "--symlink", "usr/lib64", "/lib64", "--symlink", "usr/lib", "/lib",
+                   "--symlink", "usr/bin", "/bin", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+                   "--ro-bind", str(src), "/in.pdf", "--bind", str(folder), "/out"]
         try:
-            subprocess.run(["pdftoppm", "-png", "-f", "1", "-l", "1", "-singlefile", "-scale-to", "720",
-                            str(src), str(thumb.with_suffix(""))], capture_output=True, timeout=20, check=True)
+            subprocess.run(sandbox + [pdftoppm, "-png", "-f", "1", "-l", "1", "-singlefile", "-scale-to", "720",
+                                      "/in.pdf", f"/out/{thumb.stem}"],
+                           capture_output=True, timeout=20, check=True)
         except (OSError, subprocess.SubprocessError):
             return None
         return thumb if thumb.exists() else None
@@ -603,12 +616,15 @@ class Vault:
         shutil.copytree(self.attachments, out / "attachments")
         if (out / "thumbs").exists():
             shutil.rmtree(out / "thumbs")
-        if (self.meta_dir / "thumbs").is_dir():
-            shutil.copytree(self.meta_dir / "thumbs", out / "thumbs")
+        thumbs_uri = (self.meta_dir / "thumbs").as_uri() + "/"
         for note in notes:
             body = self.render(note["rel"], self.read(note["rel"]))
             body = body.replace(self.attachments.as_uri() + "/", "attachments/")
-            body = body.replace((self.meta_dir / "thumbs").as_uri() + "/", "thumbs/")
+            # Only the PDF previews this page shows go out with it.
+            for name in re.findall(re.escape(thumbs_uri) + r"([\w-]+\.png)", body):
+                (out / "thumbs").mkdir(exist_ok=True)
+                shutil.copy2(self.meta_dir / "thumbs" / name, out / "thumbs" / name)
+            body = body.replace(thumbs_uri, "thumbs/")
             body = re.sub(r'href="mknote:([^"#]+)[^"]*"',
                           lambda m: f'href="{slug.get(self.resolve(html.unescape(m.group(1))) or "", "#")}"', body)
             page = PAGE.format(title=html.escape(note["title"]), scheme="light", printing="", nonce=secrets.token_hex(8), extra="",

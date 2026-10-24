@@ -82,7 +82,7 @@ const NOTES = {
   "A desktop that says hello, and remembers": "After login the light runs round the screen once the desktop is ready, and the greeting shows your pinned tasks and next reminder. The colours across the desktop come from your wallpaper.",
   "MK Notes: write, link, draw, find": "MK Notes keeps notes as plain Markdown files. Links, backlinks and a graph; draw with a pen; paste screenshots; edit with a live preview. The same notes are on your phone.",
   "The features you'd normally pay for": "Sync to your phone over Wi-Fi, PDF export, publishing as a website and version history are built in, plus a tasks view, a daily-notes calendar, focus mode and your own look.",
-  "Screensavers worth stepping away for": "Step away for a few minutes and a scene plays: a masked hero swinging from a web over the city, a caped figure in the rain, or code rain that decodes the time. A video or call keeps it away; any touch brings you back.",
+  "Screensavers worth stepping away for": "Step away for a few minutes and a scene plays: a brick-built masked hero hanging beside a skyscraper, a brick-built caped knight in the rain, or hexadecimal rain that decodes the time. A video or call keeps it away; any touch brings you back.",
   "Everything you check, one click away": "The top bar has a light system monitor with a speed test, a media tile for Spotify or any player with seek and speaker choice, and clipboard history on Super+V.",
   "Every window, live, one swipe away": "Alt+Tab and the three-finger swipe open a compact card of live windows, at once. Each window takes the same finger travel, the mouse works too, and 1 to 9 sends the selected window to that desktop.",
   "Installed and ready on first login": "The apps people ask for are there on first login, including Joplin, ONLYOFFICE, Zen and VS Code. The app lists are plain text files you can edit.",
@@ -214,7 +214,7 @@ s = content("Focus and tools", "Step away", "Screensavers worth stepping away fo
 shot(s, "scene-web", 0.5, 1.4, 2.9, 1.63);
 shot(s, "scene-knight", 3.55, 1.4, 2.9, 1.63);
 shot(s, "scene-matrix", 6.6, 1.4, 2.9, 1.63);
-caption(s, "Web Hang · Night Watch · Neon Cascade", 0.5, 3.12, 9);
+caption(s, "Web Hang · Night Watch · Terminal Stream", 0.5, 3.12, 9);
 row(s, "weather-clear-night", "When you step away", "after a few idle minutes; any touch ends it", 0.5, 3.6, 4.4);
 row(s, "video-display", "Never over a film", "videos and calls keep it away", 5.1, 3.6, 4.4);
 row(s, "alarm", "Focus timer", "countdown in the top bar, then a little party", 0.5, 4.35, 4.4);

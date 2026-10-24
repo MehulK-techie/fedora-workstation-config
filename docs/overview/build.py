@@ -375,8 +375,8 @@ bh = image(cr, "scene-web", M, y + 10, bw)
 image(cr, "scene-knight", M + bw + 12, y + 10, bw)
 image(cr, "scene-matrix", M + 2 * (bw + 12), y + 10, bw)
 caption(cr, "Web Hang: a masked hero swings over the city", M, y + 16 + bh, bw)
-caption(cr, "Night Watch: a caped figure in the rain", M + bw + 12, y + 16 + bh, bw)
-caption(cr, "Neon Cascade: code rain decodes the time", M + 2 * (bw + 12), y + 16 + bh, bw)
+caption(cr, "Night Watch: a brick-built caped knight in the rain", M + bw + 12, y + 16 + bh, bw)
+caption(cr, "Terminal Stream: hex rain in cyan and amber", M + 2 * (bw + 12), y + 16 + bh, bw)
 points(cr, [
     ("When you step away", "after three idle minutes, or in a focus session; any touch and you're back"),
     ("Never over a film", "a video, a call or Keep awake keeps it away"),

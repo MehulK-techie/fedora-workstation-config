@@ -3,11 +3,12 @@
 
   aurora   soft light drifting over a dark sky, rising sparks
   web      a brick-built masked hero in red and blue hangs upside down from a
-           web line over a moonlit city, a spider on the moon (two parallax
-           layers)
-  knight   a caped figure crouches on a stone gargoyle in the rain; the cape
-           moves in the wind, a searchlight sweeps the clouds, lightning
-  matrix   neon code rain, with the time decoding itself in the middle
+           web line beside a skyscraper, over the city (two parallax layers)
+  knight   a brick-built caped knight stands on a stone gargoyle in the rain;
+           the cape moves in the wind, a searchlight sweeps the clouds and
+           lights him from behind, lightning
+  matrix   a cyberpunk terminal: hexadecimal code rain in cyan and amber,
+           with the time decoding itself in the middle
 
 Each scene is a class with draw(cr, w, h, t) (t in seconds). Anything that
 doesn't move (sky, skyline, moon) is drawn once into a cached surface, so a
@@ -219,9 +220,7 @@ class WebHang(Scene):
             cr.set_source_rgba(1, 1, 1, rand.uniform(0.2, 0.8))
             cr.arc(rand.uniform(0, w), rand.uniform(0, h * 0.55), rand.uniform(0.4, 1.4), 0, 2 * math.pi)
             cr.fill()
-        r = min(w, h) * 0.08
-        moon(cr, w * 0.78, h * 0.2, r)
-        spider_emblem(cr, w * 0.78, h * 0.2, r * 0.62, (0.12, 0.10, 0.16))  # the signal on the moon
+        tower(cr, w, h)
         self.layers = None
 
     def _city(self, w, h):
@@ -417,11 +416,52 @@ def spider_emblem(cr, x, y, size, color):
     cr.restore()
 
 
+def tower(cr, w, h):
+    """The skyscraper the hero hangs beside: setbacks, a spire, rows of lit
+    windows, a cool rim light down one edge."""
+    rand = random.Random(29)
+    x, base = w * 0.55, h
+    tiers = [(w * 0.20, h * 0.30), (w * 0.15, h * 0.16), (w * 0.10, h * 0.08)]  # width, top y
+    body = cairo.LinearGradient(x, 0, x + tiers[0][0], 0)
+    body.add_color_stop_rgb(0, 0.10, 0.10, 0.20)
+    body.add_color_stop_rgb(0.7, 0.06, 0.06, 0.13)
+    body.add_color_stop_rgb(1, 0.04, 0.04, 0.09)
+    for i, (tw, top) in enumerate(tiers):
+        tx = x + (tiers[0][0] - tw) / 2
+        bottom = base if i == 0 else tiers[i - 1][1]
+        cr.set_source(body)
+        cr.rectangle(tx, top, tw, bottom - top)
+        cr.fill()
+        cr.set_source_rgba(0.55, 0.65, 0.95, 0.35)  # rim light
+        cr.rectangle(tx, top, 2, bottom - top)
+        cr.fill()
+        for wy in range(int(top) + 14, int(bottom) - 10, 18):  # window rows
+            for wx in range(int(tx + 8), int(tx + tw - 10), 14):
+                if rand.random() < 0.32:
+                    warm = rand.random() < 0.8
+                    cr.set_source_rgba(*((1.0, 0.85, 0.55) if warm else (0.6, 0.85, 1.0)), rand.uniform(0.35, 0.85))
+                    cr.rectangle(wx, wy, 7, 9)
+                    cr.fill()
+    sx = x + tiers[0][0] / 2
+    cr.set_source_rgb(0.08, 0.08, 0.16)  # spire
+    cr.move_to(sx - 10, tiers[2][1])
+    cr.line_to(sx, tiers[2][1] - h * 0.07)
+    cr.line_to(sx + 10, tiers[2][1])
+    cr.close_path()
+    cr.fill()
+    beacon = cairo.RadialGradient(sx, tiers[2][1] - h * 0.07, 0, sx, tiers[2][1] - h * 0.07, 18)
+    beacon.add_color_stop_rgba(0, 1, 0.25, 0.25, 0.9)
+    beacon.add_color_stop_rgba(1, 1, 0.25, 0.25, 0)
+    cr.set_source(beacon)
+    cr.arc(sx, tiers[2][1] - h * 0.07, 18, 0, 2 * math.pi)
+    cr.fill()
+
+
 # ---------------------------------------------------------------- knight
 
 @scene("knight", "Night Watch")
 class NightWatch(Scene):
-    """A caped figure on a gargoyle, rain, lightning and a searchlight."""
+    """A brick-built caped knight on a gargoyle, rain, lightning, a searchlight."""
 
     def __init__(self):
         super().__init__()
@@ -543,50 +583,105 @@ class NightWatch(Scene):
         cr.move_to(x0 - 10 * s, y0 + 120 * s)
         cr.curve_to(x0 - 70 * s, y0 + 110 * s, x0 - 130 * s, y0 + 90 * s, x0 - 150 * s, y0 + 70 * s)
         cr.stroke()
-        # the figure: crouched, cowl with pointed ears, cape in the wind
-        fx, fy = x0 + 40 * s, y0 + 120 * s
-        black = (0.0, 0.0, 0.01)
-        cr.set_source_rgb(*black)
+        self._minifig(cr, x0 + 40 * s, y0 + 120 * s, s * 1.05, t)
+
+    def _minifig(self, cr, fx, fy, s, t):
+        """A brick-built caped knight standing on the ledge (feet at fx, fy):
+        plastic blocks, a cowl with ears, a cape that ripples in the wind, a
+        yellow belt and chest emblem, rim-lit by the searchlight."""
+        dark, grey, gold = (0.10, 0.10, 0.12), (0.22, 0.23, 0.27), (0.98, 0.78, 0.15)
+        cr.save()
+        cr.translate(fx, fy)
+        cr.scale(s, s)
+        breathe = math.sin(t * 1.6) * 1.2
+        cr.translate(0, -breathe * 0.3)
+        # cape behind: cloth simulated as a rippling curtain, wind from the left
         wind = math.sin(t * 1.3) * 0.5 + math.sin(t * 3.1) * 0.2
-        cape = [(fx + 30 * s, fy - 170 * s)]
-        for k in range(1, 9):  # trailing edge, rippling
+        cr.set_source_rgb(0.05, 0.05, 0.07)
+        cr.move_to(-30, -150)
+        cr.line_to(30, -150)
+        edge = []
+        for k in range(9):
             u = k / 8
-            cape.append((fx + (30 - 220 * u) * s, fy - (170 - 175 * u) * s
-                         + math.sin(t * 4 + u * 6) * 16 * u * s + wind * 30 * u * s))
-        cr.move_to(fx + 40 * s, fy - 175 * s)
-        for px, py in cape:
+            edge.append((30 + 70 * u + wind * 40 * u + math.sin(t * 4 + u * 6) * 8 * u,
+                         -150 + 150 * u + math.sin(t * 3 + u * 5) * 6 * u))
+        for px, py in edge:
             cr.line_to(px, py)
-        cr.line_to(fx - 20 * s, fy)
-        cr.line_to(fx + 60 * s, fy)
+        cr.line_to(-40 - wind * 10, 0)
         cr.close_path()
         cr.fill()
-        # body crouch
-        cr.move_to(fx - 10 * s, fy)
-        cr.curve_to(fx - 5 * s, fy - 90 * s, fx + 20 * s, fy - 150 * s, fx + 45 * s, fy - 165 * s)
-        cr.curve_to(fx + 70 * s, fy - 150 * s, fx + 80 * s, fy - 80 * s, fx + 70 * s, fy)
+        for side in (-1, 1):  # legs and boots
+            x = -28 if side < 0 else 2
+            plastic(cr, x, -66, 26, 58, grey, 3)
+            plastic(cr, x, -12, 26, 12, dark, 3)
+        plastic(cr, -30, -80, 60, 16, dark, 3)  # hips
+        plastic(cr, -30, -86, 60, 8, gold, 2)  # utility belt
+        cr.save()  # torso, wider at the waist
+        cr.move_to(-36, -86)
+        cr.line_to(36, -86)
+        cr.line_to(28, -150)
+        cr.line_to(-28, -150)
         cr.close_path()
+        cr.clip()
+        plastic(cr, -36, -150, 72, 64, grey, 0)
+        cr.restore()
+        cr.set_source_rgb(*gold)  # chest emblem: a yellow oval with a dark winged shape
+        cr.save()
+        cr.translate(0, -122)
+        cr.scale(1.6, 1)
+        cr.arc(0, 0, 10, 0, 2 * math.pi)
+        cr.restore()
         cr.fill()
-        # head and ears
-        hx, hy = fx + 52 * s, fy - 188 * s
-        cr.arc(hx, hy, 22 * s, 0, 2 * math.pi)
+        cr.set_source_rgb(*dark)
+        cr.move_to(-13, -124)
+        cr.curve_to(-8, -130, -4, -126, 0, -130)
+        cr.curve_to(4, -126, 8, -130, 13, -124)
+        cr.curve_to(6, -122, 3, -116, 0, -118)
+        cr.curve_to(-3, -116, -6, -122, -13, -124)
         cr.fill()
+        for side, phase in ((-1, 0.0), (1, 1.1)):  # arms, one resting, one on the hip
+            cr.save()
+            cr.translate(side * 31, -146)
+            cr.rotate(side * (0.18 + 0.04 * math.sin(t * 1.6 + phase)))
+            plastic(cr, -8, 0, 16, 44, grey, 7)
+            cr.set_source_rgb(*dark)
+            cr.set_line_width(6)
+            cr.arc(0, 52, 7, -0.3 * math.pi, 1.3 * math.pi)
+            cr.stroke()
+            cr.restore()
+        plastic(cr, -9, -158, 18, 8, dark, 2)  # neck
+        # head and cowl with pointed ears
+        plastic(cr, -24, -204, 48, 46, dark, 10)
+        cr.set_source_rgb(*dark)
         for side in (-1, 1):
-            cr.move_to(hx + side * 8 * s, hy - 14 * s)
-            cr.line_to(hx + side * 16 * s, hy - 42 * s)
-            cr.line_to(hx + side * 20 * s, hy - 10 * s)
+            cr.move_to(side * 10, -202)
+            cr.line_to(side * 18, -228)
+            cr.line_to(side * 23, -200)
+            cr.close_path()
             cr.fill()
-        # eyes catching the light
-        cr.set_source_rgba(0.95, 0.97, 1, 0.9)
-        for side in (-1, 1):
-            cr.rectangle(hx + side * 9 * s - 3 * s, hy - 3 * s, 6 * s, 2.2 * s)
+        cr.set_source_rgb(0.93, 0.80, 0.62)  # the jaw the cowl leaves open
+        cr.rectangle(-16, -176, 32, 14)
         cr.fill()
+        cr.set_source_rgba(0.98, 0.99, 1, 0.95)  # white eye slits
+        for side in (-1, 1):
+            cr.rectangle(side * 11 - 5, -190, 10, 3.5)
+        cr.fill()
+        # rim light: the searchlight behind catches his right-hand edges
+        cr.set_source_rgba(1, 0.95, 0.75, 0.55)
+        cr.set_line_width(2)
+        for x1, y1, x2, y2 in ((28, -66, 28, -2), (36, -86, 28, -150), (24, -200, 24, -162), (23, -200, 18, -228)):
+            cr.move_to(x1, y1)
+            cr.line_to(x2, y2)
+        cr.stroke()
+        cr.restore()
 
 
 # ---------------------------------------------------------------- matrix
 
-@scene("matrix", "Neon Cascade")
+@scene("matrix", "Terminal Stream")
 class NeonCascade(Scene):
-    """Falling glowing glyphs; the time decodes itself in the middle."""
+    """A cyberpunk terminal: hexadecimal rain in cyan and amber, glowing
+    heads, faint scanlines; the time decodes itself in the middle."""
     KANA = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜ"
     ASCII = "0123456789ABCDEF<>/{}[]=+*$#@%&"
     SIZE = 20
@@ -610,7 +705,8 @@ class NeonCascade(Scene):
         self.last = None
         self.decoded = ""
         self.decode_at = 0.0
-        self.family, self.GLYPHS = self._font()
+        self.family, self.GLYPHS = "Monospace", "0123456789ABCDEF"
+        self.scan = None
 
     def draw(self, cr, w, h, t):
         dt = min(0.1, t - self.last) if self.last is not None else 0
@@ -633,21 +729,42 @@ class NeonCascade(Scene):
                 y = row * self.SIZE
                 if y < 0:
                     continue
-                tc.set_source_rgb(0.1, 0.95, 0.75 if i % 3 else 0.95)
+                if i % 5 == 2:
+                    tc.set_source_rgb(1.0, 0.68, 0.18)   # amber
+                else:
+                    tc.set_source_rgb(0.12, 0.82, 1.0)   # cyan
                 tc.move_to(i * self.SIZE, y)
                 tc.show_text(random.choice(self.GLYPHS))
             if col[0] > h + random.uniform(0, h):
                 col[0], col[1] = random.uniform(-200, 0), random.uniform(140, 420)
         cr.set_source_surface(self.trail, 0, 0)
         cr.paint()
-        # bright heads
+        # bright heads with a soft glow
         cr.select_font_face(self.family, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
         cr.set_font_size(self.SIZE)
-        cr.set_source_rgb(0.85, 1, 0.97)
         for i, col in enumerate(self.columns):
             if col[0] > 0:
-                cr.move_to(i * self.SIZE, int(col[0] // self.SIZE) * self.SIZE)
+                x, y = i * self.SIZE, int(col[0] // self.SIZE) * self.SIZE
+                amber = i % 5 == 2
+                glow = cairo.RadialGradient(x + 6, y - 7, 0, x + 6, y - 7, 18)
+                glow.add_color_stop_rgba(0, *((1.0, 0.7, 0.2) if amber else (0.2, 0.85, 1.0)), 0.35)
+                glow.add_color_stop_rgba(1, 0, 0, 0, 0)
+                cr.set_source(glow)
+                cr.arc(x + 6, y - 7, 18, 0, 2 * math.pi)
+                cr.fill()
+                cr.set_source_rgb(*((1.0, 0.92, 0.75) if amber else (0.85, 0.98, 1.0)))
+                cr.move_to(x, y)
                 cr.show_text(random.choice(self.GLYPHS))
+        # faint scanlines, drawn once per size
+        if self.scan is None or self.scan.get_width() != w or self.scan.get_height() != h:
+            self.scan = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+            sc = cairo.Context(self.scan)
+            sc.set_source_rgba(0, 0, 0, 0.18)
+            for yy in range(0, h, 3):
+                sc.rectangle(0, yy, w, 1)
+            sc.fill()
+        cr.set_source_surface(self.scan, 0, 0)
+        cr.paint()
         # the time, decoding: random glyphs settle into the real characters
         target = time.strftime("%H:%M")
         if target != self.decoded:
@@ -662,12 +779,16 @@ class NeonCascade(Scene):
         cr.set_source_rgba(0, 0, 0, 0.55)
         cr.rectangle(x - 40, y - ext.height - 30, ext.width + 80, ext.height + 60)
         cr.fill()
-        cr.set_source_rgb(0.75, 1, 0.92)
+        cr.set_source_rgba(0.2, 0.85, 1.0, 0.25)  # glow behind the digits
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+            cr.move_to(x + dx, y + dy)
+            cr.show_text(shown)
+        cr.set_source_rgb(0.8, 0.97, 1.0)
         cr.move_to(x, y)
         cr.show_text(shown)
         cr.set_font_size(18)
         sub = time.strftime("%A, %d %B")
         ext2 = cr.text_extents(sub)
-        cr.set_source_rgba(0.6, 1, 0.9, 0.6)
+        cr.set_source_rgba(1.0, 0.72, 0.25, 0.75)
         cr.move_to((w - ext2.width) / 2, y + 44)
         cr.show_text(sub)

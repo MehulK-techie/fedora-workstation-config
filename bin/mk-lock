@@ -1,0 +1,393 @@
+#!/usr/bin/env python3
+"""mk-lock: lock apps and folders behind your fingerprint (or password).
+
+  mk-lock app add APP          ask before APP starts (APP: name or desktop id)
+  mk-lock app remove APP       stop asking
+  mk-lock app list
+  mk-lock folder add PATH      encrypt PATH (gocryptfs); it opens only after
+                               you confirm it's you
+  mk-lock folder open PATH     confirm it's you, then show the files
+  mk-lock folder close PATH    hide them again (encrypted on disk)
+  mk-lock folder toggle PATH   open or close (the Files right-click script)
+  mk-lock folder remove PATH   decrypt PATH for good
+  mk-lock folder list
+  mk-lock close-all            close every open locked folder
+  mk-lock run -- COMMAND...    confirm it's you, then run COMMAND
+  mk-lock reapply              re-lock apps after their launchers changed
+
+How sure you can be:
+  * Folders are really encrypted: the files on disk are unreadable without
+    the key. The key is kept in your login keyring, and opening a folder
+    asks for your fingerprint or password first (polkit).
+  * Apps are a gate, not a vault: the app's launcher (app grid, dock, search)
+    asks first. Someone at your unlocked desktop could still start the
+    program from a terminal, and an app that's already running just comes
+    to the front.
+The confirmation is polkit's "auth_self" (io.github.mehulk.mk-lock.unlock,
+installed by setup.sh): fingerprint when a finger is enrolled, else password.
+"""
+import base64
+import configparser
+import os
+import secrets
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ACTION = "io.github.mehulk.mk-lock.unlock"
+HOME = Path.home()
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "mk-workstation"
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
+APPS_FILE = CONFIG / "locked-apps"
+FOLDERS_FILE = CONFIG / "locked-folders"
+ORIGINALS = DATA_HOME / "mk-workstation/lock-originals"
+USER_APPS = DATA_HOME / "applications"
+SELF = str(HOME / ".local/bin/mk-lock") if (HOME / ".local/bin/mk-lock").exists() else os.path.abspath(__file__)
+MARK = "X-MK-Locked"
+
+
+def die(message, code=1):
+    print(f"[-] {message}", file=sys.stderr)
+    sys.exit(code)
+
+
+def confirm_identity():
+    """polkit asks: fingerprint (if enrolled) or your password. True if it was you."""
+    if not shutil.which("pkcheck"):
+        die("pkcheck (polkit) isn't installed")
+    result = subprocess.run(["pkcheck", "--action-id", ACTION, "--process", str(os.getpid()),
+                             "--allow-user-interaction"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if result.returncode == 0:
+        return True
+    if "not registered" in result.stderr or "does not exist" in result.stderr:
+        die("The mk-lock polkit action isn't installed yet. Run: ./setup.sh")
+    return False
+
+
+def read_list(path):
+    try:
+        return [line.strip() for line in path.read_text().splitlines() if line.strip() and not line.startswith("#")]
+    except OSError:
+        return []
+
+
+def write_list(path, items):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(f"{item}\n" for item in dict.fromkeys(items)))
+
+
+# ---------------------------------------------------------------- apps
+
+def data_dirs():
+    dirs = [DATA_HOME] + [Path(d) for d in (os.environ.get("XDG_DATA_DIRS") or
+                                            "/usr/local/share:/usr/share").split(":") if d]
+    for extra in (DATA_HOME / "flatpak/exports/share", Path("/var/lib/flatpak/exports/share")):
+        if extra not in dirs:
+            dirs.append(extra)
+    return [d / "applications" for d in dirs]
+
+
+def find_app(query):
+    """A desktop id (org.gnome.Ptyxis or org.gnome.Ptyxis.desktop) or an app name."""
+    want = query[:-8] if query.endswith(".desktop") else query
+    candidates = {}
+    for folder in data_dirs():
+        for file in sorted(folder.glob("*.desktop")) if folder.is_dir() else []:
+            candidates.setdefault(file.stem, file)
+    if want in candidates:
+        return want
+    lowered = want.lower()
+    for app_id, file in candidates.items():
+        entry = parse(file)
+        name = entry.get("Desktop Entry", "Name", fallback="") if entry else ""
+        if name.lower() == lowered or app_id.lower().endswith("." + lowered):
+            return app_id
+    return None
+
+
+def parse(path):
+    entry = configparser.ConfigParser(interpolation=None, strict=False)
+    entry.optionxform = str
+    try:
+        entry.read(path, encoding="utf-8")
+    except (configparser.Error, OSError, UnicodeDecodeError):
+        return None
+    return entry if entry.has_section("Desktop Entry") else None
+
+
+def original_file(app_id):
+    """The launcher to wrap: yours (when not already wrapped), a saved copy of
+    yours, or the system's."""
+    user = USER_APPS / f"{app_id}.desktop"
+    entry = parse(user) if user.exists() else None
+    if entry and not entry.has_option("Desktop Entry", MARK):
+        ORIGINALS.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(user, ORIGINALS / f"{app_id}.desktop")
+        return user
+    saved = ORIGINALS / f"{app_id}.desktop"
+    if saved.exists():
+        return saved
+    for folder in data_dirs()[1:]:
+        if (folder / f"{app_id}.desktop").exists():
+            return folder / f"{app_id}.desktop"
+    return None
+
+
+def wrap(app_id):
+    source = original_file(app_id)
+    if not source:
+        die(f"No launcher found for {app_id}")
+    entry = parse(source)
+    if not entry:
+        die(f"Can't read {source}")
+    for section in entry.sections():
+        if section == "Desktop Entry" or section.startswith("Desktop Action "):
+            if entry.has_option(section, "Exec"):
+                entry.set(section, "Exec", f"{SELF} run -- {entry.get(section, 'Exec')}")
+    # D-Bus activation would skip Exec (and so the check): launch through Exec.
+    entry.set("Desktop Entry", "DBusActivatable", "false")
+    entry.set("Desktop Entry", MARK, "true")
+    if entry.has_option("Desktop Entry", "TryExec"):
+        entry.remove_option("Desktop Entry", "TryExec")
+    USER_APPS.mkdir(parents=True, exist_ok=True)
+    with open(USER_APPS / f"{app_id}.desktop", "w", encoding="utf-8") as f:
+        entry.write(f, space_around_delimiters=False)
+
+
+def unwrap(app_id):
+    user = USER_APPS / f"{app_id}.desktop"
+    saved = ORIGINALS / f"{app_id}.desktop"
+    entry = parse(user) if user.exists() else None
+    if entry and entry.has_option("Desktop Entry", MARK):
+        if saved.exists():
+            shutil.move(str(saved), user)
+        else:
+            user.unlink()
+
+
+def refresh_launchers():
+    subprocess.run(["update-desktop-database", "-q", str(USER_APPS)], check=False)
+
+
+def cmd_app(args):
+    if not args:
+        die("Usage: mk-lock app add|remove|list [APP]", 2)
+    action, rest = args[0], args[1:]
+    locked = read_list(APPS_FILE)
+    if action == "list":
+        print("\n".join(locked) if locked else "No locked apps.")
+        return
+    if not rest:
+        die(f"Usage: mk-lock app {action} APP", 2)
+    app_id = find_app(rest[0]) or (rest[0] if action == "remove" else None)
+    if not app_id:
+        die(f"No app called {rest[0]!r}. Try its desktop id, e.g. org.gnome.Ptyxis")
+    if action == "add":
+        wrap(app_id)
+        write_list(APPS_FILE, locked + [app_id])
+        refresh_launchers()
+        print(f"✔ {app_id} now asks for your fingerprint or password when it starts.")
+    elif action == "remove":
+        unwrap(app_id)
+        write_list(APPS_FILE, [a for a in locked if a != app_id])
+        refresh_launchers()
+        print(f"✔ {app_id} unlocked.")
+    else:
+        die("Usage: mk-lock app add|remove|list [APP]", 2)
+
+
+def cmd_reapply():
+    for app_id in read_list(APPS_FILE):
+        wrap(app_id)
+    refresh_launchers()
+
+
+# ---------------------------------------------------------------- folders
+
+def cipher_dir(path):
+    return path.parent / f".{path.name}.mklock"
+
+
+def key_store(path, key):
+    subprocess.run(["secret-tool", "store", "--label", f"MK lock: {path}", "mk-lock-path", str(path)],
+                   input=key, text=True, check=True)
+
+
+def key_lookup(path):
+    result = subprocess.run(["secret-tool", "lookup", "mk-lock-path", str(path)],
+                            capture_output=True, text=True)
+    if result.returncode != 0 or not result.stdout:
+        die(f"The key for {path} isn't in your keyring (is the keyring unlocked?)")
+    return result.stdout
+
+
+def is_open(path):
+    return os.path.ismount(path)
+
+
+def mount(path, key, target=None):
+    """Show PATH's encrypted store decrypted, at PATH (or at TARGET)."""
+    subprocess.run(["gocryptfs", "-q", "-passfile", "/dev/stdin", str(cipher_dir(path)), str(target or path)],
+                   input=key, text=True, check=True)
+
+
+def unmount(path):
+    subprocess.run(["fusermount3", "-u", str(path)], check=True)
+
+
+def need_tools():
+    for tool in ("gocryptfs", "secret-tool", "fusermount3"):
+        if not shutil.which(tool):
+            die(f"{tool} isn't installed. Run: ./setup.sh (or sudo dnf install gocryptfs libsecret fuse3)")
+
+
+def folder_add(path):
+    need_tools()
+    if not path.is_dir() or path == HOME or HOME not in path.parents:
+        die("Pick a folder inside your home folder (not your home folder itself).")
+    if cipher_dir(path).exists() or is_open(path):
+        die(f"{path} is already locked.")
+    answer = input(f"Encrypt {path}? Its files move into an encrypted store; nothing is deleted until "
+                   "the copy is checked. [y/N]: ") if sys.stdin.isatty() else "y"
+    if not answer.lower().startswith("y"):
+        return
+    key = base64.b64encode(secrets.token_bytes(32)).decode()
+    cipher = cipher_dir(path)
+    cipher.mkdir()
+    subprocess.run(["gocryptfs", "-q", "-init", "-passfile", "/dev/stdin", str(cipher)], input=key, text=True, check=True)
+    key_store(path, key)
+    with tempfile.TemporaryDirectory(prefix=".mklock-", dir=path.parent) as tmp:
+        mount(path, key, tmp)
+        try:
+            subprocess.run(["cp", "-a", f"{path}/.", tmp], check=True)
+            same = subprocess.run(["diff", "-rq", str(path), tmp], capture_output=True).returncode == 0
+        finally:
+            unmount(Path(tmp))
+    if not same:
+        die(f"The encrypted copy didn't match, so nothing was removed. {path} is unchanged; "
+            f"delete {cipher} and try again.")
+    for child in path.iterdir():
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+    write_list(FOLDERS_FILE, read_list(FOLDERS_FILE) + [str(path)])
+    print(f"✔ {path} is encrypted and closed. Open it with: mk lock open {path}")
+
+
+def folder_open(path):
+    need_tools()
+    if is_open(path):
+        print(f"{path} is already open.")
+        return
+    if not cipher_dir(path).is_dir():
+        die(f"{path} isn't a locked folder.")
+    if not confirm_identity():
+        die("Not confirmed; the folder stays closed.")
+    path.mkdir(exist_ok=True)
+    mount(path, key_lookup(path))
+    print(f"✔ {path} is open. Close it with: mk lock close {path}")
+
+
+def folder_close(path):
+    if not is_open(path):
+        print(f"{path} is already closed.")
+        return
+    unmount(path)
+    print(f"✔ {path} closed.")
+
+
+def folder_remove(path):
+    need_tools()
+    if not cipher_dir(path).is_dir():
+        die(f"{path} isn't a locked folder.")
+    if not confirm_identity():
+        die("Not confirmed; nothing changed.")
+    key = key_lookup(path)
+    if is_open(path):
+        unmount(path)
+    with tempfile.TemporaryDirectory(prefix=".mklock-", dir=path.parent) as tmp:
+        mount(path, key, tmp)
+        try:
+            subprocess.run(["cp", "-a", f"{tmp}/.", str(path)], check=True)
+            same = subprocess.run(["diff", "-rq", tmp, str(path)], capture_output=True).returncode == 0
+        finally:
+            unmount(Path(tmp))
+    if not same:
+        die(f"The decrypted copy didn't match; the encrypted store {cipher_dir(path)} was kept.")
+    shutil.rmtree(cipher_dir(path))
+    subprocess.run(["secret-tool", "clear", "mk-lock-path", str(path)], check=False)
+    write_list(FOLDERS_FILE, [f for f in read_list(FOLDERS_FILE) if f != str(path)])
+    print(f"✔ {path} is a normal folder again.")
+
+
+def notify_gui(text):
+    """Errors from the Files right-click script: show them, there's no terminal."""
+    if not sys.stdin.isatty() and shutil.which("notify-send"):
+        subprocess.run(["notify-send", "-i", "changes-prevent-symbolic", "MK Lock", text], check=False)
+
+
+def cmd_folder(args):
+    if not args:
+        die("Usage: mk-lock folder add|open|close|toggle|remove|list [PATH]", 2)
+    action = args[0]
+    if action == "list":
+        for folder in read_list(FOLDERS_FILE):
+            print(f"{'open  ' if is_open(folder) else 'closed'}  {folder}")
+        return
+    if len(args) < 2:
+        die(f"Usage: mk-lock folder {action} PATH", 2)
+    path = Path(os.path.abspath(os.path.expanduser(args[1])))
+    try:
+        if action == "add":
+            folder_add(path)
+        elif action == "open":
+            folder_open(path)
+        elif action == "close":
+            folder_close(path)
+        elif action == "toggle":
+            folder_close(path) if is_open(path) else folder_open(path)
+        elif action == "remove":
+            folder_remove(path)
+        else:
+            die("Usage: mk-lock folder add|open|close|toggle|remove|list [PATH]", 2)
+    except subprocess.CalledProcessError as e:
+        notify_gui(f"{action} failed for {path}")
+        die(f"{' '.join(map(str, e.cmd[:2]))} failed ({e.returncode})")
+    except SystemExit:
+        notify_gui(f"{path}: not opened")
+        raise
+
+
+def main():
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    if args[0] == "run":
+        command = args[2:] if len(args) > 1 and args[1] == "--" else args[1:]
+        if not command:
+            die("Usage: mk-lock run -- COMMAND...", 2)
+        if not confirm_identity():
+            notify_gui(f"{Path(command[0]).name}: not confirmed")
+            die(f"Not confirmed; {Path(command[0]).name} didn't start.")
+        os.execvp(command[0], command)
+    if args[0] == "app":
+        cmd_app(args[1:])
+    elif args[0] == "folder":
+        cmd_folder(args[1:])
+    elif args[0] == "close-all":
+        for folder in read_list(FOLDERS_FILE):
+            if is_open(folder):
+                folder_close(Path(folder))
+    elif args[0] == "reapply":
+        cmd_reapply()
+    else:
+        die(f"Unknown command {args[0]!r}. See: mk-lock --help", 2)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

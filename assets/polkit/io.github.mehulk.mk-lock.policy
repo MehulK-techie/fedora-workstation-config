@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- mk-lock: confirm it's you (fingerprint, or your password) before a
+     locked app starts or a locked folder opens. auth_self: your own login,
+     not an administrator's; asked every time, never remembered. -->
+<policyconfig>
+  <vendor>MK Workstation</vendor>
+  <action id="io.github.mehulk.mk-lock.unlock">
+    <description>Open a locked app or folder</description>
+    <message>Confirm it's you to open this locked app or folder</message>
+    <icon_name>changes-prevent-symbolic</icon_name>
+    <defaults>
+      <allow_any>auth_self</allow_any>
+      <allow_inactive>auth_self</allow_inactive>
+      <allow_active>auth_self</allow_active>
+    </defaults>
+  </action>
+</policyconfig>

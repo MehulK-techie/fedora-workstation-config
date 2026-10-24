@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Tour: a compass -->
+  <circle cx="64" cy="68" r="52" fill="#1a5fb4"/>
+  <circle cx="64" cy="64" r="52" fill="#3584e4"/>
+  <circle cx="64" cy="64" r="42" fill="#f6f5f4"/>
+  <g stroke="#c0bfbc" stroke-width="3" stroke-linecap="round">
+    <path d="M64 26v8M64 94v8M26 64h8M94 64h8"/>
+  </g>
+  <path d="M64 64l26-26-12 34z" fill="#e01b24"/>
+  <path d="M64 64L38 90l12-34z" fill="#5e5c64"/>
+  <circle cx="64" cy="64" r="5" fill="#241f31"/>
+</svg>

@@ -147,7 +147,8 @@ APP_DIR="$HOME/.local/share/applications"
 CUSTOM_ICONS="$HOME/.config/mk-workstation/icons"
 mkdir -p "$ICON_DIR/scalable/apps" "$ICON_DIR/256x256/apps" "$APP_DIR"
 declare -A ICON_NAMES=([companion]=MkCompanion [timer]=MkTimer [shortcuts]=MkShortcuts
-                       [camera]=MkCamera [ocr]=MkOcr [notes]=MkNotes [screensaver]=MkScreensaver)
+                       [camera]=MkCamera [ocr]=MkOcr [notes]=MkNotes [screensaver]=MkScreensaver
+                       [tour]=MkTour)
 for short in "${!ICON_NAMES[@]}"; do
     id="io.github.mehulk.${ICON_NAMES[$short]}"
     rm -f "$ICON_DIR/scalable/apps/$id.svg" "$ICON_DIR/256x256/apps/$id.png"
@@ -338,6 +339,30 @@ X-GNOME-Autostart-Delay=15
 NoDisplay=true
 DESKTOP
 pgrep -f "mk-screensaver$" > /dev/null || setsid -f "$HOME/.local/bin/mk-screensaver" > /dev/null 2>&1 || true
+# The tour: once, at the first login after setup (it remembers, and the
+# autostart entry then does nothing). Any time later: mk tour, Super+Shift+/.
+cat > "$AUTOSTART_DIR/mk-tour.desktop" << DESKTOP
+[Desktop Entry]
+Type=Application
+Name=MK tour (first login)
+Exec=$HOME/.local/bin/mk-tour --first-run
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=20
+NoDisplay=true
+DESKTOP
+# Locked apps (mk lock app): launchers were just rewritten above; lock them again.
+"$HOME/.local/bin/mk-lock" reapply > /dev/null 2>&1 || true
+# Files: right-click a folder › Scripts › Lock or unlock folder (mk lock).
+NAUTILUS_SCRIPTS="$HOME/.local/share/nautilus/scripts"
+mkdir -p "$NAUTILUS_SCRIPTS"
+cat > "$NAUTILUS_SCRIPTS/Lock or unlock folder" << 'SCRIPT'
+#!/bin/bash
+# MK: open or close a folder locked with `mk lock PATH` (asks for your fingerprint or password).
+while IFS= read -r path; do
+    [[ -n "$path" ]] && "$HOME/.local/bin/mk-lock" folder toggle "$path"
+done <<< "$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS"
+SCRIPT
+chmod +x "$NAUTILUS_SCRIPTS/Lock or unlock folder"
 RETIRED_DIR="$HOME/.config/mk-workstation/retired-autostart"
 rm -f "$HOME/.local/bin/mk-session"
 for hack in fix-extensions.desktop bms-panel-fix.desktop gnome-alt-tab-fix.desktop mk-session.desktop; do

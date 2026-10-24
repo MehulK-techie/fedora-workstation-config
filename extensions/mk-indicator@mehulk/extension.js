@@ -149,6 +149,15 @@ export default class MKIndicatorExtension extends Extension {
         }
         if (!locked && this._wasLocked)
             this._hideDocksSoon();
+        // Folders opened with mk lock close when the screen locks.
+        if (locked && !this._wasLocked) {
+            try {
+                Gio.Subprocess.new([`${GLib.get_home_dir()}/.local/bin/mk-lock`, 'close-all'],
+                    Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+            } catch (e) {
+                // mk-lock not installed: nothing to close
+            }
+        }
         this._wasLocked = locked;
     }
 

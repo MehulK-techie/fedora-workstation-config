@@ -571,6 +571,84 @@ case "${1:-help}" in
         echo "  System-wide parts (apps, repos, face unlock, dnf.conf) are covered in docs/GUIDE.md › Undo and uninstall."
         ;;
 
+    lock|unlock)
+        # mk lock app NAME | mk lock PATH | mk lock open|close PATH | mk lock list
+        # mk unlock app NAME | mk unlock PATH | mk unlock --remove PATH
+        verb=$1; shift
+        LOCK="$HOME/.local/bin/mk-lock"
+        case "$verb ${1:-}" in
+            "lock app") "$LOCK" app add "${2:?Usage: mk lock app NAME}" ;;
+            "unlock app") "$LOCK" app remove "${2:?Usage: mk unlock app NAME}" ;;
+            "lock list"|"unlock list"|"lock "|"unlock ")
+                echo "Locked apps:"; "$LOCK" app list | sed 's/^/  /'
+                echo "Locked folders:"; "$LOCK" folder list | sed 's/^/  /'
+                echo "Lock more: mk lock app NAME · mk lock ~/Folder" ;;
+            "lock close") "$LOCK" folder close "${2:?Usage: mk lock close PATH}" ;;
+            "lock open") "$LOCK" folder open "${2:?Usage: mk lock open PATH}" ;;
+            "unlock --remove") "$LOCK" folder remove "${2:?Usage: mk unlock --remove PATH}" ;;
+            unlock\ *) "$LOCK" folder open "$1" ;;
+            lock\ *)
+                # A folder: encrypt it the first time, close it after that.
+                if [[ -d "$(dirname "$1")/.$(basename "$1").mklock" ]]; then
+                    "$LOCK" folder close "$1"
+                else
+                    "$LOCK" folder add "$1"
+                fi ;;
+        esac
+        ;;
+
+    speedtest)
+        shift
+        "$HOME/.local/bin/mk-speedtest" "$@"
+        ;;
+
+    tour)
+        setsid -f "$HOME/.local/bin/mk-tour" > /dev/null 2>&1
+        ;;
+
+    keyring)
+        # Why apps ask for the keyring password, and the two ways out.
+        cat << 'KEYRING'
+Apps (VS Code, Spotify, browsers) keep passwords in your login keyring. GNOME
+unlocks it with the password you type at login. Signing in with your face or
+fingerprint gives it no password, so the first app that needs it asks.
+
+Two ways out:
+  1. Type your password at login (fingerprint and face still unlock the
+     screen later). The keyring opens with it: no more prompts.
+  2. Give the keyring an empty password: it opens by itself at every login,
+     however you sign in. Saved passwords are then stored UNENCRYPTED on disk,
+     readable by anyone who gets at your files. Only on a disk-encrypted
+     laptop is this a reasonable trade. To do it: open "Passwords and Keys",
+     right-click "Login" > Change Password, enter the old one, leave the new
+     one empty.
+KEYRING
+        if [[ "${2:-}" == "open" ]]; then
+            setsid -f seahorse > /dev/null 2>&1 || echo "[-] Install it with: sudo dnf install seahorse"
+        else
+            printf '\nOpen Passwords and Keys: mk keyring open\n'
+        fi
+        ;;
+
+    founders|--founders)
+        # Not in the help. The people this desktop stands on.
+        dim=$'\e[2m' bold=$'\e[1m' blue=$'\e[38;5;33m' off=$'\e[0m'
+        printf '\n  %sThis desktop runs on other people'"'"'s generosity.%s\n\n' "$bold" "$off"
+        printf '  %sLinus Torvalds%s wrote a "just a hobby, won'"'"'t be big" kernel in 1991.\n' "$blue" "$off"
+        printf '  %sRichard Stallman%s and GNU gave it a userland and a licence that keeps it free.\n' "$blue" "$off"
+        printf '  %sRed Hat and the Fedora community%s: packagers, testers and translators,\n' "$blue" "$off"
+        printf '  shipping upstream first, every six months since 2003.\n'
+        printf '  %sGNOME%s, %slibfprint%s, %sHowdy%s, %sDash to Dock%s and every author in docs/THIRD_PARTY.md.\n\n' \
+            "$blue" "$off" "$blue" "$off" "$blue" "$off" "$blue" "$off"
+        printf '  %sThank you.%s\n\n' "$dim" "$off"
+        ;;
+
+    credits|--credits)
+        # Not in the help either.
+        printf '\n  MK Workstation was built by MehulK, pair-programming with Claude, an AI by Anthropic.\n'
+        printf '  Claude says: thanks for the bug reports with screenshots; they kept the fixes honest.\n\n'
+        ;;
+
     excelsior|--excelsior)
         # A small tribute to Stan Lee (1922-2018). Not in the help: you found it.
         red=$'\e[38;5;196m' blue=$'\e[38;5;33m' dim=$'\e[2m' bold=$'\e[1m' off=$'\e[0m'
@@ -622,6 +700,11 @@ case "${1:-help}" in
         echo "  notes      MK Notes: mk notes, mk notes today, mk notes serve (phone sync)"
         echo "  accent     Desktop colour: auto (from your wallpaper), #rrggbb, status"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
+        echo "  lock       Fingerprint before an app starts, or an encrypted folder: mk lock app NAME, mk lock ~/Folder"
+        echo "  unlock     Open a locked folder (mk unlock ~/Folder) or stop locking an app (mk unlock app NAME)"
+        echo "  speedtest  Ping, download and upload speed"
+        echo "  tour       A short walkthrough of the desktop (also Super+Shift+/)"
+        echo "  keyring    Why apps ask for the keyring password after fingerprint login, and the fixes"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"
         tips=("Tip: Alt+Tab, then 1-9 sends the selected window to that desktop."
               "Tip: three fingers sideways switch windows; four switch desktops."
@@ -630,8 +713,22 @@ case "${1:-help}" in
               "Tip: the monitor in the top bar has a speed test. Click it."
               "Tip: Ctrl+\\ in MK Notes shows a live preview next to your text."
               "Tip: mk screensaver show web, if you can't wait."
+              "Tip: mk lock app Settings makes Settings ask for your fingerprint."
+              "Tip: mk tour, if you ever want the walkthrough again."
               "Tip: some commands aren't in this list. Excelsior.")
         echo ""
         echo "${tips[RANDOM % ${#tips[@]}]}"
         ;;
 esac
+
+# Now and then (1 run in 40, in a terminal only) a line for the road.
+if [[ -t 1 ]] && (( RANDOM % 40 == 0 )); then
+    memes=("It works on my machine. This is your machine now."
+           "There are 10 kinds of people: those who read binary and those who don't."
+           "git commit -m \"fix\"  # famous last words"
+           "Weeks of coding can save you hours of planning."
+           "sudo make me a sandwich."
+           "It's not a bug, it's an undocumented feature."
+           "Have you tried turning it off and on again? (Ctrl+Alt+Home)")
+    printf '\n\e[2m%s\e[0m\n' "${memes[RANDOM % ${#memes[@]}]}"
+fi

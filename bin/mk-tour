@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""MK tour: a short walkthrough of the desktop, its gestures and tools.
+
+  mk-tour              open the tour (also mk tour, Super+Shift+/ or the app grid)
+  mk-tour --first-run  open it once after setup, then never by itself again
+
+Arrow keys or the buttons move between pages; each page can open what it
+describes, so you can try it right away.
+"""
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+
+APP_ID = "io.github.mehulk.MkTour"
+BIN = Path.home() / ".local/bin"
+DONE = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "mk-workstation/tour-done"
+
+# (icon, title, text, [(button label, command)])
+PAGES = [
+    ("starred-symbolic", "Welcome to your workstation",
+     "A two-minute tour of what's where. Use the arrow keys or the buttons below; "
+     "most pages have a button to try it. Come back any time with mk tour or Super+Shift+/.",
+     []),
+    ("view-app-grid-symbolic", "The top bar",
+     "Left: the system menu (About, Settings, Sleep, Restart, Shut Down, with their shortcuts) "
+     "and the MK tag. Middle: the clock and calendar. Right: the system monitor (CPU, memory, "
+     "temperatures in °C, network, a speed test), your music, and Quick Settings with the "
+     "Welcome light.",
+     []),
+    ("focus-windows-symbolic", "Windows",
+     "Alt+Tab, or three fingers sideways on the touchpad: a compact card of every window. "
+     "Point and click, or press 1–9 to send a window to that desktop. Super+Z snaps windows "
+     "into layouts; Super with the arrow keys fills halves and quarters.",
+     []),
+    ("view-paged-symbolic", "Desktops",
+     "Four fingers sideways switch desktops; three fingers up show them all. "
+     "Super+Page Up and Page Down do the same from the keyboard, and Super+Ctrl+D adds a new one.",
+     [("Show the overview", "overview")]),
+    ("input-keyboard-symbolic", "Every shortcut, live",
+     "Super+/ lists every keyboard shortcut and touchpad gesture, marks any that clash, and "
+     "lets you change them with a click. Handy ones: Super+E Files, Super+V clipboard history, "
+     "Ctrl+Alt+End shut down, Ctrl+Alt+Home restart, Ctrl+Alt+Page Down sleep.",
+     [("Open Shortcuts", "show-shortcuts")]),
+    ("accessories-text-editor-symbolic", "MK Notes",
+     "Super+N: notes in plain Markdown files with links, tags, checklists, callouts, drawings and "
+     "pasted screenshots. Super+Ctrl+N jots a quick note from anywhere. Export to PDF with "
+     "Ctrl+Shift+E, and sync with your phone over Wi-Fi.",
+     [("Open MK Notes", "mk-notes")]),
+    ("alarm-symbolic", "Companion and focus timer",
+     "Super+Shift+N opens the Companion: notes you pin, tasks, reminders. The focus timer: type a "
+     "time and press Enter; it hides into the top bar and celebrates when you're done.",
+     [("Open the Companion", "mk-companion"), ("Focus timer", "mk-timer")]),
+    ("preferences-desktop-screensaver-symbolic", "Screensaver",
+     "Step away and a scene plays: a brick-built hero over the city, a caped knight in the rain, "
+     "a hex terminal or the aurora. Pick one or shuffle them in the Screensaver app.",
+     [("Choose a scene", "mk-screensaver settings")]),
+    ("changes-prevent-symbolic", "Locks and sign-in",
+     "Your fingerprint (and face, with a camera) signs you in and unlocks the screen. "
+     "mk lock app NAME makes an app ask for your fingerprint before it starts; "
+     "mk lock PATH encrypts a folder that only opens after you confirm it's you.",
+     []),
+    ("utilities-terminal-symbolic", "The mk command",
+     "mk update keeps everything current; mk sync re-applies the settings; mk doctor checks the "
+     "system's health; mk speedtest measures your connection; mk shortcuts, mk lock, mk tour. "
+     "Type mk on its own for the full list. Some commands aren't on it.",
+     [("Run mk doctor", "terminal:mk doctor")]),
+    ("emblem-ok-symbolic", "That's the tour",
+     "Everything is plain text in the MK repo: change it, run mk sync, and it's yours. Enjoy.",
+     []),
+]
+
+
+def show_overview():
+    """GNOME Shell's overview, through its public D-Bus property."""
+    Gio.bus_get_sync(Gio.BusType.SESSION).call(
+        "org.gnome.Shell", "/org/gnome/Shell", "org.freedesktop.DBus.Properties", "Set",
+        GLib.Variant("(ssv)", ("org.gnome.Shell", "OverviewActive", GLib.Variant("b", True))),
+        None, Gio.DBusCallFlags.NONE, 1000, None)
+
+
+def run(command):
+    if command == "overview":
+        try:
+            show_overview()
+        except GLib.Error:
+            pass
+        return
+    if command.startswith("terminal:"):
+        inner = command[len("terminal:"):]
+        argv = ["ptyxis", "--", "bash", "-c", f"{inner}; read -rp 'Press Enter to close'"]
+    else:
+        argv = command.split()
+        exe = BIN / argv[0]
+        if exe.exists():
+            argv[0] = str(exe)
+    try:
+        subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        pass
+
+
+class Tour(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Tour", default_width=720, default_height=520)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar(show_title=False))
+        self.carousel = Adw.Carousel(hexpand=True, vexpand=True, allow_scroll_wheel=True)
+        for icon, title, text, buttons in PAGES:
+            page = Adw.StatusPage(icon_name=icon, title=title, description=text, hexpand=True)
+            if buttons:
+                row = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER)
+                for label, command in buttons:
+                    button = Gtk.Button(label=label, css_classes=["pill"])
+                    button.connect("clicked", lambda _b, c=command: run(c))
+                    row.append(button)
+                page.set_child(row)
+            self.carousel.append(page)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(self.carousel)
+        nav = Gtk.Box(spacing=12, margin_start=18, margin_end=18, margin_bottom=18, margin_top=6)
+        self.back = Gtk.Button(label="Back", css_classes=["pill"])
+        self.back.connect("clicked", lambda *_: self.step(-1))
+        nav.append(self.back)
+        nav.append(Adw.CarouselIndicatorDots(carousel=self.carousel, hexpand=True))
+        self.next = Gtk.Button(label="Next", css_classes=["pill", "suggested-action"])
+        self.next.connect("clicked", lambda *_: self.step(1))
+        nav.append(self.next)
+        box.append(nav)
+        view.set_content(box)
+        self.set_content(view)
+        self.carousel.connect("page-changed", lambda *_: self.sync())
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.on_key)
+        self.add_controller(keys)
+        self.sync()
+
+    def position(self):
+        return round(self.carousel.get_position())
+
+    def step(self, delta):
+        target = self.position() + delta
+        if target >= self.carousel.get_n_pages():
+            self.close()
+            return
+        if target >= 0:
+            self.carousel.scroll_to(self.carousel.get_nth_page(target), True)
+
+    def sync(self):
+        pos = self.position()
+        self.back.set_sensitive(pos > 0)
+        self.next.set_label("Done" if pos == self.carousel.get_n_pages() - 1 else "Next")
+
+    def on_key(self, _c, keyval, _code, _state):
+        if keyval in (Gdk.KEY_Right, Gdk.KEY_space):
+            self.step(1)
+        elif keyval == Gdk.KEY_Left:
+            self.step(-1)
+        elif keyval == Gdk.KEY_Escape:
+            self.close()
+        else:
+            return False
+        return True
+
+
+class TourApp(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID)
+
+    def do_activate(self):
+        (self.get_active_window() or Tour(self)).present()
+
+
+def main():
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print(__doc__.strip())
+        return 0
+    if "--first-run" in sys.argv:
+        if DONE.exists():
+            return 0
+        DONE.parent.mkdir(parents=True, exist_ok=True)
+        DONE.write_text("shown\n")
+    return TourApp().run([sys.argv[0]])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

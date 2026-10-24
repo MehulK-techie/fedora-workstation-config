@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""mk speedtest: latency, download and upload, from the terminal.
+
+Uses Cloudflare's speed test endpoints (speed.cloudflare.com), the same ones
+as the speed test in the top-bar system monitor. About 35 MB of traffic.
+
+  mk speedtest          ping, download, upload
+  mk speedtest --ping   latency only
+"""
+import statistics
+import sys
+import time
+import urllib.request
+
+HOST = "https://speed.cloudflare.com"
+DOWN_BYTES = 25_000_000   # Cloudflare refuses single downloads much larger than this
+UP_BYTES = 10_000_000
+UA = {"User-Agent": "mk-speedtest/1"}
+
+
+def bar(label, done, total, mbps):
+    width = 28
+    filled = int(width * done / total) if total else width
+    sys.stdout.write(f"\r  {label:9} [{'█' * filled}{'·' * (width - filled)}] {mbps:7.1f} Mbit/s")
+    sys.stdout.flush()
+
+
+def ping(count=8):
+    times = []
+    for _ in range(count):
+        start = time.perf_counter()
+        with urllib.request.urlopen(urllib.request.Request(f"{HOST}/__down?bytes=0", headers=UA), timeout=10) as r:
+            r.read()
+        times.append((time.perf_counter() - start) * 1000)
+    times.sort()
+    best = times[: max(1, count - 2)]  # the slowest replies are usually the TLS warm-up
+    jitter = statistics.mean(abs(a - b) for a, b in zip(best, best[1:])) if len(best) > 1 else 0.0
+    return statistics.median(best), jitter
+
+
+def download():
+    start = time.perf_counter()
+    got = 0
+    with urllib.request.urlopen(urllib.request.Request(f"{HOST}/__down?bytes={DOWN_BYTES}", headers=UA),
+                                timeout=30) as r:
+        while chunk := r.read(256 * 1024):
+            got += len(chunk)
+            elapsed = time.perf_counter() - start
+            bar("Download", got, DOWN_BYTES, got * 8 / 1e6 / max(elapsed, 1e-6))
+    elapsed = time.perf_counter() - start
+    print()
+    return got * 8 / 1e6 / elapsed
+
+
+def upload():
+    payload = b"0" * UP_BYTES
+    sent = 0
+    start = time.perf_counter()
+
+    def body():
+        nonlocal sent
+        for i in range(0, UP_BYTES, 256 * 1024):
+            piece = payload[i:i + 256 * 1024]
+            sent += len(piece)
+            bar("Upload", sent, UP_BYTES, sent * 8 / 1e6 / max(time.perf_counter() - start, 1e-6))
+            yield piece
+
+    request = urllib.request.Request(f"{HOST}/__up", data=body(), method="POST",
+                                     headers={**UA, "Content-Type": "application/octet-stream",
+                                              "Content-Length": str(UP_BYTES)})
+    with urllib.request.urlopen(request, timeout=60) as r:
+        r.read()
+    elapsed = time.perf_counter() - start
+    print()
+    return UP_BYTES * 8 / 1e6 / elapsed
+
+
+def main():
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print(__doc__.strip())
+        return 0
+    try:
+        latency, jitter = ping()
+        print(f"  Ping      {latency:6.1f} ms   (jitter {jitter:.1f} ms)")
+        if "--ping" in sys.argv:
+            return 0
+        down = download()
+        up = upload()
+    except OSError as e:
+        print(f"\n[-] Speed test failed: {e}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print()
+        return 130
+    print(f"\n  ↓ {down:.1f} Mbit/s   ↑ {up:.1f} Mbit/s   ping {latency:.0f} ms")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

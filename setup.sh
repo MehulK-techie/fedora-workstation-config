@@ -133,6 +133,10 @@ if [[ -f "$SCRIPT_DIR/apps/dnf-packages.txt" ]]; then
     done
 fi
 
+# mk lock: the polkit action that asks "is it you?" (fingerprint or your
+# password) before a locked app starts or a locked folder opens.
+install -m 644 "$SCRIPT_DIR/assets/polkit/io.github.mehulk.mk-lock.policy" /usr/share/polkit-1/actions/
+
 # Apps MK replaced: gThumb (Loupe, GNOME's image viewer, opens images now).
 REMOVE_PKGS=(gthumb)
 for pkg in "${REMOVE_PKGS[@]}"; do

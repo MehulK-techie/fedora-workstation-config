@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Tour
+Comment=A short walkthrough of the desktop, gestures and MK tools
+Exec=@BIN@/mk-tour
+Icon=io.github.mehulk.MkTour
+Categories=Utility;Documentation;
+Keywords=help;tour;welcome;guide;tips;mk;
+StartupNotify=true
+StartupWMClass=io.github.mehulk.MkTour

@@ -12,6 +12,7 @@ import { OsdStack } from './osdStack.js';
 import { Accent } from './accent.js';
 import { SystemMonitor } from './systemMonitor.js';
 import { MediaTile } from './mediaTile.js';
+import { FocusHelper } from './focus.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -105,6 +106,8 @@ export default class MKIndicatorExtension extends Extension {
         this._sysMonitor.enable();
         this._media = new MediaTile();
         this._media.enable();
+        this._focus = new FocusHelper();
+        this._focus.enable();
         this._sessionId = Main.sessionMode.connect('updated', () => this._onSessionMode());
         this._onSessionMode();
 
@@ -187,6 +190,8 @@ export default class MKIndicatorExtension extends Extension {
         this._sysMonitor = null;
         this._media?.disable();
         this._media = null;
+        this._focus?.disable();
+        this._focus = null;
         this._accent?.disable();
         this._accent = null;
         this._brandMonitor?.cancel();

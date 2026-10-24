@@ -23,6 +23,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { Slider } from 'resource:///org/gnome/shell/ui/slider.js';
 import { getMixerControl } from 'resource:///org/gnome/shell/ui/status/volume.js';
 import { dominantHue, hsvToRgb } from './colour.js';
+import { expectFocus } from './focus.js';
 
 const PREFIX = 'org.mpris.MediaPlayer2.';
 const PATH = '/org/mpris/MediaPlayer2';
@@ -474,6 +475,7 @@ export class MediaTile {
             return;
         const name = this._current;
         this._button.menu.close();
+        expectFocus();
         this._bus.call(name, PATH, 'org.freedesktop.DBus.Properties', 'Get',
             new GLib.Variant('(ss)', ['org.mpris.MediaPlayer2', 'DesktopEntry']), null, Gio.DBusCallFlags.NONE,
             1000, null, (c, res) => {

@@ -550,6 +550,27 @@ case "${1:-help}" in
         echo "  System-wide parts (apps, repos, face unlock, dnf.conf) are covered in docs/GUIDE.md › Undo and uninstall."
         ;;
 
+    excelsior|--excelsior)
+        # A small tribute to Stan Lee (1922-2018). Not in the help: you found it.
+        red=$'\e[38;5;196m' blue=$'\e[38;5;33m' dim=$'\e[2m' bold=$'\e[1m' off=$'\e[0m'
+        cols=$(tput cols 2> /dev/null || echo 80)
+        width=$(( cols > 70 ? 60 : cols - 10 ))
+        printf '\n'
+        for (( i = 0; i <= width; i += 2 )); do  # thwip: the web line shoots across
+            printf '\r  %s%s%s' "$dim" "$(printf '%*s' "$i" '' | tr ' ' '~')" "$off"
+            printf '%s*%s' "$red" "$off"
+            sleep 0.012
+        done
+        printf '\r  %s%s%s\n\n' "$blue" "$(printf '%*s' "$width" '' | tr ' ' '~')" "$off"
+        quote="With great power comes great responsibility."
+        printf '  '
+        for (( i = 0; i < ${#quote}; i++ )); do
+            printf '%s%s%s' "$bold" "${quote:i:1}" "$off"
+            sleep 0.025
+        done
+        printf '\n\n  %s%sExcelsior!%s  %s— Stan Lee, 1922–2018%s\n\n' "$red" "$bold" "$off" "$dim" "$off"
+        ;;
+
     *)
         echo "MK Workstation CLI"
         echo "Usage: mk <command>"
@@ -581,5 +602,15 @@ case "${1:-help}" in
         echo "  accent     Desktop colour: auto (from your wallpaper), #rrggbb, status"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"
+        tips=("Tip: Alt+Tab, then 1-9 sends the selected window to that desktop."
+              "Tip: three fingers sideways switch windows; four switch desktops."
+              "Tip: Super+/ shows every shortcut, live, and lets you change them."
+              "Tip: mk welcome lines lets you write your own greetings."
+              "Tip: the monitor in the top bar has a speed test. Click it."
+              "Tip: Ctrl+\\ in MK Notes shows a live preview next to your text."
+              "Tip: mk screensaver show web, if you can't wait."
+              "Tip: some commands aren't in this list. Excelsior.")
+        echo ""
+        echo "${tips[RANDOM % ${#tips[@]}]}"
         ;;
 esac

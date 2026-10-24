@@ -597,6 +597,18 @@ case "${1:-help}" in
         esac
         ;;
 
+    nap)
+        # mk nap: which apps App Nap has paused (config/appnap.conf)
+        state="$HOME/.cache/mk-workstation/app-nap.json"
+        if [[ -s "$state" ]] && [[ "$(cat "$state")" != "{}" ]]; then
+            echo "Napping (switch to one to wake it):"
+            python3 -c 'import json,sys; [print("  " + k.removesuffix(".desktop")) for k in json.load(open(sys.argv[1]))]' "$state"
+        else
+            echo "Nothing is napping. App Nap pauses unused, minimized apps when memory or the processor is under pressure."
+        fi
+        echo "Settings: ~/.config/mk-workstation/appnap.conf (defaults in config/appnap.conf)"
+        ;;
+
     speedtest)
         shift
         "$HOME/.local/bin/mk-speedtest" "$@"
@@ -703,6 +715,7 @@ KEYRING
         echo "  lock       Fingerprint before an app starts, or an encrypted folder: mk lock app NAME, mk lock ~/Folder"
         echo "  unlock     Open a locked folder (mk unlock ~/Folder) or stop locking an app (mk unlock app NAME)"
         echo "  speedtest  Ping, download and upload speed"
+        echo "  nap        Which unused apps App Nap paused under memory or CPU pressure"
         echo "  tour       A short walkthrough of the desktop (also Super+Shift+/)"
         echo "  keyring    Why apps ask for the keyring password after fingerprint login, and the fixes"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"

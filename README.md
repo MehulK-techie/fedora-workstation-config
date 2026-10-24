@@ -27,10 +27,10 @@
 | :---: | :---: |
 | <img src="docs/assets/screens/shortcuts-window.jpg" width="420"><br><sub>Super+/ · every shortcut, live, editable</sub> | <img src="docs/assets/screens/notes-split.jpg" width="420"><br><sub>Super+N · MK Notes, edit with live preview</sub> |
 | <img src="docs/assets/screens/focus-timer.jpg" width="420"><br><sub>Focus timer</sub> | <img src="docs/assets/screens/timer-celebration.jpg" width="420"><br><sub>…and the celebration when time is up</sub> |
-| <img src="docs/assets/screens/alttab.jpg" width="420"><br><sub>Alt+Tab or three fingers · the ring glides with you</sub> | <img src="docs/assets/screens/tiled.jpg" width="420"><br><sub>Halves and quarters, Windows-style</sub> |
+| <img src="docs/assets/screens/alttab.jpg" width="420"><br><sub>Alt+Tab or three fingers · every window, live, in a grid</sub> | <img src="docs/assets/screens/tiled.jpg" width="420"><br><sub>Halves and quarters, Windows-style</sub> |
 
-| <img src="docs/assets/screens/companion.jpg" width="420"><br><sub>Super+Shift+N · Companion: quick notes, tasks, reminders</sub> | <img src="docs/assets/screens/saver-bubbles.jpg" width="420"><br><sub>Step away during a focus session: bubbles over your work</sub> |
-| <img src="docs/assets/screens/calendar.jpg" width="420"><br><sub>Calendar, with the timer countdown in the top bar</sub> | <img src="docs/assets/screens/notes-tasks.jpg" width="420"><br><sub>Every checkbox from every note, in one list</sub> |
+| <img src="docs/assets/screens/companion.jpg" width="420"><br><sub>Super+Shift+N · Companion: quick notes, tasks, reminders</sub> | <img src="docs/assets/screens/scene-web.jpg" width="420"><br><sub>Step away: Web Hang, one of the screensaver scenes</sub> |
+| <img src="docs/assets/screens/media.jpg" width="420"><br><sub>Your music in the top bar: Spotify or any player</sub> | <img src="docs/assets/screens/notes-tasks.jpg" width="420"><br><sub>Every checkbox from every note, in one list</sub> |
 
 <p align="center"><img src="docs/assets/screens/dock-magnify.jpg" width="640"><br><sub>Dock magnification and app-coloured glow</sub></p>
 

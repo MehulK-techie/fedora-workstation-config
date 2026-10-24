@@ -224,8 +224,8 @@ SECTIONS = [("why", "Why it exists", "Great foundation, bare walls"),
             ("welcome", "A desktop that says hello", "Greeting, tasks, your colours"),
             ("notes", "MK Notes", "Write, link, draw, find"),
             ("notes-more", "MK Notes: the rest", "Sync, PDF, website, history, tasks"),
-            ("focus", "Focus timer", "Screensavers over your work"),
-            ("topbar", "The top bar", "System monitor and quick settings"),
+            ("focus", "Step away", "Screensavers worth stepping away for"),
+            ("topbar", "The top bar", "Speed test, system monitor, your music"),
             ("apps", "Apps, ready to go", "Joplin, ONLYOFFICE, Zen and more"),
             ("hardware", "Made for your computer", "Fingerprint, battery, speakers"),
             ("shortcuts", "Shortcuts you already know", "Windows and Mac habits"),
@@ -271,15 +271,15 @@ footer()
 
 # 4 ── Switching
 new_page("switching", "Moving between apps")
-y = kicker_title(cr, "Moving between apps", "Swipe through your windows")
+y = kicker_title(cr, "Moving between apps", "Every window, live, one swipe away")
 h = image(cr, "alttab", M, y + 10, 560, crop=(0, 0, 1920, 1080))
-caption(cr, "Alt+Tab or a three-finger swipe: one glowing ring glides to the window you want", M, y + 16 + h, 560)
+caption(cr, "Alt+Tab or three fingers: a frosted grid of live windows, the ring glides to the one you want", M, y + 16 + h, 560)
 points(cr, [
-    ("Three fingers", "left and right through every open window, on every workspace"),
-    ("Steady", "each window takes the same finger travel, however many are open"),
-    ("Four fingers", "switch workspaces; up for an overview of everything"),
-    ("Pinch", "three fingers for volume, four to show the desktop"),
-    ("Alt+Tab", "as fast as GNOME's own switcher, measured"),
+    ("A grid, not a strip", "live previews, app icons, titles, and which desktop each is on"),
+    ("Three fingers", "swipe through them; each window takes the same finger travel"),
+    ("Move as you go", "press 1–9 to send the selected window to that desktop"),
+    ("Mouse too", "point at a window to pick it, click to open it"),
+    ("Four fingers", "switch desktops; pinch to show the desktop"),
 ], 640, y + 14, W - M - 640, size=10.5, gap=11)
 footer()
 
@@ -318,7 +318,8 @@ points(cr, [
     ("Light that lands on time", "two comets run up the screen edges and meet at the top, once the desktop "
                                  "is ready, so it never stutters"),
     ("What's waiting", "your pinned tasks and the next reminder today, right under the greeting"),
-    ("Say it your way", "your name, sir or ma'am, or your own line; spoken aloud if you like"),
+    ("Never the same twice", "good morning, Friday, long time no see, your birthday… or your own lines"),
+    ("Say it your way", "your name, sir or ma'am; spoken aloud if you like"),
     ("Your colours", "the whole desktop picks up the most vivid colour of your wallpaper"),
 ], M + 545, y + 14, W - M - (M + 545), size=10.5, gap=11)
 footer()
@@ -346,12 +347,12 @@ y = kicker_title(cr, "MK Notes", "The features you'd normally pay for")
 th = image(cr, "notes-tasks", M, y + 10, 430, crop=(0, 0, 1920, 1080))
 caption(cr, "Every checkbox from every note, in one list", M, y + 16 + th, 430)
 cols = [
-    ("Phone sync", "browser or Android app, works offline, syncs over your Wi-Fi"),
+    ("Phone sync", "browser or Android app, works offline, encrypted over your Wi-Fi"),
     ("PDF export", "one click, with pictures and checkboxes"),
     ("Your website", "publish your notes as pages you can host anywhere"),
     ("Version history", "go back to how a note looked this morning"),
     ("Daily notes", "a calendar marks the days you wrote"),
-    ("Focus mode", "F11: nothing but the words"),
+    ("Quick capture", "Super+Ctrl+N from anywhere, straight into your Inbox"),
     ("Your look", "theme, font, size, line length, spacing"),
     ("Tasks view", "tick things off without opening the note"),
 ]
@@ -368,34 +369,36 @@ footer()
 
 # 10 ── Focus
 new_page("focus", "Focus timer")
-y = kicker_title(cr, "Focus timer", "Step away. It notices.")
-bw = (W - 2 * M - 16) / 2
-bh = image(cr, "saver-bubbles", M, y + 10, bw)
-image(cr, "saver-starfield", M + bw + 16, y + 10, bw)
-caption(cr, "Bubbles drift over your work…", M, y + 16 + bh, bw)
-caption(cr, "…or fly through the stars. Any touch and you're back.", M + bw + 16, y + 16 + bh, bw)
+y = kicker_title(cr, "Step away", "Screensavers worth stepping away for")
+bw = (W - 2 * M - 2 * 12) / 3
+bh = image(cr, "scene-web", M, y + 10, bw)
+image(cr, "scene-knight", M + bw + 12, y + 10, bw)
+image(cr, "scene-matrix", M + 2 * (bw + 12), y + 10, bw)
+caption(cr, "Web Hang: a masked hero swings over the city", M, y + 16 + bh, bw)
+caption(cr, "Night Watch: a caped figure in the rain", M + bw + 12, y + 16 + bh, bw)
+caption(cr, "Neon Cascade: code rain decodes the time", M + 2 * (bw + 12), y + 16 + bh, bw)
 points(cr, [
-    ("Counts down in the top bar", "the window gets out of your way"),
-    ("Screensavers over your work", "Bubbles, Mystify, Starfield or a calm full-screen view"),
-    ("Quiet while you focus", "notifications wait until you're done"),
-    ("A celebration, not an alarm", "a little pixel party when time's up"),
+    ("When you step away", "after three idle minutes, or in a focus session; any touch and you're back"),
+    ("Never over a film", "a video, a call or Keep awake keeps it away"),
+    ("Focus timer", "counts down in the top bar, silences notifications, ends with a little party"),
+    ("Light on the machine", "30 frames a second, the still parts drawn once"),
 ], M, y + 36 + bh, W - 2 * M, size=10.5, gap=7)
 footer()
 
 # 11 ── Top bar
 new_page("topbar", "The top bar")
 y = kicker_title(cr, "The top bar", "Everything you check, one click away")
-mh = image(cr, "monitor", M, y + 10, 230)
-caption(cr, "System monitor: honest numbers, no clutter", M, y + 16 + mh, 230)
-qh = image(cr, "quick-settings", M + 250, y + 10, 210, crop=(1415, 50, 490, 560))
-caption(cr, "Quick Settings", M + 250, y + 16 + qh, 210)
+mh = image(cr, "speedtest", M, y + 10, 200)
+caption(cr, "System monitor with a speed test", M, y + 16 + mh, 200)
+qh = image(cr, "media", M + 220, y + 10, mh * 470 / 620, h=mh)
+caption(cr, "Your music, from Spotify or any player", M + 220, y + 16 + qh, mh * 470 / 620)
+px = M + 220 + mh * 470 / 620 + 22
 points(cr, [
-    ("System monitor", "a tiny CPU graph and temperature; click for memory, disk, network, battery "
-                       "draw and the busiest apps"),
+    ("System monitor", "a tiny CPU graph and temperature; click for memory, disk, battery draw"),
+    ("Speed test", "ping, download and upload on a gauge, whenever you ask"),
+    ("Your music", "spinning album art, the song scrolling by, seek, skip, pick speakers"),
     ("Clipboard history", "Super+V brings back anything you copied"),
-    ("Keep awake", "one switch stops the screen from sleeping during a film or a long download"),
-    ("Your tray icons", "Spotify, chat apps and game launchers show up like on any other desktop"),
-], M + 485, y + 14, W - M - (M + 485), size=10.5, gap=11)
+], px, y + 14, W - M - px, size=10, gap=10)
 footer()
 
 # 12 ── Apps

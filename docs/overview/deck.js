@@ -82,8 +82,9 @@ const NOTES = {
   "A desktop that says hello, and remembers": "After login the light runs round the screen once the desktop is ready, and the greeting shows your pinned tasks and next reminder. The colours across the desktop come from your wallpaper.",
   "MK Notes: write, link, draw, find": "MK Notes keeps notes as plain Markdown files. Links, backlinks and a graph; draw with a pen; paste screenshots; edit with a live preview. The same notes are on your phone.",
   "The features you'd normally pay for": "Sync to your phone over Wi-Fi, PDF export, publishing as a website and version history are built in, plus a tasks view, a daily-notes calendar, focus mode and your own look.",
-  "Step away. It notices.": "The focus timer counts down in the top bar. Step away and a screensaver plays over your work; when time's up there's a small celebration instead of an alarm.",
-  "Everything you check, one click away": "A light system monitor in the top bar with honest numbers, clipboard history on Super+V, a keep-awake switch and the usual tray icons.",
+  "Screensavers worth stepping away for": "Step away for a few minutes and a scene plays: a masked hero swinging from a web over the city, a caped figure in the rain, or code rain that decodes the time. A video or call keeps it away; any touch brings you back.",
+  "Everything you check, one click away": "The top bar has a light system monitor with a speed test, a media tile for Spotify or any player with seek and speaker choice, and clipboard history on Super+V.",
+  "Every window, live, one swipe away": "Alt+Tab and the three-finger swipe open a frosted grid of live windows. Each window takes the same finger travel, the mouse works too, and 1 to 9 sends the selected window to that desktop.",
   "Installed and ready on first login": "The apps people ask for are there on first login, including Joplin, ONLYOFFICE, Zen and VS Code. The app lists are plain text files you can edit.",
   "It looks at your hardware, then tunes for it": "It checks the hardware first: fingerprint or face unlock where there's a reader, power profiles on battery, speaker tuning, touch and 2-in-1 support, the right video driver.",
   "Your hands already know these": "Shortcuts follow Windows and macOS habits. Super+/ shows every one live and lets you change any key.",
@@ -156,13 +157,13 @@ row(s, "software-update-available", "After", "one command, a coffee, a finished 
 
 // 3. Switching
 pres.addSection({ title: "Your desktop" });
-s = content("Your desktop", "Moving between apps", "Swipe through your windows");
+s = content("Your desktop", "Moving between apps", "Every window, live, one swipe away");
 shot(s, "alttab", 0.5, 1.4, 5.6, 3.15);
-caption(s, "One glowing ring glides to the window you want", 0.5, 4.65, 5.6);
-row(s, "input-touchpad", "Three fingers", "every window, every workspace", 6.4, 1.45, 3.1);
-row(s, "view-grid", "Four fingers", "workspaces; up for an overview", 6.4, 2.3, 3.1);
-row(s, "system-run", "As fast as GNOME", "measured, frame for frame", 6.4, 3.15, 3.1);
-row(s, "view-reveal", "Steady", "same finger travel per window", 6.4, 4.0, 3.1);
+caption(s, "A frosted grid of live windows; the ring glides to your pick", 0.5, 4.65, 5.6);
+row(s, "view-grid", "A grid, not a strip", "previews, titles, which desktop", 6.4, 1.45, 3.1);
+row(s, "input-touchpad", "Three fingers", "same finger travel per window", 6.4, 2.3, 3.1);
+row(s, "view-dual", "Move as you go", "1–9 sends it to that desktop", 6.4, 3.15, 3.1);
+row(s, "system-run", "As fast as GNOME", "measured, frame for frame", 6.4, 4.0, 3.1);
 s.addNotes("Alt+Tab and the three-finger swipe show one switcher with a ring that follows your fingers. Each window takes the same finger travel however many are open, so fast swipes land where you expect.");
 
 // 4. Windows
@@ -180,7 +181,7 @@ shot(s, "welcome", 0.5, 1.4, 5.6, 3.15);
 caption(s, "The greeting lands with the light, your tasks underneath", 0.5, 4.65, 5.6);
 row(s, "weather-clear-night", "Light on time", "plays once the desktop is ready", 6.4, 1.45, 3.1);
 row(s, "view-pin", "What's waiting", "pinned tasks and today's next reminder", 6.4, 2.3, 3.1);
-row(s, "face-smile", "Your way", "your name or your own line, spoken if you like", 6.4, 3.15, 3.1);
+row(s, "face-smile", "Never the same twice", "morning, Friday, birthday, or your lines", 6.4, 3.15, 3.1);
 row(s, "preferences-color", "Your colours", "taken from your wallpaper", 6.4, 4.0, 3.1);
 
 // 6. MK Notes
@@ -197,36 +198,39 @@ row(s, "edit-paste", "Pasted", "screenshots straight in", 7.6, 3.85, 2.0);
 
 // 7. MK Notes, more
 s = content("MK Notes", "MK Notes", "The features you'd normally pay for");
-[["emblem-system", "Phone sync", "browser or Android, offline, over Wi-Fi"],
+[["emblem-system", "Phone sync", "browser or Android, offline, encrypted"],
  ["x-office-document", "PDF export", "one click, with pictures"],
  ["network-workgroup", "Your website", "publish notes as web pages"],
  ["document-open-recent", "Version history", "how a note looked this morning"],
  ["x-office-calendar", "Daily notes", "a calendar of the days you wrote"],
  ["checkbox-checked", "Tasks view", "every checkbox, in one list"],
- ["view-reveal", "Focus mode", "F11: nothing but the words"],
+ ["edit-paste", "Quick capture", "Super+Ctrl+N from anywhere"],
  ["preferences-color", "Your look", "theme, font, size, spacing"]]
   .forEach(([ic, h, b], i) => card(s, ic, h, b, 0.5 + (i % 4) * 2.28, 1.4 + Math.floor(i / 4) * 1.85, 2.1, 1.7));
 
 // 8. Focus
 pres.addSection({ title: "Focus and tools" });
-s = content("Focus and tools", "Focus timer", "Step away. It notices.");
-shot(s, "saver-bubbles", 0.5, 1.4, 4.4, 2.475);
-shot(s, "saver-starfield", 5.1, 1.4, 4.4, 2.475);
-caption(s, "Bubbles or a starfield over your work; any touch and you're back", 0.5, 3.95, 9);
-row(s, "alarm", "Counts down in the top bar", "the window gets out of your way", 0.5, 4.35, 4.4);
-row(s, "face-smile", "A celebration, not an alarm", "a little party when time's up", 5.1, 4.35, 4.4);
+s = content("Focus and tools", "Step away", "Screensavers worth stepping away for");
+shot(s, "scene-web", 0.5, 1.4, 2.9, 1.63);
+shot(s, "scene-knight", 3.55, 1.4, 2.9, 1.63);
+shot(s, "scene-matrix", 6.6, 1.4, 2.9, 1.63);
+caption(s, "Web Hang · Night Watch · Neon Cascade", 0.5, 3.12, 9);
+row(s, "weather-clear-night", "When you step away", "after a few idle minutes; any touch ends it", 0.5, 3.6, 4.4);
+row(s, "video-display", "Never over a film", "videos and calls keep it away", 5.1, 3.6, 4.4);
+row(s, "alarm", "Focus timer", "countdown in the top bar, then a little party", 0.5, 4.35, 4.4);
+row(s, "system-run", "Light on the machine", "30 fps, still parts drawn once", 5.1, 4.35, 4.4);
 
 // 9. Top bar
 s = content("Focus and tools", "The top bar", "Everything you check, one click away");
-s.addImage({ path: img("monitor"), x: 0.5, y: 1.4, w: 2.9, h: 2.6, objectName: "monitor",
+s.addImage({ path: img("speedtest"), x: 0.5, y: 1.4, w: 1.86, h: 3.2, objectName: "monitor",
   shadow: { type: "outer", color: "0B1430", opacity: 0.18, blur: 10, offset: 3, angle: 90 } });
-s.addImage({ path: img("quick"), x: 3.6, y: 1.4, w: 2.27, h: 2.6, objectName: "quick",
+s.addImage({ path: img("media"), x: 2.55, y: 1.4, w: 2.43, h: 3.2, objectName: "media",
   shadow: { type: "outer", color: "0B1430", opacity: 0.18, blur: 10, offset: 3, angle: 90 } });
-caption(s, "System monitor and Quick Settings", 0.5, 4.1, 5.4);
-row(s, "video-display", "System monitor", "CPU, memory, temperatures, battery draw", 6.2, 1.45, 3.3);
-row(s, "edit-paste", "Clipboard history", "Super+V brings back what you copied", 6.2, 2.3, 3.3);
-row(s, "weather-clear-night", "Keep awake", "one switch for films and downloads", 6.2, 3.15, 3.3);
-row(s, "view-grid", "Tray icons", "chat apps and launchers, like anywhere", 6.2, 4.0, 3.3);
+caption(s, "Speed test and your music", 0.5, 4.7, 4.5);
+row(s, "video-display", "System monitor", "CPU, memory, temperatures, battery", 5.4, 1.45, 4.1);
+row(s, "network-workgroup", "Speed test", "ping, download, upload on a gauge", 5.4, 2.3, 4.1);
+row(s, "audio-speakers", "Your music", "art, seek, skip, choose speakers", 5.4, 3.15, 4.1);
+row(s, "edit-paste", "Clipboard history", "Super+V brings back what you copied", 5.4, 4.0, 4.1);
 
 // 10. Apps
 s = content("Focus and tools", "Apps", "Installed and ready on first login");

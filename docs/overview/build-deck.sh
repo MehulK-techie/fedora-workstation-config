@@ -36,8 +36,8 @@ def crop(name, box, out):
 crop("companion", (675, 170, 1245, 945), "companion")
 crop("quick-settings", (1415, 50, 1905, 610), "quick")
 crop("shortcuts-window", (486, 76, 1436, 1032), "shortcuts")
-for name in ("welcome", "alttab", "tiled", "notes-split", "notes-tasks", "saver-bubbles", "saver-starfield",
-             "monitor", "phone-note", "dock-magnify"):
+for name in ("welcome", "alttab", "tiled", "notes-split", "notes-tasks", "scene-web", "scene-knight", "scene-matrix",
+             "speedtest", "media", "phone-note", "dock-magnify"):
     Image.open(shots / f"{name}.jpg").save(assets / "img" / f"{name}.jpg", quality=92)
 
 # GNOME's symbolic icons, white, for the coloured circles.

@@ -85,7 +85,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `config/theme.conf` | `ACCENT=` (`auto` or `#rrggbb`), `SYSTEM_ACCENT=` (on/off), `CURSOR=` (cursor theme) | mk-indicator (`accent.js`), `mk accent`, `sync.sh` |
 | `config/notes.conf` | `NOTES_DIR=`, `SYNC=`, `SYNC_PORT=`, `HISTORY=`; look: `THEME=`, `FONT=`, `FONT_SIZE=`, `WIDTH=`, `SPACING=`, `FORMAT_BAR=`, `OPEN_IN=`, `SORT=` | `mk-notes` (Preferences writes them) |
 | `config/monitor.conf` | `PANEL=` (cpu, mem, temp, net, disk, power), `INTERVAL=` (s) | mk-indicator system monitor |
-| `config/appnap.conf` | `APP_NAP=` (on/off), `MEM_THRESHOLD=` (%), `CPU_THRESHOLD=` (%), `IDLE_MINUTES=`, `NEVER=` (comma-separated app ids or parts) | mk-indicator App Nap |
+| `config/appnap.conf` | `APP_NAP=` (on/off), `MEM_THRESHOLD=` (%), `PSI_THRESHOLD=` (% memory stall, /proc/pressure/memory), `CPU_THRESHOLD=` (%), `IDLE_MINUTES=`, `NEVER=` (comma-separated app ids or parts) | mk-indicator App Nap |
 | `assets/polkit/io.github.mehulk.mk-lock.policy` | polkit action (`auth_self`) | `setup.sh` installs it; `mk-lock` asks it |
 | `config/screensaver.conf` | `SCREENSAVER=` (on/off), `DELAY=` (s, 30+), `SCENE=` (random, aurora, web, knight, matrix) | `mk-screensaver`, `mk screensaver` |
 | `config/media.conf` | `MEDIA=` (on/off), `TICKER=` (on/off: the song title beside the record), `PLAYERS=` (all/spotify) | mk-indicator media tile |

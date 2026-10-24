@@ -6,7 +6,8 @@
 // memory to zram swap. Nothing is lost: focusing any of its windows, or
 // clicking it in the dock, thaws it before you see a stale frame.
 //
-// Only paused when ALL hold: pressure (memory > MEM_THRESHOLD %, or CPU >
+// Only paused when ALL hold: pressure (memory > MEM_THRESHOLD %, memory stalls
+// > PSI_THRESHOLD % in /proc/pressure/memory, or CPU >
 // CPU_THRESHOLD % for a minute), unused for IDLE_MINUTES, every window
 // minimized or on another desktop, not playing sound, not in NEVER.
 // config/appnap.conf; `mk nap` lists what's napping (state in
@@ -22,7 +23,7 @@ const STATE = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation',
 const CHECK_S = 10;
 
 function readConf() {
-    const out = {APP_NAP: 'on', MEM_THRESHOLD: '85', CPU_THRESHOLD: '90', IDLE_MINUTES: '5', NEVER: ''};
+    const out = {APP_NAP: 'on', MEM_THRESHOLD: '85', PSI_THRESHOLD: '10', CPU_THRESHOLD: '90', IDLE_MINUTES: '5', NEVER: ''};
     for (const path of [DEFAULT_CONF, USER_CONF]) {
         try {
             const [ok, bytes] = GLib.file_get_contents(path);
@@ -126,7 +127,11 @@ export class AppNap {
         else
             this._busySince = 0;
         const cpuSustained = this._busySince && now - this._busySince >= 60e6;
-        return memUsed > Number(this._conf.MEM_THRESHOLD) || cpuSustained;
+        // Pressure stall information: the share of the last 10 s in which some
+        // task waited for memory. Rising stalls mean the system is struggling
+        // even before "used" memory looks full.
+        const psi = Number(readFile('/proc/pressure/memory').match(/^some avg10=([\d.]+)/m)?.[1] ?? 0);
+        return memUsed > Number(this._conf.MEM_THRESHOLD) || psi > Number(this._conf.PSI_THRESHOLD) || cpuSustained;
     }
 
     _audible() {

@@ -307,6 +307,20 @@ fi
 # extension (crashing others), toggled Blur my Shell too early (mk-session), or
 # re-applied keys that now persist. Move them aside rather than delete them.
 AUTOSTART_DIR="$HOME/.config/autostart"
+# Screensaver: watches for idle time from login (it does nothing while
+# SCREENSAVER=off; a video, a call or Caffeine keep it away).
+mkdir -p "$AUTOSTART_DIR"
+cat > "$AUTOSTART_DIR/mk-screensaver.desktop" << DESKTOP
+[Desktop Entry]
+Type=Application
+Name=MK screensaver
+Comment=Plays a scene when you step away (mk screensaver)
+Exec=$HOME/.local/bin/mk-screensaver
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=15
+NoDisplay=true
+DESKTOP
+pgrep -f "mk-screensaver$" > /dev/null || setsid -f "$HOME/.local/bin/mk-screensaver" > /dev/null 2>&1 || true
 RETIRED_DIR="$HOME/.config/mk-workstation/retired-autostart"
 rm -f "$HOME/.local/bin/mk-session"
 for hack in fix-extensions.desktop bms-panel-fix.desktop gnome-alt-tab-fix.desktop mk-session.desktop; do

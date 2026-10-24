@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""MK screensaver: a full-screen scene when you step away from the computer.
+
+  mk-screensaver               start watching (login does this): shows a scene
+                               after DELAY seconds without input
+  mk-screensaver show [SCENE]  show one now (aurora, web, knight, matrix, random)
+  mk-screensaver list          the scenes
+
+Settings: config/screensaver.conf, yours in ~/.config/mk-workstation/screensaver.conf
+(SCREENSAVER=on|off, DELAY=seconds, SCENE=random|aurora|web|knight|matrix).
+GNOME still blanks and locks the screen at its own time (Settings › Power
+and Privacy): the scene plays before that. It stays away while a video, a call
+or Caffeine keeps the screen awake, and while the focus timer runs (it has
+its own). The first touch of the mouse, touchpad or keyboard ends it.
+"""
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_foreign("cairo")
+from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+
+
+def _add_lib_path():
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for candidate in (Path(__file__).resolve().parent.parent / "lib",
+                      Path(data_home) / "mk-workstation/lib"):
+        if (candidate / "mkworkstation").is_dir():
+            sys.path.insert(0, str(candidate))
+            return
+
+
+_add_lib_path()
+from mkworkstation import scenes  # noqa: E402
+
+APP_ID = "io.github.mehulk.MkScreensaver"
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "mk-workstation"
+DATA = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share") / "mk-workstation"
+TIMER_STATE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "mk-workstation/timer.json"
+FPS = 30
+IDLE = ("org.gnome.Mutter.IdleMonitor", "/org/gnome/Mutter/IdleMonitor/Core", "org.gnome.Mutter.IdleMonitor")
+
+
+def conf():
+    values = {"SCREENSAVER": "on", "DELAY": "180", "SCENE": "random"}
+    for path in (DATA / "config/screensaver.conf", CONFIG / "screensaver.conf"):
+        try:
+            for line in path.read_text().splitlines():
+                if "=" in line and not line.lstrip().startswith("#"):
+                    key, value = line.split("=", 1)
+                    values[key.strip()] = value.strip()
+        except OSError:
+            pass
+    return values
+
+
+def screen_kept_awake(bus):
+    """A video, a call or Caffeine is keeping the screen awake."""
+    sm = ("org.gnome.SessionManager", "/org/gnome/SessionManager", "org.gnome.SessionManager")
+    try:
+        paths = bus.call_sync(*sm, "GetInhibitors", None, GLib.VariantType("(ao)"), 0, 1000, None).unpack()[0]
+        for path in paths:
+            flags = bus.call_sync(sm[0], path, "org.gnome.SessionManager.Inhibitor", "GetFlags", None,
+                                  GLib.VariantType("(u)"), 0, 1000, None).unpack()[0]
+            if flags & 8:
+                return True
+    except GLib.Error:
+        pass
+    return False
+
+
+def focus_timer_running():
+    try:
+        return bool(json.loads(TIMER_STATE.read_text()).get("running"))
+    except (OSError, ValueError):
+        return False
+
+
+class SaverWindow(Gtk.ApplicationWindow):
+    def __init__(self, app, name):
+        super().__init__(application=app, title="Screensaver", decorated=False)
+        self.scene = scenes.pick(name)
+        self.started = time.monotonic()
+        self.pointer = None
+        area = Gtk.DrawingArea(hexpand=True, vexpand=True)
+        area.set_draw_func(self._draw)
+        self.last_frame = 0.0
+        area.add_tick_callback(self._tick)
+        self.set_child(area)
+        self.set_cursor(Gdk.Cursor.new_from_name("none"))
+        motion = Gtk.EventControllerMotion()
+        motion.connect("motion", self._motion)
+        self.add_controller(motion)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", lambda *_: self._wake())
+        self.add_controller(keys)
+        click = Gtk.GestureClick(button=0)
+        click.connect("pressed", lambda *_: self._wake())
+        self.add_controller(click)
+        scroll = Gtk.EventControllerScroll(flags=Gtk.EventControllerScrollFlags.BOTH_AXES)
+        scroll.connect("scroll", lambda *_: self._wake())
+        self.add_controller(scroll)
+        self.fullscreen()
+
+    def _tick(self, widget, clock):
+        now = time.monotonic()
+        if now - self.last_frame >= 1 / FPS - 0.002:  # 30 fps is plenty, and kinder
+            self.last_frame = now
+            widget.queue_draw()
+        return GLib.SOURCE_CONTINUE
+
+    def _draw(self, _area, cr, w, h):
+        self.scene.draw(cr, w, h, time.monotonic() - self.started)
+
+    def _motion(self, _c, x, y):
+        if self.pointer is None:
+            self.pointer = (x, y)
+        elif abs(x - self.pointer[0]) + abs(y - self.pointer[1]) > 10:
+            self._wake()
+
+    def _wake(self):
+        if time.monotonic() - self.started > 0.7:  # ignore the input that arrives while going full screen
+            self.close()
+
+
+class Saver(Gtk.Application):
+    def __init__(self, show=None):
+        super().__init__(application_id=APP_ID if show is None else None,
+                         flags=Gio.ApplicationFlags.NON_UNIQUE if show else Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.show_now = show
+        self.window = None
+        self.watch = 0
+
+    def do_activate(self):
+        if self.show_now is not None:
+            self.open(self.show_now)
+            return
+        self.hold()  # keep watching without a window
+        self.bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+        self.bus.signal_subscribe(IDLE[0], IDLE[2], "WatchFired", IDLE[1], None,
+                                  Gio.DBusSignalFlags.NONE, self._fired)
+        self._arm()
+        # Settings changes (mk screensaver, Companion) apply without restarting.
+        self.monitor = Gio.File.new_for_path(str(CONFIG / "screensaver.conf")).monitor_file(Gio.FileMonitorFlags.NONE, None)
+        self.monitor.connect("changed", lambda *_: self._arm())
+
+    def _arm(self):
+        if self.watch:
+            try:
+                self.bus.call_sync(*IDLE, "RemoveWatch", GLib.Variant("(u)", (self.watch,)), None, 0, 1000, None)
+            except GLib.Error:
+                pass
+            self.watch = 0
+        c = conf()
+        if c["SCREENSAVER"] == "off":
+            return
+        delay = max(30, int(c.get("DELAY") or 180)) * 1000
+        self.watch = self.bus.call_sync(*IDLE, "AddIdleWatch", GLib.Variant("(t)", (delay,)),
+                                        GLib.VariantType("(u)"), 0, 1000, None).unpack()[0]
+
+    def _fired(self, _bus, _sender, _path, _iface, _signal, params):
+        if params.unpack()[0] != self.watch or self.window:
+            return
+        if screen_kept_awake(self.bus) or focus_timer_running():
+            return
+        self.open(conf()["SCENE"])
+
+    def open(self, name):
+        self.window = SaverWindow(self, name)
+        self.window.connect("close-request", self._closed)
+        self.window.present()
+
+    def _closed(self, *_):
+        self.window = None
+        return False
+
+
+def main():
+    args = sys.argv[1:]
+    if args and args[0] == "list":
+        for name, cls in scenes.SCENES.items():
+            print(f"{name:8} {cls.label}")
+        return 0
+    if args and args[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    if args and args[0] == "show":
+        return Saver(show=args[1] if len(args) > 1 else conf()["SCENE"]).run([sys.argv[0]])
+    return Saver().run([sys.argv[0]])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -403,6 +403,33 @@ case "${1:-help}" in
         echo "✔ Renamed to \"$1\" (top bar: ${tag:0:6}). Open windows update the next time they open."
         ;;
 
+    screensaver)
+        # mk screensaver [on | off | show [SCENE] | scene NAME | delay SECONDS | list]
+        shift
+        conf="$HOME/.config/mk-workstation/screensaver.conf"
+        set_saver() {
+            mkdir -p "$(dirname "$conf")"
+            touch "$conf"
+            if grep -q "^$1=" "$conf"; then sed -i "s|^$1=.*|$1=$2|" "$conf"; else echo "$1=$2" >> "$conf"; fi
+        }
+        case "${1:-}" in
+            on|off) set_saver SCREENSAVER "$1"; echo "✔ Screensaver $1" ;;
+            show) setsid -f "$HOME/.local/bin/mk-screensaver" show "${2:-random}" > /dev/null 2>&1 ;;
+            list) "$HOME/.local/bin/mk-screensaver" list ;;
+            scene)
+                case "${2:-}" in
+                    random|aurora|web|knight|matrix) set_saver SCENE "$2"; echo "✔ Scene: $2" ;;
+                    *) echo "Usage: mk screensaver scene random|aurora|web|knight|matrix" >&2; exit 2 ;;
+                esac
+                ;;
+            delay)
+                [[ "${2:-}" =~ ^[0-9]+$ && "$2" -ge 30 ]] || { echo "Usage: mk screensaver delay SECONDS (30 or more)" >&2; exit 2; }
+                set_saver DELAY "$2"; echo "✔ Starts after $2 s without input"
+                ;;
+            *) echo "Usage: mk screensaver [on | off | show [SCENE] | scene NAME | delay SECONDS | list]" >&2; exit 2 ;;
+        esac
+        ;;
+
     notes)
         # mk notes [today | serve | NOTE]: MK Notes; serve = phone sync without the window
         shift
@@ -466,7 +493,8 @@ case "${1:-help}" in
         [[ "$answer" =~ ^[yY] ]] || { echo "Nothing changed."; exit 0; }
 
         systemctl --user disable --now mk-update-check.timer mk-reminders.timer mk-power.service &>/dev/null || true
-        rm -f "$HOME/.config/systemd/user/mk-power.service" "$HOME/.config/autostart/mk-sound.desktop"
+        pkill -f "mk-screensaver$" &>/dev/null || true
+        rm -f "$HOME/.config/systemd/user/mk-power.service" "$HOME/.config/autostart/mk-sound.desktop" "$HOME/.config/autostart/mk-screensaver.desktop"
         rm -f "$HOME"/.local/share/applications/io.github.mehulk.Mk*.desktop \
             "$HOME"/.local/share/icons/hicolor/*/apps/io.github.mehulk.Mk*
         [[ -f "$HOME/.config/gtk-4.0/gtk.css" ]] && python3 -c 'import re,sys; p=sys.argv[1]; t=open(p).read(); open(p,"w").write(re.sub(r"\n*/\* >>> MK Workstation.*?/\* <<< MK Workstation \*/\n?", "\n", t, flags=re.S).lstrip("\n"))' "$HOME/.config/gtk-4.0/gtk.css"
@@ -492,7 +520,7 @@ case "${1:-help}" in
         gnome-extensions disable mk-indicator@mehulk &>/dev/null || true
         rm -rf "$HOME/.local/share/gnome-shell/extensions/mk-indicator@mehulk"
         rm -rf "$HOME/.local/share/mk-workstation/lib" "$HOME/.local/share/mk-workstation/config" "$HOME/.local/share/mk-workstation/assets"
-        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-notes mk-timer mk-reminders mk-power mk-voice mk-sound ocr-snip show-shortcuts \
+        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-notes mk-screensaver mk-timer mk-reminders mk-power mk-voice mk-sound ocr-snip show-shortcuts \
             camera-controls fix-alt-tab close-workspace-apps; do
             rm -f "$HOME/.local/bin/$tool"
         done
@@ -530,6 +558,7 @@ case "${1:-help}" in
         echo "  focus      Start the focus timer: mk focus 25 \"Writing\" (also 1:30, 90s)"
         echo "  power      Smart power profiles on laptops: status, on, off"
         echo "  effects    Visual effects: full, lite (smooth on older machines) or auto"
+        echo "  screensaver  Scenes when you step away: on, off, show, scene web|knight|matrix|aurora, delay N"
         echo "  notes      MK Notes: mk notes, mk notes today, mk notes serve (phone sync)"
         echo "  accent     Desktop colour: auto (from your wallpaper), #rrggbb, status"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"

@@ -30,6 +30,20 @@ gi.require_foreign("cairo")
 import cairo  # noqa: E402
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango, PangoCairo  # noqa: E402
 
+
+
+def _add_lib_path():
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for candidate in (Path(__file__).resolve().parent.parent / "lib",
+                      Path(data_home) / "mk-workstation/lib"):
+        if (candidate / "mkworkstation").is_dir():
+            sys.path.insert(0, str(candidate))
+            return
+
+
+_add_lib_path()
+from mkworkstation import scenes  # noqa: E402
+
 APP_ID = "io.github.mehulk.MkTimer"
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "mk-workstation"
 PREFS = CONFIG_DIR / "timer.conf"
@@ -39,7 +53,7 @@ DND_MARKER = CONFIG_DIR / "timer-silenced"
 STATE_FILE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "mk-workstation/timer.json"
 
 
-def write_state(running, remaining=0.0, total=0.0, label="", paused=False, ambient=None):
+def write_state(running, remaining=0.0, total=0.0, label="", paused=False):
     try:
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         tmp = STATE_FILE.with_suffix(".tmp")
@@ -47,8 +61,6 @@ def write_state(running, remaining=0.0, total=0.0, label="", paused=False, ambie
             "running": running, "paused": paused, "label": label, "total": total,
             "end": None if paused or not running else time.time() + remaining,
             "left": remaining if paused else None,
-            # A screensaver for mk-indicator to draw over the desktop.
-            "ambient": ambient,
         }))
         tmp.replace(STATE_FILE)
     except OSError:
@@ -200,11 +212,8 @@ def draw_text(cr, text, font, x, y, rgba, center=True):
     PangoCairo.show_layout(cr, layout)
 
 
-# Focus screensavers: the first three are drawn over your work by mk-indicator,
-# Aurora is this window full screen.
-AMBIENT_STYLES = (("random", "Surprise me"), ("bubbles", "Bubbles"), ("mystify", "Mystify"),
-                  ("starfield", "Starfield"), ("aurora", "Aurora (full screen)"))
-OVERLAY_STYLES = ("bubbles", "mystify", "starfield")
+# The focus screen's scene (lib/mkworkstation/scenes.py, shared with mk-screensaver).
+AMBIENT_STYLES = (("random", "Surprise me"),) + tuple((name, cls.label) for name, cls in scenes.SCENES.items())
 
 
 class TimerWindow(Adw.ApplicationWindow):
@@ -227,7 +236,6 @@ class TimerWindow(Adw.ApplicationWindow):
         self._ambient_since = 0.0
         self._inhibit_cookie = 0
         self._idle_poll = 0
-        self._overlay = None
 
         self.view = Adw.ToolbarView()
         self.view.add_top_bar(Adw.HeaderBar())
@@ -423,7 +431,7 @@ class TimerWindow(Adw.ApplicationWindow):
 
     def _publish(self):
         write_state(self.running, self.remaining(), self.total, self.task or "Focus",
-                    paused=self.paused_left is not None, ambient=self._overlay)
+                    paused=self.paused_left is not None)
 
     def _on_ambient_toggled(self, switch, _param):
         self.prefs["AMBIENT"] = "1" if switch.get_active() else "0"
@@ -443,13 +451,7 @@ class TimerWindow(Adw.ApplicationWindow):
         # Every 2 s: step away long enough and the focus screen takes over,
         # unless another app keeps the screen awake (a video, a call).
         self._idle_poll = (self._idle_poll + 1) % 8
-        # Back from a screensaver drawn over the desktop: mk-indicator has
-        # already hidden it; stop keeping the screen awake.
-        if (self._overlay and time.monotonic() - self._ambient_since > 1.5
-                and idle_ms() < 1500):
-            self.end_overlay()
         if (self.running and self._idle_poll == 0 and self.paused_left is None
-                and not self._overlay
                 and self.stack.get_visible_child_name() != "ambient"
                 and self.prefs.get("AMBIENT", "1") == "1"
                 and idle_ms() >= 1000 * int(self.prefs.get("AMBIENT_IDLE", "45") or 45)
@@ -473,14 +475,9 @@ class TimerWindow(Adw.ApplicationWindow):
     def enter_ambient(self):
         self._ambient_since = time.monotonic()
         style = self.prefs.get("AMBIENT_STYLE", "random")
-        if style == "random":
-            style = random.choice(OVERLAY_STYLES)
-        if style in OVERLAY_STYLES:
-            self._overlay = style
-            self._inhibit_cookie = self.get_application().inhibit(
-                None, Gtk.ApplicationInhibitFlags.IDLE, "Focus timer is showing")
-            self._publish()
-            return
+        # Aurora is the classic focus screen with the big ring; the others are
+        # the screensaver scenes with a small countdown.
+        self._scene = None if style == "aurora" else scenes.pick(style)
         self._pointer = None
         self.view.set_reveal_top_bars(False)
         self.stack.set_visible_child_name("ambient")
@@ -490,16 +487,6 @@ class TimerWindow(Adw.ApplicationWindow):
         # Like a screensaver: keep the screen from blanking while it shows.
         self._inhibit_cookie = self.get_application().inhibit(
             self, Gtk.ApplicationInhibitFlags.IDLE, "Focus timer is showing")
-
-    def end_overlay(self):
-        if not self._overlay:
-            return
-        self._overlay = None
-        if self._inhibit_cookie:
-            self.get_application().uninhibit(self._inhibit_cookie)
-            self._inhibit_cookie = 0
-        if self.running:
-            self._publish()
 
     def exit_ambient(self):
         if self.stack.get_visible_child_name() != "ambient":
@@ -524,7 +511,6 @@ class TimerWindow(Adw.ApplicationWindow):
 
     def stop(self):
         silence_notifications(False)
-        self.end_overlay()
         if self.running:
             self.running = False
             self.get_application().release()
@@ -554,7 +540,6 @@ class TimerWindow(Adw.ApplicationWindow):
 
     def finish(self):
         silence_notifications(False)
-        self._overlay = None
         if self._inhibit_cookie:
             self.get_application().uninhibit(self._inhibit_cookie)
             self._inhibit_cookie = 0
@@ -679,6 +664,16 @@ class TimerWindow(Adw.ApplicationWindow):
         return GLib.SOURCE_CONTINUE
 
     def _draw_ambient(self, _area, cr, w, h):
+        if getattr(self, "_scene", None):
+            self._scene.draw(cr, w, h, time.monotonic() - self._ambient_since)
+            size = min(w, h) * 0.2
+            cr.save()
+            cr.translate(w - size - 56, h - size - 56)
+            cr.scale(size / 380, size / 380)
+            self._draw_ring(None, cr, 380, 380)
+            cr.restore()
+            draw_text(cr, self.task or "Focus", "Sans 16", w - size / 2 - 56, h - 40, (1, 1, 1, 0.7))
+            return
         now = time.monotonic()
         dt = min(0.1, now - getattr(self, "_ambient_last", now))
         self._ambient_last = now

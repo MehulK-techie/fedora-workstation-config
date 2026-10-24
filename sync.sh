@@ -497,6 +497,7 @@ MK_INDICATOR="mk-indicator@mehulk"
 [[ -d "$USER_EXT_DIR/$MK_INDICATOR" ]] || NEW_EXTENSIONS=1
 rm -rf "${USER_EXT_DIR:?}/$MK_INDICATOR"
 cp -r "$SCRIPT_DIR/extensions/$MK_INDICATOR" "$USER_EXT_DIR/"
+glib-compile-schemas "$USER_EXT_DIR/$MK_INDICATOR/schemas" || true
 
 gsettings set org.gnome.shell disable-user-extensions false
 # Effects profile (`mk effects full|lite|auto`, default auto): lite keeps the

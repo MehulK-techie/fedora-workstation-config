@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.mk-indicator" path="/org/gnome/shell/extensions/mk-indicator/">
+    <key name="emoji-board" type="as">
+      <default><![CDATA[['<Super>period']]]></default>
+      <summary>Open the emoji board</summary>
+      <description>Pick an emoji and it's typed where the cursor is.</description>
+    </key>
+  </schema>
+</schemalist>

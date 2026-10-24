@@ -14,6 +14,7 @@ import { SystemMonitor } from './systemMonitor.js';
 import { MediaTile } from './mediaTile.js';
 import { FocusHelper } from './focus.js';
 import { AppNap } from './appNap.js';
+import { EmojiBoard, bindEmojiBoard, unbindEmojiBoard } from './emojiBoard.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -111,6 +112,12 @@ export default class MKIndicatorExtension extends Extension {
         this._focus.enable();
         this._appNap = new AppNap();
         this._appNap.enable();
+        this._emoji = new EmojiBoard(this.path);
+        try {
+            bindEmojiBoard(this, this._emoji);
+        } catch (e) {
+            console.warn(`mk-indicator: emoji board key: ${e.message}`);  // schema not compiled yet
+        }
         this._sessionId = Main.sessionMode.connect('updated', () => this._onSessionMode());
         this._onSessionMode();
 
@@ -226,6 +233,11 @@ export default class MKIndicatorExtension extends Extension {
         this._focus = null;
         this._appNap?.disable();
         this._appNap = null;
+        if (this._emoji) {
+            unbindEmojiBoard();
+            this._emoji.destroy();
+            this._emoji = null;
+        }
         this._accent?.disable();
         this._accent = null;
         this._brandMonitor?.cancel();

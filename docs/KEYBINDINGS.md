@@ -82,7 +82,7 @@ them live and lets you change any of them. Your changes go to
 | MK Notes | Super+N |
 | MK Notes: today's note | Super+Alt+N |
 | MK Notes: quick note | Super+Ctrl+N |
-| Emoji board | Super+. |
+| Emoji board: search, click, and it's typed where your cursor is | Super+. |
 | Camera controls | Super+C |
 
 ## Touchpad gestures

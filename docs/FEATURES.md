@@ -59,6 +59,7 @@ Credit for everything in the last two groups belongs to its authors; see
 | Dock magnification | The icon under the pointer grows, neighbours follow in a wave | `config/dock.conf` |
 | App-coloured dock glow | A soft circular tint in each app's own colour on hover | `dockGlow.js` |
 | System monitor | CPU sparkline and your chosen numbers in the top bar; a menu with processor, memory, swap, GPU, disk, temperatures, battery draw and time left, the busiest apps, and an Internet section: active connection, live traffic graph and an on-demand speed test (ping, download, upload on a gauge, against Cloudflare's servers); reads the kernel's counters every 2 s, nothing while locked | `config/monitor.conf` (`systemMonitor.js`, `speedTest.js`) |
+| Emoji board | Super+.: search or browse by category, recent picks first; the emoji is typed where your cursor is (through GNOME's input method, or pasted for apps that don't take it) | `emojiBoard.js`, `emoji.json` |
 | App Nap | Under memory (> 85%) or sustained CPU (> 90% for a minute) pressure, apps unused for 5 minutes with every window minimized or on another desktop are frozen (systemd cgroup freezer); focusing one wakes it instantly. Never: apps playing sound, terminals, editors, browsers, chat apps | `config/appnap.conf`, `mk nap` |
 | Timer countdown | Ring + time in the top bar while a focus timer runs; click to open | automatic |
 | Media tile | Spotify or any MPRIS player: album art spinning like a record and the song title (cut short with "…", never scrolling) in the top bar; a menu with the art glowing in its own colour, title and artist, seek bar, previous/play/next, More (album, player, which speakers or headphones to use) and Open player, which brings the player's window forward; fades out when playback stops | `config/media.conf` (`mediaTile.js`) |
@@ -283,7 +284,7 @@ them live and lets you change any of them.
 | Web browser | Super+B | App |
 | MK Notes | Super+N | MK tool |
 | MK Notes: today's note | Super+Alt+N | MK tool |
-| Emoji board | Super+. | App |
+| Emoji board (types the emoji for you) | Super+. | MK |
 | Camera controls | Super+C | MK tool |
 
 **Touchpad gestures** (Touchpad Gesture Customization, MK's settings)

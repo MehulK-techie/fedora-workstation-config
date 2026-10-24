@@ -212,3 +212,13 @@
 .mk-media-control:hover { background-color: rgba(255, 255, 255, 0.10); }
 .mk-media-play { background-color: rgba(255, 255, 255, 0.92); color: #101420; padding: 14px; }
 .mk-media-play:hover { background-color: #ffffff; }
+
+/* Emoji board (emojiBoard.js) */
+.mk-emoji-dialog .modal-dialog-content-box { spacing: 10px; padding: 18px; }
+.mk-emoji-search { min-width: 440px; border-radius: 12px; padding: 8px 12px; }
+.mk-emoji-tabs { spacing: 2px; }
+.mk-emoji-tab { font-size: 18px; padding: 4px 8px; border-radius: 10px; }
+.mk-emoji-tab:checked, .mk-emoji-tab:hover { background-color: rgba(255, 255, 255, 0.12); }
+.mk-emoji-scroll { max-height: 340px; min-height: 340px; }
+.mk-emoji-cell { font-size: 26px; padding: 4px; border-radius: 10px; min-width: 44px; min-height: 44px; }
+.mk-emoji-cell:hover, .mk-emoji-cell:focus { background-color: rgba(255, 255, 255, 0.14); }

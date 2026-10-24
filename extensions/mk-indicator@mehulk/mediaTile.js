@@ -1,16 +1,20 @@
 // Media tile in the top bar, for Spotify and any player that speaks MPRIS
-// (the standard Linux media interface): album art as a spinning record and
-// the song scrolling by; its menu has the art with a glow in the art's own
-// colour, a seek bar, controls, and which speakers or headphones to use.
+// (the standard Linux media interface): album art as a spinning record and the
+// song title (cut short with "…", never scrolling). Its menu has the art with a
+// glow in the art's own colour, title and artist, a seek bar, controls, and
+// More: album, player, which speakers or headphones to use, Open player.
+// The tile fades out when playback stops and fades back in when it starts.
 //
 // config/media.conf, yours in ~/.config/mk-workstation/media.conf:
 //   MEDIA=on|off      off removes the tile completely
-//   TICKER=on|off     the scrolling song name next to the record
+//   TICKER=on|off     the song title next to the record (off: the record only)
 import Clutter from 'gi://Clutter';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import Graphene from 'gi://Graphene';
 import GLib from 'gi://GLib';
+import Pango from 'gi://Pango';
+import Shell from 'gi://Shell';
 import Soup from 'gi://Soup?version=3.0';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -90,15 +94,15 @@ export class MediaTile {
         const box = new St.BoxLayout({style: 'spacing: 8px;', y_align: Clutter.ActorAlign.CENTER});
         this._disc = new St.Widget({style_class: 'mk-media-disc', width: 20, height: 20,
             pivot_point: new Graphene.Point({x: 0.5, y: 0.5}), y_align: Clutter.ActorAlign.CENTER});
-        this._clip = new St.Widget({clip_to_allocation: true, width: 150, height: 20,
-            layout_manager: new Clutter.FixedLayout(), y_align: Clutter.ActorAlign.CENTER,
+        // Title only, cut short with "…": no scrolling text in the top bar.
+        this._ticker = new St.Label({style_class: 'mk-media-ticker', y_align: Clutter.ActorAlign.CENTER,
             visible: this._conf.TICKER !== 'off'});
-        this._ticker = new St.Label({style_class: 'mk-media-ticker', y: 1});
-        this._clip.add_child(this._ticker);
+        this._ticker.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         box.add_child(this._disc);
-        box.add_child(this._clip);
+        box.add_child(this._ticker);
         this._button.add_child(box);
         this._button.visible = false;
+        this._button.opacity = 0;
         this._buildMenu();
         Main.panel.addToStatusArea('mk-media', this._button, 1, 'right');
         // The panel can go before we're disabled (logout): stop listening then.
@@ -151,6 +155,8 @@ export class MediaTile {
         col.add_child(this._art);
         this._title = new St.Label({style_class: 'mk-media-title', x_align: Clutter.ActorAlign.CENTER});
         this._artist = new St.Label({style_class: 'mk-media-artist', x_align: Clutter.ActorAlign.CENTER});
+        for (const label of [this._title, this._artist])
+            label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         col.add_child(this._title);
         col.add_child(this._artist);
         this._slider = new Slider(0);
@@ -178,12 +184,17 @@ export class MediaTile {
         col.add_child(controls);
         item.add_child(col);
         menu.addMenuItem(item);
-        this._outputs = new PopupMenu.PopupSubMenuMenuItem('Play on…', true);
-        this._outputs.icon.icon_name = 'audio-speakers-symbolic';
-        this._outputs.menu.connect('open-state-changed', (_m, open) => open && this._fillOutputs());
-        menu.addMenuItem(this._outputs);
+        // More: album, player, speakers or headphones (GNOME menus can't nest
+        // a submenu in a submenu, so the outputs are listed right here).
+        this._more = new PopupMenu.PopupSubMenuMenuItem('More', true);
+        this._more.icon.icon_name = 'view-more-horizontal-symbolic';
+        menu.addMenuItem(this._more);
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._openApp = menu.addAction('Open player', () => this._raise());
         menu.connect('open-state-changed', (_m, open) => {
+            // Filled here, not when More opens: GNOME won't open an empty submenu.
+            if (open)
+                this._fillMore();
             if (open && !this._posId) {
                 this._pollPosition();
                 this._posId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 1, () => {
@@ -204,7 +215,7 @@ export class MediaTile {
         const names = [...this._players];
         if (!names.length) {
             this._current = null;
-            this._button.visible = false;
+            this._showTile(false);
             this._spin.stop();
             return;
         }
@@ -264,14 +275,14 @@ export class MediaTile {
                 const title = meta['xesam:title'] || '';
                 const artist = (meta['xesam:artist'] ?? []).join(', ');
                 this._meta = {title, artist, length: meta['mpris:length'] ?? 0, track: meta['mpris:trackid'],
-                    art: meta['mpris:artUrl']};
-                this._button.visible = !this._locked && Boolean(title);
+                    art: meta['mpris:artUrl'], album: meta['xesam:album'] || ''};
+                this._showTile(this._status !== 'Stopped' && Boolean(title));
                 this._title.text = title;
                 this._artist.text = artist;
                 this._length.text = this._meta.length ? fmt(this._meta.length) : '';
                 this._playButton.child.icon_name = this._status === 'Playing'
                     ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
-                this._setTicker(artist ? `${title}  ·  ${artist}` : title);
+                this._ticker.text = title;
                 if (this._status === 'Playing')
                     this._spin.start();
                 else
@@ -280,22 +291,26 @@ export class MediaTile {
             });
     }
 
-    _setTicker(text) {
-        if (this._ticker.text === text)
+    // Fade in when something plays, fade out when playback stops or the
+    // player quits; hidden on the lock screen whatever happens.
+    _showTile(show) {
+        if (!this._button)
             return;
-        this._ticker.text = text;
-        this._ticker.remove_all_transitions();
-        this._ticker.x = 0;
-        const [, width] = this._ticker.get_preferred_width(-1);
-        const overflow = width - this._clip.width;
-        if (overflow > 0) {
-            // scroll to the end and back, pausing at each end
-            const loop = () => this._ticker?.ease({
-                x: -overflow, delay: 1500, duration: overflow * 28, mode: Clutter.AnimationMode.LINEAR,
-                onComplete: () => this._ticker?.ease({x: 0, delay: 1500, duration: 400,
-                    mode: Clutter.AnimationMode.EASE_OUT_QUAD, onComplete: () => this._ticker?.text === text && loop()}),
-            });
-            loop();
+        show = show && !this._locked;
+        if (show === this._tileShown)
+            return;
+        this._tileShown = show;
+        this._button.remove_transition('opacity');
+        if (show) {
+            this._button.visible = true;
+            this._button.ease({opacity: 255, duration: 250, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        } else {
+            this._button.menu.close();
+            this._button.ease({opacity: 0, duration: 400, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                onComplete: () => {
+                    if (this._button && !this._tileShown)
+                        this._button.visible = false;
+                }});
         }
     }
 
@@ -413,35 +428,110 @@ export class MediaTile {
         this._locked = locked;
         if (!this._button)
             return;
-        if (locked)
+        if (locked) {
             this._button.menu.close();
-        this._button.visible = !locked && Boolean(this._meta?.title);
+            this._tileShown = false;
+            this._button.remove_transition('opacity');
+            this._button.opacity = 0;
+            this._button.visible = false;
+        } else {
+            this._showTile(this._status !== 'Stopped' && Boolean(this._meta?.title));
+        }
     }
 
+    // PlayPause, Next, Previous. Some players (browsers, older Spotify) refuse
+    // PlayPause while paused: then send Play or Pause by name instead.
     _call(method) {
-        if (this._current && !this._locked) {
-            this._bus.call(this._current, PATH, PLAYER, method, null, null, Gio.DBusCallFlags.NONE, 1000, null,
-                () => this._refresh());
+        if (!this._current || this._locked)
+            return;
+        const name = this._current;
+        // Show the new state at once; the player's own update follows.
+        if (method === 'PlayPause') {
+            this._playButton.child.icon_name = this._status === 'Playing'
+                ? 'media-playback-start-symbolic' : 'media-playback-pause-symbolic';
         }
+        this._bus.call(name, PATH, PLAYER, method, null, null, Gio.DBusCallFlags.NONE, 2000, null, (c, res) => {
+            try {
+                c.call_finish(res);
+            } catch (e) {
+                if (method === 'PlayPause') {
+                    const direct = this._status === 'Playing' ? 'Pause' : 'Play';
+                    this._bus.call(name, PATH, PLAYER, direct, null, null, Gio.DBusCallFlags.NONE, 2000, null,
+                        () => this._refresh());
+                    return;
+                }
+                console.warn(`mk-indicator: media ${method} failed: ${e.message}`);
+            }
+            this._refresh();
+        });
     }
 
+    // Open player: bring its window to the front. Through GNOME first (the
+    // app's own window, works for Spotify on Wayland, where MPRIS Raise often
+    // does nothing), then MPRIS Raise for players GNOME doesn't know.
     _raise() {
-        if (this._current && !this._locked) {
-            this._bus.call(this._current, PATH, 'org.mpris.MediaPlayer2', 'Raise', null, null,
-                Gio.DBusCallFlags.NONE, 1000, null, null);
-        }
+        if (!this._current || this._locked)
+            return;
+        const name = this._current;
+        this._button.menu.close();
+        this._bus.call(name, PATH, 'org.freedesktop.DBus.Properties', 'Get',
+            new GLib.Variant('(ss)', ['org.mpris.MediaPlayer2', 'DesktopEntry']), null, Gio.DBusCallFlags.NONE,
+            1000, null, (c, res) => {
+                let entry = '';
+                try {
+                    entry = c.call_finish(res).deep_unpack()[0].deep_unpack();
+                } catch (e) {
+                    // no DesktopEntry: guess from the bus name below
+                }
+                const app = this._findApp(entry, name);
+                if (app && app.get_n_windows() > 0) {
+                    app.activate();
+                    return;
+                }
+                this._bus.call(name, PATH, 'org.mpris.MediaPlayer2', 'Raise', null, null,
+                    Gio.DBusCallFlags.NONE, 1000, null, (cc, r) => {
+                        try {
+                            cc.call_finish(r);
+                        } catch (e) {
+                            app?.activate();  // not running as a window: start it
+                        }
+                    });
+            });
     }
 
-    _fillOutputs() {
-        this._outputs.menu.removeAll();
+    _findApp(entry, busName) {
+        const system = Shell.AppSystem.get_default();
+        const guess = busName.slice(PREFIX.length).split('.')[0];
+        for (const id of [entry, guess].filter(Boolean)) {
+            const app = system.lookup_app(`${id}.desktop`) ?? system.lookup_desktop_wmclass(id) ??
+                system.lookup_startup_wmclass(id);
+            if (app)
+                return app;
+        }
+        return system.get_running().find(app => app.get_id().toLowerCase().includes(guess.toLowerCase())) ?? null;
+    }
+
+    _fillMore() {
+        const menu = this._more.menu;
+        menu.removeAll();
+        const info = [this._meta.album && `Album: ${this._meta.album}`,
+            this._current && `Player: ${this._findApp('', this._current)?.get_name() ?? this._current.slice(PREFIX.length)}`];
+        for (const text of info.filter(Boolean)) {
+            const item = new PopupMenu.PopupMenuItem(text, {reactive: false});
+            item.label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            menu.addMenuItem(item);
+        }
         const control = getMixerControl();
         const current = control.get_default_sink();
-        for (const sink of control.get_sinks()) {
+        const sinks = control.get_sinks();
+        if (sinks.length)
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Play on'));
+        for (const sink of sinks) {
             const item = new PopupMenu.PopupMenuItem(sink.get_description() || sink.get_name());
             if (current && sink.get_id() === current.get_id())
                 item.setOrnament(PopupMenu.Ornament.CHECK);
             item.connect('activate', () => control.set_default_sink(sink));
-            this._outputs.menu.addMenuItem(item);
+            menu.addMenuItem(item);
         }
     }
 

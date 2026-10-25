@@ -221,14 +221,50 @@ class Sampler {
 }
 
 // One "label ······ value" row with an optional meter under it.
+// A small history line under a value: DATA (oldest first), scaled to MAX
+// (or to its own peak when MAX is null, for speeds).
+function paintSpark(area, data, max) {
+    const cr = area.get_context();
+    const [w, h] = area.get_surface_size();
+    const [r, g, b] = accentRGB().map(c => c / 255);
+    const top = max ?? Math.max(1, ...data);
+    if (data.length > 1) {
+        const step = w / (HISTORY - 1), x0 = w - (data.length - 1) * step;
+        const y = v => h - 1 - (h - 2) * Math.min(1, v / top);
+        cr.moveTo(x0, h);
+        data.forEach((v, i) => cr.lineTo(x0 + i * step, y(v)));
+        cr.lineTo(w, h);
+        cr.closePath();
+        const grad = new Cairo.LinearGradient(0, 0, 0, h);
+        grad.addColorStopRGBA(0, r, g, b, 0.45);
+        grad.addColorStopRGBA(1, r, g, b, 0.05);
+        cr.setSource(grad);
+        cr.fill();
+        cr.setLineWidth(1.4);
+        cr.setSourceRGBA(r, g, b, 0.95);
+        data.forEach((v, i) => (i ? cr.lineTo : cr.moveTo).call(cr, x0 + i * step, y(v)));
+        cr.stroke();
+    }
+    cr.$dispose();
+}
+
 class Row {
-    constructor(menu, label, meter = false) {
+    constructor(menu, label, meter = false, spark = null) {
         this.item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'mk-monitor-row'});
         const box = new St.BoxLayout({vertical: true, x_expand: true});
         const line = new St.BoxLayout({x_expand: true, style: 'spacing: 14px;'});
         this.label = new St.Label({text: label, style_class: 'mk-monitor-name', x_expand: true});
         this.value = new St.Label({text: '…', style_class: 'mk-monitor-value'});
         line.add_child(this.label);
+        // spark: the scale of the history line (100 for percentages), or
+        // 'auto' for speeds (scaled to their own peak).
+        if (spark !== null) {
+            this.history = [];
+            this.sparkMax = spark === 'auto' ? null : spark;
+            this.spark = new St.DrawingArea({width: 64, height: 16, y_align: Clutter.ActorAlign.CENTER});
+            this.spark.connect('repaint', area => paintSpark(area, this.history, this.sparkMax));
+            line.add_child(this.spark);
+        }
         line.add_child(this.value);
         box.add_child(line);
         if (meter) {
@@ -253,6 +289,17 @@ class Row {
         }
     }
 
+    // Add a reading to the history line (kept even while the menu is closed).
+    push(v) {
+        if (!this.history)
+            return;
+        this.history.push(v);
+        if (this.history.length > HISTORY)
+            this.history.shift();
+        if (this.item.visible && this.item.get_stage())
+            this.spark.queue_repaint();
+    }
+
     hide(hidden) {
         this.item.visible = !hidden;
     }
@@ -275,12 +322,12 @@ export class SystemMonitor {
         const menu = this._button.menu;
         menu.box.add_style_class_name('mk-monitor-menu');
         this._rows = {
-            cpu: new Row(menu, 'Processor', true),
-            mem: new Row(menu, 'Memory', true),
+            cpu: new Row(menu, 'Processor', true, 100),
+            mem: new Row(menu, 'Memory', true, 100),
             swap: new Row(menu, 'Swap', true),
             gpu: new Row(menu, 'Graphics', true),
             disk: new Row(menu, 'Disk ( / )', true),
-            io: new Row(menu, 'Disk activity'),
+            io: new Row(menu, 'Disk activity', false, 'auto'),
         };
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._rows.temp = new Row(menu, 'Temperatures');
@@ -362,6 +409,9 @@ export class SystemMonitor {
         this._spark.visible = this._conf.PANEL.includes('cpu');
         this._spark.queue_repaint();
         this._internet?.feed(s.down, s.up);
+        this._rows.cpu.push(s.cpu);
+        this._rows.mem.push(s.memTotal ? 100 * s.memUsed / s.memTotal : 0);
+        this._rows.io.push(s.diskRead + s.diskWrite);
         if (open)
             this._fillMenu(s);
     }
@@ -414,28 +464,7 @@ export class SystemMonitor {
     }
 
     _paintSpark(area) {
-        const cr = area.get_context();
-        const [w, h] = area.get_surface_size();
-        const data = this._sampler?.cpuHistory || [];
-        const [r, g, b] = accentRGB().map(c => c / 255);
-        if (data.length > 1) {
-            const step = w / (HISTORY - 1), x0 = w - (data.length - 1) * step;
-            const y = v => h - 1 - (h - 2) * v / 100;
-            cr.moveTo(x0, h);
-            data.forEach((v, i) => cr.lineTo(x0 + i * step, y(v)));
-            cr.lineTo(w, h);
-            cr.closePath();
-            const grad = new Cairo.LinearGradient(0, 0, 0, h);
-            grad.addColorStopRGBA(0, r, g, b, 0.45);
-            grad.addColorStopRGBA(1, r, g, b, 0.05);
-            cr.setSource(grad);
-            cr.fill();
-            cr.setLineWidth(1.4);
-            cr.setSourceRGBA(r, g, b, 0.95);
-            data.forEach((v, i) => (i ? cr.lineTo : cr.moveTo).call(cr, x0 + i * step, y(v)));
-            cr.stroke();
-        }
-        cr.$dispose();
+        paintSpark(area, this._sampler?.cpuHistory || [], 100);
     }
 
     disable() {

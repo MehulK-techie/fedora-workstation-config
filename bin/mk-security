@@ -2,8 +2,9 @@
 # mk security: a health check for this computer's security, with a score.
 #
 #   mk security            scan (asks for your fingerprint or password first)
-#   mk security fix NAME   apply one fix the report suggests
-#                          (selinux, firewall, updates, ssh, permissions)
+#   mk security fix NAME   apply one fix the report suggests (selinux,
+#                          firewall, updates, autoupdates, ssh, permissions,
+#                          sharing, lock)
 #
 # What it checks: SELinux, firewall, Secure Boot, disk encryption, waiting
 # security updates, accounts, SSH, what listens to the network, permissions in
@@ -29,8 +30,22 @@ fi
 
 case "${1:-scan}" in
     fix)
-        name=${2:?Usage: mk security fix selinux|firewall|updates|ssh|permissions}
-        [[ "$name" =~ ^(selinux|firewall|updates|ssh|permissions)$ ]] || { echo "Unknown fix: $name" >&2; exit 2; }
+        name=${2:?Usage: mk security fix selinux|firewall|updates|autoupdates|ssh|permissions|sharing|lock}
+        case "$name" in
+            # Your own account's settings: no administrator rights needed.
+            sharing)
+                gsettings set org.gnome.settings-daemon.plugins.sharing.service:/org/gnome/settings-daemon/plugins/sharing/gnome-user-share-webdav/ enabled-connections "[]"
+                echo "File sharing off on every network (turn it back on in Settings › Sharing, with a password)."
+                exit 0 ;;
+            lock)
+                gsettings set org.gnome.desktop.screensaver lock-enabled true
+                gsettings set org.gnome.desktop.screensaver lock-delay "uint32 0"
+                [[ "$(gsettings get org.gnome.desktop.session idle-delay | awk '{print $2}')" -eq 0 ]] &&
+                    gsettings set org.gnome.desktop.session idle-delay "uint32 300"
+                echo "The screen locks as soon as it blanks (after 5 minutes idle at most)."
+                exit 0 ;;
+        esac
+        [[ "$name" =~ ^(selinux|firewall|updates|autoupdates|ssh|permissions)$ ]] || { echo "Unknown fix: $name" >&2; exit 2; }
         exec pkexec "$HELPER" fix "$name"
         ;;
     scan) ;;
@@ -38,8 +53,37 @@ case "${1:-scan}" in
     *) echo "Usage: mk security [scan | fix NAME]" >&2; exit 2 ;;
 esac
 
+# Checks of your own account's settings (no administrator rights needed).
+user_checks() {
+    local webdav=org.gnome.settings-daemon.plugins.sharing.service:/org/gnome/settings-daemon/plugins/sharing/gnome-user-share-webdav/
+    if [[ "$(gsettings get "$webdav" enabled-connections 2> /dev/null)" =~ [0-9a-f]{8}- ]]; then
+        if [[ "$(gsettings get org.gnome.desktop.file-sharing require-password 2> /dev/null)" == "'never'" ]]; then
+            echo "FINDING|high|sharing|File sharing is on without a password|Anyone on that network can open your Public folder (Settings › Sharing)|mk security fix sharing"
+        else
+            echo "PASS|File sharing asks for a password"
+        fi
+    else
+        echo "PASS|File sharing is off"
+    fi
+    if [[ "$(gsettings get org.gnome.desktop.screensaver lock-enabled)" == true &&
+          "$(gsettings get org.gnome.desktop.session idle-delay | awk '{print $2}')" -gt 0 ]]; then
+        echo "PASS|The screen locks when you step away"
+    else
+        echo "FINDING|high|lock|The screen doesn't lock when you step away|Anyone at the laptop gets your session|mk security fix lock"
+    fi
+    if grdctl status 2> /dev/null | grep -q 'Status: enabled'; then
+        echo "FINDING|medium|remote|Remote desktop is on|Others can connect to this screen (Settings › System › Remote Desktop)|"
+    fi
+}
+
 echo "${bold}MK security check${off}  ${dim}(confirm it's you; the scan takes a minute or two)${off}"
-report=$(pkexec "$HELPER" scan) || { echo "Not confirmed, or the scan failed." >&2; exit 1; }
+report=$(pkexec "$HELPER" scan)
+status=$?
+if (( status == 126 || status == 127 )) || [[ -z "$report" ]]; then
+    echo "Not confirmed, or the scan couldn't run." >&2
+    exit 1
+fi
+report+=$'\n'"$(user_checks)"
 
 score=100 lynis="" fixes=()
 passes=() findings=() notes=()

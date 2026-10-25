@@ -53,6 +53,11 @@ scan() {
     else
         pass "No security updates waiting"
     fi
+    if systemctl is-enabled -q dnf5-automatic.timer 2> /dev/null || systemctl is-enabled -q dnf-automatic.timer 2> /dev/null; then
+        pass "Security updates install by themselves"
+    else
+        finding medium autoupdates "Security updates wait for you to install them" "Fixes for known holes arrive later than they could" "mk security fix autoupdates"
+    fi
     # --- accounts and remote access
     roots=$(awk -F: '$3 == 0 && $1 != "root" { print $1 }' /etc/passwd | paste -sd ' ')
     if [[ -n "$roots" ]]; then
@@ -76,7 +81,8 @@ scan() {
         note "SSH server is running (turn it off if you don't log in remotely: sudo systemctl disable --now sshd)"
     fi
     # --- network: what listens beyond this computer
-    open=$(ss -Htulpn 2> /dev/null | awk '$5 !~ /^(127\.|\[::1\]|::1|\[?::ffff:127\.)/ { split($5, a, ":"); p = a[length(a)]; match($0, /users:\(\("([^"]+)"/, m); print p "/" $1 " (" m[1] ")" }' | sort -u | paste -sd, | sed 's/,/, /g')
+    # TCP servers only: UDP "listeners" are mostly apps' own client sockets.
+    open=$(ss -Htlpn 2> /dev/null | awk '$4 !~ /^(127\.|\[::1\]|::1|\[?::ffff:127\.)/ { n = split($4, a, ":"); match($0, /users:\(\("([^"]+)"/, m); print a[n] "/tcp (" (m[1] ? m[1] : "?") ")" }' | sort -u | paste -sd, | sed 's/,/, /g')
     if [[ -n "$open" ]]; then
         finding low ports "Listening to the network: $open" "Each one is a door; the firewall decides who gets in" ""
     else
@@ -162,6 +168,15 @@ fix() {
             printf '# MK security fix\nPermitRootLogin no\nPasswordAuthentication no\n' > /etc/ssh/sshd_config.d/40-mk-hardening.conf
             systemctl try-reload-or-restart sshd
             echo "SSH: no root logins, keys only (undo: delete /etc/ssh/sshd_config.d/40-mk-hardening.conf)." ;;
+        autoupdates)
+            # Security updates only, installed daily; the rest stays manual (mk update).
+            rpm -q dnf5-plugin-automatic > /dev/null || dnf install -y dnf5-plugin-automatic
+            conf=/etc/dnf/automatic.conf
+            [[ -f "$conf" && ! -f "$conf.bak" ]] && cp -a "$conf" "$conf.bak"
+            install -d /etc/dnf
+            printf '# MK security fix: security updates, installed daily\n[commands]\nupgrade_type = security\napply_updates = yes\n' > "$conf"
+            systemctl enable --now dnf5-automatic.timer
+            echo "Security updates now install by themselves each day." ;;
         permissions)
             [[ -n "$home" && -d "$home" ]] || exit 1
             chmod 700 "$home"
@@ -172,7 +187,7 @@ fix() {
 }
 
 case "${1:-scan}" in
-    scan) scan ;;
+    scan) scan; exit 0 ;;
     fix) fix "${2:-}" ;;
     *) echo "Usage: mk-security-scan [scan | fix NAME]" >&2; exit 2 ;;
 esac

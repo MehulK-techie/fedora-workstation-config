@@ -1,0 +1,402 @@
+#!/usr/bin/env python3
+"""MK Control Center: the MK tools in one window.
+
+  mk-center [home | lock | security]     (also: mk center, the app grid)
+
+Home: quick actions (free memory, vault, text from screen, speed test), power
+modes, App Nap, and the desktop tools. MK Lock: lock apps with a switch, lock
+and open folders and the vault, lock notebooks of MK Notes. Security: run the
+security check and apply its fixes.
+
+Everything here calls the same tools as the mk command (mk-lock, mk-security,
+mk power...), so the terminal and this window always agree.
+"""
+import json
+import os
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+
+APP_ID = "io.github.mehulk.MkCenter"
+HOME = Path.home()
+BIN = HOME / ".local/bin"
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "mk-workstation"
+NOTES = HOME / "Notes"
+PROFILES = ("org.freedesktop.UPower.PowerProfiles", "/org/freedesktop/UPower/PowerProfiles",
+            "org.freedesktop.UPower.PowerProfiles")
+CSS = b"""
+.mk-action { padding: 18px 10px; border-radius: 16px; }
+.mk-action image { -gtk-icon-size: 28px; }
+.mk-report { font-family: monospace; font-size: 0.92em; }
+"""
+
+
+def tool(name):
+    """An MK tool: installed copy first, then the one next to this file."""
+    for candidate in (BIN / name, Path(__file__).resolve().parent / name):
+        if candidate.exists():
+            return str(candidate)
+    return name
+
+
+def run_bg(argv, done=None):
+    """Run ARGV off the main loop; DONE(returncode, output) back on it."""
+    def work():
+        try:
+            p = subprocess.run(argv, capture_output=True, text=True, timeout=600)
+            result = (p.returncode, p.stdout + p.stderr)
+        except (OSError, subprocess.SubprocessError) as e:
+            result = (1, str(e))
+        if done:
+            GLib.idle_add(lambda: (done(*result), False)[1])
+    threading.Thread(target=work, daemon=True).start()
+
+
+def read_list(name):
+    try:
+        return [x.strip() for x in (CONFIG / name).read_text().splitlines() if x.strip() and not x.startswith("#")]
+    except OSError:
+        return []
+
+
+def is_open(path):
+    return os.path.ismount(path)
+
+
+class Center(Adw.ApplicationWindow):
+    def __init__(self, app, page="home"):
+        super().__init__(application=app, title="MK Control Center", default_width=980, default_height=760)
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider,
+                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.toast = Adw.ToastOverlay()
+        view = Adw.ToolbarView()
+        head = Adw.HeaderBar()
+        self.stack = Adw.ViewStack()
+        self.stack.add_titled_with_icon(self._home(), "home", "Home", "go-home-symbolic")
+        self.stack.add_titled_with_icon(self._lock(), "lock", "MK Lock", "changes-prevent-symbolic")
+        self.stack.add_titled_with_icon(self._security(), "security", "Security", "security-high-symbolic")
+        head.set_title_widget(Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE))
+        view.add_top_bar(head)
+        self.toast.set_child(self.stack)
+        view.set_content(self.toast)
+        self.set_content(view)
+        self.stack.set_visible_child_name(page if page in ("home", "lock", "security") else "home")
+
+    def say(self, text):
+        self.toast.add_toast(Adw.Toast(title=text, timeout=3))
+
+    # ---------------------------------------------------------------- home
+    def _home(self):
+        page = Adw.PreferencesPage()
+        quick = Adw.PreferencesGroup(title="Quick actions")
+        grid = Gtk.Grid(column_spacing=12, row_spacing=12, column_homogeneous=True)
+        actions = [("media-flash-symbolic", "Free memory", lambda: self._optimize_ram()),
+                   ("changes-prevent-symbolic", "Vault", lambda: run_bg([tool("mk-lock"), "vault"],
+                                                                        lambda c, o: self.say("Vault: " + (o.strip().splitlines() or ["done"])[-1].strip("✔ ")))),
+                   ("insert-text-symbolic", "Text from screen", lambda: run_bg([tool("ocr-snip")])),
+                   ("network-wireless-signal-excellent-symbolic", "Speed test",
+                    lambda: run_bg([tool("mk-speedtest"), "--gui", "--start"]))]
+        for i, (icon, label, cb) in enumerate(actions):
+            b = Gtk.Button(css_classes=["card", "mk-action"])
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            box.append(Gtk.Image(icon_name=icon))
+            box.append(Gtk.Label(label=label))
+            b.set_child(box)
+            b.connect("clicked", lambda _b, c=cb: c())
+            grid.attach(b, i, 0, 1, 1)
+        quick.add(grid)
+        page.add(quick)
+
+        power = Adw.PreferencesGroup(title="Power", description="The same modes as Quick Settings › Power Mode")
+        row = Adw.ActionRow(title="Mode")
+        modes = Gtk.Box(css_classes=["linked"], valign=Gtk.Align.CENTER)
+        self.mode_buttons = {}
+        group = None
+        current = self._profile()
+        for key, label in (("power-saver", "Quiet"), ("balanced", "Comfort"), ("performance", "Performance")):
+            b = Gtk.ToggleButton(label=label, active=key == current)
+            if group:
+                b.set_group(group)
+            group = group or b
+            b.connect("toggled", lambda btn, k=key: btn.get_active() and self._set_profile(k))
+            modes.append(b)
+        row.add_suffix(modes)
+        power.add(row)
+        nap = Adw.ActionRow(title="App Nap", subtitle=self._nap_text())
+        power.add(nap)
+        page.add(power)
+
+        desk = Adw.PreferencesGroup(title="Desktop")
+        for title, sub, argv in (("Screensaver", "Pick a scene or shuffle; the lock screen too", [tool("mk-screensaver"), "settings"]),
+                                 ("Keyboard shortcuts", "Every shortcut and gesture, live", [tool("show-shortcuts")]),
+                                 ("Photo Booth", "Your webcam with live looks and stickers", [tool("camera-controls")]),
+                                 ("Tour", "The walkthrough again", [tool("mk-tour")]),
+                                 ("Health check", "mk doctor, in a terminal", ["ptyxis", "--", "bash", "-c", f"{tool('mk')} doctor; read -rp 'Press Enter to close'"]),
+                                 ("Update everything", "mk update, in a terminal", ["ptyxis", "--", "bash", "-c", f"{tool('mk')} update; read -rp 'Press Enter to close'"])):
+            r = Adw.ActionRow(title=title, subtitle=sub, activatable=True)
+            r.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
+            r.connect("activated", lambda _r, a=argv: run_bg(a))
+            desk.add(r)
+        page.add(desk)
+        return page
+
+    def _profile(self):
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SYSTEM)
+            v = bus.call_sync(PROFILES[0], PROFILES[1], "org.freedesktop.DBus.Properties", "Get",
+                              GLib.Variant("(ss)", (PROFILES[2], "ActiveProfile")), None, 0, 1000, None)
+            return v.unpack()[0]
+        except GLib.Error:
+            return "balanced"
+
+    def _set_profile(self, key):
+        try:
+            Gio.bus_get_sync(Gio.BusType.SYSTEM).call_sync(
+                PROFILES[0], PROFILES[1], "org.freedesktop.DBus.Properties", "Set",
+                GLib.Variant("(ssv)", (PROFILES[2], "ActiveProfile", GLib.Variant("s", key))), None, 0, 2000, None)
+            self.say({"power-saver": "Quiet", "balanced": "Comfort", "performance": "Performance"}[key] + " mode")
+        except GLib.Error as e:
+            self.say(f"Couldn't change the power mode: {e.message}")
+
+    def _nap_text(self):
+        try:
+            napping = json.loads((Path(GLib.get_user_cache_dir()) / "mk-workstation/app-nap.json").read_text())
+        except (OSError, ValueError):
+            napping = {}
+        if napping:
+            return "Paused now: " + ", ".join(k.removesuffix(".desktop") for k in napping)
+        return "Pauses apps you left minimized when memory runs short; nothing is paused now"
+
+    def _optimize_ram(self):
+        self.say("Freeing cached memory (asks for your password)…")
+        run_bg([tool("mk"), "optimize", "ram"], lambda c, o: self.say(o.strip().splitlines()[-1] if o.strip() else "Done"))
+
+    # ---------------------------------------------------------------- MK Lock
+    def _lock(self):
+        tabs = Adw.ViewStack()
+        tabs.add_titled_with_icon(self._lock_apps(), "apps", "Apps", "view-app-grid-symbolic")
+        tabs.add_titled_with_icon(self._lock_folders(), "folders", "Folders & Vault", "folder-symbolic")
+        tabs.add_titled_with_icon(self._lock_notes(), "notes", "Notes", "accessories-text-editor-symbolic")
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        bar = Adw.ViewSwitcher(stack=tabs, policy=Adw.ViewSwitcherPolicy.WIDE, halign=Gtk.Align.CENTER,
+                               margin_top=6)
+        box.append(bar)
+        tabs.set_vexpand(True)
+        box.append(tabs)
+        return box
+
+    def _lock_apps(self):
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(title="Lock apps",
+                                     description="A locked app asks for your fingerprint, face or password before it "
+                                                 "starts from the app grid, dock or search.")
+        search = Gtk.SearchEntry(placeholder_text="Search apps", margin_bottom=8)
+        group.set_header_suffix(search)
+        locked = set(read_list("locked-apps"))
+        rows = []
+        apps = sorted((a for a in Gio.AppInfo.get_all() if a.should_show() and a.get_id()),
+                      key=lambda a: a.get_display_name().lower())
+        seen = set()
+        for app in apps:
+            app_id = app.get_id().removesuffix(".desktop")
+            if app_id in seen:
+                continue
+            seen.add(app_id)
+            row = Adw.SwitchRow(title=app.get_display_name(), subtitle=app_id, active=app_id in locked)
+            icon = app.get_icon()
+            row.add_prefix(Gtk.Image(gicon=icon, pixel_size=32) if icon else Gtk.Image(icon_name="application-x-executable"))
+            row.connect("notify::active", self._toggle_app, app_id)
+            group.add(row)
+            rows.append((row, f"{app.get_display_name()} {app_id}".lower()))
+
+        def filter_rows(entry):
+            q = entry.get_text().lower()
+            for row, text in rows:
+                row.set_visible(q in text)
+        search.connect("search-changed", filter_rows)
+        page.add(group)
+        return page
+
+    def _toggle_app(self, row, _param, app_id):
+        action = "add" if row.get_active() else "remove"
+        run_bg([tool("mk-lock"), "app", action, app_id],
+               lambda c, o: self.say((o.strip().splitlines() or ["Done"])[-1].strip("✔[-] ")))
+
+    def _lock_folders(self):
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(title="Locked folders",
+                                     description="Encrypted on disk; open after your fingerprint, face or password. "
+                                                 "They close when the screen locks. Drop a folder here to lock it.")
+        add = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Lock a folder", css_classes=["flat"])
+        add.connect("clicked", lambda *_: self._pick_folder())
+        group.set_header_suffix(add)
+        self.folder_group = group
+        self.folder_rows = []
+        self._fill_folders()
+        page.add(group)
+        vault = Adw.PreferencesGroup(title="Vault", description="A hidden encrypted folder of your own (~/.vault).")
+        vrow = Adw.ActionRow(title="Open or close the vault", activatable=True)
+        vrow.add_suffix(Gtk.Image(icon_name="changes-prevent-symbolic"))
+        vrow.connect("activated", lambda *_: run_bg([tool("mk-lock"), "vault"], lambda c, o: self._fill_folders()))
+        vault.add(vrow)
+        allrow = Adw.ActionRow(title="Lock all now", subtitle="Close every open locked folder and the vault",
+                               activatable=True)
+        allrow.add_suffix(Gtk.Image(icon_name="system-lock-screen-symbolic"))
+        allrow.connect("activated", lambda *_: run_bg([tool("mk-lock"), "close-all"],
+                                                      lambda c, o: (self._fill_folders(), self.say("Everything is locked"))))
+        vault.add(allrow)
+        page.add(vault)
+        drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        drop.connect("drop", lambda _t, value, *_: [self._lock_folder(f.get_path()) for f in value.get_files()
+                                                     if f.get_path() and os.path.isdir(f.get_path())] or True)
+        page.add_controller(drop)
+        return page
+
+    def _fill_folders(self):
+        for row in self.folder_rows:
+            self.folder_group.remove(row)
+        self.folder_rows = []
+        for folder in read_list("locked-folders"):
+            row = Adw.SwitchRow(title=Path(folder).name, subtitle=folder, active=is_open(folder))
+            row.add_prefix(Gtk.Image(icon_name="folder-open-symbolic" if is_open(folder) else "folder-symbolic"))
+            row.set_tooltip_text("On: open (decrypted) · Off: closed")
+            row.connect("notify::active", lambda r, _p, f=folder: run_bg(
+                [tool("mk-lock"), "folder", "open" if r.get_active() else "close", f],
+                lambda c, o: (self._fill_folders(), c and self.say((o.strip().splitlines() or ["Failed"])[-1]))))
+            self.folder_group.add(row)
+            self.folder_rows.append(row)
+        if not self.folder_rows:
+            empty = Adw.ActionRow(title="No locked folders yet", subtitle="Use + or drop a folder here")
+            self.folder_group.add(empty)
+            self.folder_rows.append(empty)
+
+    def _pick_folder(self):
+        def chosen(d, res):
+            try:
+                folder = d.select_folder_finish(res)
+            except GLib.Error:
+                return
+            self._lock_folder(folder.get_path())
+        Gtk.FileDialog(title="Lock a folder").select_folder(self, None, chosen)
+
+    def _lock_folder(self, path):
+        self.say(f"Encrypting {Path(path).name}…")
+        run_bg([tool("mk-lock"), "folder", "add", path],
+               lambda c, o: (self._fill_folders(), self.say((o.strip().splitlines() or ["Done"])[-1].strip("✔[-] "))))
+
+    def _lock_notes(self):
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(
+            title="Lock notebooks",
+            description="A notebook is a folder of MK Notes. Locked, its notes are encrypted and MK Notes "
+                        "doesn't show them until you open it here (or in Files). New: make a notebook "
+                        "just for private notes.")
+        locked = set(read_list("locked-folders"))
+        folders = sorted(p for p in NOTES.iterdir() if p.is_dir() and not p.name.startswith(".")) if NOTES.is_dir() else []
+        for folder in folders:
+            if folder.name in ("attachments", "Templates"):
+                continue
+            key = str(folder)
+            row = Adw.SwitchRow(title=folder.name, subtitle="Locked" if key in locked else "Not locked",
+                                active=key in locked)
+            row.add_prefix(Gtk.Image(icon_name="accessories-text-editor-symbolic"))
+            row.connect("notify::active", self._toggle_notebook, key)
+            group.add(row)
+        private = Adw.ActionRow(title="New private notebook", subtitle="~/Notes/Private, locked from the start",
+                                activatable=True)
+        private.add_suffix(Gtk.Image(icon_name="list-add-symbolic"))
+        private.connect("activated", lambda *_: self._new_private())
+        group.add(private)
+        page.add(group)
+        return page
+
+    def _toggle_notebook(self, row, _p, path):
+        if row.get_active():
+            self._lock_folder(path)
+            row.set_subtitle("Locked")
+        else:
+            self.say("To unlock a notebook for good: mk unlock --remove " + path)
+            row.set_active(True)
+
+    def _new_private(self):
+        folder = NOTES / "Private"
+        folder.mkdir(parents=True, exist_ok=True)
+        if not any(folder.iterdir()):
+            (folder / "Welcome.md").write_text("# Private\n\nNotes in this notebook are encrypted when it's locked.\n")
+        self._lock_folder(str(folder))
+
+    # ---------------------------------------------------------------- security
+    def _security(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_start=24, margin_end=24,
+                      margin_top=18, margin_bottom=18)
+        top = Gtk.Box(spacing=12)
+        title = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
+        title.append(Gtk.Label(label="Security check", css_classes=["title-2"], xalign=0))
+        title.append(Gtk.Label(label="Firewall, updates, sharing, accounts, rootkits, viruses and more. "
+                                     "It asks for your fingerprint or password, then only reads.",
+                               css_classes=["dim-label"], xalign=0, wrap=True))
+        top.append(title)
+        self.scan_btn = Gtk.Button(label="Run check", css_classes=["pill", "suggested-action"], valign=Gtk.Align.CENTER)
+        self.scan_btn.connect("clicked", lambda *_: self._scan())
+        top.append(self.scan_btn)
+        box.append(top)
+        self.fix_box = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=4)
+        box.append(self.fix_box)
+        self.report = Gtk.TextView(editable=False, cursor_visible=False, css_classes=["mk-report", "card"],
+                                   left_margin=14, right_margin=14, top_margin=12, bottom_margin=12,
+                                   wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        box.append(Gtk.ScrolledWindow(child=self.report, vexpand=True))
+        return box
+
+    def _scan(self):
+        self.scan_btn.set_sensitive(False)
+        self.scan_btn.set_label("Checking…")
+        self.report.get_buffer().set_text("Checking… (a minute or two)")
+
+        def done(code, out):
+            self.scan_btn.set_sensitive(True)
+            self.scan_btn.set_label("Run again")
+            self.report.get_buffer().set_text(out.strip() or "No result.")
+            while child := self.fix_box.get_first_child():
+                self.fix_box.remove(child)
+            for line in out.splitlines():
+                line = line.strip()
+                if line.startswith("mk security fix "):
+                    name = line.split()[-1]
+                    b = Gtk.Button(label=f"Fix: {name}", css_classes=["pill"])
+                    b.connect("clicked", lambda _b, n=name: run_bg(
+                        [tool("mk-security"), "fix", n], lambda c, o: (self.say((o.strip().splitlines() or ["Done"])[-1]),
+                                                                        self._scan())))
+                    self.fix_box.append(b)
+        run_bg([tool("mk-security")], done)
+
+
+class CenterApp(Adw.Application):
+    def __init__(self, page):
+        super().__init__(application_id=APP_ID)
+        self.page = page
+
+    def do_activate(self):
+        window = self.get_active_window() or Center(self, self.page)
+        window.present()
+
+
+def main():
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print(__doc__.strip())
+        return 0
+    page = sys.argv[1] if len(sys.argv) > 1 else "home"
+    return CenterApp(page).run([sys.argv[0]])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

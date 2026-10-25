@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=MK Control Center
+Comment=Quick actions, power modes, MK Lock for apps, folders and notes, and the security check
+Exec=@BIN@/mk-center
+Icon=io.github.mehulk.MkCenter
+Categories=Settings;Utility;
+Keywords=mk;control;center;lock;vault;security;power;speed;optimize;
+StartupNotify=true
+StartupWMClass=io.github.mehulk.MkCenter

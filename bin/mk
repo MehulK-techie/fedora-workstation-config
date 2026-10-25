@@ -684,6 +684,10 @@ case "${1:-help}" in
         "$HOME/.local/bin/mk-lock" vault
         ;;
 
+    center|control)
+        setsid -f "$HOME/.local/bin/mk-center" "${2:-home}" > /dev/null 2>&1
+        ;;
+
     speedtest)
         shift
         "$HOME/.local/bin/mk-speedtest" "$@"
@@ -761,6 +765,8 @@ KEYRING
 
     *)
         echo "MK Workstation CLI"
+        echo "The same in a window: mk center (MK Control Center in the app grid)"
+        echo ""
         echo "Usage: mk <command>"
         echo ""
         echo "Commands:"
@@ -792,6 +798,7 @@ KEYRING
         echo "  lock       Fingerprint before an app starts, or an encrypted folder: mk lock app NAME, mk lock ~/Folder"
         echo "  unlock     Open a locked folder (mk unlock ~/Folder) or stop locking an app (mk unlock app NAME)"
         echo "  vault      Open or close your hidden encrypted folder (~/.vault)"
+        echo "  center     MK Control Center: quick actions, power, MK Lock, security (center lock|security)"
         echo "  security   Security check with a score: firewall, updates, rootkits, viruses, Lynis (fix NAME applies a fix)"
         echo "  speedtest  Ping, download and upload speed"
         echo "  nap        Which unused apps App Nap paused under memory or CPU pressure"

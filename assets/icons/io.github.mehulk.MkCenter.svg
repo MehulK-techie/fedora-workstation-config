@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- MK Control Center: four tiles -->
+  <rect x="10" y="14" width="108" height="104" rx="22" fill="#1a5fb4"/>
+  <rect x="10" y="10" width="108" height="104" rx="22" fill="#3584e4"/>
+  <rect x="24" y="24" width="36" height="36" rx="9" fill="#ffffff"/>
+  <rect x="68" y="24" width="36" height="36" rx="9" fill="#99c1f1"/>
+  <rect x="24" y="68" width="36" height="36" rx="9" fill="#99c1f1"/>
+  <rect x="68" y="68" width="36" height="36" rx="9" fill="#ffffff"/>
+  <path d="M86 78a6 6 0 0 0-6 6v4h-2v12h16V88h-2v-4a6 6 0 0 0-6-6zm0 3a3 3 0 0 1 3 3v4h-6v-4a3 3 0 0 1 3-3z" fill="#1a5fb4"/>
+</svg>

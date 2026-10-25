@@ -143,6 +143,12 @@ install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-security-scan" /usr/local/libex
 
 # Apps MK replaced: gThumb (Loupe, GNOME's image viewer, opens images now).
 REMOVE_PKGS=(gthumb)
+# IBus Typing Booster runs in the background (about 100 MB) even when it isn't
+# one of your input sources; the MK emoji board (Super+.) covers emoji. Kept
+# when you use it as an input source.
+if [[ "$REAL_USER" != root ]] && ! as_user gsettings get org.gnome.desktop.input-sources sources 2> /dev/null | grep -q typing-booster; then
+    REMOVE_PKGS+=(ibus-typing-booster)
+fi
 for pkg in "${REMOVE_PKGS[@]}"; do
     if rpm -q "$pkg" &>/dev/null; then
         echo "==> Removing $pkg (replaced)..."

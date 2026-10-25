@@ -615,8 +615,11 @@ gsettings set org.gnome.desktop.privacy remove-old-temp-files true
 gsettings set org.gnome.desktop.privacy old-files-age 30
 # Faster overview search: skip search providers for apps that are rarely
 # searched and often slow or failing to answer (VMs, contacts, passwords).
+# Software too: answering overview searches kept GNOME Software (and its dnf
+# daemon, together about 330 MB) running all day. Open Software to search apps.
 gsettings_append org.gnome.desktop.search-providers disabled \
-    org.gnome.Boxes.desktop org.gnome.Contacts.desktop org.gnome.seahorse.Application.desktop
+    org.gnome.Boxes.desktop org.gnome.Contacts.desktop org.gnome.seahorse.Application.desktop \
+    org.gnome.Software.desktop
 # Laptop comfort: tap to click, natural scrolling, battery %, weekday, Night Light
 gsettings set org.gnome.desktop.peripherals.touchpad tap-to-click true
 gsettings set org.gnome.desktop.peripherals.touchpad natural-scroll true

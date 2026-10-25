@@ -179,6 +179,52 @@ def polaroid(img):
     return polaroid_frame(polaroid_photo(img))[0]
 
 
+@look("flash", "Flash")
+def flash(img):
+    """Direct flash in a party booth: bright faces, deep shadows, crisp."""
+    photo = rgb(img)
+    photo = ImageEnhance.Contrast(photo).enhance(1.55)
+    photo = ImageEnhance.Brightness(photo).enhance(1.08)
+    photo = ImageEnhance.Color(photo).enhance(0.9)
+    # light falls off from the middle, like a flash on the camera
+    photo = Image.composite(Image.new("RGB", photo.size, (0, 0, 0)), photo, _vignette_mask(*photo.size, 0.35, 0.65))
+    return ImageEnhance.Sharpness(photo).enhance(1.6)
+
+
+@look("instant", "Instant 600")
+def instant(img):
+    """Instant film: a warm golden wash, soft skin, cyan in the shadows."""
+    photo = ImageEnhance.Contrast(rgb(img)).enhance(0.92)
+    r, g, b = photo.split()
+    r = r.point(lambda v: min(255, int(v * 1.06 + 8)))
+    g = g.point(lambda v: min(255, int(v * 1.02 + 4)))
+    b = b.point(lambda v: int(v * 0.86 + 22 * (1 - v / 255)))  # cooler in the shadows only
+    photo = Image.merge("RGB", (r, g, b))
+    photo = photo.point(lambda v: 18 + v * (240 - 18) / 255)  # milky blacks and highlights
+    return photo.filter(ImageFilter.GaussianBlur(0.6))
+
+
+@look("film", "Film")
+def film(img):
+    """Analog film: organic warmth, muted greens, gentle grain."""
+    photo = rgb(img)
+    h, s_, v = photo.convert("HSV").split()
+    # greens (hue around 85/255) lose saturation; everything else a little
+    greens = h.point(lambda x: 255 if 60 < x < 120 else 0)
+    s_ = Image.composite(s_.point(lambda x: int(x * 0.55)), s_.point(lambda x: int(x * 0.85)), greens)
+    photo = Image.merge("HSV", (h, s_, v)).convert("RGB")
+    warm = Image.new("RGB", photo.size, (255, 214, 170))
+    photo = Image.blend(photo, ImageChops.multiply(photo, warm), 0.25)
+    photo = photo.point(lambda x: 14 + x * (246 - 14) / 255)
+    key = ("grain", photo.size)
+    if key not in _CACHE:
+        rand = random.Random(3)
+        noise = Image.new("L", (photo.width // 2 + 1, photo.height // 2 + 1))
+        noise.putdata([rand.randint(100, 156) for _ in range(noise.width * noise.height)])
+        _CACHE[key] = noise.resize(photo.size).convert("RGB")
+    return ImageChops.overlay(photo, _CACHE[key])
+
+
 @look("vignette", "Vignette")
 def vignette(img):
     photo = rgb(img)

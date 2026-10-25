@@ -9,15 +9,21 @@ hardware controls (brightness, contrast, saturation, gamma, sharpness, white
 balance) with Reset to hardware defaults. Space or the shutter button takes
 the photo, after an optional 3-2-1 countdown.
 
+G shows nine looks at once, live (3 x 3); click one to use it.
+
 Decorate page: type text or pick an emoji sticker, then click the photo to
-place it; with a Polaroid frame, write a caption on the frame. Undo, then
-Save: the photo goes to ~/Pictures/MK Booth/.
+place it. A placed layer can be selected and moved, resized from its
+corners and turned from the knob on top (the angle shows as you turn);
+bring it forward or send it back, or delete it. With a Polaroid frame,
+write a caption on it; add a date stamp (90s digital, typewriter or
+handwritten). Save: the photo goes to ~/Pictures/MK Booth/.
 
 The looks come from lib/mkworkstation/photo.py; text and stickers are drawn
 with Pango and cairo (colour emoji). Hardware controls use v4l2-ctl.
 """
 import glob
 import io
+import math
 import os
 import re
 import subprocess
@@ -55,6 +61,8 @@ from mkworkstation import photo  # noqa: E402
 APP_ID = "io.github.mehulk.MkCamera"
 OUT_DIR = Path(GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES) or Path.home() / "Pictures") / "MK Booth"
 PREVIEW_W = 640
+GRID_W = 320
+GRID_LOOKS = [None, "polaroid", "flash", "instant", "film", "noir", "thermal", "popart", "comic"]
 STICKERS = "😀😂😍🥳😎🤩😜🥰🤪😇👻🤖👑🎉🎈🎂🌈⭐✨🔥💖💯👍✌️🙌🍕🍿🌸🦄🐶🐱"
 COLORS = [("White", (1, 1, 1)), ("Black", (0.08, 0.08, 0.1)), ("Pink", (1, 0.35, 0.65)),
           ("Yellow", (1, 0.85, 0.15)), ("Blue", (0.25, 0.6, 1)), ("Green", (0.3, 0.9, 0.45))]
@@ -65,6 +73,10 @@ CSS = b"""
                     background: #ff4757; color: white; border: 4px solid alpha(white, 0.85); }
 .mk-booth-sticker { font-size: 22px; padding: 2px 6px; min-width: 36px; }
 .mk-booth-photo { border-radius: 12px; }
+.mk-booth-cell-label { background: alpha(black, 0.55); color: white; border-radius: 99px; padding: 2px 10px;
+                       font-weight: 700; font-size: 0.9em; }
+.mk-booth-angle { background: alpha(black, 0.65); color: white; border-radius: 8px; padding: 2px 8px;
+                  font-weight: 700; }
 """
 
 # ---------------------------------------------------------------- webcam hardware controls (v4l2)
@@ -113,12 +125,17 @@ def to_texture(img):
     return Gdk.MemoryTexture.new(img.width, img.height, Gdk.MemoryFormat.R8G8B8, data, img.width * 3)
 
 
-def draw_items(img, items, caption=None, caption_box=None):
-    """Text and emoji stickers (and a Polaroid caption) drawn with Pango/cairo,
-    which renders colour emoji. ITEMS: dicts with kind, text, x, y (0-1), size
-    (fraction of the photo's width) and colour."""
-    if not items and not caption:
-        return img
+DATE_STYLES = {"digital": ("Digital (90s)", "DSEG7 Classic, Monospace Bold", (1.0, 0.55, 0.1)),
+               "typewriter": ("Typewriter", "Courier Prime, Liberation Mono, Monospace", (0.95, 0.92, 0.85)),
+               "handwritten": ("Handwritten", "Patrick Hand, Comic Neue, Sans Italic", (1.0, 1.0, 1.0))}
+
+
+def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=None):
+    """Text and emoji stickers drawn with Pango/cairo (which renders colour
+    emoji), each turned by its angle; a Polaroid caption; a date stamp in the
+    photo's corner. ITEMS: dicts with kind, text, x, y (0-1 of the image),
+    size (fraction of its width), angle (degrees) and colour. Returns the
+    image and each item's box (cx, cy, w, h, angle) in image pixels."""
     rgba = img.convert("RGBA")
     w, h = rgba.size
     # PIL RGBA -> cairo ARGB32 (BGRA in memory on little-endian machines)
@@ -126,35 +143,62 @@ def draw_items(img, items, caption=None, caption_box=None):
     surface = cairo.ImageSurface.create_for_data(bytearray(Image.merge("RGBA", (b, g, r, a)).tobytes()),
                                                  cairo.FORMAT_ARGB32, w, h, w * 4)
     cr = cairo.Context(surface)
+    boxes = []
 
-    def text_at(text, cx, cy, px, colour, font, outline=True):
+    def text_at(text, cx, cy, px, colour, font, outline=True, angle=0.0, glow=False):
         layout = PangoCairo.create_layout(cr)
         layout.set_font_description(Pango.FontDescription.from_string(f"{font} {max(6, px)}px"))
         layout.set_text(text, -1)
         tw, th = layout.get_pixel_size()
-        cr.move_to(cx - tw / 2, cy - th / 2)
+        cr.save()
+        cr.translate(cx, cy)
+        cr.rotate(math.radians(angle))
+        if glow:  # the orange digits of a 90s camera, slightly bleeding
+            cr.move_to(-tw / 2, -th / 2)
+            PangoCairo.layout_path(cr, layout)
+            cr.set_source_rgba(*colour, 0.35)
+            cr.set_line_width(max(2, px / 6))
+            cr.stroke()
         if outline:  # a dark edge keeps light text readable on any photo
+            cr.move_to(-tw / 2, -th / 2)
             PangoCairo.layout_path(cr, layout)
             cr.set_source_rgba(0, 0, 0, 0.55)
             cr.set_line_width(max(2, px / 10))
             cr.stroke()
-            cr.move_to(cx - tw / 2, cy - th / 2)
+        cr.move_to(-tw / 2, -th / 2)
         cr.set_source_rgb(*colour)
         PangoCairo.show_layout(cr, layout)
+        cr.restore()
+        return tw, th
 
     for item in items:
         px = round(item["size"] * w)
+        angle = item.get("angle", 0.0)
         if item["kind"] == "sticker":
-            text_at(item["text"], item["x"] * w, item["y"] * h, px, (1, 1, 1), "Noto Color Emoji", outline=False)
+            tw, th = text_at(item["text"], item["x"] * w, item["y"] * h, px, (1, 1, 1), "Noto Color Emoji",
+                             outline=False, angle=angle)
         else:
-            text_at(item["text"], item["x"] * w, item["y"] * h, px, item["colour"], "Sans Bold")
+            tw, th = text_at(item["text"], item["x"] * w, item["y"] * h, px, item["colour"], "Sans Bold",
+                             angle=angle)
+        boxes.append((item["x"] * w, item["y"] * h, tw, th, angle))
     if caption and caption_box:
         x, y, bw, bh = caption_box
         text_at(caption, x + bw / 2, y + bh / 2, round(bh * 0.32), (0.18, 0.16, 0.2),
-                "Comic Neue, Patrick Hand, Sans", outline=False)
+                "Patrick Hand, Comic Neue, Sans", outline=False)
+    if date and photo_box:
+        style, stamp = date
+        _label, font, colour = DATE_STYLES[style]
+        x, y, bw, bh = photo_box
+        px = max(10, round(bw * 0.035))
+        layout = PangoCairo.create_layout(cr)
+        layout.set_font_description(Pango.FontDescription.from_string(f"{font} {px}px"))
+        layout.set_text(stamp, -1)
+        tw, th = layout.get_pixel_size()
+        text_at(stamp, x + bw - tw / 2 - bw * 0.04, y + bh - th / 2 - bh * 0.04, px, colour,
+                font, outline=style != "digital", glow=style == "digital")
     surface.flush()
     out = Image.frombuffer("RGBA", (w, h), bytes(surface.get_data()), "raw", "BGRA", 0, 1)
-    return out.convert("RGB")
+    return out.convert("RGB"), boxes
 
 
 # ---------------------------------------------------------------- the window
@@ -211,7 +255,28 @@ class Booth(Adw.ApplicationWindow):
                                    css_classes=["mk-booth-photo"])
         self.countdown = Gtk.Label(css_classes=["mk-booth-countdown"], visible=False)
         self.flash = Gtk.Box(css_classes=["mk-booth-flash"], opacity=0, can_target=False)
-        overlay = Gtk.Overlay(child=self.preview, margin_start=12, margin_end=12, margin_top=8)
+        # 3 x 3: nine looks live at once, click one to use it.
+        self.grid_mode = False
+        self.grid = Gtk.Grid(row_spacing=6, column_spacing=6, hexpand=True, vexpand=True,
+                             row_homogeneous=True, column_homogeneous=True)
+        self.grid_cells = []
+        for n, key in enumerate(GRID_LOOKS):
+            pic = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, css_classes=["mk-booth-photo"],
+                              cursor=Gdk.Cursor.new_from_name("pointer"))
+            label = Gtk.Label(label=photo.FILTERS[key].label if key else "Original",
+                              css_classes=["mk-booth-cell-label"], valign=Gtk.Align.END, halign=Gtk.Align.CENTER,
+                              margin_bottom=6)
+            cell = Gtk.Overlay(child=pic)
+            cell.add_overlay(label)
+            click = Gtk.GestureClick()
+            click.connect("released", lambda *_a, k=key: self._pick_from_grid(k))
+            cell.add_controller(click)
+            self.grid.attach(cell, n % 3, n // 3, 1, 1)
+            self.grid_cells.append((key, pic))
+        self.view_stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, hexpand=True, vexpand=True)
+        self.view_stack.add_named(self.preview, "single")
+        self.view_stack.add_named(self.grid, "grid")
+        overlay = Gtk.Overlay(child=self.view_stack, margin_start=12, margin_end=12, margin_top=8)
         overlay.add_overlay(self.flash)
         overlay.add_overlay(self.countdown)
 
@@ -222,8 +287,10 @@ class Booth(Adw.ApplicationWindow):
         top.append(overlay)
         top.append(revealer)
 
-        looks = Gtk.Box(spacing=6, margin_start=12, margin_end=12)
+        # Room under the pills for the scrollbar, so they never overlap.
+        looks = Gtk.Box(spacing=6, margin_start=12, margin_end=12, margin_top=4, margin_bottom=12)
         group = None
+        self.look_buttons = {}
         for key, label in [(None, "Original")] + [(k, f.label) for k, f in photo.FILTERS.items()]:
             b = Gtk.ToggleButton(label=label, css_classes=["pill"], active=key is None)
             if group:
@@ -231,12 +298,21 @@ class Booth(Adw.ApplicationWindow):
             group = group or b
             b.connect("toggled", lambda btn, k=key: btn.get_active() and setattr(self, "look", k))
             looks.append(b)
-        scroller = Gtk.ScrolledWindow(child=looks, vscrollbar_policy=Gtk.PolicyType.NEVER, min_content_height=48)
+            self.look_buttons[key] = b
+        scroller = Gtk.ScrolledWindow(child=looks, vscrollbar_policy=Gtk.PolicyType.NEVER,
+                                      hscrollbar_policy=Gtk.PolicyType.AUTOMATIC, propagate_natural_height=True,
+                                      overlay_scrolling=False, margin_start=4, margin_end=4)
 
         bottom = Gtk.CenterBox(margin_top=8, margin_bottom=14, margin_start=16, margin_end=16)
         self.timer_btn = Gtk.ToggleButton(icon_name="alarm-symbolic", tooltip_text="3-2-1 countdown",
                                           css_classes=["circular"], valign=Gtk.Align.CENTER)
-        bottom.set_start_widget(self.timer_btn)
+        self.grid_btn = Gtk.ToggleButton(icon_name="view-grid-symbolic", tooltip_text="Nine looks at once (G)",
+                                         css_classes=["circular"], valign=Gtk.Align.CENTER)
+        self.grid_btn.connect("toggled", lambda b: self._set_grid(b.get_active()))
+        left = Gtk.Box(spacing=8)
+        left.append(self.timer_btn)
+        left.append(self.grid_btn)
+        bottom.set_start_widget(left)
         shutter = Gtk.Button(icon_name="camera-photo-symbolic", css_classes=["mk-booth-shutter"],
                              tooltip_text="Take the photo (Space)")
         shutter.connect("clicked", lambda *_: self.take())
@@ -355,9 +431,26 @@ class Booth(Adw.ApplicationWindow):
         img = self._latest()
         if img is None:
             return GLib.SOURCE_REMOVE
+        if self.grid_mode:
+            if now - getattr(self, "last_grid", 0) < 1 / 12:  # nine looks: 12 fps is smooth enough
+                return GLib.SOURCE_REMOVE
+            self.last_grid = now
+            tiny = img.resize((GRID_W, round(GRID_W * img.height / img.width)), Image.Resampling.BILINEAR)
+            for key, pic in self.grid_cells:
+                look = photo.polaroid_photo(tiny) if key == "polaroid" else photo.apply(tiny, key) if key else tiny
+                pic.set_paintable(to_texture(look))
+            return GLib.SOURCE_REMOVE
         small = img.resize((PREVIEW_W, round(PREVIEW_W * img.height / img.width)), Image.Resampling.BILINEAR)
         self.preview.set_paintable(to_texture(photo.apply(small, self.look) if self.look else small))
         return GLib.SOURCE_REMOVE
+
+    def _set_grid(self, on):
+        self.grid_mode = on
+        self.view_stack.set_visible_child_name("grid" if on else "single")
+
+    def _pick_from_grid(self, key):
+        self.look_buttons[key].set_active(True)
+        self.grid_btn.set_active(False)
 
     # ----- taking the photo
     def take(self):
@@ -402,6 +495,8 @@ class Booth(Adw.ApplicationWindow):
             self.shot = photo.apply(img, self.look) if self.look else img
             self.frame_on = False
         self.items = []
+        self.selected = None
+        self.taken_at = time.localtime()
         self.frame_switch.set_active(self.frame_on)
         self.caption.set_text("")
         self._compose()
@@ -410,15 +505,29 @@ class Booth(Adw.ApplicationWindow):
     # ----- decorate page
     def _decorate_page(self):
         self.result = Gtk.Picture(content_fit=Gtk.ContentFit.CONTAIN, hexpand=True, vexpand=True,
-                                  css_classes=["mk-booth-photo"])
-        click = Gtk.GestureClick()
-        click.connect("released", self._place)
-        self.result.add_controller(click)
+                                  css_classes=["mk-booth-photo"], can_target=False)
+        # Handles over the picture: select, move, resize from the corners,
+        # rotate from the knob on top.
+        self.handles = Gtk.DrawingArea(hexpand=True, vexpand=True)
+        self.handles.set_draw_func(self._draw_handles)
+        drag = Gtk.GestureDrag()
+        drag.connect("drag-begin", self._drag_begin)
+        drag.connect("drag-update", self._drag_update)
+        drag.connect("drag-end", self._drag_end)
+        self.handles.add_controller(drag)
+        self.angle_label = Gtk.Label(css_classes=["mk-booth-angle"], visible=False, halign=Gtk.Align.START,
+                                     valign=Gtk.Align.START, can_target=False)
+        canvas = Gtk.Overlay(child=self.result, margin_start=12, margin_top=8, margin_bottom=12)
+        canvas.add_overlay(self.handles)
+        canvas.add_overlay(self.angle_label)
+        self.selected = None
+        self.boxes = []
 
-        tools = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, width_request=300,
-                        margin_start=12, margin_end=12, margin_top=8)
-        tools.append(Gtk.Label(label="Click the photo to place", css_classes=["title-4"], xalign=0))
-        self.text_entry = Gtk.Entry(placeholder_text="Your text (then click the photo)")
+        tools = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, width_request=310,
+                        margin_start=12, margin_end=12, margin_top=8, margin_bottom=12)
+        tools.append(Gtk.Label(label="Add text or a sticker, then click the photo", css_classes=["heading"],
+                               xalign=0, wrap=True))
+        self.text_entry = Gtk.Entry(placeholder_text="Your text")
         tools.append(self.text_entry)
         colours = Gtk.Box(spacing=4)
         self.colour = COLORS[0][1]
@@ -428,15 +537,9 @@ class Booth(Adw.ApplicationWindow):
             if group:
                 b.set_group(group)
             group = group or b
-            b.connect("toggled", lambda btn, c=rgb: btn.get_active() and setattr(self, "colour", c))
+            b.connect("toggled", lambda btn, c=rgb: btn.get_active() and self._set_colour(c))
             colours.append(b)
         tools.append(colours)
-        tools.append(Gtk.Label(label="Size", xalign=0, css_classes=["caption-heading"]))
-        self.size = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.03, 0.25, 0.01)
-        self.size.set_value(0.08)
-        tools.append(self.size)
-        tools.append(Gtk.Label(label="Stickers (pick one, then click the photo)", xalign=0,
-                               css_classes=["caption-heading"]))
         flow = Gtk.FlowBox(max_children_per_line=8, selection_mode=Gtk.SelectionMode.NONE)
         self.sticker = None
         for ch in self._split_emoji(STICKERS):
@@ -444,31 +547,50 @@ class Booth(Adw.ApplicationWindow):
             b.connect("clicked", lambda _b, c=ch: self._pick_sticker(c))
             flow.append(b)
         tools.append(flow)
+        layer = Gtk.Box(spacing=6, css_classes=["linked"])
+        for icon, tip, cb in (("go-up-symbolic", "Bring forward", lambda: self._restack(1)),
+                              ("go-down-symbolic", "Send backward", lambda: self._restack(-1)),
+                              ("user-trash-symbolic", "Delete (Del)", lambda: self._delete_selected())):
+            b = Gtk.Button(icon_name=icon, tooltip_text=tip)
+            b.connect("clicked", lambda _b, c=cb: c())
+            layer.append(b)
+        tools.append(Gtk.Label(label="Selected layer: drag to move, corners to resize, the top knob to turn",
+                               css_classes=["caption", "dim-label"], xalign=0, wrap=True))
+        tools.append(layer)
+
         frame_row = Gtk.Box(spacing=8)
         frame_row.append(Gtk.Label(label="Polaroid frame", hexpand=True, xalign=0))
         self.frame_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
-        self.frame_switch.connect("notify::active", lambda s, _p: (setattr(self, "frame_on", s.get_active()),
-                                                                   self._compose()))
+        self.frame_switch.connect("notify::active", lambda sw, _p: (setattr(self, "frame_on", sw.get_active()),
+                                                                    self._compose()))
         frame_row.append(self.frame_switch)
         tools.append(frame_row)
         self.caption = Gtk.Entry(placeholder_text="Caption on the frame")
         self.caption.connect("changed", lambda *_: self._compose())
         tools.append(self.caption)
-        row = Gtk.Box(spacing=6, margin_top=10)
-        undo = Gtk.Button(label="Undo", css_classes=["pill"])
-        undo.connect("clicked", lambda *_: (self.items.pop() if self.items else None, self._compose()))
+        date_row = Gtk.Box(spacing=8)
+        date_row.append(Gtk.Label(label="Date stamp", hexpand=True, xalign=0))
+        self.date_style = Gtk.DropDown.new_from_strings([v[0] for v in DATE_STYLES.values()])
+        self.date_style.connect("notify::selected", lambda *_: self._compose())
+        date_row.append(self.date_style)
+        self.date_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
+        self.date_switch.connect("notify::active", lambda *_: self._compose())
+        date_row.append(self.date_switch)
+        tools.append(date_row)
+
+        row = Gtk.Box(spacing=6, margin_top=6)
         retake = Gtk.Button(label="Retake", css_classes=["pill"])
         retake.connect("clicked", lambda *_: self.stack.set_visible_child_name("camera"))
-        save = Gtk.Button(label="Save", css_classes=["pill", "suggested-action"])
+        save = Gtk.Button(label="Save", css_classes=["pill", "suggested-action"], hexpand=True)
         save.connect("clicked", lambda *_: self.save())
-        for b in (undo, retake, save):
-            row.append(b)
+        row.append(retake)
+        row.append(save)
         tools.append(row)
 
         page = Gtk.Box()
-        page.append(Gtk.Box(hexpand=True, vexpand=True, margin_start=12, margin_top=8, margin_bottom=12))
-        page.get_first_child().append(self.result)
-        page.append(tools)
+        page.append(canvas)
+        page.append(Gtk.ScrolledWindow(child=tools, hscrollbar_policy=Gtk.PolicyType.NEVER,
+                                       propagate_natural_width=True))
         return page
 
     @staticmethod
@@ -487,52 +609,201 @@ class Booth(Adw.ApplicationWindow):
         self.text_entry.set_text("")
         self.toast.add_toast(Adw.Toast(title=f"{ch} picked: click the photo to place it", timeout=2))
 
-    def _composed_parts(self):
-        """The photo with its frame (if on), and where the photo and caption sit."""
-        if self.frame_on:
-            framed, caption_box = photo.polaroid_frame(self.shot)
-            side = caption_box[0]
-            return framed, (side, side, self.shot.width, self.shot.height), caption_box
-        return self.shot, (0, 0, self.shot.width, self.shot.height), None
+    def _set_colour(self, colour):
+        self.colour = colour
+        if self.selected is not None and self.items[self.selected]["kind"] == "text":
+            self.items[self.selected]["colour"] = colour
+            self._compose()
 
-    def _compose(self):
-        if self.shot is None:
-            return
-        base, (px, py, pw, ph), caption_box = self._composed_parts()
+    def _composed_parts(self, base_photo=None):
+        """The photo with its frame (if on), and where the photo and caption sit."""
+        shot = base_photo or self.shot
+        if self.frame_on:
+            framed, caption_box = photo.polaroid_frame(shot)
+            side = caption_box[0]
+            return framed, (side, side, shot.width, shot.height), caption_box
+        return shot, (0, 0, shot.width, shot.height), None
+
+    def _render(self, base_photo):
+        base, (px, py, pw, ph), caption_box = self._composed_parts(base_photo)
         # Items are kept relative to the photo, so the frame can come and go.
         placed = [dict(it, x=(px + it["x"] * pw) / base.width, y=(py + it["y"] * ph) / base.height,
                        size=it["size"] * pw / base.width) for it in self.items]
-        self.final = draw_items(base, placed, self.caption.get_text().strip() if self.frame_on else None,
-                                caption_box)
-        preview = self.final.copy()
-        preview.thumbnail((1400, 1400))
-        self.result.set_paintable(to_texture(preview))
+        date = None
+        if self.date_switch.get_active():
+            style = list(DATE_STYLES)[self.date_style.get_selected()]
+            fmt = "'%y %m %d" if style == "digital" else "%d %b %Y" if style == "typewriter" else "%d/%m/%y"
+            date = (style, time.strftime(fmt, self.taken_at))
+        return draw_items(base, placed, self.caption.get_text().strip() if self.frame_on else None,
+                          caption_box, date, (px, py, pw, ph))
 
-    def _place(self, _g, _n, x, y):
+    def _compose(self):
+        """Redraw the editing view (on a smaller copy, so dragging is smooth)."""
         if self.shot is None:
             return
-        base, (px, py, pw, ph), _cap = self._composed_parts()
-        w, h = self.result.get_width(), self.result.get_height()
-        k = min(w / base.width, h / base.height)
-        ox, oy = (w - base.width * k) / 2, (h - base.height * k) / 2
+        small = self.shot.copy()
+        small.thumbnail((1100, 1100))
+        self.view_img, self.boxes = self._render(small)
+        self.result.set_paintable(to_texture(self.view_img))
+        self.handles.queue_draw()
+
+    # ----- layers: select, move, resize, rotate
+    def _to_view(self):
+        """(scale, x offset, y offset) of the shown image inside the widget."""
+        w, h = self.handles.get_width(), self.handles.get_height()
+        iw, ih = self.view_img.size
+        k = min(w / iw, h / ih)
+        return k, (w - iw * k) / 2, (h - ih * k) / 2
+
+    def _box_points(self, i):
+        """The selected box's corners and rotate knob, in widget coordinates."""
+        cx, cy, bw, bh, angle = self.boxes[i]
+        k, ox, oy = self._to_view()
+        a = math.radians(angle)
+        def at(dx, dy):
+            return (ox + (cx + dx * math.cos(a) - dy * math.sin(a)) * k,
+                    oy + (cy + dx * math.sin(a) + dy * math.cos(a)) * k)
+        corners = [at(-bw / 2 - 6, -bh / 2 - 6), at(bw / 2 + 6, -bh / 2 - 6),
+                   at(bw / 2 + 6, bh / 2 + 6), at(-bw / 2 - 6, bh / 2 + 6)]
+        knob = at(0, -bh / 2 - 6 - 28 / k)
+        return corners, knob, (ox + cx * k, oy + cy * k)
+
+    def _draw_handles(self, _area, cr, _w, _h):
+        if self.selected is None or self.selected >= len(self.boxes):
+            return
+        corners, knob, centre = self._box_points(self.selected)
+        cr.set_source_rgba(1, 1, 1, 0.95)
+        cr.set_line_width(1.5)
+        cr.set_dash([5, 4])
+        cr.move_to(*corners[0])
+        for c in corners[1:]:
+            cr.line_to(*c)
+        cr.close_path()
+        cr.stroke()
+        cr.set_dash([])
+        top_mid = ((corners[0][0] + corners[1][0]) / 2, (corners[0][1] + corners[1][1]) / 2)
+        cr.move_to(*top_mid)
+        cr.line_to(*knob)
+        cr.stroke()
+        for x, y in corners:
+            cr.rectangle(x - 6, y - 6, 12, 12)
+        cr.set_source_rgb(0.21, 0.52, 0.89)
+        cr.fill()
+        cr.arc(knob[0], knob[1], 8, 0, 2 * math.pi)
+        cr.fill()
+
+    def _hit(self, x, y):
+        """What's under the pointer: ('rotate'|'scale'|'move', index) or None."""
+        if self.selected is not None and self.selected < len(self.boxes):
+            corners, knob, _c = self._box_points(self.selected)
+            if math.dist((x, y), knob) < 14:
+                return ("rotate", self.selected)
+            if any(math.dist((x, y), c) < 14 for c in corners):
+                return ("scale", self.selected)
+        k, ox, oy = self._to_view()
+        bx, by = (x - ox) / k, (y - oy) / k
+        for i in reversed(range(len(self.boxes))):  # topmost first
+            cx, cy, bw, bh, angle = self.boxes[i]
+            a = -math.radians(angle)
+            dx, dy = bx - cx, by - cy
+            rx, ry = dx * math.cos(a) - dy * math.sin(a), dx * math.sin(a) + dy * math.cos(a)
+            if abs(rx) <= bw / 2 + 6 and abs(ry) <= bh / 2 + 6:
+                return ("move", i)
+        return None
+
+    def _drag_begin(self, _g, x, y):
+        self.drag_start = (x, y)
+        hit = self._hit(x, y)
+        self.drag_mode = hit[0] if hit else None
+        if hit:
+            self.selected = hit[1]
+            it = self.items[self.selected]
+            _corners, _knob, centre = self._box_points(self.selected)
+            self.drag_item = dict(it)
+            self.drag_centre = centre
+            self.drag_dist = max(1.0, math.dist((x, y), centre))
+            self.drag_angle0 = math.degrees(math.atan2(y - centre[1], x - centre[0]))
+        self.handles.queue_draw()
+
+    def _drag_update(self, _g, dx, dy):
+        if not self.drag_mode or self.selected is None:
+            return
+        it, start = self.items[self.selected], self.drag_item
+        x, y = self.drag_start[0] + dx, self.drag_start[1] + dy
+        base, (_px, _py, pw, ph), _cap = self._composed_parts(self.view_photo_size())
+        k, _ox, _oy = self._to_view()
+        if self.drag_mode == "move":
+            it["x"] = min(1.0, max(0.0, start["x"] + dx / k / pw))
+            it["y"] = min(1.0, max(0.0, start["y"] + dy / k / ph))
+        elif self.drag_mode == "scale":
+            it["size"] = min(0.9, max(0.02, start["size"] * math.dist((x, y), self.drag_centre) / self.drag_dist))
+        else:
+            now = math.degrees(math.atan2(y - self.drag_centre[1], x - self.drag_centre[0]))
+            it["angle"] = (start.get("angle", 0.0) + now - self.drag_angle0 + 180) % 360 - 180
+            self.angle_label.set_label(f"{round(it['angle'])}°")
+            self.angle_label.set_margin_start(int(x) + 16)
+            self.angle_label.set_margin_top(int(y) + 16)
+            self.angle_label.set_visible(True)
+        self._compose()
+
+    def _drag_end(self, _g, dx, dy):
+        self.angle_label.set_visible(False)
+        if abs(dx) + abs(dy) < 4 and not self.drag_mode:
+            self._place(*self.drag_start)  # a click on an empty spot
+        elif abs(dx) + abs(dy) < 4 and self.drag_mode == "move":
+            pass  # a click on a layer just selects it
+        self.drag_mode = None
+
+    def view_photo_size(self):
+        small = self.shot.copy()
+        small.thumbnail((1100, 1100))
+        return small
+
+    def _place(self, x, y):
+        if self.shot is None:
+            return
+        base, (px, py, pw, ph), _cap = self._composed_parts(self.view_photo_size())
+        k, ox, oy = self._to_view()
         bx, by = (x - ox) / k, (y - oy) / k
         if not (px <= bx <= px + pw and py <= by <= py + ph):
+            self.selected = None
+            self.handles.queue_draw()
             return
-        rel = {"x": (bx - px) / pw, "y": (by - py) / ph, "size": self.size.get_value()}
+        rel = {"x": (bx - px) / pw, "y": (by - py) / ph, "angle": 0.0}
         text = self.text_entry.get_text().strip()
         if text:
-            self.items.append({"kind": "text", "text": text, "colour": self.colour, **rel})
+            self.items.append({"kind": "text", "text": text, "colour": self.colour, "size": 0.08, **rel})
+            self.text_entry.set_text("")
         elif self.sticker:
-            self.items.append({"kind": "sticker", "text": self.sticker, **rel, "size": rel["size"] * 1.4})
+            self.items.append({"kind": "sticker", "text": self.sticker, "size": 0.12, **rel})
         else:
+            self.selected = None
+            self.handles.queue_draw()
             self.toast.add_toast(Adw.Toast(title="Type some text or pick a sticker first", timeout=2))
             return
+        self.selected = len(self.items) - 1
         self._compose()
+
+    def _restack(self, step):
+        i = self.selected
+        if i is None:
+            return
+        j = max(0, min(len(self.items) - 1, i + step))
+        self.items.insert(j, self.items.pop(i))
+        self.selected = j
+        self._compose()
+
+    def _delete_selected(self):
+        if self.selected is not None:
+            self.items.pop(self.selected)
+            self.selected = None
+            self._compose()
 
     def save(self):
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         path = OUT_DIR / time.strftime("booth-%Y%m%d-%H%M%S.jpg")
-        self.final.save(path, "JPEG", quality=92)
+        final, _boxes = self._render(self.shot)  # full size for the file
+        final.save(path, "JPEG", quality=92)
         toast = Adw.Toast(title=f"Saved {path.name}", button_label="Open", timeout=4)
         toast.connect("button-clicked", lambda *_: Gio.AppInfo.launch_default_for_uri(path.as_uri(), None))
         self.toast.add_toast(toast)
@@ -546,9 +817,21 @@ class Booth(Adw.ApplicationWindow):
         if keyval == Gdk.KEY_space and self.stack.get_visible_child_name() == "camera":
             self.take()
             return True
-        if keyval == Gdk.KEY_Escape and self.stack.get_visible_child_name() == "decorate":
-            self.stack.set_visible_child_name("camera")
+        if keyval in (Gdk.KEY_g, Gdk.KEY_G) and self.stack.get_visible_child_name() == "camera":
+            self.grid_btn.set_active(not self.grid_btn.get_active())
             return True
+        if self.stack.get_visible_child_name() == "decorate" and not self.text_entry.has_focus() \
+                and not self.caption.has_focus():
+            if keyval == Gdk.KEY_Delete:
+                self._delete_selected()
+                return True
+            if keyval == Gdk.KEY_Escape:
+                if self.selected is not None:
+                    self.selected = None
+                    self.handles.queue_draw()
+                else:
+                    self.stack.set_visible_child_name("camera")
+                return True
         return False
 
 

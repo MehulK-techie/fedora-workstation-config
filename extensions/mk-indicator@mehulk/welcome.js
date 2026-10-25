@@ -12,6 +12,7 @@ import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Gvc from 'gi://Gvc';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -19,6 +20,7 @@ import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import { ExtensionState } from 'resource:///org/gnome/shell/misc/extensionUtils.js';
+import { getMixerControl } from 'resource:///org/gnome/shell/ui/status/volume.js';
 import { accentPairUnit } from './accent.js';
 
 const CONFIG_DIR = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation']);
@@ -591,8 +593,74 @@ export class Welcome {
         const conf = welcomeConf();
         if (!force && conf.WELCOME === 'off')
             return;
+        if (conf.VOICE !== 'on') {
+            this._greetNow(conf, force, null);
+            return;
+        }
+        // In step: first the voice file (rendered once, cached) and the audio
+        // server; then the light and the voice start together. Waiting is
+        // capped at 4 s: after that the light plays without the voice rather
+        // than late or out of step.
+        let path = null, audio = false, done = false;
+        const go = () => {
+            if (done || !(path !== null && audio))
+                return;
+            done = true;
+            if (this._voiceWaitId)
+                GLib.source_remove(this._voiceWaitId);
+            this._voiceWaitId = 0;
+            this._greetNow(conf, force, path || null);
+        };
+        this._voiceWaitId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 4000, () => {
+            this._voiceWaitId = 0;
+            if (!done) {
+                done = true;
+                this._greetNow(conf, force, audio && path ? path : null);
+            }
+            return GLib.SOURCE_REMOVE;
+        });
+        this._whenAudioReady(() => {
+            audio = true;
+            go();
+        });
+        this._pending = pickGreeting(conf);
+        try {
+            const proc = Gio.Subprocess.new([`${BIN}/mk-voice`, 'file', this._pending],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+            proc.communicate_utf8_async(null, null, (p, res) => {
+                try {
+                    const [, out] = p.communicate_utf8_finish(res);
+                    path = p.get_successful() ? out.trim() : '';
+                } catch (e) {
+                    path = '';
+                }
+                go();
+            });
+        } catch (e) {
+            path = '';
+            go();
+        }
+    }
+
+    // GNOME's own audio mixer says when PipeWire is up.
+    _whenAudioReady(callback) {
+        const mixer = getMixerControl();
+        if (mixer.get_state() === Gvc.MixerControlState.READY) {
+            callback();
+            return;
+        }
+        const id = mixer.connect('state-changed', () => {
+            if (mixer.get_state() === Gvc.MixerControlState.READY) {
+                mixer.disconnect(id);
+                callback();
+            }
+        });
+    }
+
+    _greetNow(conf, force, voicePath) {
         const firstToday = readJson(HISTORY, {}).day !== GLib.DateTime.new_now_local().format('%F');
-        const greeting = pickGreeting(conf);
+        const greeting = this._pending ?? pickGreeting(conf);
+        this._pending = null;
         const extra = [];
         const todo = conf.TASKS !== 'off' ? agenda() : {pinned: [], next: null};
         if (todo.pinned.length) {
@@ -611,15 +679,12 @@ export class Welcome {
             extra.push(`🔋 ${battery}`);
         const duration = 3600;
         this._light.play({greeting, subtitle: conf.SUBTITLE !== 'off', duration, extra});
-        if (conf.VOICE === 'on') {
-            // spoken as the words appear, not before
+        if (voicePath) {
+            // Spoken as the words appear: the file is ready and so is the
+            // audio server, so playback starts within a few milliseconds.
             this._voiceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.round(duration * 0.28), () => {
                 this._voiceId = 0;
-                // Its own systemd user unit, ordered after PipeWire: right after
-                // a cold boot the audio server may still be starting.
-                run(['systemd-run', '--user', '--quiet', '--collect', '--no-block',
-                    '-p', 'After=pipewire.service pipewire-pulse.service wireplumber.service',
-                    '-p', 'Wants=pipewire-pulse.service', `${BIN}/mk-voice`, 'say', greeting]);
+                run(['pw-play', voicePath]);
                 return GLib.SOURCE_REMOVE;
             });
         }
@@ -703,7 +768,7 @@ export class Welcome {
     }
 
     disable() {
-        for (const id of ['_voiceId', '_remindId', '_prepareId', '_fingerId']) {
+        for (const id of ['_voiceId', '_remindId', '_prepareId', '_fingerId', '_voiceWaitId']) {
             if (this[id])
                 GLib.source_remove(this[id]);
             this[id] = 0;

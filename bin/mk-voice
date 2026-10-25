@@ -4,6 +4,7 @@
   mk-voice say [TEXT] speak the greeting, or TEXT (rendered once, then cached)
   mk-voice prepare    render every greeting the welcome can pick, in advance
   mk-voice render     re-render the greeting audio
+  mk-voice file TEXT  render TEXT if needed and print its WAV (no playback)
   mk-voice install    install the natural British voice (Piper, ~260 MB, no sudo)
   mk-voice remove     remove it again (back to espeak-ng)
   mk-voice status     which voice and greeting are in use
@@ -30,6 +31,13 @@ if __name__ == "__main__":
     try:
         if command == "say":
             welcome.say(" ".join(sys.argv[2:]) or None)
+        elif command == "file":
+            # The WAV for TEXT (rendered once, then cached); the welcome light
+            # plays it itself, in step with the animation.
+            path = welcome.render(" ".join(sys.argv[2:]) or None)
+            if not path:
+                sys.exit(1)
+            print(path)
         elif command == "prepare":
             print(f"✔ {welcome.prepare()} greetings ready")
         elif command == "render":

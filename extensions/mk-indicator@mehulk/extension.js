@@ -34,6 +34,23 @@ function brandShort() {
     return 'MK';
 }
 
+// Module state survives disable/enable (screen lock, extension reloads) but
+// not a new login, which starts a new gnome-shell process.
+let greetedThisLogin = false;
+
+// How long this gnome-shell process has run (from /proc), in seconds.
+function shellAgeSeconds() {
+    try {
+        const [, stat] = GLib.file_get_contents('/proc/self/stat');
+        const fields = new TextDecoder().decode(stat).split(') ')[1].split(' ');
+        const startTicks = Number(fields[19]);  // field 22: starttime, in clock ticks
+        const [, up] = GLib.file_get_contents('/proc/uptime');
+        return Number(new TextDecoder().decode(up).split(' ')[0]) - startTicks / 100;
+    } catch (e) {
+        return Infinity;
+    }
+}
+
 export default class MKIndicatorExtension extends Extension {
     enable() {
         this._indicator = new St.Button({
@@ -125,22 +142,32 @@ export default class MKIndicatorExtension extends Extension {
         // login and then shows no blur until the next unlock. Rebuild its panel
         // blur once, after the shell has finished starting up. Not on unlock:
         // a second rebuild there was a visible hitch.
+        // Greet the moment extensions have stopped loading (usually right
+        // away); fix the top-bar blur only after the animation, so nothing
+        // redraws underneath it. Once per login: also when this extension
+        // loads a moment after the shell finished starting (a slow login,
+        // extensions enabled late), which used to skip the greeting.
+        const greetOnce = () => {
+            if (greetedThisLogin)
+                return;
+            greetedThisLogin = true;
+            this._welcome?.whenSettled(() => {
+                this._welcome?.greet(false);
+                this._greetId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3600, () => {
+                    this._greetId = 0;
+                    this._refreshBlur();
+                    return GLib.SOURCE_REMOVE;
+                });
+            });
+        };
         if (Main.layoutManager._startingUp) {
             this._startupId = Main.layoutManager.connect('startup-complete', () => {
                 Main.layoutManager.disconnect(this._startupId);
                 this._startupId = 0;
-                // Greet the moment extensions have stopped loading (usually
-                // right away); fix the top-bar blur only after the animation, so
-                // nothing redraws underneath it.
-                this._welcome?.whenSettled(() => {
-                    this._welcome?.greet(false);
-                    this._greetId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3600, () => {
-                        this._greetId = 0;
-                        this._refreshBlur();
-                        return GLib.SOURCE_REMOVE;
-                    });
-                });
+                greetOnce();
             });
+        } else if (shellAgeSeconds() < 90 && !Main.sessionMode.isLocked) {
+            greetOnce();
         }
     }
 

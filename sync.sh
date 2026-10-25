@@ -353,17 +353,13 @@ NoDisplay=true
 DESKTOP
 # Locked apps (mk lock app): launchers were just rewritten above; lock them again.
 "$HOME/.local/bin/mk-lock" reapply > /dev/null 2>&1 || true
-# Files: right-click a folder › Scripts › Lock or unlock folder (mk lock).
-NAUTILUS_SCRIPTS="$HOME/.local/share/nautilus/scripts"
-mkdir -p "$NAUTILUS_SCRIPTS"
-cat > "$NAUTILUS_SCRIPTS/Lock or unlock folder" << 'SCRIPT'
-#!/bin/bash
-# MK: open or close a folder locked with `mk lock PATH` (asks for your fingerprint or password).
-while IFS= read -r path; do
-    [[ -n "$path" ]] && "$HOME/.local/bin/mk-lock" folder toggle "$path"
-done <<< "$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS"
-SCRIPT
-chmod +x "$NAUTILUS_SCRIPTS/Lock or unlock folder"
+# Files: right-click a folder for Lock / Unlock with MK Lock, and a lock badge
+# on locked folders (a nautilus-python extension; setup.sh installs
+# nautilus-python). The older Scripts entry it replaces is removed.
+NAUTILUS_EXT="$HOME/.local/share/nautilus-python/extensions"
+mkdir -p "$NAUTILUS_EXT"
+cp -f "$SCRIPT_DIR/config/nautilus/mk-lock.py" "$NAUTILUS_EXT/mk-lock.py"
+rm -f "$HOME/.local/share/nautilus/scripts/Lock or unlock folder"
 RETIRED_DIR="$HOME/.config/mk-workstation/retired-autostart"
 rm -f "$HOME/.local/bin/mk-session"
 for hack in fix-extensions.desktop bms-panel-fix.desktop gnome-alt-tab-fix.desktop mk-session.desktop; do

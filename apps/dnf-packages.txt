@@ -19,6 +19,10 @@ python3-pygments
 python3-pynacl
 # MK Notes image editor (crop, rotate, filters)
 python3-pillow
+# Files' right-click Lock / Unlock with MK Lock (config/nautilus/mk-lock.py)
+nautilus-python
+# mk speedtest --ookla: Ookla's nearest server
+speedtest-cli
 # mk lock folder: encrypted folders (keys kept root-only, released after a fingerprint/password check)
 gocryptfs
 # mk security: hardening audit, rootkit checks, virus scanner (ClamAV's

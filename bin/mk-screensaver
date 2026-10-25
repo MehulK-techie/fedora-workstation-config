@@ -6,6 +6,8 @@
   mk-screensaver show [SCENE]  show one now (aurora, web, knight, matrix, random)
   mk-screensaver settings      pick a scene from previews, or shuffle; on/off; delay
   mk-screensaver list          the scenes
+  (mk-screensaver frames SCENE W H FILE: frames for the lock screen, used by
+   mk-indicator; LOCKSCREEN=on|off in screensaver.conf)
 
 Settings: config/screensaver.conf, yours in ~/.config/mk-workstation/screensaver.conf
 (SCREENSAVER=on|off, DELAY=seconds, SCENE=random|aurora|web|knight|matrix).
@@ -85,6 +87,36 @@ def watch():
     return 0
 
 
+def frames(name, w, h, out):
+    """For the lock screen (mk-indicator): render SCENE at WxH into OUT, 15
+    times a second, as raw premultiplied BGRA (cairo ARGB32). Each frame is
+    written next to OUT and renamed over it, so the shell never reads half a
+    frame. Runs until the shell stops it (it does on unlock)."""
+    import time
+
+    import cairo
+
+    from mkworkstation import scenes
+    scenes.SHOW_CAPTION = False
+    if out.parent != Path(GLib.get_user_runtime_dir()) or not out.name.startswith("mk-lockscene"):
+        print("frames: OUT must be $XDG_RUNTIME_DIR/mk-lockscene*", file=sys.stderr)
+        return 2
+    scene = scenes.pick(name)
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+    cr = cairo.Context(surface)
+    tmp = out.with_suffix(".tmp")
+    start = time.monotonic()
+    parent = os.getppid()
+    while os.getppid() == parent:  # the shell went away (crash, logout): stop
+        tick = time.monotonic()
+        scene.draw(cr, w, h, tick - start)
+        surface.flush()
+        tmp.write_bytes(bytes(surface.get_data()))
+        os.replace(tmp, out)
+        time.sleep(max(0.0, 1 / 15 - (time.monotonic() - tick)))
+    return 0
+
+
 def main():
     args = sys.argv[1:]
     if args and args[0] in ("-h", "--help"):
@@ -95,6 +127,8 @@ def main():
         for name, cls in scenes.SCENES.items():
             print(f"{name:8} {cls.label}")
         return 0
+    if args and args[0] == "frames" and len(args) == 5:
+        return frames(args[1], int(args[2]), int(args[3]), Path(args[4]))
     if args and args[0] == "settings":
         from mkworkstation import saver_gui
         return saver_gui.SettingsApp().run([sys.argv[0]])

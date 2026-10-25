@@ -14,6 +14,7 @@ import { SystemMonitor } from './systemMonitor.js';
 import { MediaTile } from './mediaTile.js';
 import { FocusHelper } from './focus.js';
 import { AppNap } from './appNap.js';
+import { LockScene } from './lockScene.js';
 import { EmojiBoard, bindEmojiBoard, unbindEmojiBoard } from './emojiBoard.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
@@ -186,6 +187,14 @@ export default class MKIndicatorExtension extends Extension {
         }
         if (!locked && this._wasLocked)
             this._hideDocksSoon();
+        // The screensaver scene behind the lock screen's clock.
+        if (locked && !this._wasLocked) {
+            this._lockScene = new LockScene();
+            this._lockScene.start();
+        } else if (!locked && this._lockScene) {
+            this._lockScene.stop();
+            this._lockScene = null;
+        }
         // Folders opened with mk lock close when the screen locks.
         if (locked && !this._wasLocked) {
             try {
@@ -260,6 +269,8 @@ export default class MKIndicatorExtension extends Extension {
         this._focus = null;
         this._appNap?.disable();
         this._appNap = null;
+        this._lockScene?.stop();
+        this._lockScene = null;
         if (this._emoji) {
             unbindEmojiBoard();
             this._emoji.destroy();

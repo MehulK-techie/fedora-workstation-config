@@ -143,8 +143,13 @@ def draw_skyline(cr, rand, buildings, base, color, window=None, offset=0.0):
                         cr.fill()
 
 
+SHOW_CAPTION = True  # off on the lock screen, which shows its own clock
+
+
 def caption(cr, w, h, lines):
     """The time (or a countdown) in the corner, quiet."""
+    if not SHOW_CAPTION:
+        return
     cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
     y = h - 70
     for i, (text, size, alpha) in enumerate(lines):

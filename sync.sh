@@ -484,6 +484,17 @@ if [[ -f "$WACK_MENU" ]] && ! grep -q 'MK: sleep hint' "$WACK_MENU" &&
     perl -0pi -e "s#(SystemActions\.getDefault\(\)\.activateSuspend\(\);\n\s*\})\)\);#\1, getShortcut('sleep'), isDark));#" "$WACK_MENU"
     echo "    [+] Top-left menu: Sleep shows its shortcut (after logging in again)"
 fi
+# Four-finger desktop swipes: one desktop per swipe, however fast the flick,
+# and a settle of at least 300 ms, so switching feels deliberate and weighted
+# instead of skipping two desktops on a quick swipe.
+GESTURE_WS="$USER_EXT_DIR/touchpad-gesture-customization@coooolapps.com/src/workspaceSwitching.js"
+if [[ -f "$GESTURE_WS" ]] && ! grep -q 'MK: one desktop per swipe' "$GESTURE_WS" &&
+    grep -q '_gestureBegin(tracker, monitor) {' "$GESTURE_WS" &&
+    grep -q 'this._workspaceAnimation._switchWorkspaceEnd(tracker, duration, progress);' "$GESTURE_WS"; then
+    sed -i 's#_gestureBegin(tracker, monitor) {#_gestureBegin(tracker, monitor) {\n        this._mkStart = global.workspace_manager.get_active_workspace_index(); // MK: one desktop per swipe#' "$GESTURE_WS"
+    sed -i 's#this._workspaceAnimation._switchWorkspaceEnd(tracker, duration, progress);#if (this._mkStart !== undefined) progress = Math.clamp(progress, this._mkStart - 1, this._mkStart + 1);\n        this._workspaceAnimation._switchWorkspaceEnd(tracker, Math.max(duration, 300), progress);#' "$GESTURE_WS"
+    echo "    [+] Desktop swipes: one desktop at a time, weighted (after logging in again)"
+fi
 # Burn My Windows: a short, subtle "Glide" when windows open and close. The MK
 # profile is high priority, so it wins over the default profile (Fire).
 BMW_PROFILE="$HOME/.config/burn-my-windows/profiles/mk-glide.conf"

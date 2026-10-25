@@ -86,10 +86,8 @@
   border-radius: 999px;
 }
 
-#dashtodockContainer .overview-tile:hover .overview-icon,
 #dashtodockContainer .show-apps:hover .overview-icon {
-  background-color: rgba(0, 200, 255, 0.08);
-  box-shadow: 0 0 10px 0 rgba(0, 210, 255, 0.18);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 /* dockMagnify.js: the whole tile is magnified as one clone (its glow scales

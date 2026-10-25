@@ -141,8 +141,8 @@ export class DockGlow {
         const icon = findOverviewIcon(tile);
         if (!icon)
             return;
-        // The whole tile is magnified as one clone, so the glow scales with it.
-        const colour = tile.hover ? appColour(tile.app) : null;
+        // Native hover while magnifying: the zoom is the feedback, no glow.
+        const colour = tile.hover && !this._magnify?.enabled ? appColour(tile.app) : null;
         if (!colour) {
             icon.set_style(null);
             return;

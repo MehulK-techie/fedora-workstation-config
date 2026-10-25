@@ -40,3 +40,4 @@ __pycache__/
 
 # Built apps (scripts/build-apk.sh)
 dist/
+__pycache__/

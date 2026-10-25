@@ -3,6 +3,12 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Photo Booth (Super+C):** live webcam looks (Polaroid, Thermal, Pop Art, Noir, Retro, Comic, Neon, Mirror, Dreamy, Vignette, Hue Shift, Distort), countdown, text and colour-emoji stickers, Polaroid captions, hardware sliders with reset.
+- **`mk security`:** a scored security check with one-line fixes (root half via pkexec).
+- **Lock screen:** the screensaver scene behind the clock; Space slides it up to the prompt.
+- **Emoji board (Super+.)** that types the emoji where your cursor is.
+- **`mk vault`**, item passwords for locks, `mk power comfort|quiet|performance`, `mk optimize ram|cpu`, `mk --legends`.
+- **MK Notes:** zoom, resize pictures in place, fresh clipboard paste, PDF export without a print dialog.
 - **`mk lock`:** apps that ask for your fingerprint first; gocryptfs-encrypted folders that open after the same check (also Files › Scripts) and close on screen lock.
 - **App Nap:** frees the CPU and lets memory swap out from idle, minimized apps under pressure; focusing wakes them (`config/appnap.conf`, `mk nap`).
 - **MK Notes:** pictures inline in the editor; an image editor (rotate, flip, crop, resize, Thermal, Pop Art, Distort, Polaroid); PDFs suggested in `~/Documents/Notes`.
@@ -106,6 +112,9 @@
 - Docs moved to `docs/`.
 
 ### Fixed
+- **Welcome:** greets at every login (also when the extension loads a moment late); the voice starts in step with the light; the natural voice no longer sounds processed.
+- **Dock:** no stale magnified icons across desktop switches; the app-coloured glow is back.
+- **Memory:** the screensaver watcher is GTK-free (64 to 33 MB); GNOME Software and IBus Typing Booster no longer sit in memory; App Nap also reads memory stalls.
 - **Fingerprint on the lock screen:** `scripts/fingerprint-pam.sh` (run by setup) keeps `gdm-password` off the reader so it no longer competes with `gdm-fingerprint`; a login notice when the reader has forgotten your finger (on-chip readers reset by Windows Hello or firmware).
 - **Dock magnification** shows one layer: no unscaled halo under the magnified icon. The MacOS Dock extension is removed.
 - **MK Notes:** pasted or dropped images and files are attached (`![[name]]`), never pasted as `/home/…` paths; links open in the browser.

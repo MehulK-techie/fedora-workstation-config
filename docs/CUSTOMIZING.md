@@ -21,6 +21,7 @@ There are two ways to customize:
 | Notes folder, phone sync, history | `~/.config/mk-workstation/notes.conf` | `config/notes.conf` |
 | App Nap | `APP_NAP=off`, thresholds, idle time or apps never paused (`NEVER=`) in `~/.config/mk-workstation/appnap.conf` | `config/appnap.conf` |
 | Locked apps and folders | `mk lock app NAME`, `mk lock ~/Folder`; `mk lock list` | `~/.config/mk-workstation/locked-apps`, `locked-folders` |
+| Lock-screen scene | `LOCKSCREEN=off` in `~/.config/mk-workstation/screensaver.conf` | `config/screensaver.conf` |
 | Screensaver | `mk screensaver scene web` (or knight, matrix, aurora, random), `mk screensaver delay 300`, `mk screensaver off` | `config/screensaver.conf` |
 | Focus timer's screen | Focus timer › Screensaver | `AMBIENT_STYLE` in `timer.conf` |
 | Screensaver | The Screensaver app (or `mk screensaver`): live previews of every scene, pick one or Shuffle; the focus timer uses the same choice | `config/screensaver.conf` |

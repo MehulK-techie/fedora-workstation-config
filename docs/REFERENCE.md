@@ -41,6 +41,11 @@ Every command, file and format. How the parts fit together is in
 | `mk nap` | Apps App Nap has paused |
 | `mk keyring [open]` | Why apps ask for the keyring after fingerprint or face login, and the two fixes |
 | `mk tour` | The walkthrough (also Super+Shift+/) |
+| `mk security [fix NAME]` | Security check (pkexec runs `/usr/local/libexec/mk-security-scan`); fixes: selinux, firewall, updates, autoupdates, ssh, permissions (root) and sharing, lock (your account) |
+| `mk vault` | Open or close `~/.vault`, an encrypted hidden folder made the first time |
+| `mk lock password set\|remove app NAME \| folder PATH` | An item's own password (10+ characters), typed instead of the fingerprint |
+| `mk power comfort\|quiet\|performance` | Power profile through the PowerProfiles D-Bus API (balanced, power-saver, performance) |
+| `mk optimize ram\|cpu` | Drop file caches and compact memory (pkexec) · Performance mode and the busiest processes |
 | `mk check` | Notify if a new version of the repo is available (run daily by a timer) |
 | `mk uninstall` | Remove MK's tools, shortcuts, timers and top-bar extension from your account |
 
@@ -87,7 +92,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `config/monitor.conf` | `PANEL=` (cpu, mem, temp, net, disk, power), `INTERVAL=` (s) | mk-indicator system monitor |
 | `config/appnap.conf` | `APP_NAP=` (on/off), `MEM_THRESHOLD=` (%), `PSI_THRESHOLD=` (% memory stall, /proc/pressure/memory), `CPU_THRESHOLD=` (%), `IDLE_MINUTES=`, `NEVER=` (comma-separated app ids or parts) | mk-indicator App Nap |
 | `assets/polkit/io.github.mehulk.mk-lock.policy` | polkit action (`auth_self`) | `setup.sh` installs it; `mk-lock` asks it |
-| `config/screensaver.conf` | `SCREENSAVER=` (on/off), `DELAY=` (s, 30+), `SCENE=` (random, aurora, web, knight, matrix) | `mk-screensaver`, `mk screensaver` |
+| `config/screensaver.conf` | `SCREENSAVER=` (on/off), `DELAY=` (s, 30+), `LOCKSCREEN=` (on/off: the scene behind the lock screen's clock), `SCENE=` (random, aurora, web, knight, matrix) | `mk-screensaver`, `mk screensaver` |
 | `config/media.conf` | `MEDIA=` (on/off), `TICKER=` (on/off: the song title beside the record), `PLAYERS=` (all/spotify) | mk-indicator media tile |
 | `config/greetings.conf` | `[section]` then one greeting per line; sections morning, afternoon, evening, night, monday, friday, weekend, return, long, birthday, newyear, any | mk-indicator, `mk-voice prepare` (yours: `~/.config/mk-workstation/greetings.conf`) |
 | `config/browser/zen-userChrome.css` | CSS with `@ACCENT@` | `sync.sh` (marked block in each Zen profile's `chrome/userChrome.css`) |

@@ -60,7 +60,7 @@ closes it without saving.
 | Bold, italic, highlight, strikethrough | Ctrl+B, Ctrl+I, or the buttons |
 | Heading | Ctrl+H cycles through `#`, `##` and `###` |
 | Checklist | Ctrl+L. Enter continues the list, and Enter on an empty item ends it |
-| Link to another note | Ctrl+K, or type `[[Note name]]`. A link to a note that doesn't exist yet creates it when you click the link |
+| Link to another note | Ctrl+K, or type `[[`: matching note names pop up as you type; Enter or Tab takes one. A link to a note that doesn't exist yet creates it when you click the link |
 | Open a link while editing | Ctrl+click a web address or `[[link]]`. Web links open in your default browser (as `xdg-open` does) |
 | Embed | `![[image.png]]` for a picture, `![[Other note]]` for another note's text |
 | Tags | `#project`. Nested tags work too: `#project/apollo` |
@@ -108,12 +108,13 @@ closes it without saving.
   with how many notes use each.
 - **Info pane** (the right-sidebar button) shows the note's outline, its
   backlinks (other notes that link here), its links and its tags.
-- **Tasks** (sidebar, Ctrl+Shift+T) lists every checkbox in every note, open
-  ones first. Tick them off right there, or click to jump to the note.
+- Tasks are kept in the Companion (Super+Shift+N); checkboxes in notes stay
+  ordinary checklists.
 - **Calendar** (the calendar button) marks the days that have a daily note.
   Pick any day to open or start its note.
 - **Graph view** (Ctrl+G) shows every note and link. You can drag it, zoom
-  it, and click a note to open it.
+  it, and click a note to open it. Preferences › Writing › Graph view turns
+  it off.
 
 ## Organising
 
@@ -131,6 +132,9 @@ closes it without saving.
   - It needs WeasyPrint, which `setup.sh` installs. If it's missing, MK
     Notes offers to install it (your password, once) and then exports: no
     print dialog. A notification says when the PDF is ready; click to open.
+- **Export to Word** (menu, or right-click a note): a `.docx` written
+  directly, no extra software: headings, lists, checklists, callouts, code,
+  tables, links and pictures at their set width.
 - **Publish vault as website:** writes a folder of HTML pages with a note
   list and working links. Upload it to GitHub Pages, Netlify or any web
   host. This is Obsidian Publish without the subscription.
@@ -204,7 +208,7 @@ same key.
 | Ctrl+N · Ctrl+Shift+N | New note · new folder |
 | Ctrl+O · Ctrl+P | Jump to a note · commands |
 | Ctrl+E · Ctrl+\\ · F11 | Edit / read · edit with preview · focus mode |
-| Ctrl+, · Ctrl+Shift+T | Preferences · Tasks |
+| Ctrl+, | Preferences |
 | Ctrl+F | Search |
 | Ctrl+Shift+D | Today's note (also Super+Alt+N anywhere) |
 | Ctrl+B · Ctrl+I · Ctrl+H · Ctrl+L · Ctrl+K | Bold · italic · heading · checklist · link |

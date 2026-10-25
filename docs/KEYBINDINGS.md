@@ -119,7 +119,7 @@ A compact card in the middle of the screen; it appears at once.
 | Ctrl+N · Ctrl+Shift+N | New note · new folder |
 | Ctrl+O · Ctrl+P | Jump to a note · every command |
 | Ctrl+E · Ctrl+\\ · F11 | Edit / read · edit with live preview · focus mode |
-| Ctrl+F · Ctrl+Shift+T | Search · Tasks |
+| Ctrl+F | Search |
 | Ctrl+Shift+D | Today's note |
 | Ctrl+B · Ctrl+I · Ctrl+H · Ctrl+L · Ctrl+K | Bold · italic · heading · checklist · link |
 | Ctrl+Shift+S · Ctrl+Shift+P · Ctrl+Shift+I | Insert a screenshot · draw · edit the picture on this line |

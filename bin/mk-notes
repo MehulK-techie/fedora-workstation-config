@@ -836,7 +836,8 @@ class NotesWindow(Adw.ApplicationWindow):
             section.append(label, action)
         menu.append_section(None, section)
         section = Gio.Menu()
-        for label, action in (("Export to PDF…", "win.pdf"), ("Version history…", "win.history"),
+        for label, action in (("Export to PDF…", "win.pdf"), ("Export to Word (.docx)…", "win.docx"),
+                              ("Version history…", "win.history"),
                               ("Rename (F2)", "win.rename"), ("Delete note", "win.delete")):
             section.append(label, action)
         menu.append_section(None, section)
@@ -931,6 +932,13 @@ class NotesWindow(Adw.ApplicationWindow):
         link_click = Gtk.GestureClick(button=1)
         link_click.connect("released", self._on_editor_click)
         self.view.add_controller(link_click)
+        # [[ suggests note names as you type; Enter or Tab takes one.
+        self._links_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
+        self._links_list.connect("row-activated", lambda _l, row: self._complete_link(row.name))
+        self._links_pop = Gtk.Popover(child=self._links_list, autohide=False, has_arrow=False,
+                                      position=Gtk.PositionType.BOTTOM)
+        self._links_pop.set_parent(self.view)
+        self.buffer.connect("changed", lambda *_: GLib.idle_add(lambda: (self._update_links(), False)[1]))
         # Zoom: Ctrl+scroll, a touchpad pinch, Ctrl+plus/minus/0. Text, line
         # length and inline pictures scale together; the note itself is unchanged.
         self.zoom = 1.0
@@ -1018,6 +1026,7 @@ class NotesWindow(Adw.ApplicationWindow):
             ("zoom-out", lambda: self.set_zoom(self.zoom / 1.1), ["<Control>minus"]),
             ("zoom-reset", lambda: self.set_zoom(1.0), ["<Control>0"]),
             ("pdf", self.export_pdf, ["<Control><Shift>e"]),
+            ("docx", self.export_docx, []),
             ("history", self.show_history, []),
             ("rename", lambda: self.title.grab_focus(), ["F2"]),
             ("delete", self.delete_note, []),
@@ -1027,7 +1036,6 @@ class NotesWindow(Adw.ApplicationWindow):
             ("phone", self.show_phone, []),
             ("open-folder", lambda: Gio.AppInfo.launch_default_for_uri(self.vault.root.as_uri(), None), []),
             ("preferences", self.show_preferences, ["<Control>comma"]),
-            ("show-tasks", lambda: self._set_scope(("tasks", None), "Tasks"), ["<Control><Shift>t"]),
             ("focus", self.toggle_focus, ["F11"]),
             ("split", lambda: self.mode.set_active_name("edit" if self.mode.get_active_name() == "split" else "split"),
              ["<Control>backslash"]),
@@ -1151,11 +1159,13 @@ class NotesWindow(Adw.ApplicationWindow):
             move.append(folder, f"win.row-move::{rel}|{folder}")
         menu.append_submenu("Move to", move)
         menu.append("Export to PDF", f"win.row-pdf::{rel}")
+        menu.append("Export to Word", f"win.row-docx::{rel}")
         menu.append("Delete", f"win.row-delete::{rel}")
         for name, cb in (("row-pin", lambda r: (self.vault.set_pinned(r, not self.vault.is_pinned(r)), self.refresh())),
                          ("row-color", lambda v: (self.vault.set_color(*v.split("|", 1)), self.refresh())),
                          ("row-move", self._move),
                          ("row-pdf", lambda r: (self.open_note(r), self.export_pdf())),
+                         ("row-docx", lambda r: (self.open_note(r), self.export_docx())),
                          ("row-delete", lambda r: (self.open_note(r), self.delete_note()))):
             if not self.lookup_action(name):
                 action = Gio.SimpleAction.new(name, GLib.VariantType("s"))
@@ -1203,9 +1213,8 @@ class NotesWindow(Adw.ApplicationWindow):
 
         rows = [add("All notes", "view-list-symbolic", ("all", None), count=len(self.vault.notes())),
                 add("Pinned", "view-pin-symbolic", ("pinned", None), count=len(self.vault.state["pinned"])),
-                add("Daily notes", "x-office-calendar-symbolic", ("daily", None)),
-                add("Tasks", "checkbox-checked-symbolic", ("tasks", None),
-                    count=sum(1 for t in self.vault.tasks() if not t[3]))]
+                add("Daily notes", "x-office-calendar-symbolic", ("daily", None))]
+        # Tasks are managed in the Companion (Super+Shift+N), not here.
         folders = [f for f in self.vault.folders() if f not in ("Daily", "Templates")]
         if folders:
             header("FOLDERS")
@@ -1682,8 +1691,79 @@ class NotesWindow(Adw.ApplicationWindow):
     def insert_table(self):
         self.insert("\n| Column | Column | Column |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |\n")
 
+    # ---------- [[link]] suggestions ----------
+    def _link_query(self):
+        """The text typed after an open [[ on this line, or None."""
+        cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+        ok, start = self.buffer.get_iter_at_line(cursor.get_line())
+        before = self.buffer.get_text(start, cursor, False)
+        m = re.search(r"\[\[([^\]|#\[]*)$", before)
+        return m.group(1) if m else None
+
+    def _update_links(self):
+        query = self._link_query()
+        if query is None:
+            self._links_pop.popdown()
+            return
+        q = query.lower()
+        names = [n["title"] for n in self.vault.notes()]
+        hits = sorted((n for n in names if q in n.lower()), key=lambda n: (not n.lower().startswith(q), n.lower()))[:8]
+        while (child := self._links_list.get_first_child()):
+            self._links_list.remove(child)
+        for name in hits:
+            row = Gtk.ListBoxRow()
+            row.name = name
+            row.set_child(Gtk.Label(label=name, xalign=0, margin_start=8, margin_end=8, margin_top=4, margin_bottom=4))
+            self._links_list.append(row)
+        if not hits:
+            self._links_pop.popdown()
+            return
+        self._links_list.select_row(self._links_list.get_row_at_index(0))
+        cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+        rect = self.view.get_iter_location(cursor)
+        x, y = self.view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, rect.x, rect.y)
+        self._links_pop.set_pointing_to(Gdk.Rectangle(x=x, y=y, width=1, height=rect.height))
+        self._links_pop.popup()
+
+    def _complete_link(self, name):
+        query = self._link_query()
+        if query is None:
+            return
+        cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+        start = cursor.copy()
+        start.backward_chars(len(query))
+        self.buffer.begin_user_action()
+        self.buffer.delete(start, cursor)
+        after = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+        close = after.copy()
+        has_close = close.forward_chars(2) and self.buffer.get_text(after, close, False) == "]]"
+        self.buffer.insert_at_cursor(name if has_close else name + "]]")
+        self.buffer.end_user_action()
+        self._links_pop.popdown()
+
+    def _links_key(self, keyval):
+        """Up/Down/Enter/Tab/Escape while suggestions show."""
+        if not self._links_pop.get_visible():
+            return False
+        row = self._links_list.get_selected_row()
+        if keyval in (Gdk.KEY_Down, Gdk.KEY_Up):
+            i = (row.get_index() if row else -1) + (1 if keyval == Gdk.KEY_Down else -1)
+            nxt = self._links_list.get_row_at_index(max(0, i))
+            if nxt:
+                self._links_list.select_row(nxt)
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_Tab) and row:
+            self._complete_link(row.name)
+            return True
+        if keyval == Gdk.KEY_Escape:
+            self._links_pop.popdown()
+            return True
+        return False
+
     def _on_editor_key(self, _c, keyval, _code, state):
         """Lists continue on Enter, as in Apple Notes and Obsidian."""
+        if self._links_key(keyval):
+            return True
         if keyval not in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) or state & (Gdk.ModifierType.SHIFT_MASK | Gdk.ModifierType.CONTROL_MASK):
             return False
         cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert())
@@ -2033,6 +2113,10 @@ class NotesWindow(Adw.ApplicationWindow):
         bar.connect("notify::active", lambda r, _p: (conf_set("FORMAT_BAR", "on" if r.get_active() else "off"),
                                                     self.apply_look()))
         editing.add(bar)
+        graph = Adw.SwitchRow(title="Graph view", subtitle="Ctrl+G; off keeps it out of the way on slower computers",
+                              active=conf.get("GRAPH", "on") != "off")
+        graph.connect("notify::active", lambda r, _p: conf_set("GRAPH", "on" if r.get_active() else "off"))
+        editing.add(graph)
         choice(editing, "Open notes in", "OPEN_IN", {"edit": "Edit", "split": "Edit with preview", "read": "Read"})
         choice(editing, "Sort notes by", "SORT", {"edited": "Last edited", "title": "Title", "folder": "Folder"})
         page.add(editing)
@@ -2281,6 +2365,44 @@ class NotesWindow(Adw.ApplicationWindow):
             self.add_action(action)
         dialog.save(self, None, chosen)
 
+    def export_docx(self):
+        """A Word document (.docx), written directly (no print dialog, no
+        extra software), suggested in ~/Documents/Notes."""
+        if not self.rel:
+            return
+        self._save_now()
+        dialog = Gtk.FileDialog(title="Export to Word", initial_name=f"{Path(self.rel).stem}.docx")
+        docs = Path(GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS) or Path.home() / "Documents") / "Notes"
+        try:
+            docs.mkdir(parents=True, exist_ok=True)
+            dialog.set_initial_folder(Gio.File.new_for_path(str(docs)))
+        except OSError:
+            pass
+
+        def chosen(d, res):
+            try:
+                target = d.save_finish(res)
+            except GLib.Error:
+                return
+            from mkworkstation import docx
+
+            def image(name):
+                rel = self.vault.resolve(name)
+                return self.vault.path(rel) if rel else None
+            try:
+                docx.write(self.vault.read(self.rel), target.get_path(), image, title=Path(self.rel).stem)
+            except (OSError, ValueError) as e:
+                self.toast.add_toast(Adw.Toast(title=f"Word export failed: {e}"))
+                return
+            self._last_pdf = target.get_uri()  # the Open button opens the last export
+            self.toast.add_toast(Adw.Toast(title=f"Saved {target.get_basename()}", button_label="Open",
+                                           action_name="win.open-last-pdf", timeout=5))
+            if not self.lookup_action("open-last-pdf"):
+                action = Gio.SimpleAction.new("open-last-pdf", None)
+                action.connect("activate", lambda *_: Gio.AppInfo.launch_default_for_uri(self._last_pdf, None))
+                self.add_action(action)
+        dialog.save(self, None, chosen)
+
     def publish(self):
         dialog = Gtk.FileDialog(title="Publish to a folder (for GitHub Pages or any web host)")
 
@@ -2337,6 +2459,9 @@ class NotesWindow(Adw.ApplicationWindow):
         dialog.present(self)
 
     def show_graph(self):
+        if look_conf().get("GRAPH", "on") == "off":
+            self.toast.add_toast(Adw.Toast(title="Graph view is off (Preferences › Writing)", timeout=3))
+            return
         self._save_now()
         graph = self.vault.graph()
         win = Adw.Window(transient_for=self, title="Graph view", default_width=1000, default_height=720)

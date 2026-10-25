@@ -514,6 +514,7 @@ class NightWatch(Scene):
     def paint_background(self, cr, w, h):
         sky(cr, w, h, (0.02, 0.03, 0.06), (0.08, 0.10, 0.16))
         moon(cr, w * 0.22, h * 0.22, min(w, h) * 0.09, glow=(0.9, 0.9, 0.8))
+        dither(cr, w, h)  # breaks up the banding in the dark moon glow
         rand = random.Random(23)
         buildings = skyline(rand, w, h, h * 0.45, None)
         draw_skyline(cr, random.Random(4), buildings, h, (0.03, 0.035, 0.05), (0.95, 0.8, 0.45))
@@ -536,9 +537,11 @@ class NightWatch(Scene):
             cr.arc(0, 0, 260, 0, 2 * math.pi)
             cr.restore()
             cr.fill()
-        # searchlight sweeping the clouds
-        ang = -math.pi / 2 + 0.45 * math.sin(t * 0.18)
-        bx, by = w * 0.62, h
+        # searchlight sweeping the clouds, from a projector on the roof
+        sc = min(w, h) / 1080 * 1.6
+        roof_y = h * 0.42 + 120 * sc
+        bx, by = w * 0.60 + (w - w * 0.60) * 0.42, roof_y - 34 * sc
+        ang = -math.pi / 2 - 0.25 + 0.30 * math.sin(t * 0.18)
         tip_x, tip_y = bx + math.cos(ang) * h * 1.1, by + math.sin(ang) * h * 1.1
         beam = cairo.LinearGradient(bx, by, tip_x, tip_y)
         beam.add_color_stop_rgba(0, 1, 0.95, 0.75, 0.22)
@@ -551,6 +554,7 @@ class NightWatch(Scene):
         cr.line_to(bx + 8, by)
         cr.close_path()
         cr.fill()
+        projector(cr, bx, by, sc, ang)
         # Where the beam meets the clouds: a glowing oval with the MK monogram.
         sx, sy = tip_x, tip_y + h * 0.28
         signal(cr, sx, sy, min(w, h) * 0.11, ang)
@@ -623,6 +627,18 @@ class NightWatch(Scene):
         self._minifig(cr, x0 + 40 * s, y0 + 120 * s, s * 1.05, t)
 
     def _minifig(self, cr, fx, fy, s, t):
+        # A contact shadow under the boots and cape: he stands on the roof.
+        shade = cairo.RadialGradient(fx, fy + 2 * s, 0, fx, fy + 2 * s, 60 * s)
+        shade.add_color_stop_rgba(0, 0, 0, 0, 0.55)
+        shade.add_color_stop_rgba(1, 0, 0, 0, 0)
+        cr.save()
+        cr.translate(fx, fy + 2 * s)
+        cr.scale(1, 0.18)
+        cr.translate(-fx, -(fy + 2 * s))
+        cr.set_source(shade)
+        cr.arc(fx, fy + 2 * s, 60 * s, 0, 2 * math.pi)
+        cr.fill()
+        cr.restore()
         """A brick-built caped knight standing on the ledge (feet at fx, fy):
         plastic blocks, a cowl with ears, a cape that ripples in the wind, a
         yellow belt and chest emblem, rim-lit by the searchlight."""
@@ -711,6 +727,52 @@ class NightWatch(Scene):
             cr.line_to(x2, y2)
         cr.stroke()
         cr.restore()
+
+
+_DITHER = None
+
+
+def dither(cr, w, h):
+    """Fine noise over the sky, so slow dark gradients don't show bands."""
+    global _DITHER
+    if _DITHER is None:
+        rand = random.Random(1)
+        tile = cairo.ImageSurface(cairo.FORMAT_ARGB32, 128, 128)
+        data = tile.get_data()
+        for i in range(0, len(data), 4):
+            v = rand.randrange(0, 7)  # premultiplied white, alpha 0-6
+            data[i:i + 4] = bytes((v, v, v, v))
+        tile.mark_dirty()
+        _DITHER = cairo.SurfacePattern(tile)
+        _DITHER.set_extend(cairo.EXTEND_REPEAT)
+    cr.set_source(_DITHER)
+    cr.paint()
+
+
+def projector(cr, x, y, s, angle):
+    """The searchlight on the roof: a drum on a stand, aimed along ANGLE."""
+    cr.save()
+    cr.set_source_rgb(0.09, 0.09, 0.11)
+    cr.move_to(x - 16 * s, y + 34 * s)
+    cr.line_to(x - 4 * s, y + 6 * s)
+    cr.line_to(x + 4 * s, y + 6 * s)
+    cr.line_to(x + 16 * s, y + 34 * s)
+    cr.close_path()
+    cr.fill()
+    cr.translate(x, y)
+    cr.rotate(angle + math.pi / 2)
+    cr.rectangle(-14 * s, -10 * s, 28 * s, 26 * s)
+    cr.fill()
+    lens = cairo.RadialGradient(0, -10 * s, 0, 0, -10 * s, 14 * s)
+    lens.add_color_stop_rgba(0, 1, 0.97, 0.85, 1)
+    lens.add_color_stop_rgba(1, 1, 0.9, 0.6, 0.2)
+    cr.set_source(lens)
+    cr.save()
+    cr.scale(1, 0.35)
+    cr.arc(0, -10 * s / 0.35, 14 * s, 0, 2 * math.pi)
+    cr.restore()
+    cr.fill()
+    cr.restore()
 
 
 def signal(cr, x, y, r, angle):

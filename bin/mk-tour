@@ -64,14 +64,21 @@ PAGES = [
     ("fingerprint-detection-symbolic", "Sign in with your finger or face",
      "SIGNIN",  # filled in from the hardware this computer has (see signin_page)
      []),
+    ("preferences-system-symbolic", "MK Control Center",
+     "One place for the everyday switches: free memory, open the vault, a speed test, power modes "
+     "(Quiet, Comfort, Performance), App Nap and a security check. Open it from the app grid or "
+     "with mk center.",
+     [("Open the Control Center", "mk-center")]),
     ("changes-prevent-symbolic", "Locks and your vault",
-     "mk lock app NAME makes an app ask for your fingerprint before it starts. mk lock PATH "
-     "encrypts a folder that only opens after you confirm it's you. Vault (app grid) is a hidden "
-     "encrypted folder of your own; it closes when the screen locks.",
-     [("Open the vault", "mk-lock vault")]),
+     "MK Lock lives in the Control Center: switch on an app and it asks for your fingerprint before "
+     "it starts; add a folder and it's encrypted until you confirm it's you. In Files, right-click a "
+     "folder for Lock and Unlock. Vault is a hidden encrypted folder of your own; everything closes "
+     "when the screen locks, and Lock all now closes it at once.",
+     [("Open MK Lock", "mk-center lock"), ("Open the vault", "mk-lock vault")]),
     ("camera-photo-symbolic", "Photo Booth",
-     "Super+C: your webcam with live looks (Polaroid, Thermal, Pop Art, Noir, Comic, Neon...), a "
-     "3-2-1 countdown, then text, emoji stickers and a caption on a Polaroid frame. The webcam's own "
+     "Super+C: your webcam with live looks (Polaroid, Instant 600, Film, Noir, Pop Art...), a 3x3 grid "
+     "of them all (G), a 3-2-1 countdown, then text, stickers you drag, resize and rotate, and a date "
+     "stamp on a Polaroid frame. The webcam's own "
      "brightness, contrast and white balance are a click away, with a reset.",
      [("Open Photo Booth", "camera-controls")]),
     ("face-smile-big-symbolic", "Emoji anywhere",
@@ -85,7 +92,7 @@ PAGES = [
      [("Run mk security", "terminal:mk security")]),
     ("utilities-terminal-symbolic", "The mk command",
      "mk update keeps everything current; mk sync re-applies the settings; mk doctor checks the "
-     "system's health; mk speedtest measures your connection; mk shortcuts, mk lock, mk tour. "
+     "system's health; mk speedtest --gui measures your connection; mk shortcuts, mk lock, mk tour. "
      "Type mk on its own for the full list. Some commands aren't on it.",
      [("Run mk doctor", "terminal:mk doctor")]),
     ("emblem-ok-symbolic", "That's the tour",

@@ -95,11 +95,13 @@ def sky(cr, w, h, top, bottom):
 
 
 def moon(cr, x, y, r, glow=(0.85, 0.9, 1.0)):
-    halo = cairo.RadialGradient(x, y, r * 0.9, x, y, r * 3.2)
-    halo.add_color_stop_rgba(0, *glow, 0.30)
-    halo.add_color_stop_rgba(1, *glow, 0)
+    # The glow fades out along an ease-out curve, so it has no visible rim.
+    halo = cairo.RadialGradient(x, y, r * 0.95, x, y, r * 4.0)
+    for k in range(9):
+        u = k / 8
+        halo.add_color_stop_rgba(u, *glow, 0.26 * (1 - u) ** 2.4)
     cr.set_source(halo)
-    cr.arc(x, y, r * 3.2, 0, 2 * math.pi)
+    cr.arc(x, y, r * 4.0, 0, 2 * math.pi)
     cr.fill()
     body = cairo.RadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r)
     body.add_color_stop_rgb(0, 1, 1, 0.97)
@@ -220,6 +222,7 @@ class WebHang(Scene):
             cr.set_source_rgba(1, 1, 1, rand.uniform(0.2, 0.8))
             cr.arc(rand.uniform(0, w), rand.uniform(0, h * 0.55), rand.uniform(0.4, 1.4), 0, 2 * math.pi)
             cr.fill()
+        city_far(cr, w, h, h * 0.62, random.Random(9))
         tower(cr, w, h)
         self.layers = None
 
@@ -244,7 +247,9 @@ class WebHang(Scene):
             cr.set_source_surface(surf, -pad / 2 + math.sin(t * 0.05) * pad / 2 * depth, 0)
             cr.paint()
 
+        # The web hangs from the cornice of the rooftop at the top of the view.
         anchor_x, length = w * 0.40, h * 0.30
+        ledge = h * 0.07
         swing = 0.10 * math.sin(t * 0.7) + 0.02 * math.sin(t * 1.9)
         end_x = anchor_x + math.sin(swing) * length
         end_y = math.cos(swing) * length
@@ -252,13 +257,15 @@ class WebHang(Scene):
         cr.set_line_cap(cairo.LINE_CAP_ROUND)
         cr.set_source_rgba(0.95, 0.97, 1, 0.85)
         cr.set_line_width(2)
-        cr.move_to(anchor_x, -5)
-        cr.curve_to(anchor_x, length * 0.4, end_x, length * 0.6, end_x, end_y)
+        end_y += ledge
+        cr.move_to(anchor_x, ledge)
+        cr.curve_to(anchor_x, ledge + length * 0.4, end_x, ledge + length * 0.6, end_x, end_y)
         cr.stroke()
         glint = (t * 0.25) % 1
         cr.set_source_rgba(1, 1, 1, 0.9 * math.sin(glint * math.pi))
-        cr.arc(anchor_x + (end_x - anchor_x) * glint, end_y * glint, 2.5, 0, 2 * math.pi)
+        cr.arc(anchor_x + (end_x - anchor_x) * glint, ledge + (end_y - ledge) * glint, 2.5, 0, 2 * math.pi)
         cr.fill()
+        cornice(cr, w, ledge, anchor_x)
 
         cr.save()
         cr.translate(end_x, end_y)
@@ -416,6 +423,33 @@ def spider_emblem(cr, x, y, size, color):
     cr.restore()
 
 
+def cornice(cr, w, bottom, anchor_x):
+    """The high-rise's rooftop edge across the top of the view, seen from
+    below: a stone cornice with dentils, the web tied round a flagpole bracket."""
+    right = w * 0.58
+    stone = cairo.LinearGradient(0, 0, 0, bottom)
+    stone.add_color_stop_rgb(0, 0.10, 0.09, 0.14)
+    stone.add_color_stop_rgb(1, 0.17, 0.15, 0.22)
+    cr.set_source(stone)
+    cr.move_to(0, 0)
+    cr.line_to(right + bottom * 0.6, 0)
+    cr.line_to(right, bottom)
+    cr.line_to(0, bottom)
+    cr.close_path()
+    cr.fill()
+    cr.set_source_rgba(0, 0, 0, 0.45)  # dentils under the cornice
+    step = max(10, int(bottom * 0.35))
+    for x in range(4, int(right) - step, step):
+        cr.rectangle(x, bottom - bottom * 0.28, step * 0.55, bottom * 0.28)
+    cr.fill()
+    cr.set_source_rgba(0.6, 0.65, 0.9, 0.35)  # city glow catching its lower edge
+    cr.rectangle(0, bottom - 2, right, 2)
+    cr.fill()
+    cr.set_source_rgb(0.22, 0.2, 0.26)  # the bracket the web is tied to
+    cr.rectangle(anchor_x - 5, bottom - 4, 10, 10)
+    cr.fill()
+
+
 def tower(cr, w, h):
     """The skyscraper the hero hangs beside: setbacks, a spire, rows of lit
     windows, a cool rim light down one edge."""
@@ -512,12 +546,9 @@ class NightWatch(Scene):
         cr.line_to(bx + 8, by)
         cr.close_path()
         cr.fill()
-        spot = cairo.RadialGradient(tip_x, tip_y + h * 0.28, 0, tip_x, tip_y + h * 0.28, 120)
-        spot.add_color_stop_rgba(0, 1, 0.95, 0.75, 0.30)
-        spot.add_color_stop_rgba(1, 1, 0.95, 0.75, 0)
-        cr.set_source(spot)
-        cr.arc(tip_x, tip_y + h * 0.28, 120, 0, 2 * math.pi)
-        cr.fill()
+        # Where the beam meets the clouds: a glowing oval with the MK monogram.
+        sx, sy = tip_x, tip_y + h * 0.28
+        signal(cr, sx, sy, min(w, h) * 0.11, ang)
         # bats now and then
         if not self.bats or (len(self.bats) < 4 and random.random() < dt * 0.15):
             self.bats.append([-0.05, random.uniform(0.1, 0.45), random.uniform(0.06, 0.12), random.uniform(0, 6)])
@@ -565,6 +596,7 @@ class NightWatch(Scene):
         cr.set_source_rgba(0.75, 0.78, 0.85, 0.35)  # moonlight catching the edge
         cr.rectangle(x0 - 40 * s, y0 + 120 * s, w - x0 + 60 * s, 3 * s)
         cr.fill()
+        rooftop(cr, x0 - 40 * s, y0 + 120 * s, w, h, s, t)
         cr.set_source_rgb(*stone)
         # gargoyle: a crouched beast's head and wings jutting out from the ledge
         cr.move_to(x0 - 10 * s, y0 + 120 * s)
@@ -674,6 +706,116 @@ class NightWatch(Scene):
             cr.line_to(x2, y2)
         cr.stroke()
         cr.restore()
+
+
+def signal(cr, x, y, r, angle):
+    """A searchlight's oval on the clouds, with an MK monogram in it."""
+    cr.save()
+    cr.translate(x, y)
+    cr.rotate((angle + math.pi / 2) * 0.35)  # the oval leans with the beam
+    cr.scale(1.45, 1)
+    glow = cairo.RadialGradient(0, 0, r * 0.2, 0, 0, r * 1.6)
+    glow.add_color_stop_rgba(0, 1, 0.95, 0.75, 0.42)
+    glow.add_color_stop_rgba(0.55, 1, 0.95, 0.75, 0.22)
+    glow.add_color_stop_rgba(1, 1, 0.95, 0.75, 0)
+    cr.set_source(glow)
+    cr.arc(0, 0, r * 1.6, 0, 2 * math.pi)
+    cr.fill()
+    cr.set_source_rgba(1, 0.96, 0.8, 0.30)
+    cr.arc(0, 0, r, 0, 2 * math.pi)
+    cr.fill()
+    cr.restore()
+    # The monogram: dark letters, as if cut out of the light.
+    cr.save()
+    cr.translate(x, y)
+    cr.rotate((angle + math.pi / 2) * 0.35)
+    cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+    cr.set_font_size(r * 0.9)
+    ext = cr.text_extents("MK")
+    cr.move_to(-ext.width / 2 - ext.x_bearing, ext.height / 2)
+    cr.set_source_rgba(0.04, 0.05, 0.08, 0.75)
+    cr.show_text("MK")
+    cr.restore()
+
+
+def rooftop(cr, left, top, w, h, s, t):
+    """Details on the knight's roof: brick courses, a water tower, vents and a
+    blinking aircraft light, with rain splashes on the ledge."""
+    rand = random.Random(41)
+    cr.set_source_rgba(0, 0, 0, 0.25)  # brick courses
+    cr.set_line_width(1)
+    for k, y in enumerate(range(int(top + 26 * s), int(h), int(18 * s))):
+        cr.move_to(left, y)
+        cr.line_to(w, y)
+        for x in range(int(left + (k % 2) * 22 * s), int(w), int(44 * s)):
+            cr.move_to(x, y)
+            cr.line_to(x, y + 18 * s)
+    cr.stroke()
+    # water tower on legs
+    tx, tb = left + (w - left) * 0.62, top
+    cr.set_source_rgb(0.07, 0.07, 0.09)
+    for dx in (-30, 30):
+        cr.rectangle(tx + dx * s - 2 * s, tb - 60 * s, 4 * s, 60 * s)
+    cr.rectangle(tx - 46 * s, tb - 150 * s, 92 * s, 90 * s)
+    cr.fill()
+    cr.move_to(tx - 52 * s, tb - 150 * s)
+    cr.line_to(tx, tb - 190 * s)
+    cr.line_to(tx + 52 * s, tb - 150 * s)
+    cr.close_path()
+    cr.fill()
+    cr.set_source_rgba(0.75, 0.78, 0.85, 0.18)  # moonlight on its staves
+    for k in range(5):
+        cr.rectangle(tx - 40 * s + k * 18 * s, tb - 148 * s, 1.5 * s, 86 * s)
+    cr.fill()
+    # vents and a chimney
+    cr.set_source_rgb(0.08, 0.08, 0.1)
+    for vx, vw, vh in ((0.86, 26, 34), (0.92, 18, 54), (0.40, 30, 22)):
+        x = left + (w - left) * vx
+        cr.rectangle(x, top - vh * s, vw * s, vh * s)
+    cr.fill()
+    # a red aircraft light on the antenna, blinking
+    ax = left + (w - left) * 0.92 + 9 * s
+    cr.set_source_rgb(0.08, 0.08, 0.1)
+    cr.rectangle(ax - 1.5 * s, top - 140 * s, 3 * s, 86 * s)
+    cr.fill()
+    on = (t % 2.2) < 0.25
+    light = cairo.RadialGradient(ax, top - 142 * s, 0, ax, top - 142 * s, 16 * s)
+    light.add_color_stop_rgba(0, 1, 0.2, 0.15, 0.95 if on else 0.25)
+    light.add_color_stop_rgba(1, 1, 0.2, 0.15, 0)
+    cr.set_source(light)
+    cr.arc(ax, top - 142 * s, 16 * s, 0, 2 * math.pi)
+    cr.fill()
+    # rain splashing on the ledge
+    cr.set_source_rgba(0.75, 0.8, 0.9, 0.5)
+    cr.set_line_width(1)
+    for k in range(14):
+        phase = (t * 3 + k * 0.37) % 1
+        x = left + (w - left) * rand.random()
+        rr = 2 + 6 * phase
+        cr.save()
+        cr.translate(x, top + 2)
+        cr.scale(1, 0.35)
+        cr.arc(0, 0, rr * s, math.pi, 2 * math.pi)
+        cr.restore()
+        cr.stroke()
+
+
+def city_far(cr, w, h, horizon, rand):
+    """The far city: a band of tiny lights fading into haze toward the horizon."""
+    haze = cairo.LinearGradient(0, horizon - h * 0.12, 0, h)
+    haze.add_color_stop_rgba(0, 0.30, 0.20, 0.45, 0)
+    haze.add_color_stop_rgba(0.35, 0.30, 0.20, 0.45, 0.35)
+    haze.add_color_stop_rgba(1, 0.10, 0.06, 0.18, 0.6)
+    cr.set_source(haze)
+    cr.rectangle(0, horizon - h * 0.12, w, h)
+    cr.fill()
+    for _ in range(int(w * 0.9)):
+        y = horizon + (h - horizon) * rand.random() ** 1.8
+        depth = (y - horizon) / max(1, h - horizon)
+        cr.set_source_rgba(1, 0.82 if rand.random() < 0.8 else 0.95, 0.55, 0.25 + 0.5 * depth)
+        size = 0.6 + 1.6 * depth
+        cr.rectangle(rand.uniform(0, w), y, size, size)
+        cr.fill()
 
 
 # ---------------------------------------------------------------- matrix

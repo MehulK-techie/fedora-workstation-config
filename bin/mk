@@ -622,6 +622,21 @@ case "${1:-help}" in
         esac
         ;;
 
+    tasks)
+        # mk tasks badge on|off: the top-bar pill with today's task count
+        if [[ "${2:-}" == badge && "${3:-}" =~ ^(on|off)$ ]]; then
+            conf="$HOME/.config/mk-workstation/welcome.conf"
+            mkdir -p "$(dirname "$conf")"
+            touch "$conf"
+            sed -i '/^TASK_BADGE=/d' "$conf"
+            echo "TASK_BADGE=$3" >> "$conf"
+            echo "✔ Task badge $3"
+        else
+            echo "Usage: mk tasks badge on|off" >&2
+            exit 2
+        fi
+        ;;
+
     nap)
         # mk nap: which apps App Nap has paused (config/appnap.conf)
         state="$HOME/.cache/mk-workstation/app-nap.json"

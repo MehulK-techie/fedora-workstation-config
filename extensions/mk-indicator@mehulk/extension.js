@@ -7,6 +7,7 @@ import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { DockGlow } from './dockGlow.js';
 import { Welcome } from './welcome.js';
 import { TimerPill } from './timerPill.js';
+import { TaskBadge } from './taskBadge.js';
 import { SwitcherAnimation } from './switcher.js';
 import { OsdStack } from './osdStack.js';
 import { Accent } from './accent.js';
@@ -118,6 +119,8 @@ export default class MKIndicatorExtension extends Extension {
         this._welcome.enable();
         this._timerPill = new TimerPill();
         this._timerPill.enable();
+        this._taskBadge = new TaskBadge();
+        this._taskBadge.enable();
         this._switcher = new SwitcherAnimation();
         this._switcher.enable();
         this._osdStack = new OsdStack();
@@ -176,6 +179,7 @@ export default class MKIndicatorExtension extends Extension {
         const locked = Main.sessionMode.isLocked;
         this._indicator.visible = !locked;
         this._timerPill?.setLocked(locked);
+        this._taskBadge?.setLocked(locked);
         this._sysMonitor?.setLocked(locked);
         this._media?.setLocked(locked);
         if (locked && this._dockGlow) {
@@ -257,6 +261,8 @@ export default class MKIndicatorExtension extends Extension {
         this._welcome = null;
         this._timerPill?.disable();
         this._timerPill = null;
+        this._taskBadge?.disable();
+        this._taskBadge = null;
         this._switcher?.disable();
         this._switcher = null;
         this._osdStack?.disable();

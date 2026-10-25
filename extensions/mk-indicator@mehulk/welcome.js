@@ -22,13 +22,14 @@ import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js'
 import { ExtensionState } from 'resource:///org/gnome/shell/misc/extensionUtils.js';
 import { getMixerControl } from 'resource:///org/gnome/shell/ui/status/volume.js';
 import { accentPairUnit } from './accent.js';
+import { tasksToday } from './taskBadge.js';
 
 const CONFIG_DIR = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation']);
 const USER_CONF = GLib.build_filenamev([CONFIG_DIR, 'welcome.conf']);
 const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'welcome.conf']);
 const TEST_FILE = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'welcome-test']);
 const DEFAULTS = {
-    WELCOME: 'on', GREETING: 'Welcome back home, {title}.', TITLE: 'sir', SUBTITLE: 'on', VOICE: 'off',
+    BRIEFING: 'on', WELCOME: 'on', GREETING: 'Welcome back home, {title}.', TITLE: 'sir', SUBTITLE: 'on', VOICE: 'off',
     EDGE_NOTIFY: 'off', COLOR_A: 'auto', COLOR_B: 'auto', TASKS: 'on', VARIETY: 'on', BIRTHDAY: '', BIRTHDAY_COUNTDOWN: 'on',
 };
 const COMPANION = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'companion.json']);
@@ -624,8 +625,14 @@ export class Welcome {
             go();
         });
         this._pending = pickGreeting(conf);
+        // The spoken briefing: the greeting, then today's tasks.
+        let spoken = this._pending;
+        if (conf.BRIEFING !== 'off') {
+            const n = tasksToday();
+            spoken += n ? ` You have ${n} ${n === 1 ? 'task' : 'tasks'} scheduled for today.` : ' Your day is clear.';
+        }
         try {
-            const proc = Gio.Subprocess.new([`${BIN}/mk-voice`, 'file', this._pending],
+            const proc = Gio.Subprocess.new([`${BIN}/mk-voice`, 'file', spoken],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
             proc.communicate_utf8_async(null, null, (p, res) => {
                 try {

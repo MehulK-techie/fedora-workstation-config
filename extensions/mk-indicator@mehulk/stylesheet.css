@@ -220,3 +220,8 @@
 .mk-emoji-scroll { max-height: 340px; min-height: 340px; }
 .mk-emoji-cell { font-size: 26px; padding: 4px; border-radius: 10px; min-width: 44px; min-height: 44px; }
 .mk-emoji-cell:hover, .mk-emoji-cell:focus { background-color: rgba(255, 255, 255, 0.14); }
+
+/* Task badge (taskBadge.js) */
+.mk-task-badge { font-size: 0.85em; font-weight: 700; padding: 1px 10px; margin: 5px 4px; border-radius: 99px;
+  color: #ffffff; background-color: rgba(255, 255, 255, 0.14); }
+.mk-task-badge:hover { background-color: rgba(255, 255, 255, 0.24); }

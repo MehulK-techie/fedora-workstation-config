@@ -99,7 +99,8 @@ while IFS="|" read -r kind a _ c d e; do
                 *) score=$(( score - 2 )); colour=$yellow; label="LOW   " ;;
             esac
             findings+=("${colour}${label}${off}  ${bold}${c}${off}"$'\n'"        ${dim}${d}${off}")
-            [[ -n "$e" ]] && fixes+=("$e")
+            # Only fix commands MK knows are ever shown.
+            [[ "$e" =~ ^mk\ security\ fix\ (selinux|firewall|updates|autoupdates|ssh|permissions|sharing|lock)$ ]] && fixes+=("$e")
             ;;
     esac
 done <<< "$report"

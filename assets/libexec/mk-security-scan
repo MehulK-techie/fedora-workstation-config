@@ -19,9 +19,12 @@ fi
 uid=${PKEXEC_UID:-0}
 home=$(getent passwd "$uid" | cut -d: -f6)
 
-finding() { printf 'FINDING|%s|%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" "$5"; }
-pass() { printf 'PASS|%s\n' "$1"; }
-note() { printf 'NOTE|%s\n' "$1"; }
+# Fields can hold names other programs chose (process names): no "|" (the
+# field separator) and no control characters may get through.
+clean() { printf '%s' "$1" | tr -d '|[:cntrl:]'; }
+finding() { printf 'FINDING|%s|%s|%s|%s|%s\n' "$1" "$2" "$(clean "$3")" "$(clean "$4")" "$(clean "$5")"; }
+pass() { printf 'PASS|%s\n' "$(clean "$1")"; }
+note() { printf 'NOTE|%s\n' "$(clean "$1")"; }
 
 scan() {
     # --- the basics Fedora ships with
@@ -82,7 +85,7 @@ scan() {
     fi
     # --- network: what listens beyond this computer
     # TCP servers only: UDP "listeners" are mostly apps' own client sockets.
-    open=$(ss -Htlpn 2> /dev/null | awk '$4 !~ /^(127\.|\[::1\]|::1|\[?::ffff:127\.)/ { n = split($4, a, ":"); match($0, /users:\(\("([^"]+)"/, m); print a[n] "/tcp (" (m[1] ? m[1] : "?") ")" }' | sort -u | paste -sd, | sed 's/,/, /g')
+    open=$(ss -Htlpn 2> /dev/null | awk '$4 !~ /^(127\.|\[::1\]|::1|\[?::ffff:127\.)/ { n = split($4, a, ":"); match($0, /users:\(\("([^"]+)"/, m); name = m[1]; gsub(/[^A-Za-z0-9._-]/, "_", name); print a[n] "/tcp (" (name ? name : "?") ")" }' | sort -u | paste -sd, | sed 's/,/, /g')
     if [[ -n "$open" ]]; then
         finding low ports "Listening to the network: $open" "Each one is a door; the firewall decides who gets in" ""
     else

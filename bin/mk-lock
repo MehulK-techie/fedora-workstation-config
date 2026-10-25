@@ -32,9 +32,12 @@ How sure you can be:
     to the front.
 The confirmation is polkit's "auth_self" (io.github.mehulk.mk-lock.unlock,
 installed by setup.sh): fingerprint when a finger is enrolled, else password.
-An item password (mk-lock password set) is an alternative: for a folder it
-unlocks a copy of the folder's key sealed with that password (Argon2id +
-NaCl secretbox), so it's real encryption, not a check that can be skipped.
+An item password (mk-lock password set) is an alternative, weaker than the
+fingerprint check: for a folder it unlocks a copy of the folder's key sealed
+with that password (Argon2id at its "sensitive" cost + NaCl secretbox), real
+encryption, but someone with a copy of your files can try passwords offline,
+so it must be long (10+ characters). For an app it is only a gate: a program
+running as you could replace it, just as it could start the app directly.
 """
 import base64
 import configparser
@@ -99,7 +102,7 @@ def item_file(kind, ident):
 def _box(password, salt):
     pwhash, secret, _utils = _nacl()
     key = pwhash.argon2id.kdf(secret.SecretBox.KEY_SIZE, password.encode(), salt,
-                              opslimit=pwhash.argon2id.OPSLIMIT_MODERATE, memlimit=pwhash.argon2id.MEMLIMIT_MODERATE)
+                              opslimit=pwhash.argon2id.OPSLIMIT_SENSITIVE, memlimit=pwhash.argon2id.MEMLIMIT_SENSITIVE)
     return secret.SecretBox(key)
 
 
@@ -150,14 +153,14 @@ def ask_password(title, text, allow_fingerprint=True):
 def new_password(what):
     if sys.stdin.isatty():
         first = getpass.getpass(f"New password for {what}: ")
-        if len(first) < 6:
-            die("Use at least 6 characters.")
+        if len(first) < 10:
+            die("Use at least 10 characters (a short sentence works well).")
         if getpass.getpass("Again: ") != first:
             die("The two didn't match.")
         return first
-    kind, pw = ask_password("MK Lock", f"New password for {what} (6+ characters)", allow_fingerprint=False)
-    if not pw or len(pw) < 6:
-        die("No password set (it needs at least 6 characters).")
+    kind, pw = ask_password("MK Lock", f"New password for {what} (10+ characters)", allow_fingerprint=False)
+    if not pw or len(pw) < 10:
+        die("No password set (it needs at least 10 characters).")
     return pw
 
 

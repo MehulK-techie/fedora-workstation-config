@@ -4,6 +4,18 @@
 # ==============================================================================
 set -euo pipefail
 
+# Now and then (1 failure in 6, in a terminal only), a word of comfort.
+comfort() {
+    local status=$? jokes
+    if (( status != 0 && status != 130 )) && [[ -t 2 ]] && (( RANDOM % 6 == 0 )); then
+        jokes=("It compiled on my machine." "Have you tried sudo? (Please don't.)"
+               "Error 418: I'm a teapot." "The bug is between the chair and the keyboard. Or not."
+               "99 little bugs in the code... patch one down, 127 little bugs in the code.")
+        printf '\e[2m%s\e[0m\n' "${jokes[RANDOM % ${#jokes[@]}]}" >&2
+    fi
+}
+trap comfort EXIT
+
 # sync.sh records the clone location here; fall back to the repo this file is in.
 REPO_DIR=""
 [[ -f "$HOME/.config/mk-workstation/repo-path" ]] && REPO_DIR=$(< "$HOME/.config/mk-workstation/repo-path")
@@ -705,7 +717,7 @@ KEYRING
         fi
         ;;
 
-    founders|--founders)
+    legends|--legends|founders|--founders)
         # Not in the help. The people this desktop stands on.
         dim=$'\e[2m' bold=$'\e[1m' blue=$'\e[38;5;33m' off=$'\e[0m'
         printf '\n  %sThis desktop runs on other people'"'"'s generosity.%s\n\n' "$bold" "$off"
@@ -715,6 +727,8 @@ KEYRING
         printf '  shipping upstream first, every six months since 2003.\n'
         printf '  %sGNOME%s, %slibfprint%s, %sHowdy%s, %sDash to Dock%s and every author in docs/THIRD_PARTY.md.\n\n' \
             "$blue" "$off" "$blue" "$off" "$blue" "$off" "$blue" "$off"
+        printf '  And %sClaude%s (Anthropic), who pair-programmed much of this workstation: the shell\n' "$blue" "$off"
+        printf '  extension, the scenes, the scripts, and a good many bug hunts.\n\n'
         printf '  %sThank you.%s\n\n' "$dim" "$off"
         ;;
 

@@ -61,11 +61,28 @@ PAGES = [
      "Step away and a scene plays: a brick-built hero over the city, a caped knight in the rain, "
      "a hex terminal or the aurora. Pick one or shuffle them in the Screensaver app.",
      [("Choose a scene", "mk-screensaver settings")]),
-    ("changes-prevent-symbolic", "Locks and sign-in",
-     "Your fingerprint (and face, with a camera) signs you in and unlocks the screen. "
-     "mk lock app NAME makes an app ask for your fingerprint before it starts; "
-     "mk lock PATH encrypts a folder that only opens after you confirm it's you.",
+    ("fingerprint-detection-symbolic", "Sign in with your finger or face",
+     "SIGNIN",  # filled in from the hardware this computer has (see signin_page)
      []),
+    ("changes-prevent-symbolic", "Locks and your vault",
+     "mk lock app NAME makes an app ask for your fingerprint before it starts. mk lock PATH "
+     "encrypts a folder that only opens after you confirm it's you. Vault (app grid) is a hidden "
+     "encrypted folder of your own; it closes when the screen locks.",
+     [("Open the vault", "mk-lock vault")]),
+    ("camera-photo-symbolic", "Photo Booth",
+     "Super+C: your webcam with live looks (Polaroid, Thermal, Pop Art, Noir, Comic, Neon...), a "
+     "3-2-1 countdown, then text, emoji stickers and a caption on a Polaroid frame. The webcam's own "
+     "brightness, contrast and white balance are a click away, with a reset.",
+     [("Open Photo Booth", "camera-controls")]),
+    ("face-smile-big-symbolic", "Emoji anywhere",
+     "Super+. opens the emoji board. Search or browse, click, and the emoji is typed where your "
+     "cursor is: no copy and paste.",
+     []),
+    ("security-high-symbolic", "Is it safe?",
+     "mk security checks the firewall, updates, sharing, rootkits and viruses and gives a score "
+     "out of 100, with one-line fixes. App Nap pauses apps you left minimized when memory runs "
+     "short, and wakes them the moment you switch back.",
+     [("Run mk security", "terminal:mk security")]),
     ("utilities-terminal-symbolic", "The mk command",
      "mk update keeps everything current; mk sync re-applies the settings; mk doctor checks the "
      "system's health; mk speedtest measures your connection; mk shortcuts, mk lock, mk tour. "
@@ -75,6 +92,39 @@ PAGES = [
      "Everything is plain text in the MK repo: change it, run mk sync, and it's yours. Enjoy.",
      []),
 ]
+
+
+def has_fingerprint_reader():
+    try:
+        out = subprocess.run(["fprintd-list", os.environ.get("USER", "")], capture_output=True, text=True,
+                             timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False, False
+    return "Device at" in out or "Using device" in out, " - #" in out
+
+
+def has_camera():
+    return any(Path("/dev").glob("video*"))
+
+
+def signin_page():
+    """The text and buttons for this computer: only what its hardware can do.
+    Two faces can be enrolled (you and one other person), each as themselves."""
+    reader, enrolled = has_fingerprint_reader()
+    text, buttons = [], []
+    if reader:
+        text.append("Your fingerprint reader is ready." if enrolled else
+                    "This computer has a fingerprint reader: enroll a finger and it unlocks the "
+                    "screen, sudo and locked folders.")
+        buttons.append(("Enroll a finger", "terminal:mk fingerprint"))
+    if has_camera():
+        text.append("Face unlock signs you in with the camera; it can know two faces (you and "
+                    "one other person, each with their own account).")
+        buttons.append(("Set up face unlock", "terminal:mk face"))
+        buttons.append(("Add a second face", "terminal:read -rp 'Their account name: ' u && mk face --user \"$u\""))
+    if not text:
+        text.append("This computer has no fingerprint reader or camera: your password signs you in.")
+    return " ".join(text), buttons
 
 
 def show_overview():
@@ -113,6 +163,8 @@ class Tour(Adw.ApplicationWindow):
         view.add_top_bar(Adw.HeaderBar(show_title=False))
         self.carousel = Adw.Carousel(hexpand=True, vexpand=True, allow_scroll_wheel=True)
         for icon, title, text, buttons in PAGES:
+            if text == "SIGNIN":
+                text, buttons = signin_page()
             page = Adw.StatusPage(icon_name=icon, title=title, description=text, hexpand=True)
             if buttons:
                 row = Gtk.Box(spacing=12, halign=Gtk.Align.CENTER)

@@ -338,6 +338,14 @@ export class SystemMonitor {
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         // Optimize: drop file caches (asks your password; rarely needed, see
         // `mk optimize`), or full speed with the Performance power mode.
+        menu.addAction('Full speed test…', () => {
+            try {
+                Gio.Subprocess.new([`${GLib.get_home_dir()}/.local/bin/mk-speedtest`, '--gui', '--start'],
+                    Gio.SubprocessFlags.NONE);
+            } catch (e) {
+                console.warn(`mk-indicator: mk-speedtest: ${e.message}`);
+            }
+        });
         menu.addAction('Free cached memory', () => this._run(['optimize', 'ram', '--notify']));
         menu.addAction('Performance mode', () => this._run(['optimize', 'cpu', '--notify']));
         menu.addAction('Open System Monitor', () => {

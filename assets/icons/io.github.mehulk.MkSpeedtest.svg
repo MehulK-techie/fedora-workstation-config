@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Speedtest: a speedometer -->
+  <circle cx="64" cy="70" r="54" fill="#241f31"/>
+  <circle cx="64" cy="66" r="54" fill="#3d3846"/>
+  <path d="M24 92a46 46 0 1 1 80 0" fill="none" stroke="#5e5c64" stroke-width="10" stroke-linecap="round"/>
+  <path d="M24 92a46 46 0 0 1 62-62" fill="none" stroke="#33d17a" stroke-width="10" stroke-linecap="round"/>
+  <path d="M64 70L92 44" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="64" cy="70" r="8" fill="#ffffff"/>
+</svg>

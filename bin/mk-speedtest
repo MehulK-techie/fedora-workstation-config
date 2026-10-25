@@ -1,99 +1,286 @@
 #!/usr/bin/env python3
-"""mk speedtest: latency, download and upload, from the terminal.
+"""MK Speedtest: ping, jitter, download and upload.
 
-Uses Cloudflare's speed test endpoints (speed.cloudflare.com), the same ones
-as the speed test in the top-bar system monitor. About 35 MB of traffic.
+  mk speedtest           in the terminal
+  mk speedtest --ookla   through Ookla's nearest server (speedtest-cli)
+  mk speedtest --gui     the speedometer window (also: Speedtest in the app grid);
+                         add --start to begin measuring at once
 
-  mk speedtest          ping, download, upload
-  mk speedtest --ping   latency only
+Several streams at once against Cloudflare's network by default, so fast
+fibre lines are measured properly (lib/mkworkstation/speedtest.py).
 """
-import statistics
+import math
+import os
+import shutil
 import sys
+import threading
 import time
-import urllib.request
-
-HOST = "https://speed.cloudflare.com"
-DOWN_BYTES = 25_000_000   # Cloudflare refuses single downloads much larger than this
-UP_BYTES = 10_000_000
-UA = {"User-Agent": "mk-speedtest/1"}
+from pathlib import Path
 
 
-def bar(label, done, total, mbps):
-    width = 28
-    filled = int(width * done / total) if total else width
-    sys.stdout.write(f"\r  {label:9} [{'█' * filled}{'·' * (width - filled)}] {mbps:7.1f} Mbit/s")
-    sys.stdout.flush()
+def _add_lib_path():
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for candidate in (Path(__file__).resolve().parent.parent / "lib",
+                      Path(data_home) / "mk-workstation/lib"):
+        if (candidate / "mkworkstation").is_dir():
+            sys.path.insert(0, str(candidate))
+            return
 
 
-def ping(count=8):
-    times = []
-    for _ in range(count):
-        start = time.perf_counter()
-        with urllib.request.urlopen(urllib.request.Request(f"{HOST}/__down?bytes=0", headers=UA), timeout=10) as r:
-            r.read()
-        times.append((time.perf_counter() - start) * 1000)
-    times.sort()
-    best = times[: max(1, count - 2)]  # the slowest replies are usually the TLS warm-up
-    jitter = statistics.mean(abs(a - b) for a, b in zip(best, best[1:])) if len(best) > 1 else 0.0
-    return statistics.median(best), jitter
+_add_lib_path()
+from mkworkstation.speedtest import Cancelled, SpeedTest  # noqa: E402
+
+# ---------------------------------------------------------------- terminal
 
 
-def download():
-    start = time.perf_counter()
-    got = 0
-    with urllib.request.urlopen(urllib.request.Request(f"{HOST}/__down?bytes={DOWN_BYTES}", headers=UA),
-                                timeout=30) as r:
-        while chunk := r.read(256 * 1024):
-            got += len(chunk)
-            elapsed = time.perf_counter() - start
-            bar("Download", got, DOWN_BYTES, got * 8 / 1e6 / max(elapsed, 1e-6))
-    elapsed = time.perf_counter() - start
-    print()
-    return got * 8 / 1e6 / elapsed
+def cli(mode):
+    def update(phase, value, done):
+        if phase == "ping":
+            text = f"  Ping       {value:7.1f} ms" if value else "  Finding a server..."
+        else:
+            width = 26
+            fill = int(width * done)
+            text = f"  {phase.title():9} [{'█' * fill}{'·' * (width - fill)}] {value:8.1f} Mbit/s"
+        sys.stdout.write("\r" + text.ljust(64))
+        sys.stdout.flush()
+    test = SpeedTest(update, mode)
+    try:
+        r = test.run()
+    except KeyboardInterrupt:
+        test.cancel()
+        print()
+        return 130
+    except (OSError, RuntimeError) as e:
+        print(f"\n[-] Speed test failed: {e}", file=sys.stderr)
+        return 1
+    print("\r" + " " * 64)
+    print(f"  Ping {r['ping']:.0f} ms   Jitter {r['jitter']:.1f} ms   "
+          f"↓ {r['download']:.1f} Mbit/s   ↑ {r['upload']:.1f} Mbit/s")
+    print(f"  {r['server']}")
+    return 0
 
 
-def upload():
-    payload = b"0" * UP_BYTES
-    sent = 0
-    start = time.perf_counter()
+# ---------------------------------------------------------------- window
+TICKS = [0, 5, 10, 25, 50, 100, 250, 500, 1000]
+START, SWEEP = math.radians(150), math.radians(240)
 
-    def body():
-        nonlocal sent
-        for i in range(0, UP_BYTES, 256 * 1024):
-            piece = payload[i:i + 256 * 1024]
-            sent += len(piece)
-            bar("Upload", sent, UP_BYTES, sent * 8 / 1e6 / max(time.perf_counter() - start, 1e-6))
-            yield piece
 
-    request = urllib.request.Request(f"{HOST}/__up", data=body(), method="POST",
-                                     headers={**UA, "Content-Type": "application/octet-stream",
-                                              "Content-Length": str(UP_BYTES)})
-    with urllib.request.urlopen(request, timeout=60) as r:
-        r.read()
-    elapsed = time.perf_counter() - start
-    print()
-    return UP_BYTES * 8 / 1e6 / elapsed
+def gauge_pos(mbps):
+    """0-1 along the dial: a piecewise scale like Ookla's (more room low down)."""
+    if mbps <= 0:
+        return 0.0
+    for i in range(1, len(TICKS)):
+        if mbps <= TICKS[i]:
+            lo, hi = TICKS[i - 1], TICKS[i]
+            return (i - 1 + (mbps - lo) / (hi - lo)) / (len(TICKS) - 1)
+    return 1.0
+
+
+def gui(mode, autostart=False):
+    import gi
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw, GLib, Gtk
+
+    class Window(Adw.ApplicationWindow):
+        def __init__(self, app):
+            super().__init__(application=app, title="Speedtest", default_width=520, default_height=660)
+            self.target = self.shown = 0.0
+            self.phase = None
+            self.samples = []
+            self.test = None
+            self.results = {}
+            view = Adw.ToolbarView()
+            head = Adw.HeaderBar()
+            self.server = Gtk.DropDown.new_from_strings(
+                ["Cloudflare (multi-stream)"] + (["Ookla (nearest server)"] if shutil.which("speedtest-cli") else []))
+            if mode == "ookla" and shutil.which("speedtest-cli"):
+                self.server.set_selected(1)
+            head.pack_start(self.server)
+            view.add_top_bar(head)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, margin_start=24, margin_end=24,
+                          margin_bottom=24)
+            self.dial = Gtk.DrawingArea(content_width=420, content_height=300, hexpand=True)
+            self.dial.set_draw_func(self.draw_dial)
+            self.dial.add_tick_callback(self.tick)
+            box.append(self.dial)
+            tiles = Gtk.Box(spacing=10, homogeneous=True)
+            self.tiles = {}
+            for key, label, unit in (("ping", "Ping", "ms"), ("jitter", "Jitter", "ms"),
+                                     ("download", "Download", "Mbit/s"), ("upload", "Upload", "Mbit/s")):
+                tile = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, css_classes=["card"], spacing=2)
+                tile.append(Gtk.Label(label=label, css_classes=["caption-heading", "dim-label"], margin_top=8))
+                value = Gtk.Label(label="–", css_classes=["title-2"])
+                tile.append(value)
+                tile.append(Gtk.Label(label=unit, css_classes=["caption", "dim-label"], margin_bottom=8))
+                tiles.append(tile)
+                self.tiles[key] = value
+            box.append(tiles)
+            self.graph = Gtk.DrawingArea(content_height=70, hexpand=True)
+            self.graph.set_draw_func(self.draw_graph)
+            box.append(self.graph)
+            self.status = Gtk.Label(css_classes=["dim-label"], label="Press Go to measure your connection.")
+            box.append(self.status)
+            self.go = Gtk.Button(label="Go", css_classes=["pill", "suggested-action"], halign=Gtk.Align.CENTER,
+                                 width_request=160)
+            self.go.connect("clicked", lambda *_: self.start())
+            box.append(self.go)
+            view.set_content(box)
+            self.set_content(view)
+            self.connect("close-request", lambda *_: (self.test and self.test.cancel(), False)[1])
+            if autostart:
+                GLib.timeout_add(400, lambda: (self.start(), False)[1])
+
+        def start(self):
+            if self.test:
+                self.test.cancel()
+                return
+            for v in self.tiles.values():
+                v.set_label("–")
+            self.samples = []
+            mode = "ookla" if self.server.get_selected() == 1 else "cloudflare"
+            self.test = SpeedTest(lambda *a: GLib.idle_add(self.update, *a), mode)
+            self.go.set_label("Stop")
+            self.status.set_label("Measuring…")
+            threading.Thread(target=self.work, daemon=True).start()
+
+        def work(self):
+            try:
+                r = self.test.run()
+                GLib.idle_add(self.finished, r, None)
+            except Cancelled:
+                GLib.idle_add(self.finished, None, "Stopped.")
+            except (OSError, RuntimeError) as e:
+                GLib.idle_add(self.finished, None, f"Failed: {e}")
+
+        def update(self, phase, value, _done):
+            if phase != self.phase:
+                if self.phase == "ping" and self.test:
+                    self.tiles["ping"].set_label(f"{value:.0f}" if phase == "ping" else self.tiles["ping"].get_label())
+                self.phase = phase
+                self.samples = []
+            if phase == "ping":
+                if value:
+                    self.tiles["ping"].set_label(f"{value:.0f}")
+                self.target = 0.0
+            else:
+                self.target = value
+                self.samples.append(value)
+                self.tiles[phase].set_label(f"{value:.0f}")
+                self.graph.queue_draw()
+            return False
+
+        def finished(self, r, message):
+            self.test = None
+            self.go.set_label("Go again")
+            self.phase = None
+            self.target = 0.0
+            if r:
+                self.tiles["ping"].set_label(f"{r['ping']:.0f}")
+                self.tiles["jitter"].set_label(f"{r['jitter']:.1f}")
+                self.tiles["download"].set_label(f"{r['download']:.0f}")
+                self.tiles["upload"].set_label(f"{r['upload']:.0f}")
+                self.status.set_label(r["server"])
+            else:
+                self.status.set_label(message)
+            return False
+
+        def tick(self, widget, clock):
+            # The needle eases toward the reading: quick, but never jumpy.
+            self.shown += (self.target - self.shown) * 0.12
+            widget.queue_draw()
+            return True
+
+        def draw_dial(self, _area, cr, w, h):
+            import cairo
+            cx, cy, r = w / 2, h * 0.58, min(w / 2, h * 0.58) - 18
+            cr.set_line_cap(cairo.LINE_CAP_ROUND)
+            cr.set_line_width(16)
+            cr.set_source_rgba(1, 1, 1, 0.10)
+            cr.arc(cx, cy, r, START, START + SWEEP)
+            cr.stroke()
+            pos = gauge_pos(self.shown)
+            if pos > 0.002:
+                grad = cairo.LinearGradient(cx - r, 0, cx + r, 0)
+                upload = self.phase == "upload"
+                grad.add_color_stop_rgb(0, *((0.55, 0.3, 1.0) if upload else (0.1, 0.8, 1.0)))
+                grad.add_color_stop_rgb(1, *((1.0, 0.4, 0.8) if upload else (0.3, 1.0, 0.65)))
+                cr.set_source(grad)
+                cr.arc(cx, cy, r, START, START + SWEEP * pos)
+                cr.stroke()
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            cr.set_font_size(12)
+            for i, t in enumerate(TICKS):
+                a = START + SWEEP * i / (len(TICKS) - 1)
+                x, y = cx + math.cos(a) * (r - 30), cy + math.sin(a) * (r - 30)
+                label = str(t)
+                ext = cr.text_extents(label)
+                cr.set_source_rgba(1, 1, 1, 0.5)
+                cr.move_to(x - ext.width / 2, y + ext.height / 2)
+                cr.show_text(label)
+            a = START + SWEEP * pos  # needle
+            cr.set_source_rgba(1, 1, 1, 0.9)
+            cr.set_line_width(4)
+            cr.move_to(cx, cy)
+            cr.line_to(cx + math.cos(a) * (r - 46), cy + math.sin(a) * (r - 46))
+            cr.stroke()
+            cr.arc(cx, cy, 7, 0, 2 * math.pi)
+            cr.fill()
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+            cr.set_font_size(44)
+            big = f"{self.shown:.0f}" if self.phase in ("download", "upload") else "–"
+            ext = cr.text_extents(big)
+            cr.move_to(cx - ext.width / 2 - ext.x_bearing, cy + r * 0.55)
+            cr.show_text(big)
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            cr.set_font_size(14)
+            sub = {"ping": "Ping…", "download": "Mbit/s · Download", "upload": "Mbit/s · Upload"}.get(self.phase, "Mbit/s")
+            ext = cr.text_extents(sub)
+            cr.set_source_rgba(1, 1, 1, 0.6)
+            cr.move_to(cx - ext.width / 2, cy + r * 0.55 + 24)
+            cr.show_text(sub)
+
+        def draw_graph(self, _area, cr, w, h):
+            data = self.samples
+            if len(data) < 2:
+                return
+            top = max(data) * 1.15 or 1
+            step = w / max(1, len(data) - 1)
+            upload = self.phase == "upload"
+            colour = (0.85, 0.45, 1.0) if upload else (0.2, 0.85, 1.0)
+            cr.move_to(0, h)
+            for i, v in enumerate(data):
+                cr.line_to(i * step, h - h * v / top)
+            cr.line_to((len(data) - 1) * step, h)
+            cr.close_path()
+            cr.set_source_rgba(*colour, 0.25)
+            cr.fill_preserve()
+            cr.new_path()
+            for i, v in enumerate(data):
+                (cr.line_to if i else cr.move_to)(i * step, h - h * v / top)
+            cr.set_source_rgba(*colour, 0.95)
+            cr.set_line_width(2)
+            cr.stroke()
+
+    class App(Adw.Application):
+        def __init__(self):
+            super().__init__(application_id="io.github.mehulk.MkSpeedtest")
+
+        def do_activate(self):
+            (self.get_active_window() or Window(self)).present()
+
+    return App().run([sys.argv[0]])
 
 
 def main():
-    if "-h" in sys.argv or "--help" in sys.argv:
+    args = sys.argv[1:]
+    if "-h" in args or "--help" in args:
         print(__doc__.strip())
         return 0
-    try:
-        latency, jitter = ping()
-        print(f"  Ping      {latency:6.1f} ms   (jitter {jitter:.1f} ms)")
-        if "--ping" in sys.argv:
-            return 0
-        down = download()
-        up = upload()
-    except OSError as e:
-        print(f"\n[-] Speed test failed: {e}", file=sys.stderr)
-        return 1
-    except KeyboardInterrupt:
-        print()
-        return 130
-    print(f"\n  ↓ {down:.1f} Mbit/s   ↑ {up:.1f} Mbit/s   ping {latency:.0f} ms")
-    return 0
+    mode = "ookla" if "--ookla" in args else "cloudflare"
+    if "--gui" in args or not sys.stdout.isatty():
+        return gui(mode, "--start" in args)
+    return cli(mode)
 
 
 if __name__ == "__main__":

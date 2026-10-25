@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Speedtest
+Comment=Ping, jitter, download and upload, with a speedometer
+Exec=@BIN@/mk-speedtest --gui
+Icon=io.github.mehulk.MkSpeedtest
+Categories=Network;Utility;
+Keywords=speed;internet;bandwidth;ping;wifi;test;mk;
+StartupNotify=true
+StartupWMClass=io.github.mehulk.MkSpeedtest

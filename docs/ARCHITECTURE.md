@@ -65,7 +65,7 @@ you can run `./bin/show-shortcuts` straight from a clone while hacking.
 | `mk-screensaver` | GTK4 + cairo (`lib/mkworkstation/scenes.py`) | Mutter IdleMonitor `AddIdleWatch`; skips when an idle inhibitor (video, call) or the focus timer is active; full-screen window, 30 fps |
 | `mk-timer` | GTK4 + libadwaita + cairo | `~/.config/mk-workstation/timer.conf`; a marker file guarantees notifications are restored after focus mode |
 | `mk-reminders` | none | Run each minute by `mk-reminders.timer`; writes only `reminders-state.json` |
-| `camera-controls` | Tkinter | v4l2 controls of the webcam (`v4l2-ctl`) |
+| `camera-controls` | GTK 4, GStreamer, Pillow, Pango/cairo | Photo Booth: live webcam with looks (`photo.py`), stickers and captions; v4l2 controls (`v4l2-ctl`) |
 
 Each GTK app above is a single-instance `Adw.Application`: launching it again
 brings the existing window forward.

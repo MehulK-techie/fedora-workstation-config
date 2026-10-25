@@ -83,7 +83,7 @@ them live and lets you change any of them. Your changes go to
 | MK Notes: today's note | Super+Alt+N |
 | MK Notes: quick note | Super+Ctrl+N |
 | Emoji board: search, click, and it's typed where your cursor is | Super+. |
-| Camera controls | Super+C |
+| Photo Booth: webcam with live looks, stickers, captions; its hardware controls | Super+C |
 
 ## Touchpad gestures
 

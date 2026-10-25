@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
-Name=Camera Controls
-Comment=Brightness, focus and exposure of your webcam
+Name=Photo Booth
+Comment=Your webcam with live looks (Polaroid, Thermal, Pop Art...), stickers, captions, and its hardware controls
 Exec=@BIN@/camera-controls
 Icon=io.github.mehulk.MkCamera
-Categories=AudioVideo;Video;Settings;
-Keywords=webcam;camera;mk;
+Categories=AudioVideo;Video;Graphics;Photography;
+Keywords=webcam;camera;photo;booth;selfie;polaroid;filter;sticker;brightness;mk;
 StartupNotify=true
 StartupWMClass=io.github.mehulk.MkCamera

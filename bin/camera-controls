@@ -1,29 +1,88 @@
 #!/usr/bin/env python3
-"""Sliders for the webcam's hardware controls.
+"""MK Photo Booth: your webcam with live looks, then decorate and save.
 
-Only controls the camera reports are shown, using the camera's own ranges,
-and each slider starts at the current value so opening the window changes
-nothing.
+  camera-controls            open the booth (app grid: Photo Booth, Super+C)
+
+Camera page: a live, mirrored preview; looks (Polaroid, Thermal, Pop Art,
+Noir, Comic, Neon...) applied as you watch; Adjust opens the webcam's own
+hardware controls (brightness, contrast, saturation, gamma, sharpness, white
+balance) with Reset to hardware defaults. Space or the shutter button takes
+the photo, after an optional 3-2-1 countdown.
+
+Decorate page: type text or pick an emoji sticker, then click the photo to
+place it; with a Polaroid frame, write a caption on the frame. Undo, then
+Save: the photo goes to ~/Pictures/MK Booth/.
+
+The looks come from lib/mkworkstation/photo.py; text and stickers are drawn
+with Pango and cairo (colour emoji). Hardware controls use v4l2-ctl.
 """
 import glob
+import io
+import os
 import re
 import subprocess
-import tkinter as tk
-from tkinter import ttk, messagebox
+import sys
+import threading
+import time
+from pathlib import Path
 
-PRIMARY = [("brightness", "Brightness"), ("contrast", "Contrast"), ("saturation", "Saturation")]
-ADVANCED = [("sharpness", "Sharpness"), ("gamma", "Gamma"),
-            ("white_balance_temperature", "White Balance Temperature")]
-CTRL_RE = re.compile(r"^\s*(\w+)\s+0x[0-9a-f]+\s+\(int\)\s*:\s*min=(-?\d+)\s+max=(-?\d+)"
-                     r"\s+step=(\d+)\s+default=(-?\d+)\s+value=(-?\d+)")
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+gi.require_version("Gst", "1.0")
+gi.require_version("Pango", "1.0")
+gi.require_version("PangoCairo", "1.0")
+gi.require_foreign("cairo")
+import cairo  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gst, Gtk, Pango, PangoCairo  # noqa: E402
+
+
+def _add_lib_path():
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for candidate in (Path(__file__).resolve().parent.parent / "lib",
+                      Path(data_home) / "mk-workstation/lib"):
+        if (candidate / "mkworkstation").is_dir():
+            sys.path.insert(0, str(candidate))
+            return
+
+
+_add_lib_path()
+from PIL import Image  # noqa: E402
+
+from mkworkstation import photo  # noqa: E402
+
+APP_ID = "io.github.mehulk.MkCamera"
+OUT_DIR = Path(GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES) or Path.home() / "Pictures") / "MK Booth"
+PREVIEW_W = 640
+STICKERS = "😀😂😍🥳😎🤩😜🥰🤪😇👻🤖👑🎉🎈🎂🌈⭐✨🔥💖💯👍✌️🙌🍕🍿🌸🦄🐶🐱"
+COLORS = [("White", (1, 1, 1)), ("Black", (0.08, 0.08, 0.1)), ("Pink", (1, 0.35, 0.65)),
+          ("Yellow", (1, 0.85, 0.15)), ("Blue", (0.25, 0.6, 1)), ("Green", (0.3, 0.9, 0.45))]
+CSS = b"""
+.mk-booth-countdown { font-size: 120px; font-weight: 900; color: white; text-shadow: 0 4px 24px rgba(0,0,0,0.6); }
+.mk-booth-flash { background: white; }
+.mk-booth-shutter { min-width: 64px; min-height: 64px; border-radius: 32px; padding: 0;
+                    background: #ff4757; color: white; border: 4px solid alpha(white, 0.85); }
+.mk-booth-sticker { font-size: 22px; padding: 2px 6px; min-width: 36px; }
+.mk-booth-photo { border-radius: 12px; }
+"""
+
+# ---------------------------------------------------------------- webcam hardware controls (v4l2)
+CTRL_RE = re.compile(r"^\s*(\w+)\s+0x[0-9a-f]+\s+\((int|bool)\)\s*:\s*(?:min=(-?\d+)\s+max=(-?\d+)\s+step=(\d+)\s+)?"
+                     r"default=(-?\d+)\s+value=(-?\d+)")
+SLIDERS = [("brightness", "Brightness"), ("contrast", "Contrast"), ("saturation", "Saturation"),
+           ("gamma", "Gamma"), ("sharpness", "Sharpness"), ("white_balance_temperature", "White balance")]
 
 
 def v4l2(*args):
-    return subprocess.run(["v4l2-ctl", *args], capture_output=True, text=True).stdout
+    try:
+        return subprocess.run(["v4l2-ctl", *args], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
 
 
 def find_camera():
-    """First /dev/video* node that captures video (skips metadata nodes)."""
+    """The first /dev/video* that captures video (skips metadata nodes)."""
     for dev in sorted(glob.glob("/dev/video*"), key=lambda d: int(re.sub(r"\D", "", d) or 0)):
         caps = re.search(r"Device Caps\s*:\s*(0x[0-9a-fA-F]+)", v4l2("-d", dev, "--info"))
         if caps and int(caps.group(1), 16) & 0x1:
@@ -32,78 +91,481 @@ def find_camera():
 
 
 def list_controls(dev):
-    ctrls = {}
+    out = {}
     for line in v4l2("-d", dev, "--list-ctrls").splitlines():
         m = CTRL_RE.match(line)
         if m:
-            ctrls[m.group(1)] = dict(zip(("min", "max", "step", "default", "value"),
-                                         map(int, m.groups()[1:])))
-    return ctrls
+            name, kind, lo, hi, step, default, value = m.groups()
+            out[name] = {"kind": kind, "min": int(lo or 0), "max": int(hi or 1), "step": int(step or 1),
+                         "default": int(default), "value": int(value)}
+    return out
+
+
+def set_control(dev, name, value):
+    subprocess.Popen(["v4l2-ctl", "-d", dev, f"--set-ctrl={name}={int(value)}"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+# ---------------------------------------------------------------- drawing helpers
+def to_texture(img):
+    img = img.convert("RGB")
+    data = GLib.Bytes.new(img.tobytes())
+    return Gdk.MemoryTexture.new(img.width, img.height, Gdk.MemoryFormat.R8G8B8, data, img.width * 3)
+
+
+def draw_items(img, items, caption=None, caption_box=None):
+    """Text and emoji stickers (and a Polaroid caption) drawn with Pango/cairo,
+    which renders colour emoji. ITEMS: dicts with kind, text, x, y (0-1), size
+    (fraction of the photo's width) and colour."""
+    if not items and not caption:
+        return img
+    rgba = img.convert("RGBA")
+    w, h = rgba.size
+    # PIL RGBA -> cairo ARGB32 (BGRA in memory on little-endian machines)
+    r, g, b, a = rgba.split()
+    surface = cairo.ImageSurface.create_for_data(bytearray(Image.merge("RGBA", (b, g, r, a)).tobytes()),
+                                                 cairo.FORMAT_ARGB32, w, h, w * 4)
+    cr = cairo.Context(surface)
+
+    def text_at(text, cx, cy, px, colour, font, outline=True):
+        layout = PangoCairo.create_layout(cr)
+        layout.set_font_description(Pango.FontDescription.from_string(f"{font} {max(6, px)}px"))
+        layout.set_text(text, -1)
+        tw, th = layout.get_pixel_size()
+        cr.move_to(cx - tw / 2, cy - th / 2)
+        if outline:  # a dark edge keeps light text readable on any photo
+            PangoCairo.layout_path(cr, layout)
+            cr.set_source_rgba(0, 0, 0, 0.55)
+            cr.set_line_width(max(2, px / 10))
+            cr.stroke()
+            cr.move_to(cx - tw / 2, cy - th / 2)
+        cr.set_source_rgb(*colour)
+        PangoCairo.show_layout(cr, layout)
+
+    for item in items:
+        px = round(item["size"] * w)
+        if item["kind"] == "sticker":
+            text_at(item["text"], item["x"] * w, item["y"] * h, px, (1, 1, 1), "Noto Color Emoji", outline=False)
+        else:
+            text_at(item["text"], item["x"] * w, item["y"] * h, px, item["colour"], "Sans Bold")
+    if caption and caption_box:
+        x, y, bw, bh = caption_box
+        text_at(caption, x + bw / 2, y + bh / 2, round(bh * 0.32), (0.18, 0.16, 0.2),
+                "Comic Neue, Patrick Hand, Sans", outline=False)
+    surface.flush()
+    out = Image.frombuffer("RGBA", (w, h), bytes(surface.get_data()), "raw", "BGRA", 0, 1)
+    return out.convert("RGB")
+
+
+# ---------------------------------------------------------------- the window
+class Booth(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Photo Booth", default_width=1100, default_height=760)
+        Gst.init(None)
+        self.dev = find_camera()
+        self.look = None
+        self.mirror = True
+        self.frame = None          # (bytes, width, height) of the latest camera frame
+        self.frame_lock = threading.Lock()
+        self.pending = False
+        self.last_shown = 0.0
+        self.pipeline = None
+        self.items = []
+        self.shot = None           # the captured photo (PIL), before decorations
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider,
+                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.toast = Adw.ToastOverlay()
+        view = Adw.ToolbarView()
+        head = Adw.HeaderBar()
+        self.adjust_btn = Gtk.ToggleButton(icon_name="preferences-color-symbolic", tooltip_text="Adjust the camera")
+        head.pack_end(self.adjust_btn)
+        self.mirror_btn = Gtk.ToggleButton(icon_name="object-flip-horizontal-symbolic", active=True,
+                                           tooltip_text="Mirror the preview and the photo, like a mirror")
+        self.mirror_btn.connect("toggled", lambda b: setattr(self, "mirror", b.get_active()))
+        head.pack_end(self.mirror_btn)
+        view.add_top_bar(head)
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
+        self.stack.add_named(self._camera_page(), "camera")
+        self.stack.add_named(self._decorate_page(), "decorate")
+        self.stack.add_named(Adw.StatusPage(icon_name="camera-disabled-symbolic", title="No camera",
+                                            description="No webcam was found, or another app is using it. "
+                                                        "Close that app and open Photo Booth again."), "none")
+        self.toast.set_child(self.stack)
+        view.set_content(self.toast)
+        self.set_content(view)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._on_key)
+        self.add_controller(keys)
+        self.connect("close-request", lambda *_: self._stop_camera() or False)
+        if self.dev or os.environ.get("MK_BOOTH_TEST"):
+            self._start_camera()
+        else:
+            self.stack.set_visible_child_name("none")
+
+    # ----- camera page
+    def _camera_page(self):
+        self.preview = Gtk.Picture(content_fit=Gtk.ContentFit.CONTAIN, hexpand=True, vexpand=True,
+                                   css_classes=["mk-booth-photo"])
+        self.countdown = Gtk.Label(css_classes=["mk-booth-countdown"], visible=False)
+        self.flash = Gtk.Box(css_classes=["mk-booth-flash"], opacity=0, can_target=False)
+        overlay = Gtk.Overlay(child=self.preview, margin_start=12, margin_end=12, margin_top=8)
+        overlay.add_overlay(self.flash)
+        overlay.add_overlay(self.countdown)
+
+        side = self._adjust_panel()
+        revealer = Gtk.Revealer(child=side, transition_type=Gtk.RevealerTransitionType.SLIDE_LEFT)
+        self.adjust_btn.bind_property("active", revealer, "reveal-child", 0)
+        top = Gtk.Box()
+        top.append(overlay)
+        top.append(revealer)
+
+        looks = Gtk.Box(spacing=6, margin_start=12, margin_end=12)
+        group = None
+        for key, label in [(None, "Original")] + [(k, f.label) for k, f in photo.FILTERS.items()]:
+            b = Gtk.ToggleButton(label=label, css_classes=["pill"], active=key is None)
+            if group:
+                b.set_group(group)
+            group = group or b
+            b.connect("toggled", lambda btn, k=key: btn.get_active() and setattr(self, "look", k))
+            looks.append(b)
+        scroller = Gtk.ScrolledWindow(child=looks, vscrollbar_policy=Gtk.PolicyType.NEVER, min_content_height=48)
+
+        bottom = Gtk.CenterBox(margin_top=8, margin_bottom=14, margin_start=16, margin_end=16)
+        self.timer_btn = Gtk.ToggleButton(icon_name="alarm-symbolic", tooltip_text="3-2-1 countdown",
+                                          css_classes=["circular"], valign=Gtk.Align.CENTER)
+        bottom.set_start_widget(self.timer_btn)
+        shutter = Gtk.Button(icon_name="camera-photo-symbolic", css_classes=["mk-booth-shutter"],
+                             tooltip_text="Take the photo (Space)")
+        shutter.connect("clicked", lambda *_: self.take())
+        bottom.set_center_widget(shutter)
+        folder = Gtk.Button(icon_name="folder-pictures-symbolic", tooltip_text="Your photos",
+                            css_classes=["circular"], valign=Gtk.Align.CENTER)
+        folder.connect("clicked", lambda *_: self._open_folder())
+        bottom.set_end_widget(folder)
+
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        page.append(top)
+        page.append(scroller)
+        page.append(bottom)
+        return page
+
+    def _adjust_panel(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, width_request=280,
+                      margin_start=12, margin_end=12, margin_top=8)
+        box.append(Gtk.Label(label="Camera", css_classes=["title-4"], xalign=0))
+        self.sliders = {}
+        ctrls = list_controls(self.dev) if self.dev else {}
+        for name, label in SLIDERS:
+            c = ctrls.get(name)
+            if not c or c["kind"] != "int":
+                continue
+            box.append(Gtk.Label(label=label, xalign=0, css_classes=["caption-heading"]))
+            scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, c["min"], c["max"], max(1, c["step"]))
+            scale.set_value(c["value"])
+            scale.connect("value-changed", self._on_slider, name)
+            box.append(scale)
+            self.sliders[name] = (scale, c["default"])
+        reset = Gtk.Button(label="Reset to hardware defaults", css_classes=["pill"], margin_top=8)
+        reset.connect("clicked", lambda *_: self._reset_controls())
+        box.append(reset)
+        if not self.sliders:
+            box.append(Gtk.Label(label="This camera has no adjustable controls.", wrap=True))
+        return box
+
+    def _on_slider(self, scale, name):
+        if name == "white_balance_temperature":
+            set_control(self.dev, "white_balance_automatic", 0)  # a manual value needs auto off
+        set_control(self.dev, name, scale.get_value())
+
+    def _reset_controls(self):
+        for name, (scale, default) in self.sliders.items():
+            scale.set_value(default)
+        set_control(self.dev, "white_balance_automatic", 1)
+        self.toast.add_toast(Adw.Toast(title="Camera back to its hardware defaults", timeout=2))
+
+    # ----- live video
+    def _start_camera(self):
+        # Motion-JPEG at 1280x720 when the webcam offers it (most do), raw video
+        # otherwise. MK_BOOTH_TEST=1 uses a test pattern (tests never film you).
+        test = "videotestsrc pattern=ball ! video/x-raw,width=1280,height=720 ! videoconvert ! video/x-raw,format=RGB " \
+               "! appsink name=sink emit-signals=true max-buffers=1 drop=true sync=false"
+        for desc in ([test] if os.environ.get("MK_BOOTH_TEST") else []) + [f"v4l2src device={self.dev} ! image/jpeg,width=1280,height=720 ! jpegdec ! videoconvert "
+                     "! video/x-raw,format=RGB ! appsink name=sink emit-signals=true max-buffers=1 drop=true sync=false",
+                     f"v4l2src device={self.dev} ! videoconvert ! videoscale ! video/x-raw,format=RGB,width=1280,height=720 "
+                     "! appsink name=sink emit-signals=true max-buffers=1 drop=true sync=false"]:
+            try:
+                pipeline = Gst.parse_launch(desc)
+            except GLib.Error:
+                continue
+            pipeline.get_by_name("sink").connect("new-sample", self._on_sample)
+            if pipeline.set_state(Gst.State.PLAYING) != Gst.StateChangeReturn.FAILURE:
+                self.pipeline = pipeline
+                bus = pipeline.get_bus()
+                bus.add_signal_watch()
+                bus.connect("message::error", self._on_error)
+                return
+            pipeline.set_state(Gst.State.NULL)
+        self.stack.set_visible_child_name("none")
+
+    def _on_error(self, _bus, message):
+        err, _debug = message.parse_error()
+        self._stop_camera()
+        self.stack.set_visible_child_name("none")
+        print(f"camera: {err.message}", file=sys.stderr)
+
+    def _stop_camera(self):
+        if self.pipeline:
+            self.pipeline.set_state(Gst.State.NULL)
+            self.pipeline = None
+
+    def _on_sample(self, sink):
+        # The streaming thread: keep only the newest frame, draw it on the main loop.
+        sample = sink.emit("pull-sample")
+        caps = sample.get_caps().get_structure(0)
+        buf = sample.get_buffer()
+        ok, info = buf.map(Gst.MapFlags.READ)
+        if ok:
+            with self.frame_lock:
+                self.frame = (bytes(info.data), caps.get_value("width"), caps.get_value("height"))
+            buf.unmap(info)
+            if not self.pending:
+                self.pending = True
+                GLib.idle_add(self._show_frame)
+        return Gst.FlowReturn.OK
+
+    def _latest(self):
+        with self.frame_lock:
+            if not self.frame:
+                return None
+            data, w, h = self.frame
+        img = Image.frombuffer("RGB", (w, h), data, "raw", "RGB", 0, 1)
+        return img.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if self.mirror else img
+
+    def _show_frame(self):
+        self.pending = False
+        if self.stack.get_visible_child_name() != "camera":
+            return GLib.SOURCE_REMOVE
+        now = time.monotonic()
+        if now - self.last_shown < 1 / 30:  # 30 fps is plenty, and kinder to the battery
+            return GLib.SOURCE_REMOVE
+        self.last_shown = now
+        img = self._latest()
+        if img is None:
+            return GLib.SOURCE_REMOVE
+        small = img.resize((PREVIEW_W, round(PREVIEW_W * img.height / img.width)), Image.Resampling.BILINEAR)
+        self.preview.set_paintable(to_texture(photo.apply(small, self.look) if self.look else small))
+        return GLib.SOURCE_REMOVE
+
+    # ----- taking the photo
+    def take(self):
+        if self.stack.get_visible_child_name() != "camera" or self.countdown.get_visible():
+            return
+        if not self.timer_btn.get_active():
+            self._snap()
+            return
+        steps = iter(("3", "2", "1"))
+
+        def tick():
+            label = next(steps, None)
+            if label is None:
+                self.countdown.set_visible(False)
+                self._snap()
+                return GLib.SOURCE_REMOVE
+            self.countdown.set_label(label)
+            self.countdown.set_visible(True)
+            return GLib.SOURCE_CONTINUE
+        tick()
+        GLib.timeout_add(1000, tick)
+
+    def _snap(self):
+        img = self._latest()
+        if img is None:
+            return
+        # A white flash, fading out.
+        self.flash.set_opacity(1)
+        start = time.monotonic()
+
+        def fade(*_):
+            k = (time.monotonic() - start) / 0.35
+            self.flash.set_opacity(max(0.0, 1 - k))
+            return k < 1
+        self.flash.add_tick_callback(fade)
+        if self.look == "polaroid":
+            # The look without its frame: the frame (with room for a caption)
+            # is added on the decorate page, where it can be switched off.
+            self.shot = photo.polaroid_photo(img)
+            self.frame_on = True
+        else:
+            self.shot = photo.apply(img, self.look) if self.look else img
+            self.frame_on = False
+        self.items = []
+        self.frame_switch.set_active(self.frame_on)
+        self.caption.set_text("")
+        self._compose()
+        self.stack.set_visible_child_name("decorate")
+
+    # ----- decorate page
+    def _decorate_page(self):
+        self.result = Gtk.Picture(content_fit=Gtk.ContentFit.CONTAIN, hexpand=True, vexpand=True,
+                                  css_classes=["mk-booth-photo"])
+        click = Gtk.GestureClick()
+        click.connect("released", self._place)
+        self.result.add_controller(click)
+
+        tools = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, width_request=300,
+                        margin_start=12, margin_end=12, margin_top=8)
+        tools.append(Gtk.Label(label="Click the photo to place", css_classes=["title-4"], xalign=0))
+        self.text_entry = Gtk.Entry(placeholder_text="Your text (then click the photo)")
+        tools.append(self.text_entry)
+        colours = Gtk.Box(spacing=4)
+        self.colour = COLORS[0][1]
+        group = None
+        for name, rgb in COLORS:
+            b = Gtk.ToggleButton(label=name[0], tooltip_text=name, css_classes=["circular"], active=group is None)
+            if group:
+                b.set_group(group)
+            group = group or b
+            b.connect("toggled", lambda btn, c=rgb: btn.get_active() and setattr(self, "colour", c))
+            colours.append(b)
+        tools.append(colours)
+        tools.append(Gtk.Label(label="Size", xalign=0, css_classes=["caption-heading"]))
+        self.size = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.03, 0.25, 0.01)
+        self.size.set_value(0.08)
+        tools.append(self.size)
+        tools.append(Gtk.Label(label="Stickers (pick one, then click the photo)", xalign=0,
+                               css_classes=["caption-heading"]))
+        flow = Gtk.FlowBox(max_children_per_line=8, selection_mode=Gtk.SelectionMode.NONE)
+        self.sticker = None
+        for ch in self._split_emoji(STICKERS):
+            b = Gtk.Button(label=ch, css_classes=["flat", "mk-booth-sticker"])
+            b.connect("clicked", lambda _b, c=ch: self._pick_sticker(c))
+            flow.append(b)
+        tools.append(flow)
+        frame_row = Gtk.Box(spacing=8)
+        frame_row.append(Gtk.Label(label="Polaroid frame", hexpand=True, xalign=0))
+        self.frame_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
+        self.frame_switch.connect("notify::active", lambda s, _p: (setattr(self, "frame_on", s.get_active()),
+                                                                   self._compose()))
+        frame_row.append(self.frame_switch)
+        tools.append(frame_row)
+        self.caption = Gtk.Entry(placeholder_text="Caption on the frame")
+        self.caption.connect("changed", lambda *_: self._compose())
+        tools.append(self.caption)
+        row = Gtk.Box(spacing=6, margin_top=10)
+        undo = Gtk.Button(label="Undo", css_classes=["pill"])
+        undo.connect("clicked", lambda *_: (self.items.pop() if self.items else None, self._compose()))
+        retake = Gtk.Button(label="Retake", css_classes=["pill"])
+        retake.connect("clicked", lambda *_: self.stack.set_visible_child_name("camera"))
+        save = Gtk.Button(label="Save", css_classes=["pill", "suggested-action"])
+        save.connect("clicked", lambda *_: self.save())
+        for b in (undo, retake, save):
+            row.append(b)
+        tools.append(row)
+
+        page = Gtk.Box()
+        page.append(Gtk.Box(hexpand=True, vexpand=True, margin_start=12, margin_top=8, margin_bottom=12))
+        page.get_first_child().append(self.result)
+        page.append(tools)
+        return page
+
+    @staticmethod
+    def _split_emoji(text):
+        """Emoji, one each: a base character plus any variation selector."""
+        out = []
+        for ch in text:
+            if ch == "️" and out:
+                out[-1] += ch
+            else:
+                out.append(ch)
+        return out
+
+    def _pick_sticker(self, ch):
+        self.sticker = ch
+        self.text_entry.set_text("")
+        self.toast.add_toast(Adw.Toast(title=f"{ch} picked: click the photo to place it", timeout=2))
+
+    def _composed_parts(self):
+        """The photo with its frame (if on), and where the photo and caption sit."""
+        if self.frame_on:
+            framed, caption_box = photo.polaroid_frame(self.shot)
+            side = caption_box[0]
+            return framed, (side, side, self.shot.width, self.shot.height), caption_box
+        return self.shot, (0, 0, self.shot.width, self.shot.height), None
+
+    def _compose(self):
+        if self.shot is None:
+            return
+        base, (px, py, pw, ph), caption_box = self._composed_parts()
+        # Items are kept relative to the photo, so the frame can come and go.
+        placed = [dict(it, x=(px + it["x"] * pw) / base.width, y=(py + it["y"] * ph) / base.height,
+                       size=it["size"] * pw / base.width) for it in self.items]
+        self.final = draw_items(base, placed, self.caption.get_text().strip() if self.frame_on else None,
+                                caption_box)
+        preview = self.final.copy()
+        preview.thumbnail((1400, 1400))
+        self.result.set_paintable(to_texture(preview))
+
+    def _place(self, _g, _n, x, y):
+        if self.shot is None:
+            return
+        base, (px, py, pw, ph), _cap = self._composed_parts()
+        w, h = self.result.get_width(), self.result.get_height()
+        k = min(w / base.width, h / base.height)
+        ox, oy = (w - base.width * k) / 2, (h - base.height * k) / 2
+        bx, by = (x - ox) / k, (y - oy) / k
+        if not (px <= bx <= px + pw and py <= by <= py + ph):
+            return
+        rel = {"x": (bx - px) / pw, "y": (by - py) / ph, "size": self.size.get_value()}
+        text = self.text_entry.get_text().strip()
+        if text:
+            self.items.append({"kind": "text", "text": text, "colour": self.colour, **rel})
+        elif self.sticker:
+            self.items.append({"kind": "sticker", "text": self.sticker, **rel, "size": rel["size"] * 1.4})
+        else:
+            self.toast.add_toast(Adw.Toast(title="Type some text or pick a sticker first", timeout=2))
+            return
+        self._compose()
+
+    def save(self):
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        path = OUT_DIR / time.strftime("booth-%Y%m%d-%H%M%S.jpg")
+        self.final.save(path, "JPEG", quality=92)
+        toast = Adw.Toast(title=f"Saved {path.name}", button_label="Open", timeout=4)
+        toast.connect("button-clicked", lambda *_: Gio.AppInfo.launch_default_for_uri(path.as_uri(), None))
+        self.toast.add_toast(toast)
+        self.stack.set_visible_child_name("camera")
+
+    def _open_folder(self):
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        Gio.AppInfo.launch_default_for_uri(OUT_DIR.as_uri(), None)
+
+    def _on_key(self, _c, keyval, _code, _state):
+        if keyval == Gdk.KEY_space and self.stack.get_visible_child_name() == "camera":
+            self.take()
+            return True
+        if keyval == Gdk.KEY_Escape and self.stack.get_visible_child_name() == "decorate":
+            self.stack.set_visible_child_name("camera")
+            return True
+        return False
+
+
+class BoothApp(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID)
+
+    def do_activate(self):
+        (self.get_active_window() or Booth(self)).present()
 
 
 def main():
-    dev = find_camera()
-    if dev is None:
-        messagebox.showerror("Camera Controls", "No camera found.")
-        return
-    ctrls = list_controls(dev)
-
-    def set_ctrl(name, val):
-        subprocess.run(["v4l2-ctl", "-d", dev, f"--set-ctrl={name}={int(float(val))}"])
-
-    root = tk.Tk(className="io.github.mehulk.MkCamera")  # matches its .desktop file and icon
-    root.title(f"Camera Controls Studio ({dev})")
-    root.geometry("450x580")
-    root.configure(bg="#1e1e2e")
-
-    style = ttk.Style()
-    style.theme_use("clam")
-    style.configure("TLabel", background="#1e1e2e", foreground="#cdd6f4", font=("Sans", 10))
-    style.configure("Header.TLabel", font=("Sans", 12, "bold"), foreground="#89b4fa")
-
-    ttk.Label(root, text="Camera Hardware Tuning", style="Header.TLabel").pack(pady=10)
-    frame = tk.Frame(root, bg="#1e1e2e")
-    frame.pack(fill="both", expand=True, padx=25, pady=5)
-
-    scales = {}
-
-    def add_slider(name, label_text):
-        c = ctrls[name]
-        ttk.Label(frame, text=f"{label_text}:").pack(anchor="w", pady=(6, 0))
-        scale = tk.Scale(frame, from_=c["min"], to=c["max"], resolution=c["step"], orient="horizontal",
-                         bg="#313244", fg="#cdd6f4", highlightthickness=0)
-        scale.set(c["value"])
-        # Attach the callback after set() so opening the window doesn't write to the camera.
-        scale.configure(command=lambda val: set_ctrl(name, val))
-        scale.pack(fill="x", pady=(0, 6))
-        scales[name] = scale
-
-    for name, label in PRIMARY:
-        if name in ctrls:
-            add_slider(name, label)
-    advanced = [(n, label) for n, label in ADVANCED if n in ctrls]
-    if advanced:
-        ttk.Label(frame, text="Advanced Hardware Controls", style="Header.TLabel").pack(anchor="w", pady=(12, 4))
-        for name, label in advanced:
-            add_slider(name, label)
-    if not scales:
-        ttk.Label(frame, text="This camera has no adjustable controls.").pack(pady=20)
-
-    def reset_all():
-        for name, scale in scales.items():
-            scale.set(ctrls[name]["default"])
-            set_ctrl(name, ctrls[name]["default"])
-        messagebox.showinfo("Camera Controls", "All parameters reset to hardware defaults.")
-
-    btn_frame = tk.Frame(root, bg="#1e1e2e")
-    btn_frame.pack(fill="x", pady=15, padx=25)
-    tk.Button(btn_frame, text="Reset Defaults", bg="#f38ba8", fg="#11111b",
-              font=("Sans", 10, "bold"), relief="flat", command=reset_all).pack(side="left", expand=True, fill="x", padx=5)
-    tk.Button(btn_frame, text="Close", bg="#a6e3a1", fg="#11111b",
-              font=("Sans", 10, "bold"), relief="flat", command=root.destroy).pack(side="right", expand=True, fill="x", padx=5)
-
-    root.mainloop()
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print(__doc__.strip())
+        return 0
+    return BoothApp().run([sys.argv[0]])
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

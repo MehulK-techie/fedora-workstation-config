@@ -230,7 +230,7 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | | `Super+L` · `Super+Backspace` | Lock · shut down / restart |
 | | `Ctrl+Alt+End` · `Ctrl+Alt+Home` · `Ctrl+Alt+PgDn` | Shut down · restart (both ask first) · sleep |
 | **Apps** | `Super+N` · `Super+Alt+N` · `Super+Ctrl+N` · `Super+B` | MK Notes · today's note · quick note · web browser |
-| **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Shortcuts window · Companion (notes, tasks, timer) · camera controls |
+| **MK tools** | `Super+/` · `Super+Shift+N` · `Super+C` | Shortcuts window · Companion (notes, tasks, timer) · Photo Booth |
 | **Touchpad** | 4 fingers ←/→ · 3 fingers ←/→ | Switch workspaces (Spaces) · switch windows, on every workspace |
 | | 3 fingers ↑/↓ · 4 fingers ↑/↓ | Overview (Mission Control) · maximize / restore the window |
 | | 3-finger pinch · 4-finger pinch | Volume · show desktop (pinch again to bring windows back) |

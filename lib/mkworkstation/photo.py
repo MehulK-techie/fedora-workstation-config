@@ -161,8 +161,8 @@ def polaroid_frame(photo):
     return frame, (side, top + h, w, bottom)
 
 
-@look("polaroid", "Polaroid")
-def polaroid(img, seed=7):
+def polaroid_photo(img):
+    """The Polaroid look on the photo itself, without the frame."""
     photo = rgb(img)
     photo.thumbnail((1400, 1400))
     # The vintage look: less saturated, warm, lifted blacks, soft corners.
@@ -171,8 +171,12 @@ def polaroid(img, seed=7):
     photo = Image.blend(photo, ImageChops.multiply(photo, warm), 0.35)
     photo = photo.point(lambda v: 28 + v * (235 - 28) / 255)  # faded: no pure black or white
     photo = ImageEnhance.Contrast(photo).enhance(1.08)
-    photo = Image.composite(Image.new("RGB", photo.size, (40, 25, 15)), photo, _vignette_mask(*photo.size))
-    return polaroid_frame(photo)[0]
+    return Image.composite(Image.new("RGB", photo.size, (40, 25, 15)), photo, _vignette_mask(*photo.size))
+
+
+@look("polaroid", "Polaroid")
+def polaroid(img):
+    return polaroid_frame(polaroid_photo(img))[0]
 
 
 @look("vignette", "Vignette")

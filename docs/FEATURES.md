@@ -47,7 +47,7 @@ Credit for everything in the last two groups belongs to its authors; see
 | **App and folder locks** (`mk-lock`) | Apps that ask for your fingerprint or password before they start; folders encrypted with gocryptfs that open only after the same check and close when the screen locks | `mk lock app NAME`, `mk lock ~/Folder`, Files › Scripts |
 | **Accounts** (`mk-users`) | A second person's account that gets the MK desktop at their first login; a Guest login with no password that starts empty every time | `mk users add NAME`, `mk guest on` |
 | **OCR snip** | Pick a screen area, get its text in the clipboard | Super+Shift+T |
-| **Camera controls** | Brightness, contrast, focus, exposure of your webcam | Super+C |
+| **Photo Booth** (`camera-controls`) | Your webcam with live looks (Polaroid with a caption frame, Thermal, Pop Art, Noir, Retro, Comic, Neon, Mirror, Dreamy, Vignette, Hue Shift, Distort), a 3-2-1 countdown, then text and colour-emoji stickers placed with a click; the webcam's hardware sliders with Reset to hardware defaults; photos in ~/Pictures/MK Booth | Super+C |
 | **Terminal capture** | Add notes and tasks with reminders without opening anything | `mk note`, `mk task`, `mk remind`, `mk list` |
 | **Spoken greeting** | Calm British "JARVIS-style" voice for the welcome (espeak-ng, or the natural Piper voice) | `mk welcome voice install` |
 
@@ -285,7 +285,7 @@ them live and lets you change any of them.
 | MK Notes | Super+N | MK tool |
 | MK Notes: today's note | Super+Alt+N | MK tool |
 | Emoji board (types the emoji for you) | Super+. | MK |
-| Camera controls | Super+C | MK tool |
+| Photo Booth | Super+C | MK tool |
 
 **Touchpad gestures** (Touchpad Gesture Customization, MK's settings)
 

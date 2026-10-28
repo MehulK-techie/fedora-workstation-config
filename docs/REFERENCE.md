@@ -45,7 +45,7 @@ Every command, file and format. How the parts fit together is in
 | `mk vault` | Open or close `~/.vault`, an encrypted hidden folder made the first time |
 | `mk lock password set\|remove app NAME \| folder PATH` | An item's own password (10+ characters), typed instead of the fingerprint |
 | `mk power comfort\|quiet\|performance` | Power profile through the PowerProfiles D-Bus API (balanced, power-saver, performance) |
-| `mk optimize ram\|cpu` | Drop file caches and compact memory (pkexec) · Performance mode and the busiest processes |
+| `mk optimize ram\|cpu` | Drop file caches and compact memory (no password at the computer: mk-drop-caches polkit action; also the top bar's "Free cached memory") · Performance mode and the busiest processes |
 | `mk check` | Notify if a new version of the repo is available (run daily by a timer) |
 | `mk uninstall` | Remove MK's tools, shortcuts, timers and top-bar extension from your account |
 

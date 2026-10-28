@@ -79,7 +79,7 @@ export class InternetSection {
         item.add_child(box);
         menu.addMenuItem(item);
 
-        this._button = new PopupMenu.PopupMenuItem('Run speed test');
+        this._button = new PopupMenu.PopupMenuItem('Run network speed test');
         // Not the usual activate (that closes the menu): keep it open to watch.
         this._button.activate = () => this.run();
         menu.addMenuItem(this._button);

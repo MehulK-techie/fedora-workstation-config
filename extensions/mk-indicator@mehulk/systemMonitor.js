@@ -336,18 +336,10 @@ export class SystemMonitor {
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Busiest right now'));
         this._procRows = [0, 1, 2, 3, 4].map(() => new Row(menu, ''));
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        // Optimize: drop file caches (asks your password; rarely needed, see
-        // `mk optimize`), or full speed with the Performance power mode.
-        menu.addAction('Full speed test…', () => {
-            try {
-                Gio.Subprocess.new([`${GLib.get_home_dir()}/.local/bin/mk-speedtest`, '--gui', '--start'],
-                    Gio.SubprocessFlags.NONE);
-            } catch (e) {
-                console.warn(`mk-indicator: mk-speedtest: ${e.message}`);
-            }
-        });
-        menu.addAction('Free cached memory', () => this._run(['optimize', 'ram', '--notify']));
-        menu.addAction('Performance mode', () => this._run(['optimize', 'cpu', '--notify']));
+        // Free cached memory: no password (mk-drop-caches' polkit action);
+        // the item shows how much came back for a few seconds. Power modes
+        // live in GNOME's Quick Settings, the full speed test app in the grid.
+        this._freeItem = menu.addAction('Free cached memory', () => this._freeMemory());
         menu.addAction('Open System Monitor', () => {
             try {
                 Gio.AppInfo.create_from_commandline('gnome-system-monitor', null, Gio.AppInfoCreateFlags.NONE).launch([], null);
@@ -463,11 +455,32 @@ export class SystemMonitor {
         });
     }
 
-    _run(args) {
+    _freeMemory() {
+        const label = this._freeItem.label;
+        label.text = 'Freeing cached memory…';
         try {
-            Gio.Subprocess.new([`${GLib.get_home_dir()}/.local/bin/mk`, ...args], Gio.SubprocessFlags.STDOUT_SILENCE);
+            const proc = Gio.Subprocess.new([`${GLib.get_home_dir()}/.local/bin/mk`, 'optimize', 'ram'],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+            proc.communicate_utf8_async(null, null, (p, res) => {
+                let out = '';
+                try {
+                    [, out] = p.communicate_utf8_finish(res);
+                } catch (e) {
+                    console.warn(`mk-indicator: mk optimize ram: ${e.message}`);
+                }
+                const freed = /freed ([\d.]+ GB)/.exec(out ?? '');
+                label.text = freed ? `Freed ${freed[1]}` : 'Memory not changed';
+                if (this._freeReset)
+                    GLib.source_remove(this._freeReset);
+                this._freeReset = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 4, () => {
+                    this._freeReset = 0;
+                    label.text = 'Free cached memory';
+                    return GLib.SOURCE_REMOVE;
+                });
+            });
         } catch (e) {
-            console.warn(`mk-indicator: mk ${args.join(' ')}: ${e.message}`);
+            label.text = 'Free cached memory';
+            console.warn(`mk-indicator: mk optimize ram: ${e.message}`);
         }
     }
 
@@ -479,6 +492,10 @@ export class SystemMonitor {
         if (this._timer) {
             GLib.source_remove(this._timer);
             this._timer = 0;
+        }
+        if (this._freeReset) {
+            GLib.source_remove(this._freeReset);
+            this._freeReset = 0;
         }
         this._monitor?.cancel();
         this._monitor = null;

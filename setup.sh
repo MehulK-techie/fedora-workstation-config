@@ -136,6 +136,10 @@ fi
 # mk lock: the polkit action that asks "is it you?" (fingerprint or your
 # password) before a locked app starts or a locked folder opens.
 install -m 644 "$SCRIPT_DIR/assets/polkit/io.github.mehulk.mk-lock.policy" /usr/share/polkit-1/actions/
+# mk optimize ram / top bar "Free cached memory": no password for the person
+# at the computer (a no-argument helper; see its policy file).
+install -m 644 "$SCRIPT_DIR/assets/polkit/io.github.mehulk.mk-drop-caches.policy" /usr/share/polkit-1/actions/
+install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-drop-caches" /usr/local/libexec/mk-drop-caches
 # Its root-only key store for locked folders (keys released after that check).
 install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-lock-key" /usr/local/libexec/mk-lock-key
 # mk security: its root half (read-only scan; fixes only when asked by name).

@@ -675,8 +675,16 @@ case "${1:-help}" in
                 # back the moment an app needs it, so this rarely speeds anything up;
                 # it can help before starting something very large.
                 before=$(mem_avail)
-                if pkexec sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory'; then
-                    say "Memory: ${before} GB free before, $(mem_avail) GB free now (file caches dropped)."
+                # The installed helper needs no password (its polkit action);
+                # before setup.sh installs it, pkexec asks for one.
+                if [[ -x /usr/local/libexec/mk-drop-caches ]]; then
+                    drop=(pkexec /usr/local/libexec/mk-drop-caches)
+                else
+                    drop=(pkexec sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory')
+                fi
+                if "${drop[@]}"; then
+                    after=$(mem_avail)
+                    say "Memory: freed $(awk -v a="$after" -v b="$before" 'BEGIN { d = a - b; printf "%.1f", d < 0 ? 0 : d }') GB (${before} → ${after} GB free)."
                 else
                     say "Memory: not changed (not confirmed)."
                 fi

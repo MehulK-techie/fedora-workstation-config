@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- mk optimize ram: drop file caches without a password for the person at
+     the computer (active local session). The helper takes no arguments and
+     only syncs and drops caches, so there's nothing to misuse; remote and
+     inactive sessions still need an administrator. -->
+<policyconfig>
+  <vendor>MK Workstation</vendor>
+  <action id="io.github.mehulk.mk-drop-caches">
+    <description>Free cached memory</description>
+    <message>Free cached memory</message>
+    <icon_name>media-flash-symbolic</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/libexec/mk-drop-caches</annotate>
+  </action>
+</policyconfig>

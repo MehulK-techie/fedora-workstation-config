@@ -1,0 +1,13 @@
+#!/bin/bash
+# mk-drop-caches: the root half of `mk optimize ram` and the top bar's "Free
+# cached memory" (installed by setup.sh to /usr/local/libexec, run through
+# pkexec). Its polkit action lets the person at the computer run it without a
+# password; it takes no arguments and does only this.
+set -euo pipefail
+if [[ $EUID -ne 0 ]]; then
+    echo "mk-drop-caches runs as root (through pkexec, from mk optimize ram)" >&2
+    exit 1
+fi
+sync
+echo 3 > /proc/sys/vm/drop_caches
+echo 1 > /proc/sys/vm/compact_memory

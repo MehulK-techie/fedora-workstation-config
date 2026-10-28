@@ -9,6 +9,7 @@
 //   MEDIA=on|off      off removes the tile completely
 //   TICKER=on|off     the song title next to the record (off: the record only)
 //   PLAYERS=all|spotify  every player, or Spotify only (also a switch under More)
+//   TRACK_PILL=on|off  a small pill under the top bar when the song changes
 //
 // Browsers (YouTube and the like) play short muted previews as you scroll past
 // thumbnails, each one a "player". A browser only shows here after it has
@@ -38,7 +39,7 @@ const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-worksta
 const ART_DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'album-art']);
 
 export function mediaConf() {
-    const out = {MEDIA: 'on', TICKER: 'on', PLAYERS: 'all'};
+    const out = {MEDIA: 'on', TICKER: 'on', PLAYERS: 'all', TRACK_PILL: 'on'};
     for (const path of [DEFAULT_CONF, USER_CONF]) {
         try {
             const [ok, bytes] = GLib.file_get_contents(path);
@@ -344,6 +345,13 @@ export class MediaTile {
         this._meta = {title, artist, length: meta['mpris:length'] ?? 0, track: meta['mpris:trackid'],
             art: meta['mpris:artUrl'], album: meta['xesam:album'] || ''};
         this._showTile(this._status !== 'Stopped' && Boolean(title));
+        const key = `${this._current}|${title}|${artist}`;
+        if (key !== this._trackKey) {
+            // Not for the first song seen, nor when the menu shows it anyway.
+            if (this._trackKey && this._status === 'Playing' && title && !this._button.menu.isOpen)
+                this._showPill(title, artist);
+            this._trackKey = key;
+        }
         this._title.text = title;
         this._artist.text = artist;
         this._length.text = this._meta.length ? fmt(this._meta.length) : '';
@@ -485,6 +493,51 @@ export class MediaTile {
             box-shadow: 0 10px 36px 4px rgba(${glow},0.45);`;
         this._disc.style = `background-image: url("${uri}"); background-size: cover; border-radius: 10px;
             border: 2px solid rgba(255,255,255,0.25);`;
+        // The art often arrives after the pill showed: fill it in then.
+        this._artStyle = `background-image: url("${uri}"); background-size: cover;`;
+        if (this._pillArt)
+            this._pillArt.style = this._artStyle;
+    }
+
+    // The song changed: a pill under the top bar (art, title, artist) fades
+    // in, stays a moment and fades out. One at a time; never on the lock screen.
+    _showPill(title, artist) {
+        if (this._conf.TRACK_PILL === 'off' || this._locked)
+            return;
+        if (!this._pill) {
+            this._pill = new St.BoxLayout({style_class: 'mk-track-pill', opacity: 0, reactive: false});
+            this._pillArt = new St.Widget({style_class: 'mk-track-pill-art', width: 32, height: 32,
+                y_align: Clutter.ActorAlign.CENTER});
+            const text = new St.BoxLayout({vertical: true, y_align: Clutter.ActorAlign.CENTER});
+            this._pillTitle = new St.Label({style_class: 'mk-track-pill-title'});
+            this._pillArtist = new St.Label({style_class: 'mk-track-pill-artist'});
+            for (const label of [this._pillTitle, this._pillArtist]) {
+                label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+                text.add_child(label);
+            }
+            this._pill.add_child(this._pillArt);
+            this._pill.add_child(text);
+            Main.layoutManager.uiGroup.add_child(this._pill);
+        }
+        this._pillTitle.text = title;
+        this._pillArtist.text = artist;
+        this._pillArtist.visible = Boolean(artist);
+        this._pillArt.style = this._artStyle ?? '';
+        const monitor = Main.layoutManager.primaryMonitor;
+        const [, width] = this._pill.get_preferred_width(-1);
+        this._pill.set_position(Math.round(monitor.x + (monitor.width - width) / 2),
+            monitor.y + Main.panel.height + 8);
+        if (this._pillHideId)
+            GLib.source_remove(this._pillHideId);
+        this._pill.remove_all_transitions();
+        this._pill.show();
+        this._pill.ease({opacity: 255, duration: 200, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        this._pillHideId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2600, () => {
+            this._pillHideId = 0;
+            this._pill?.ease({opacity: 0, duration: 200, mode: Clutter.AnimationMode.EASE_IN_QUAD,
+                onComplete: () => this._pill?.hide()});
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _pollPosition() {
@@ -514,6 +567,7 @@ export class MediaTile {
             return;
         if (locked) {
             this._button.menu.close();
+            this._pill?.hide();
             this._tileShown = false;
             this._button.remove_transition('opacity');
             this._button.opacity = 0;
@@ -573,8 +627,18 @@ export class MediaTile {
                 const app = this._findApp(root.DesktopEntry ?? '', name);
                 expectFocus(app);
                 const fallback = () => {
-                    if (app && Shell.WindowTracker.get_default().focus_app !== app)
-                        app.activate();
+                    if (app) {
+                        if (Shell.WindowTracker.get_default().focus_app !== app)
+                            app.activate();
+                        return;
+                    }
+                    // No app to match (an unusual browser build or Flatpak):
+                    // the newest window whose class names the player.
+                    const guess = name.slice(PREFIX.length).split('.')[0].toLowerCase();
+                    const win = global.display.get_tab_list(0, null)
+                        .find(w => (w.get_wm_class() ?? '').toLowerCase().includes(guess));
+                    if (win)
+                        Main.activateWindow(win);
                 };
                 if (root.CanRaise === false) {
                     fallback();
@@ -652,11 +716,13 @@ export class MediaTile {
                 this._bus.signal_unsubscribe(this[id]);
             this[id] = 0;
         }
-        for (const id of ['_posId', '_recheckId', '_raiseCheckId']) {
+        for (const id of ['_posId', '_recheckId', '_raiseCheckId', '_pillHideId']) {
             if (this[id])
                 GLib.source_remove(this[id]);
             this[id] = 0;
         }
+        this._pill?.destroy();
+        this._pill = this._pillArt = null;
         this._spin?.stop();
         this._session?.abort();
         this._button = null;

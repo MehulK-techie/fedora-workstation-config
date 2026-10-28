@@ -294,6 +294,10 @@ vm.vfs_cache_pressure = 50
 # write back in small batches: no multi-second stalls after a big copy
 vm.dirty_bytes = 268435456
 vm.dirty_background_bytes = 67108864
+# editors (VS Code) watch every file of a project: room for big repos.
+# Each watch costs ~1 KB of kernel memory only while it's in use.
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 1024
 SYSCTL
 if swapon --show=NAME --noheadings 2> /dev/null | grep -q zram; then
     sysctl --system > /dev/null && echo "    [+] Applied (zram swap found)"

@@ -294,8 +294,31 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 UNIT
+# Watchdog: leftover VS Code helpers and runaway Node/Python (bin/mk-watchdog).
+cat > "$UNIT_DIR/mk-watchdog.service" << 'UNIT'
+[Unit]
+Description=Catch leftover and runaway developer processes
+
+[Service]
+Type=oneshot
+Nice=15
+IOSchedulingClass=idle
+ExecStart=%h/.local/bin/mk-watchdog
+UNIT
+cat > "$UNIT_DIR/mk-watchdog.timer" << 'UNIT'
+[Unit]
+Description=Check for leftover and runaway developer processes every 2 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=2min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
+UNIT
 systemctl --user daemon-reload 2>/dev/null \
-    && systemctl --user enable --now mk-update-check.timer mk-reminders.timer &>/dev/null \
+    && systemctl --user enable --now mk-update-check.timer mk-reminders.timer mk-watchdog.timer &>/dev/null \
     || echo "    [*] Couldn't enable the update check and reminders (no systemd user session)"
 
 # Laptops: smart power profiles (performance plugged in, balanced on battery,

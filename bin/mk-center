@@ -98,6 +98,7 @@ ACTIONS = [
     ("effects-full", "Performance", "applications-graphics-symbolic", "Full effects", "Every visual effect on", ("bg", mk("effects", "full"))),
     ("nap", "Performance", "weather-clear-night-symbolic", "App Nap", "Which unused apps are paused", ("show", mk("nap"))),
     ("speedtest", "Performance", "network-wireless-signal-excellent-symbolic", "Speed test", "Ping, download and upload", ("bg", [tool("mk-speedtest"), "--gui", "--start"])),
+    ("watchdog", "Performance", "dialog-warning-symbolic", "Watchdog", "Leftover VS Code helpers, runaway Node/Python", ("show", mk("watchdog", "status"))),
     ("monitor", "Performance", "org.gnome.SystemMonitor-symbolic", "System Monitor", "Every process", ("bg", ["gnome-system-monitor"])),
     ("security", "Security & Vault", "security-high-symbolic", "Security check", "A score, and fixes", ("page", "security")),
     ("vault", "Security & Vault", "changes-prevent-symbolic", "Vault", "Open or close ~/.vault (made the first time)", ("bg", [tool("mk-lock"), "vault"])),

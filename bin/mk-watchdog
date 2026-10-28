@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""mk-watchdog: catch leftover and runaway developer processes.
+
+  mk-watchdog          one check (the mk-watchdog.timer user unit runs it every 2 minutes)
+  mk-watchdog status   what it would do now, without doing it
+  mk-watchdog kill PID stop a process it warned about (yours only)
+
+What it does:
+  * Leftover VS Code helpers (language servers, extension hosts, file
+    watchers) whose editor is gone: their parent died and they were handed to
+    systemd, but they keep their memory and often a CPU core. Stopped (SIGTERM)
+    when KILL_ORPHANS=on; you get one notification saying how much came back.
+  * Runaway Node or Python processes (and language servers): a full core for
+    two checks in a row (about 4 minutes), or more than a quarter of the RAM.
+    Only a notification, once per process: they may be your own work.
+Settings: ~/.config/mk-workstation/watchdog.conf (WATCHDOG=on|off,
+KILL_ORPHANS=on|off). mk watchdog on|off|status.
+"""
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HOME = Path.home()
+CONF = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "mk-workstation/watchdog.conf"
+STATE = Path(os.environ.get("XDG_CACHE_HOME") or HOME / ".cache") / "mk-workstation/watchdog.json"
+TICK = os.sysconf("SC_CLK_TCK")
+PAGE = os.sysconf("SC_PAGE_SIZE")
+UID = os.getuid()
+# Where VS Code (and its forks) keep the helpers they start.
+EDITOR_MARKERS = ("/.vscode/extensions/", "/.vscode-oss/extensions/", "/.cursor/extensions/",
+                  "/resources/app/extensions/", "/.vscode-server/", "vscode-server", "--type=extensionHost",
+                  "--type=fileWatcher", "--type=utility")
+RUNTIMES = ("node", "python", "python3", "tsserver", "pyright", "pylance", "gopls", "rust-analyzer",
+            "clangd", "jdtls", "java")
+CPU_LIMIT = 0.9          # share of one core
+MEM_SHARE = 0.25         # share of all RAM
+MIN_AGE = 60             # seconds: never touch something that just started
+
+
+def conf():
+    out = {"WATCHDOG": "on", "KILL_ORPHANS": "on"}
+    try:
+        for line in CONF.read_text().splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                k, v = line.split("=", 1)
+                out[k.strip()] = v.strip()
+    except OSError:
+        pass
+    return out
+
+
+def boot_time():
+    for line in Path("/proc/stat").read_text().splitlines():
+        if line.startswith("btime "):
+            return int(line.split()[1])
+    return 0
+
+
+def processes():
+    """Your processes: pid -> dict(name, ppid, cpu (seconds), start, rss, cmd)."""
+    btime = boot_time()
+    out = {}
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            if entry.stat().st_uid != UID:
+                continue
+            stat = (entry / "stat").read_text()
+            cmd = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+            statm = (entry / "statm").read_text().split()
+        except OSError:
+            continue  # gone, or not ours to read
+        name = stat[stat.index("(") + 1:stat.rindex(")")]
+        fields = stat[stat.rindex(")") + 2:].split()
+        out[int(entry.name)] = {
+            "name": name, "ppid": int(fields[1]), "cpu": (int(fields[11]) + int(fields[12])) / TICK,
+            "start": btime + int(fields[19]) / TICK, "rss": int(statm[1]) * PAGE, "cmd": cmd,
+        }
+    return out
+
+
+def is_dev(p):
+    base = p["cmd"].split(" ", 1)[0].rsplit("/", 1)[-1]
+    return p["name"] in RUNTIMES or base in RUNTIMES or any(m in p["cmd"] for m in EDITOR_MARKERS)
+
+
+def orphans(procs):
+    """VS Code helpers whose parent is init or a systemd manager: the editor is gone."""
+    editors = {pid for pid, p in procs.items() if p["name"] in ("code", "code-oss", "codium", "cursor")}
+    found = []
+    for pid, p in procs.items():
+        parent = procs.get(p["ppid"])
+        adopted = p["ppid"] == 1 or (parent is not None and parent["name"] == "systemd")
+        if (adopted and not editors and time.time() - p["start"] > MIN_AGE
+                and any(m in p["cmd"] for m in EDITOR_MARKERS)):
+            found.append(pid)
+    return found
+
+
+def mem_total():
+    for line in Path("/proc/meminfo").read_text().splitlines():
+        if line.startswith("MemTotal:"):
+            return int(line.split()[1]) * 1024
+    return 0
+
+
+def notify(title, body):
+    subprocess.run(["notify-send", "-a", "MK", "-i", "utilities-system-monitor-symbolic", title, body],
+                   check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def label(p):
+    for m in ("tsserver", "pyright", "pylance", "gopls", "rust-analyzer", "clangd", "eslint", "jdtls"):
+        if m in p["cmd"]:
+            return f"{p['name']} ({m})"
+    return p["name"]
+
+
+def check(act=True):
+    settings = conf()
+    procs = processes()
+    try:
+        state = json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        state = {}
+    now = time.time()
+    seen, report = {}, []
+
+    left = orphans(procs)
+    if left:
+        freed = sum(procs[pid]["rss"] for pid in left)
+        names = sorted({label(procs[pid]) for pid in left})
+        if act and settings["KILL_ORPHANS"] == "on":
+            for pid in left:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass
+            notify(f"Stopped {len(left)} leftover VS Code helper(s)",
+                   f"{', '.join(names)}: their editor had closed. About {freed / 2**20:.0f} MB back.")
+        report.append(f"Leftover VS Code helpers ({freed / 2**20:.0f} MB): "
+                      + ", ".join(f"{label(procs[p])} [{p}]" for p in left))
+
+    total = mem_total()
+    for pid, p in procs.items():
+        if pid in left or not is_dev(p) or now - p["start"] < MIN_AGE:
+            continue
+        key = str(pid)
+        prev = state.get(key)
+        busy = False
+        if prev and prev["start"] == round(p["start"]):
+            share = (p["cpu"] - prev["cpu"]) / max(1.0, now - prev["at"])
+            busy = share >= CPU_LIMIT
+        streak = (prev["streak"] + 1 if busy and prev else 0) if prev else 0
+        warned = prev.get("warned", False) if prev else False
+        hog = total and p["rss"] > total * MEM_SHARE
+        if (streak >= 2 or hog) and not warned:
+            why = f"{p['rss'] / 2**30:.1f} GB of memory" if hog else "a full processor core for 4 minutes"
+            report.append(f"{label(p)} [{pid}]: {why}")
+            if act:
+                notify(f"{label(p)} is using {why}",
+                       f"If it shouldn't be: mk watchdog kill {pid} (or close the project using it).")
+                warned = True
+        seen[key] = {"start": round(p["start"]), "cpu": p["cpu"], "at": now, "streak": streak, "warned": warned}
+
+    if act:
+        STATE.parent.mkdir(parents=True, exist_ok=True)
+        STATE.write_text(json.dumps(seen))
+    return report
+
+
+def main():
+    args = sys.argv[1:]
+    if args and args[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    if args and args[0] == "kill" and len(args) == 2 and args[1].isdigit():
+        pid = int(args[1])
+        try:
+            if os.stat(f"/proc/{pid}").st_uid != UID:
+                raise PermissionError
+            os.kill(pid, signal.SIGTERM)
+        except (OSError, PermissionError):
+            print(f"[-] No process {pid} of yours to stop.", file=sys.stderr)
+            return 1
+        print(f"✔ Asked {pid} to stop.")
+        return 0
+    if args and args[0] == "status":
+        settings = conf()
+        print(f"Watchdog {settings['WATCHDOG']}, leftover VS Code helpers "
+              f"{'stopped' if settings['KILL_ORPHANS'] == 'on' else 'only reported'}.")
+        found = check(act=False)
+        print("\n".join(f"  {line}" for line in found) if found else "  Nothing to catch right now.")
+        print("Runaway processes show up after two checks in a row (the timer's job).")
+        return 0
+    if args:
+        print("Usage: mk-watchdog [status | kill PID]", file=sys.stderr)
+        return 2
+    if conf()["WATCHDOG"] != "on":
+        return 0
+    check()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

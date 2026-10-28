@@ -555,13 +555,14 @@ case "${1:-help}" in
         read -rp "Continue? [y/N]: " answer
         [[ "$answer" =~ ^[yY] ]] || { echo "Nothing changed."; exit 0; }
 
-        systemctl --user disable --now mk-update-check.timer mk-reminders.timer mk-power.service &>/dev/null || true
+        systemctl --user disable --now mk-update-check.timer mk-reminders.timer mk-watchdog.timer mk-power.service &>/dev/null || true
         pkill -f "mk-screensaver$" &>/dev/null || true
         rm -f "$HOME/.config/systemd/user/mk-power.service" "$HOME/.config/autostart/mk-sound.desktop" "$HOME/.config/autostart/mk-screensaver.desktop"
         rm -f "$HOME"/.local/share/applications/io.github.mehulk.Mk*.desktop \
             "$HOME"/.local/share/icons/hicolor/*/apps/io.github.mehulk.Mk*
         [[ -f "$HOME/.config/gtk-4.0/gtk.css" ]] && python3 -c 'import re,sys; p=sys.argv[1]; t=open(p).read(); open(p,"w").write(re.sub(r"\n*/\* >>> MK Workstation.*?/\* <<< MK Workstation \*/\n?", "\n", t, flags=re.S).lstrip("\n"))' "$HOME/.config/gtk-4.0/gtk.css"
-        rm -f "$HOME/.config/systemd/user/"mk-update-check.{service,timer} "$HOME/.config/systemd/user/"mk-reminders.{service,timer}
+        rm -f "$HOME/.config/systemd/user/"mk-update-check.{service,timer} "$HOME/.config/systemd/user/"mk-reminders.{service,timer} \
+            "$HOME/.config/systemd/user/"mk-watchdog.{service,timer}
         systemctl --user daemon-reload &>/dev/null || true
         rm -f "$HOME/.config/burn-my-windows/profiles/mk-glide.conf"
 
@@ -583,7 +584,7 @@ case "${1:-help}" in
         gnome-extensions disable mk-indicator@mehulk &>/dev/null || true
         rm -rf "$HOME/.local/share/gnome-shell/extensions/mk-indicator@mehulk"
         rm -rf "$HOME/.local/share/mk-workstation/lib" "$HOME/.local/share/mk-workstation/config" "$HOME/.local/share/mk-workstation/assets"
-        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-notes mk-screensaver mk-timer mk-reminders mk-power mk-voice mk-sound ocr-snip show-shortcuts \
+        for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-notes mk-screensaver mk-timer mk-reminders mk-power mk-voice mk-sound mk-watchdog ocr-snip show-shortcuts \
             camera-controls fix-alt-tab close-workspace-apps; do
             rm -f "$HOME/.local/bin/$tool"
         done
@@ -635,6 +636,21 @@ case "${1:-help}" in
             echo "Usage: mk tasks badge on|off" >&2
             exit 2
         fi
+        ;;
+
+    watchdog)
+        # mk watchdog [status | on | off | kill PID]: leftover VS Code helpers, runaway Node/Python
+        conf="$HOME/.config/mk-workstation/watchdog.conf"
+        case "${2:-status}" in
+            on|off)
+                mkdir -p "$(dirname "$conf")"
+                touch "$conf"
+                sed -i '/^WATCHDOG=/d' "$conf"
+                echo "WATCHDOG=$2" >> "$conf"
+                echo "✔ Watchdog $2" ;;
+            status|kill) "$HOME/.local/bin/mk-watchdog" "${@:2}" ;;
+            *) echo "Usage: mk watchdog [status | on | off | kill PID]" >&2; exit 2 ;;
+        esac
         ;;
 
     nap)
@@ -831,6 +847,7 @@ KEYRING
         echo "  security   Security check with a score: firewall, updates, rootkits, viruses, Lynis (fix NAME applies a fix)"
         echo "  speedtest  Ping, download and upload speed"
         echo "  nap        Which unused apps App Nap paused under memory or CPU pressure"
+        echo "  watchdog   Leftover VS Code helpers (stopped) and runaway Node/Python (a warning): status, on, off"
         echo "  optimize   Free cached memory (ram) or switch to full speed (cpu)"
         echo "  users      Another person's account: mk users add NAME (their own settings and face)"
         echo "  guest      A Guest login with no password that starts empty every time: mk guest on|off"

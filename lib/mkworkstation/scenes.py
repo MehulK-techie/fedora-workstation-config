@@ -3,7 +3,9 @@
 
   aurora   soft light drifting over a dark sky, rising sparks
   web      a brick-built masked hero in red and blue hangs upside down from a
-           web line beside a skyscraper, over the city (two parallax layers)
+           web line beside a skyscraper with a neon MK sign, over the city
+           (two parallax layers); now and then lightning, and Stan Lee's
+           silhouette in the clouds with his line
   knight   a brick-built caped knight stands on a stone gargoyle in the rain;
            the cape moves in the wind, a searchlight sweeps the clouds and
            lights him from behind, lightning
@@ -12,7 +14,9 @@
 
 Each scene is a class with draw(cr, w, h, t) (t in seconds). Anything that
 doesn't move (sky, skyline, moon) is drawn once into a cached surface, so a
-frame only paints what changes.
+frame only paints what changes. Full-screen players call burn_in_shift()
+first: the whole picture wanders a few pixels over minutes, so nothing (the
+clock, a skyline) sits on the same pixels for hours on an OLED screen.
 """
 import math
 import os
@@ -85,6 +89,18 @@ class Scene:
 
 
 # ---------------------------------------------------------------- shared pieces
+
+def burn_in_shift(cr, w, h, t, amplitude=6):
+    """Move the whole scene up to AMPLITUDE pixels along a slow Lissajous path
+    (periods of minutes: invisible as motion), slightly enlarged so the edges
+    never show."""
+    dx = amplitude * math.sin(2 * math.pi * t / 397)
+    dy = amplitude * math.sin(2 * math.pi * t / 541 + 1.3)
+    zoom = 1 + 2 * amplitude / max(1, min(w, h))
+    cr.translate(w / 2 + dx, h / 2 + dy)
+    cr.scale(zoom, zoom)
+    cr.translate(-w / 2, -h / 2)
+
 
 def sky(cr, w, h, top, bottom):
     grad = cairo.LinearGradient(0, 0, 0, h)
@@ -272,12 +288,56 @@ class WebHang(Scene):
         cr.fill()
         cornice(cr, w, ledge, anchor_x)
 
+        neon_sign(cr, w * 0.65, h * 0.37, h * 0.075, t)
+        self._tribute(cr, w, h, t)
+
         cr.save()
         cr.translate(end_x, end_y)
         cr.rotate(-swing)
         self._hero(cr, min(w, h) / 1080 * 1.45, t)
         cr.restore()
         caption(cr, w, h, [(time.strftime("%H:%M"), 44, 0.85), (time.strftime("%A, %d %B"), 16, 0.5)])
+
+    TRIBUTE_EVERY = 75  # seconds; the first one 20 s in
+
+    def _tribute(self, cr, w, h, t):
+        """Now and then lightning: a double flash, a bolt, and in the clouds a
+        silhouette of Stan Lee (1922-2018) with his line, fading out."""
+        if t < 20:
+            return
+        cycle, p = divmod(t - 20, self.TRIBUTE_EVERY)
+        if p > 10:
+            return
+        flash = max(0.0, 1 - abs(p - 0.08) / 0.08) + 0.7 * max(0.0, 1 - abs(p - 0.32) / 0.1)
+        if flash > 0:
+            rand = random.Random(int(cycle))
+            x, y = w * rand.uniform(0.08, 0.3), 0.0
+            cr.move_to(x, y)
+            while y < h * 0.45:
+                x += rand.uniform(-40, 40)
+                y += rand.uniform(30, 60)
+                cr.line_to(x, y)
+            cr.set_source_rgba(0.85, 0.9, 1, 0.9 * min(1, flash))
+            cr.set_line_width(2.5)
+            cr.stroke()
+            cr.set_source_rgba(0.8, 0.85, 1, 0.3 * min(1, flash))
+            cr.paint()
+        # the face in the clouds: in over 1.5 s, held, out by 10 s
+        a = min(1.0, max(0.0, (p - 0.3) / 1.5)) * min(1.0, max(0.0, (10 - p) / 2.5))
+        if a <= 0:
+            return
+        r = h * 0.085
+        stan_lee(cr, w * 0.17, h * 0.2, r, a)
+        cr.select_font_face("Serif", cairo.FONT_SLANT_ITALIC, cairo.FONT_WEIGHT_NORMAL)
+        cr.set_font_size(max(14, h * 0.022))
+        cr.set_source_rgba(0.92, 0.94, 1, 0.85 * a)
+        cr.move_to(w * 0.17 - r * 1.6, h * 0.2 + r * 1.75)
+        cr.show_text("With great power comes great responsibility.")
+        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+        cr.set_font_size(max(11, h * 0.014))
+        cr.set_source_rgba(0.85, 0.88, 0.95, 0.6 * a)
+        cr.move_to(w * 0.17 - r * 1.6, h * 0.2 + r * 1.75 + max(22, h * 0.03))
+        cr.show_text("Excelsior!  — Stan Lee, 1922–2018")
 
     def _hero(self, cr, s, t):
         """A plastic brick-style minifigure, upside down: feet at the origin (on
@@ -375,6 +435,93 @@ class WebHang(Scene):
             cr.set_line_width(2.5)
             cr.stroke()
         cr.restore()
+
+
+def neon_sign(cr, cx, cy, size, t):
+    """"MK" in neon tubes on a dark board, with a glow; it flickers now and then."""
+    tick = int(t * 12)
+    flicker = 0.35 if (tick * 2654435761) % 97 < 3 else 1.0
+    cr.save()
+    cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+    cr.set_font_size(size)
+    ext = cr.text_extents("MK")
+    bx, by = cx - ext.width / 2 - size * 0.3, cy - ext.height / 2 - size * 0.25
+    bw, bh = ext.width + size * 0.6, ext.height + size * 0.5
+    cr.set_source_rgba(0.03, 0.02, 0.06, 0.92)  # the board, and its two mounts
+    cr.rectangle(bx, by, bw, bh)
+    cr.fill()
+    cr.rectangle(bx + bw * 0.2, by + bh, 3, size * 0.25)
+    cr.rectangle(bx + bw * 0.8, by + bh, 3, size * 0.25)
+    cr.fill()
+    cr.move_to(cx - ext.width / 2 - ext.x_bearing, cy + ext.height / 2)
+    cr.text_path("MK")
+    path = cr.copy_path()
+    cr.new_path()
+    for width, alpha in ((size * 0.42, 0.06), (size * 0.24, 0.12), (size * 0.12, 0.25)):  # glow
+        cr.append_path(path)
+        cr.set_source_rgba(1.0, 0.18, 0.42, alpha * flicker)
+        cr.set_line_width(width)
+        cr.stroke()
+    cr.append_path(path)
+    cr.set_line_width(max(1.5, size * 0.045))
+    cr.set_source_rgba(1.0, 0.55, 0.72, 0.95 * flicker)  # the tube
+    cr.stroke_preserve()
+    cr.set_line_width(max(0.8, size * 0.015))
+    cr.set_source_rgba(1.0, 0.92, 0.96, flicker)  # its hot core
+    cr.stroke()
+    cr.restore()
+
+
+def stan_lee(cr, x, y, r, alpha):
+    """A stylized silhouette facing right, lit by the lightning: swept-back
+    hair, the big tinted glasses, the moustache. R is the head's radius."""
+    cr.save()
+    cr.translate(x, y)
+    pale = (0.80, 0.84, 0.95)
+    cr.set_source_rgba(*pale, 0.38 * alpha)
+    cr.save()  # head
+    cr.scale(0.82, 1.0)
+    cr.arc(0, 0, r, 0, 2 * math.pi)
+    cr.restore()
+    cr.fill()
+    cr.move_to(-r * 0.85, -r * 0.15)  # hair, swept back in a wave
+    cr.curve_to(-r * 0.95, -r * 1.25, r * 0.35, -r * 1.45, r * 0.85, -r * 0.62)
+    cr.curve_to(r * 0.55, -r * 0.82, r * 0.05, -r * 0.78, -r * 0.2, -r * 0.55)
+    cr.close_path()
+    cr.set_source_rgba(*pale, 0.55 * alpha)
+    cr.fill()
+    cr.move_to(r * 0.72, -r * 0.12)  # nose
+    cr.line_to(r * 1.0, r * 0.18)
+    cr.line_to(r * 0.74, r * 0.24)
+    cr.close_path()
+    cr.set_source_rgba(*pale, 0.38 * alpha)
+    cr.fill()
+    cr.move_to(-r * 0.1, r * 0.75)  # neck and shoulders
+    cr.line_to(r * 0.35, r * 0.75)
+    cr.curve_to(r * 0.5, r * 1.2, r * 1.3, r * 1.25, r * 1.5, r * 1.6)
+    cr.line_to(-r * 1.4, r * 1.6)
+    cr.curve_to(-r * 1.1, r * 1.2, -r * 0.4, r * 1.2, -r * 0.1, r * 0.75)
+    cr.close_path()
+    cr.fill()
+    for gx in (r * 0.05, r * 0.5):  # the glasses: two big dark lenses and a bridge
+        cr.rectangle(gx - r * 0.2, -r * 0.18, r * 0.36, r * 0.3)
+    cr.set_source_rgba(0.05, 0.06, 0.12, 0.8 * alpha)
+    cr.fill()
+    cr.move_to(r * 0.16, -r * 0.08)
+    cr.line_to(r * 0.3, -r * 0.08)
+    cr.move_to(-r * 0.15, -r * 0.1)
+    cr.line_to(-r * 0.6, -r * 0.02)  # the arm to the ear
+    cr.set_line_width(max(1.0, r * 0.04))
+    cr.stroke()
+    cr.set_source_rgba(1, 1, 1, 0.5 * alpha)  # a glint of lightning on a lens
+    cr.rectangle(r * 0.38, -r * 0.15, r * 0.06, r * 0.1)
+    cr.fill()
+    cr.move_to(r * 0.38, r * 0.32)  # moustache
+    cr.curve_to(r * 0.55, r * 0.24, r * 0.82, r * 0.28, r * 0.88, r * 0.38)
+    cr.curve_to(r * 0.7, r * 0.42, r * 0.5, r * 0.42, r * 0.38, r * 0.32)
+    cr.set_source_rgba(0.08, 0.09, 0.16, 0.75 * alpha)
+    cr.fill()
+    cr.restore()
 
 
 def plastic(cr, x, y, w, h, color, radius=4):

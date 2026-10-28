@@ -54,7 +54,9 @@ class SaverWindow(Gtk.ApplicationWindow):
         return GLib.SOURCE_CONTINUE
 
     def _draw(self, _area, cr, w, h):
-        self.scene.draw(cr, w, h, time.monotonic() - self.started)
+        t = time.monotonic() - self.started
+        scenes.burn_in_shift(cr, w, h, t)
+        self.scene.draw(cr, w, h, t)
 
     def _motion(self, _c, x, y):
         if self.pointer is None:

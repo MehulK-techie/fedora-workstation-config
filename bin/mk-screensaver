@@ -109,7 +109,10 @@ def frames(name, w, h, out):
     parent = os.getppid()
     while os.getppid() == parent:  # the shell went away (crash, logout): stop
         tick = time.monotonic()
+        cr.save()
+        scenes.burn_in_shift(cr, w, h, tick - start, amplitude=3)  # frames are half the screen's size
         scene.draw(cr, w, h, tick - start)
+        cr.restore()
         surface.flush()
         tmp.write_bytes(bytes(surface.get_data()))
         os.replace(tmp, out)

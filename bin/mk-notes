@@ -36,8 +36,9 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("PangoCairo", "1.0")
+gi.require_version("GdkPixbuf", "2.0")
 gi.require_foreign("cairo")
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango, PangoCairo  # noqa: E402
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango, PangoCairo  # noqa: E402
 
 
 def _add_lib_path():
@@ -1422,12 +1423,19 @@ class VisualMindMapWindow(Adw.Window):
             cr.show_text(n["label"])
 
 
-def export_pdf_direct(title, body_text, images_meta, out_path, resolve_img_fn):
+PDF_FONTS = {"title": "Sans Heavy 22", "h1": "Sans Bold 18", "h2": "Sans Bold 15",
+             "h3": "Sans Semi-Bold 13", "body": "Sans 11"}
+
+
+def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_img_fn):
+    """Render a note to PDF with Cairo (no print dialog). LINES: (Pango markup,
+    kind) pairs from NotesWindow._export_lines; kind picks the font."""
     PAGE_W, PAGE_H = 595.0, 842.0
     MARGIN = 48.0
     CONTENT_W = PAGE_W - 2 * MARGIN
 
     surface = cairo.PDFSurface(str(out_path), PAGE_W, PAGE_H)
+    surface.set_metadata(cairo.PDFMetadata.TITLE, title)
     cr = cairo.Context(surface)
     y = MARGIN
 
@@ -1437,13 +1445,13 @@ def export_pdf_direct(title, body_text, images_meta, out_path, resolve_img_fn):
             cr.show_page()
             y = MARGIN
 
-    def draw_text_block(txt, font_str, color=(0.1, 0.12, 0.16), space_after=8.0):
+    def draw_text_block(markup, font_str, color=(0.1, 0.12, 0.16), space_after=8.0):
         nonlocal y
         layout = PangoCairo.create_layout(cr)
         layout.set_width(int(CONTENT_W * Pango.SCALE))
         layout.set_wrap(Pango.WrapMode.WORD_CHAR)
         layout.set_font_description(Pango.FontDescription(font_str))
-        layout.set_text(txt, -1)
+        layout.set_markup(markup, -1)
         _ink, logical = layout.get_pixel_extents()
         h = max(16.0, float(logical.height))
         ensure_space(h + space_after)
@@ -1452,7 +1460,8 @@ def export_pdf_direct(title, body_text, images_meta, out_path, resolve_img_fn):
         PangoCairo.show_layout(cr, layout)
         y += h + space_after
 
-    draw_text_block(title, "Sans Bold 20", color=(0.06, 0.09, 0.18), space_after=14.0)
+    draw_text_block(GLib.markup_escape_text(title), "Sans Bold 20", color=(0.06, 0.09, 0.18), space_after=4.0)
+    draw_text_block(GLib.markup_escape_text(meta_line), "Sans 9", color=(0.42, 0.45, 0.52), space_after=12.0)
     cr.set_source_rgba(0.2, 0.25, 0.35, 0.25)
     cr.set_line_width(1.0)
     cr.move_to(MARGIN, y - 6)
@@ -1460,36 +1469,40 @@ def export_pdf_direct(title, body_text, images_meta, out_path, resolve_img_fn):
     cr.stroke()
     y += 6
 
-    for line in body_text.splitlines():
-        if not line.strip():
+    for markup, kind in lines:
+        if not markup.strip():
             y += 6.0
             continue
-        draw_text_block(line, "Sans 11", space_after=5.0)
+        heading = kind != "body"
+        if heading:
+            y += 6.0
+        draw_text_block(markup, PDF_FONTS[kind], space_after=8.0 if heading else 5.0)
 
     for item in images_meta:
         img_path = resolve_img_fn(item.get("name", ""))
-        if img_path and Path(img_path).is_file():
-            try:
-                from PIL import Image
-                pil = Image.open(img_path).convert("RGBA")
-                buf = io.BytesIO()
-                pil.save(buf, format="PNG")
-                buf.seek(0)
-                surf = cairo.ImageSurface.create_from_png(buf)
-                iw, ih = surf.get_width(), surf.get_height()
-                if iw > 0 and ih > 0:
-                    tw = min(CONTENT_W, float(item.get("w", 380)) * 0.72)
-                    th = float(item.get("h", ih * (tw / iw))) * 0.72
-                    ensure_space(th + 14.0)
-                    cr.save()
-                    cr.translate(MARGIN, y)
-                    cr.scale(tw / iw, th / ih)
-                    cr.set_source_surface(surf, 0, 0)
-                    cr.paint()
-                    cr.restore()
-                    y += th + 14.0
-            except Exception:
-                pass
+        if not (img_path and Path(img_path).is_file()):
+            continue
+        try:
+            # GdkPixbuf reads JPEG, WebP and the rest; Cairo itself only PNG.
+            pix = GdkPixbuf.Pixbuf.new_from_file(str(img_path))
+            tw = min(CONTENT_W, float(item.get("w", 380)) * 0.72)
+            th = min(PAGE_H - 2 * MARGIN, float(item.get("h", pix.get_height() * (tw / pix.get_width()))) * 0.72)
+            if pix.get_width() > tw * 2:  # 2 pixels per point is sharp in print; more only bloats the file
+                pix = pix.scale_simple(round(tw * 2), max(1, round(th * 2)), GdkPixbuf.InterpType.BILINEAR)
+            _ok, png = pix.save_to_bufferv("png", [], [])
+            surf = cairo.ImageSurface.create_from_png(io.BytesIO(png))
+        except (GLib.Error, cairo.Error):
+            continue
+        iw, ih = surf.get_width(), surf.get_height()
+        if iw > 0 and ih > 0:
+            ensure_space(th + 14.0)
+            cr.save()
+            cr.translate(MARGIN, y)
+            cr.scale(tw / iw, th / ih)
+            cr.set_source_surface(surf, 0, 0)
+            cr.paint()
+            cr.restore()
+            y += th + 14.0
 
     surface.finish()
 
@@ -3800,16 +3813,64 @@ class NotesWindow(Adw.ApplicationWindow):
         self.refresh_lists()
         self.open_note(rel)
 
-    def _do_export(self, out_path, fmt):
+    def _export_lines(self):
+        """The note as (Pango markup, kind) per line, read from the buffer's
+        tags. Main thread only: GTK widgets aren't thread-safe."""
+        styles = {"bold": 'weight="bold"', "italic": 'style="italic"', "underline": 'underline="single"',
+                  "strike": 'strikethrough="true"', "hl-yellow": 'bgcolor="#facc15" bgalpha="35%"'}
+        out = []
+        for n in range(self.buffer.get_line_count()):
+            _ok, it = self.buffer.get_iter_at_line(n)
+            end = it.copy()
+            if not end.ends_line():
+                end.forward_to_line_end()
+            names = {t.props.name for t in it.get_tags()}
+            kind = next((k for k in ("title", "h1", "h2", "h3") if k in names), "body")
+            parts = []
+            while it.compare(end) < 0:
+                nxt = it.copy()
+                if not nxt.forward_to_tag_toggle(None) or nxt.compare(end) > 0:
+                    nxt = end.copy()
+                text = GLib.markup_escape_text(self.buffer.get_text(it, nxt, False))
+                attrs = []
+                for t in it.get_tags():
+                    name = t.props.name or ""
+                    if name in styles:
+                        attrs.append(styles[name])
+                    elif re.fullmatch(r"fg-[0-9a-f]{6}", name):
+                        attrs.append(f'foreground="#{name[3:]}"')
+                parts.append(f"<span {' '.join(attrs)}>{text}</span>" if attrs else text)
+                it = nxt
+            out.append(("".join(parts), kind))
+        return out
+
+    def _export_job(self, out_path, fmt):
+        """Collect everything on the main thread; the returned function writes
+        the file and may run on a worker thread."""
         title = Path(self.rel).stem
-        body = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), False)
-        imgs = [w.data for w in self.canvas_images]
+        imgs = [dict(w.data) for w in self.canvas_images]
+        resolve = self._resolve_attachment
         if fmt == "docx":
-            from mkworkstation import docx
+            body = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), False)
             md_lines = [body] + [f"![[{it['name']}]]" for it in imgs]
-            docx.write("\n\n".join(md_lines), str(out_path), self._resolve_attachment, title=title)
-        else:
-            export_pdf_direct(title, body, imgs, out_path, self._resolve_attachment)
+
+            def write_docx():
+                from mkworkstation import docx
+                docx.write("\n\n".join(md_lines), str(out_path), resolve, title=title)
+            return write_docx
+        try:
+            edited = datetime.fromtimestamp(self.vault.path(self.rel).stat().st_mtime).strftime("%d %b %Y, %H:%M")
+        except OSError:
+            edited = "?"
+        meta = f"Last edited {edited} · Exported {datetime.now().strftime('%d %b %Y, %H:%M')}"
+        tags = getattr(self, "note_tags", [])
+        if tags:
+            meta += " · " + " ".join(f"#{t}" for t in tags)
+        lines = self._export_lines()
+        return lambda: export_pdf_direct(title, meta, lines, imgs, out_path, resolve)
+
+    def _do_export(self, out_path, fmt):
+        self._export_job(out_path, fmt)()
 
     def quick_export(self):
         if not self.rel:
@@ -3828,9 +3889,11 @@ class NotesWindow(Adw.ApplicationWindow):
             act.connect("activate", lambda *_: Gio.AppInfo.launch_default_for_uri(self._last_export_uri, None))
             self.add_action(act)
 
+        job = self._export_job(out_path, fmt)
+
         def work():
             try:
-                self._do_export(out_path, fmt)
+                job()
                 GLib.idle_add(done, None)
             except Exception as e:
                 GLib.idle_add(done, str(e))

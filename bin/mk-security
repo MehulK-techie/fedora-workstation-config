@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # mk security: a health check for this computer's security, with a score.
 #
-#   mk security            scan (asks for your fingerprint or password first)
+#   mk security            quick scan, a few seconds (asks for your fingerprint
+#                          or password first)
+#   mk security deep       also rootkits (rkhunter, chkrootkit), viruses in files
+#                          that arrived lately (ClamAV) and a fresh Lynis audit:
+#                          a few minutes, at the lowest CPU priority
 #   mk security fix NAME   apply one fix the report suggests (selinux,
 #                          firewall, updates, autoupdates, ssh, permissions,
 #                          sharing, lock)
 #
 # What it checks: SELinux, firewall, Secure Boot, disk encryption, waiting
 # security updates, accounts, SSH, what listens to the network, permissions in
-# your home folder, and, when installed, rkhunter and chkrootkit (rootkits),
-# ClamAV (viruses in Downloads, Desktop and /tmp) and Lynis (a broad
-# hardening audit). The scan itself is read-only; fixes run only when you ask.
+# your home folder, programs running from temporary folders, Lynis's last
+# hardening index; deep adds rkhunter and chkrootkit (rootkits), ClamAV (files
+# changed in the last 14 days in Downloads, Desktop and /tmp) and a fresh Lynis
+# audit, each with a time limit. Read-only; fixes run only when you ask.
 # The checks run as root through pkexec (/usr/local/libexec/mk-security-scan,
 # installed by setup.sh).
 set -uo pipefail
@@ -48,9 +53,10 @@ case "${1:-scan}" in
         [[ "$name" =~ ^(selinux|firewall|updates|autoupdates|ssh|permissions)$ ]] || { echo "Unknown fix: $name" >&2; exit 2; }
         exec pkexec "$HELPER" fix "$name"
         ;;
-    scan) ;;
-    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "Usage: mk security [scan | fix NAME]" >&2; exit 2 ;;
+    scan) mode="" ;;
+    deep) mode=deep ;;
+    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Usage: mk security [scan | deep | fix NAME]" >&2; exit 2 ;;
 esac
 
 # Checks of your own account's settings (no administrator rights needed).
@@ -76,8 +82,12 @@ user_checks() {
     fi
 }
 
-echo "${bold}MK security check${off}  ${dim}(confirm it's you; the scan takes a minute or two)${off}"
-report=$(pkexec "$HELPER" scan)
+if [[ "$mode" == deep ]]; then
+    echo "${bold}MK security check, deep${off}  ${dim}(confirm it's you; a few minutes at low priority)${off}"
+else
+    echo "${bold}MK security check${off}  ${dim}(confirm it's you; a few seconds)${off}"
+fi
+report=$(pkexec "$HELPER" scan "$mode")
 status=$?
 if (( status == 126 || status == 127 )) || [[ -z "$report" ]]; then
     echo "Not confirmed, or the scan couldn't run." >&2

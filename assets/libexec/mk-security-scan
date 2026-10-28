@@ -4,6 +4,11 @@
 # password first). It only reads, unless asked for one of the fixes listed in
 # fix() below, by name.
 #
+# scan: quick checks only, a few seconds (Lynis's index from its last report).
+# scan deep: also rkhunter, chkrootkit, ClamAV (files changed in the last 14
+# days in Downloads, Desktop and /tmp) and a fresh Lynis audit, each with a
+# time limit and at the lowest CPU and disk priority. One scan at a time.
+#
 # Output, one line each (read by mk-security):
 #   FINDING|high|medium|low|ID|title|detail|fix command
 #   PASS|title
@@ -26,7 +31,15 @@ finding() { printf 'FINDING|%s|%s|%s|%s|%s\n' "$1" "$2" "$(clean "$3")" "$(clean
 pass() { printf 'PASS|%s\n' "$(clean "$1")"; }
 note() { printf 'NOTE|%s\n' "$(clean "$1")"; }
 
+# Run a slow tool for at most $1 seconds, at the lowest CPU and disk priority.
+slow() {
+    local limit=$1
+    shift
+    timeout --kill-after=5 "$limit" nice -n 19 ionice -c 3 "$@"
+}
+
 scan() {
+    local deep=${1:-}
     # --- the basics Fedora ships with
     if [[ "$(getenforce 2> /dev/null)" == "Enforcing" ]]; then
         pass "SELinux is enforcing"
@@ -53,7 +66,8 @@ scan() {
     fi
     # --- updates
     # dnf5 prints a column header even with -q: count only advisory rows.
-    sec=$(dnf -q updateinfo list --security 2> /dev/null | awk '$2 == "security"' | wc -l)
+    # -C: from the cached metadata (mk update refreshes it); never a download here.
+    sec=$(timeout 20 dnf -q -C updateinfo list --security 2> /dev/null | awk '$2 == "security"' | wc -l)
     if (( sec > 0 )); then
         finding high updates "$sec security update(s) waiting" "Known holes stay open until they're installed" "mk security fix updates"
     else
@@ -109,10 +123,40 @@ scan() {
             finding medium homeperm "Other accounts can look into your home folder" "Your files are visible to every user on this computer" "mk security fix permissions"
         fi
     fi
+    # --- running programs started from places only temporary files belong
+    local odd="" pid exe
+    for pid in /proc/[0-9]*; do
+        exe=$(readlink "$pid/exe" 2> /dev/null) || continue
+        case "$exe" in
+            /tmp/*|/var/tmp/*|/dev/shm/*) odd+="${odd:+, }$(basename "$exe") (${pid#/proc/})" ;;
+        esac
+    done
+    if [[ -n "$odd" ]]; then
+        finding medium tmpexec "Programs running from a temporary folder: $odd" "Malware often hides there; installers and build tools sometimes do too" ""
+    else
+        pass "No programs running from temporary folders"
+    fi
+    # --- Lynis: its last hardening index, quick; a fresh audit with deep
+    if command -v lynis > /dev/null; then
+        if [[ "$deep" == deep ]]; then
+            slow 300 lynis audit system --quick --no-colors --quiet > /dev/null 2>&1
+        fi
+        index=$(awk -F= '/^hardening_index=/ { print $2 }' /var/log/lynis-report.dat 2> /dev/null)
+        [[ -n "$index" ]] && printf 'LYNIS|%s\n' "$index"
+        warns=$(grep -c '^warning\[\]=' /var/log/lynis-report.dat 2> /dev/null || true)
+        (( warns > 0 )) && note "Lynis: $warns warning(s), $(grep -c '^suggestion\[\]=' /var/log/lynis-report.dat) suggestion(s) (sudo lynis show details, or /var/log/lynis-report.dat)"
+        [[ -z "$index" ]] && note "Lynis hasn't audited yet: mk security deep"
+    else
+        note "Lynis isn't installed (sudo dnf install lynis)"
+    fi
+    if [[ "$deep" != deep ]]; then
+        note "Quick scan. Rootkit and virus checks: mk security deep (a few minutes, low priority)"
+        return
+    fi
     # --- rootkit checks
     if command -v rkhunter > /dev/null; then
-        [[ -s /var/lib/rkhunter/db/rkhunter.dat ]] || rkhunter --propupd --nocolors > /dev/null 2>&1
-        warn=$(rkhunter --check --sk --nocolors --rwo 2> /dev/null | grep -c '^Warning' || true)
+        [[ -s /var/lib/rkhunter/db/rkhunter.dat ]] || slow 120 rkhunter --propupd --nocolors > /dev/null 2>&1
+        warn=$(slow 180 rkhunter --check --sk --nocolors --rwo 2> /dev/null | grep -c '^Warning' || true)
         if (( warn > 0 )); then
             finding medium rkhunter "rkhunter: $warn warning(s)" "Often harmless after updates; read: sudo rkhunter --check --sk --rwo" ""
         else
@@ -122,7 +166,7 @@ scan() {
         note "rkhunter isn't installed (sudo dnf install rkhunter)"
     fi
     if command -v chkrootkit > /dev/null; then
-        hits=$(chkrootkit -q 2> /dev/null | grep -v -E '^$|not (infected|found)|nothing found' | grep -c -i -E 'infected|suspicious|warning' || true)
+        hits=$(slow 120 chkrootkit -q 2> /dev/null | grep -v -E '^$|not (infected|found)|nothing found' | grep -c -i -E 'infected|suspicious|warning' || true)
         if (( hits > 0 )); then
             finding high chkrootkit "chkrootkit: $hits suspicious result(s)" "Read: sudo chkrootkit -q" ""
         else
@@ -131,29 +175,28 @@ scan() {
     else
         note "chkrootkit isn't installed (sudo dnf install chkrootkit)"
     fi
-    # --- viruses in the usual places files arrive
+    # --- viruses in what arrived lately: files changed in the last 14 days in
+    # Downloads, Desktop and /tmp, skipping code checkouts and build trees.
     if command -v clamscan > /dev/null; then
-        command -v freshclam > /dev/null && freshclam --quiet > /dev/null 2>&1
-        targets=()
-        for d in "$home/Downloads" "$home/Desktop" /tmp; do [[ -d "$d" ]] && targets+=("$d"); done
-        infected=$(clamscan -r -i --no-summary --max-filesize=200M "${targets[@]}" 2> /dev/null | grep -c 'FOUND$' || true)
+        command -v freshclam > /dev/null && slow 60 freshclam --quiet > /dev/null 2>&1
+        list=$(mktemp)
+        for d in "$home/Downloads" "$home/Desktop" /tmp; do
+            [[ -d "$d" ]] && find "$d" -xdev \( -name .git -o -name node_modules -o -name .venv -o -name build \
+                -o -name __pycache__ \) -prune -o -type f -mtime -14 -size -200M -print 2> /dev/null
+        done | head -n 5000 > "$list"
+        if [[ -s "$list" ]]; then
+            infected=$(slow 240 clamscan -i --no-summary --max-filesize=200M --file-list="$list" 2> /dev/null | grep -c 'FOUND$' || true)
+        else
+            infected=0
+        fi
+        rm -f "$list"
         if (( infected > 0 )); then
             finding high malware "ClamAV: $infected infected file(s) in Downloads, Desktop or /tmp" "Details: clamscan -r -i ~/Downloads ~/Desktop" ""
         else
-            pass "ClamAV found nothing in Downloads, Desktop or /tmp"
+            pass "ClamAV found nothing in recent files (Downloads, Desktop, /tmp)"
         fi
     else
         note "ClamAV isn't installed (sudo dnf install clamav clamav-freshclam)"
-    fi
-    # --- lynis: the broad hardening audit
-    if command -v lynis > /dev/null; then
-        lynis audit system --quick --no-colors --quiet > /dev/null 2>&1
-        index=$(awk -F= '/^hardening_index=/ { print $2 }' /var/log/lynis-report.dat 2> /dev/null)
-        [[ -n "$index" ]] && printf 'LYNIS|%s\n' "$index"
-        warns=$(grep -c '^warning\[\]=' /var/log/lynis-report.dat 2> /dev/null || true)
-        (( warns > 0 )) && note "Lynis: $warns warning(s), $(grep -c '^suggestion\[\]=' /var/log/lynis-report.dat) suggestion(s) (sudo lynis show details, or /var/log/lynis-report.dat)"
-    else
-        note "Lynis isn't installed (sudo dnf install lynis)"
     fi
 }
 
@@ -193,7 +236,14 @@ fix() {
 }
 
 case "${1:-scan}" in
-    scan) scan; exit 0 ;;
+    scan)
+        # One scan at a time: a second one waits for nothing, it just stops.
+        exec 9> /run/mk-security-scan.lock
+        if ! flock -n 9; then
+            echo "NOTE|Another security scan is still running; wait for it to finish"
+            exit 0
+        fi
+        scan "${2:-}"; exit 0 ;;
     fix) fix "${2:-}" ;;
     *) echo "Usage: mk-security-scan [scan | fix NAME]" >&2; exit 2 ;;
 esac

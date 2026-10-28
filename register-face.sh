@@ -137,8 +137,17 @@ if (( ${#IR_CAMS[@]} )); then
 elif (( ${#RGB_CAMS[@]} )); then
     CAM_TYPE="rgb"
     CANDIDATES=("${RGB_CAMS[@]}")
-    echo "⚠ No IR camera found. Using a regular webcam: a printed photo may be enough"
-    echo "  to fool it, so keep a strong password."
+    echo "⚠ No IR camera found, only a regular webcam. It needs good light facing you,"
+    echo "  and a printed photo may be enough to fool it, so keep a strong password."
+    answer=y
+    (( TUNE_ONLY )) || read -rp "  Use the regular webcam for face unlock anyway? [y/N]: " answer || true
+    if [[ ! "$answer" =~ ^[yY] ]]; then
+        echo "[*] Face unlock not set up. Nothing was changed. Your password works as always."
+        if command -v fprintd-enroll &>/dev/null && fprintd-list "$TARGET_USER" 2>/dev/null | grep -qi 'device at'; then
+            echo "    This laptop has a fingerprint reader: mk fingerprint enroll"
+        fi
+        exit 0
+    fi
 else
     echo "[-] Error: No video capture device found." >&2
     exit 1
@@ -164,6 +173,16 @@ else
 fi
 echo "[+] Using camera: ${SELECTED_CAM} (${CAM_NAME[$SELECTED_CAM]})"
 
+# /dev/videoN can renumber after a reboot or when another camera is plugged
+# in; the udev links under /dev/v4l name this camera itself.
+HOWDY_DEVICE="$SELECTED_CAM"
+for link in /dev/v4l/by-id/* /dev/v4l/by-path/*; do
+    if [[ -e "$link" && "$(readlink -f "$link")" == "$SELECTED_CAM" ]]; then
+        HOWDY_DEVICE="$link"
+        break
+    fi
+done
+
 # ------------------------------------------------------------------------------
 # Step 2: Tune Howdy for this camera. Howdy skips frames darker than
 # dark_threshold and accepts a match below certainty/10 (lower = stricter).
@@ -174,7 +193,7 @@ echo "[+] Using camera: ${SELECTED_CAM} (${CAM_NAME[$SELECTED_CAM]})"
 # ------------------------------------------------------------------------------
 echo "==> Step 2/4: Tuning face recognition for this camera..."
 [[ -f "${HOWDY_CONF}.bak" ]] || cp -a "$HOWDY_CONF" "${HOWDY_CONF}.bak"
-set_howdy device_path "$SELECTED_CAM"
+set_howdy device_path "$HOWDY_DEVICE"
 set_howdy certainty 3.5
 if [[ "$CAM_TYPE" == "ir" ]]; then
     set_howdy dark_threshold 60
@@ -215,7 +234,7 @@ if [[ "$CAM_TYPE" == "rgb" ]] && { (( !TUNE_ONLY )) || sudo_has_howdy; }; then
 fi
 
 if (( TUNE_ONLY )); then
-    echo "✔ Re-tuned Howdy for ${SELECTED_CAM}. No face models were changed."
+    echo "✔ Re-tuned Howdy for ${HOWDY_DEVICE}. No face models were changed."
     exit 0
 fi
 

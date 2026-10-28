@@ -41,6 +41,7 @@ running as you could replace it, just as it could start the app directly.
 """
 import base64
 import configparser
+import errno
 import getpass
 import hashlib
 import json
@@ -399,6 +400,16 @@ def is_open(path):
     return os.path.ismount(path)
 
 
+def clear_stale_mount(path):
+    """After a crash the FUSE mount can linger dead ("Transport endpoint is
+    not connected"): unmount it so the folder can be opened again."""
+    try:
+        os.stat(path)
+    except OSError as err:
+        if err.errno == errno.ENOTCONN:
+            subprocess.run(["fusermount3", "-uz", str(path)], check=False)
+
+
 def mount(path, key, target=None):
     """Show PATH's encrypted store decrypted, at PATH (or at TARGET)."""
     subprocess.run(["gocryptfs", "-q", "-passfile", "/dev/stdin", str(cipher_dir(path)), str(target or path)],
@@ -451,13 +462,17 @@ def folder_add(path, ask=True):
 
 def folder_open(path):
     need_tools()
+    clear_stale_mount(path)
     if is_open(path):
         print(f"{path} is already open.")
         return
     if not cipher_dir(path).is_dir():
         die(f"{path} isn't a locked folder.")
-    key = folder_key(path)  # its own password, or fingerprint/password through polkit
     path.mkdir(exist_ok=True)
+    if any(path.iterdir()):
+        die(f"{path} has files in it while it's closed (they were never encrypted). "
+            "Move them somewhere else, open it, then move them back in.")
+    key = folder_key(path)  # its own password, or fingerprint/password through polkit
     mount(path, key)
     print(f"✔ {path} is open. Close it with: mk lock close {path}")
 
@@ -496,9 +511,19 @@ def folder_remove(path):
 def cmd_vault():
     """~/.vault: made (empty, encrypted) the first time; then open or close.
     Opened, it shows in Files."""
+    need_tools()
+    clear_stale_mount(VAULT)  # folder_open checks too; is_open() below needs it first
     if not cipher_dir(VAULT).is_dir():
+        print("Setting up your vault: a hidden folder (~/.vault), encrypted on disk.\n"
+              "Its key is kept by the system and handed out only after you confirm it's you\n"
+              "(fingerprint or your password), so confirm now to create it.")
+        notify_gui("Setting up your vault: confirm it's you to create it")
         VAULT.mkdir(mode=0o700, exist_ok=True)
         folder_add(VAULT, ask=False)
+        print("A passphrase of its own, as well (optional): mk-lock password set folder ~/.vault")
+    for private in (VAULT, cipher_dir(VAULT)):
+        if private.is_dir() and not is_open(private):
+            os.chmod(private, 0o700)
     if is_open(VAULT):
         folder_close(VAULT)
         notify_gui("Vault closed")

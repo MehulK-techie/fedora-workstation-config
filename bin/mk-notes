@@ -1125,6 +1125,18 @@ class StudioInkCanvas(Gtk.DrawingArea):
             cr.restore()
 
 
+class PassThroughFixed(Gtk.Fixed):
+    """The layer for sticky notes and images, laid over the whole page.
+
+    A plain Gtk.Fixed claims every click on its empty area, so the text view
+    under it never got clicked or focused (typing seemed locked). This one
+    only takes clicks that land on one of its children.
+    """
+
+    def do_contains(self, _x, _y):
+        return False
+
+
 class PaperPatternBackground(Gtk.DrawingArea):
     def __init__(self, note_win):
         super().__init__(hexpand=True, vexpand=True)
@@ -2194,7 +2206,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.view.add_controller(pinch)
 
         self.paper_bg = PaperPatternBackground(self)
-        self.canvas_fixed = Gtk.Fixed()
+        self.canvas_fixed = PassThroughFixed()
 
         self.page_overlay = Gtk.Overlay(child=self.paper_bg, hexpand=True, vexpand=True)
         self.page_overlay.add_overlay(self.view)
@@ -3001,6 +3013,8 @@ class NotesWindow(Adw.ApplicationWindow):
         if row:
             self.list.select_row(row)
         self._refresh_header_pills()
+        if not self.ink_canvas.active:
+            GLib.idle_add(self.view.grab_focus)
 
     def _rebuild_canvas_objects(self, images_list, stickies_list):
         for w in self.canvas_images + self.sticky_notes:

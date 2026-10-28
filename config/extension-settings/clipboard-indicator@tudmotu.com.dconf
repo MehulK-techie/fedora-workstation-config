@@ -1,5 +1,14 @@
 # dconf path: /org/gnome/shell/extensions/clipboard-indicator/
+# Super+V opens it at the pointer (like Windows); type to search; one click
+# pastes the entry and moves it to the top. Ctrl+F11/F12 cycle entries
+# without opening the menu. Password managers' copies never enter history.
 [/]
 enable-keybindings=true
+excluded-apps=['KeePassXC', 'org.keepassxc.KeePassXC', 'Bitwarden', '1Password', 'Proton Pass']
+move-item-first=true
 next-history-clear=-1
+notify-on-cycle=false
+open-at-cursor=true
+paste-on-select=true
+show-search-bar=true
 toggle-menu=['<Super>v']

@@ -149,7 +149,7 @@ mkdir -p "$ICON_DIR/scalable/apps" "$ICON_DIR/256x256/apps" "$APP_DIR"
 declare -A ICON_NAMES=([companion]=MkCompanion [timer]=MkTimer [shortcuts]=MkShortcuts
                        [camera]=MkCamera [ocr]=MkOcr [notes]=MkNotes [screensaver]=MkScreensaver
                        [tour]=MkTour [vault]=MkVault [speedtest]=MkSpeedtest
-                       [center]=MkCenter)
+                       [center]=MkCenter [commands]=MkCommands)
 for short in "${!ICON_NAMES[@]}"; do
     id="io.github.mehulk.${ICON_NAMES[$short]}"
     rm -f "$ICON_DIR/scalable/apps/$id.svg" "$ICON_DIR/256x256/apps/$id.png"

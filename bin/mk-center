@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """MK Control Center: the MK tools in one window.
 
-  mk-center [home | actions | lock | security]   (also: mk center, mk hub, the app grid)
+  mk-center [home | actions | lock | security]   (also: mk center, the app grid)
+  mk-center hub        MK Commands Hub: the Actions page in a window of its own
+                       (also: mk hub, and in the app grid)
 
 Actions: every mk command as a card, by category, with a search box; star
 the ones you use most and they stay on top (~/.config/mk-workstation/hub-pins).
@@ -30,6 +32,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 APP_ID = "io.github.mehulk.MkCenter"
+HUB_ID = "io.github.mehulk.MkCommands"
 HOME = Path.home()
 BIN = HOME / ".local/bin"
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "mk-workstation"
@@ -138,13 +141,17 @@ def is_open(path):
     return os.path.ismount(path)
 
 
+def load_css():
+    provider = Gtk.CssProvider()
+    provider.load_from_data(CSS)
+    Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider,
+                                              Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+
 class Center(Adw.ApplicationWindow):
     def __init__(self, app, page="home"):
         super().__init__(application=app, title="MK Control Center", default_width=980, default_height=760)
-        provider = Gtk.CssProvider()
-        provider.load_from_data(CSS)
-        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider,
-                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        load_css()
         self.toast = Adw.ToastOverlay()
         view = Adw.ToolbarView()
         head = Adw.HeaderBar()
@@ -246,7 +253,7 @@ class Center(Adw.ApplicationWindow):
                 continue
             self.action_groups.append(Gtk.Label(label=title, xalign=0, css_classes=["heading"]))
             flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True,
-                               min_children_per_line=1, max_children_per_line=4,
+                               min_children_per_line=2, max_children_per_line=4,
                                column_spacing=10, row_spacing=10)
             for action in actions:
                 flow.append(self._card(action))
@@ -282,7 +289,10 @@ class Center(Adw.ApplicationWindow):
     def _run_action(self, action):
         _id, _cat, _icon, title, _sub, (how, what) = action
         if how == "page":
-            self.stack.set_visible_child_name(what)
+            if hasattr(self, "stack"):
+                self.stack.set_visible_child_name(what)
+            else:  # the Hub has no other pages: Control Center opens there
+                run_bg([tool("mk-center"), what])
         elif how == "term":
             mk_cmd = shlex.quote(tool("mk"))
             run_bg(terminal(mk_cmd + what[2:] if what.startswith("mk ") else what))
@@ -533,13 +543,28 @@ class Center(Adw.ApplicationWindow):
         run_bg([tool("mk-security")], done)
 
 
+class Hub(Center):
+    """MK Commands Hub: only the Actions page, with its own app id, icon and
+    window (io.github.mehulk.MkCommands), so it sits in the app grid by itself."""
+
+    def __init__(self, app):  # noqa: super().__init__ would build every page
+        Adw.ApplicationWindow.__init__(self, application=app, title="MK Commands Hub",
+                                       default_width=900, default_height=760)
+        load_css()
+        self.toast = Adw.ToastOverlay(child=self._actions())
+        view = Adw.ToolbarView(content=self.toast)
+        view.add_top_bar(Adw.HeaderBar())
+        self.set_content(view)
+        GLib.idle_add(self.action_search.grab_focus)
+
+
 class CenterApp(Adw.Application):
     def __init__(self, page):
-        super().__init__(application_id=APP_ID)
+        super().__init__(application_id=HUB_ID if page == "hub" else APP_ID)
         self.page = page
 
     def do_activate(self):
-        window = self.get_active_window() or Center(self, self.page)
+        window = self.get_active_window() or (Hub(self) if self.page == "hub" else Center(self, self.page))
         window.present()
 
 

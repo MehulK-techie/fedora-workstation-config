@@ -728,8 +728,8 @@ case "${1:-help}" in
         ;;
 
     hub|actions)
-        # Every mk command as a clickable card (MK Control Center › Actions)
-        setsid -f "$HOME/.local/bin/mk-center" actions > /dev/null 2>&1
+        # MK Commands Hub: every mk command as a clickable card (also in the app grid)
+        setsid -f "$HOME/.local/bin/mk-center" hub > /dev/null 2>&1
         ;;
 
     speedtest)

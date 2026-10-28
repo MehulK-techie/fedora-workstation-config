@@ -4,8 +4,17 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-SHELL_FILES=(*.sh scripts/*.sh docs/overview/*.sh bin/mk bin/mk-apps bin/mk-doctor bin/ocr-snip bin/mk-scratchpad bin/mk-sound)
-PYTHON_FILES=(bin/camera-controls bin/show-shortcuts bin/mk-companion bin/mk-notes bin/mk-screensaver bin/mk-timer bin/mk-reminders bin/mk-power bin/mk-voice lib/mkworkstation/*.py docs/overview/*.py)
+# Every script in bin/ and assets/libexec/, sorted by its shebang, so a new
+# one is checked without being listed here.
+SHELL_FILES=(*.sh scripts/*.sh docs/overview/*.sh)
+PYTHON_FILES=(lib/mkworkstation/*.py docs/overview/*.py)
+for f in bin/* assets/libexec/*; do
+    [[ -f "$f" ]] || continue
+    case "$(head -n 1 "$f")" in
+        *python3*) PYTHON_FILES+=("$f") ;;
+        *bash*) SHELL_FILES+=("$f") ;;
+    esac
+done
 
 for f in "${SHELL_FILES[@]}"; do
     bash -n "$f"

@@ -711,6 +711,11 @@ case "${1:-help}" in
         setsid -f "$HOME/.local/bin/mk-center" "${2:-home}" > /dev/null 2>&1
         ;;
 
+    hub|actions)
+        # Every mk command as a clickable card (MK Control Center › Actions)
+        setsid -f "$HOME/.local/bin/mk-center" actions > /dev/null 2>&1
+        ;;
+
     speedtest)
         shift
         "$HOME/.local/bin/mk-speedtest" "$@"
@@ -822,6 +827,7 @@ KEYRING
         echo "  unlock     Open a locked folder (mk unlock ~/Folder) or stop locking an app (mk unlock app NAME)"
         echo "  vault      Open or close your hidden encrypted folder (~/.vault)"
         echo "  center     MK Control Center: quick actions, power, MK Lock, security (center lock|security)"
+        echo "  hub        Every mk command as a card you can click, search and pin (Control Center › Actions)"
         echo "  security   Security check with a score: firewall, updates, rootkits, viruses, Lynis (fix NAME applies a fix)"
         echo "  speedtest  Ping, download and upload speed"
         echo "  nap        Which unused apps App Nap paused under memory or CPU pressure"

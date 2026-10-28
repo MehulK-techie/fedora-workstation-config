@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """MK Control Center: the MK tools in one window.
 
-  mk-center [home | lock | security]     (also: mk center, the app grid)
+  mk-center [home | actions | lock | security]   (also: mk center, mk hub, the app grid)
 
+Actions: every mk command as a card, by category, with a search box; star
+the ones you use most and they stay on top (~/.config/mk-workstation/hub-pins).
 Home: quick actions (free memory, vault, text from screen, speed test), power
 modes, App Nap, and the desktop tools. MK Lock: lock apps with a switch, lock
 and open folders and the vault, lock notebooks of MK Notes. Security: run the
@@ -13,6 +15,9 @@ mk power...), so the terminal and this window always agree.
 """
 import json
 import os
+import re
+import shlex
+import shutil
 import subprocess
 import sys
 import threading
@@ -35,7 +40,12 @@ CSS = b"""
 .mk-action { padding: 18px 10px; border-radius: 16px; }
 .mk-action image { -gtk-icon-size: 28px; }
 .mk-report { font-family: monospace; font-size: 0.92em; }
+.mk-card { padding: 12px 14px; border-radius: 14px; }
+.mk-card .title { font-weight: 700; }
+.mk-card .subtitle { font-size: 0.88em; opacity: 0.7; }
 """
+PINS = CONFIG / "hub-pins"
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def tool(name):
@@ -57,6 +67,63 @@ def run_bg(argv, done=None):
         if done:
             GLib.idle_add(lambda: (done(*result), False)[1])
     threading.Thread(target=work, daemon=True).start()
+
+
+def terminal(command):
+    """argv that runs COMMAND (a shell line) in the desktop's terminal and
+    keeps it open until Enter: Ptyxis (Fedora 41+), Console, or GNOME Terminal."""
+    line = f"{command}; read -rp 'Press Enter to close'"
+    for term, flag in (("ptyxis", "--"), ("kgx", "--"), ("gnome-terminal", "--")):
+        if shutil.which(term):
+            return [term, flag, "bash", "-c", line]
+    return ["xdg-terminal-exec", "bash", "-c", line]
+
+
+def mk(*args):
+    return [tool("mk"), *args]
+
+
+# The Actions page: (id, category, icon, title, what it does, how it runs).
+# How: ("bg", argv) runs quietly and shows the last line it prints; ("show",
+# argv) shows all of its output; ("term", "mk ...") needs a terminal (sudo or
+# questions); ("page", name) opens another page of this window.
+CATEGORIES = ("Performance", "Security & Vault", "Biometrics & Lock", "Screensavers & Wallpapers",
+              "Notes & Focus", "System Maintenance")
+ACTIONS = [
+    ("free-ram", "Performance", "media-flash-symbolic", "Free memory", "Drop file caches (no password)", ("bg", mk("optimize", "ram"))),
+    ("quiet", "Performance", "power-profile-power-saver-symbolic", "Quiet mode", "Cooler and quieter, longest battery", ("bg", mk("power", "quiet"))),
+    ("comfort", "Performance", "power-profile-balanced-symbolic", "Comfort mode", "Balanced speed and battery", ("bg", mk("power", "comfort"))),
+    ("performance", "Performance", "power-profile-performance-symbolic", "Performance mode", "Full speed, warmer", ("bg", mk("power", "performance"))),
+    ("effects-lite", "Performance", "applications-graphics-symbolic", "Lite effects", "Blur and window effects off", ("bg", mk("effects", "lite"))),
+    ("effects-full", "Performance", "applications-graphics-symbolic", "Full effects", "Every visual effect on", ("bg", mk("effects", "full"))),
+    ("nap", "Performance", "weather-clear-night-symbolic", "App Nap", "Which unused apps are paused", ("show", mk("nap"))),
+    ("speedtest", "Performance", "network-wireless-signal-excellent-symbolic", "Speed test", "Ping, download and upload", ("bg", [tool("mk-speedtest"), "--gui", "--start"])),
+    ("monitor", "Performance", "org.gnome.SystemMonitor-symbolic", "System Monitor", "Every process", ("bg", ["gnome-system-monitor"])),
+    ("security", "Security & Vault", "security-high-symbolic", "Security check", "A score, and fixes", ("page", "security")),
+    ("vault", "Security & Vault", "changes-prevent-symbolic", "Vault", "Open or close ~/.vault (made the first time)", ("bg", [tool("mk-lock"), "vault"])),
+    ("lock-page", "Security & Vault", "changes-prevent-symbolic", "MK Lock", "Lock apps, folders and notebooks", ("page", "lock")),
+    ("keyring", "Security & Vault", "dialog-password-symbolic", "Passwords and Keys", "Why apps ask for the keyring", ("bg", mk("keyring", "open"))),
+    ("face", "Biometrics & Lock", "camera-web-symbolic", "Face unlock setup", "Guided: camera, light, face models", ("term", "mk face")),
+    ("face-tune", "Biometrics & Lock", "camera-web-symbolic", "Re-tune the camera", "After a new webcam; faces kept", ("term", "mk face --tune-only")),
+    ("finger", "Biometrics & Lock", "auth-fingerprint-symbolic", "Enroll a finger", "Login, lock screen and sudo", ("term", "mk fingerprint enroll")),
+    ("finger-check", "Biometrics & Lock", "auth-fingerprint-symbolic", "Fingerprint check", "Is it set up everywhere?", ("show", mk("fingerprint", "check"))),
+    ("saver", "Screensavers & Wallpapers", "preferences-desktop-screensaver-symbolic", "Screensaver", "Scenes, delay, lock screen", ("bg", [tool("mk-screensaver"), "settings"])),
+    ("saver-show", "Screensavers & Wallpapers", "media-playback-start-symbolic", "Show a scene now", "Shuffle", ("bg", mk("screensaver", "show"))),
+    ("accent", "Screensavers & Wallpapers", "preferences-color-symbolic", "Accent from wallpaper", "Desktop colour follows the wallpaper", ("bg", mk("accent", "auto"))),
+    ("notes", "Notes & Focus", "accessories-text-editor-symbolic", "MK Notes", "Your notes", ("bg", mk("notes"))),
+    ("today", "Notes & Focus", "x-office-calendar-symbolic", "Today's note", "The daily note", ("bg", mk("notes", "today"))),
+    ("focus", "Notes & Focus", "alarm-symbolic", "Focus 25 min", "The focus timer", ("bg", mk("focus", "25"))),
+    ("list", "Notes & Focus", "view-list-symbolic", "Notes and tasks", "Companion notes, tasks, reminders", ("show", mk("list"))),
+    ("ocr", "Notes & Focus", "insert-text-symbolic", "Text from screen", "Select an area, copy its text", ("bg", [tool("ocr-snip")])),
+    ("update", "System Maintenance", "software-update-available-symbolic", "Update everything", "Repo, apps, settings, system", ("term", "mk update")),
+    ("update-check", "System Maintenance", "software-update-available-symbolic", "Check for updates", "Preview only", ("term", "mk update --check")),
+    ("doctor", "System Maintenance", "object-select-symbolic", "Health check", "Updates, codecs, extensions, face unlock", ("term", "mk doctor")),
+    ("sync", "System Maintenance", "view-refresh-symbolic", "Re-apply settings", "Shortcuts, extensions, tweaks", ("term", "mk sync")),
+    ("restore", "System Maintenance", "edit-undo-symbolic", "Undo last sync", "Restore the settings snapshot", ("term", "mk restore")),
+    ("device", "System Maintenance", "computer-symbolic", "This computer", "What it has, what MK tunes", ("show", mk("device"))),
+    ("shortcuts", "System Maintenance", "preferences-desktop-keyboard-shortcuts-symbolic", "Keyboard shortcuts", "Every shortcut, live", ("bg", [tool("show-shortcuts")])),
+    ("tour", "System Maintenance", "help-browser-symbolic", "Tour", "The walkthrough, or the cheat sheet", ("bg", [tool("mk-tour")])),
+]
 
 
 def read_list(name):
@@ -82,6 +149,7 @@ class Center(Adw.ApplicationWindow):
         head = Adw.HeaderBar()
         self.stack = Adw.ViewStack()
         self.stack.add_titled_with_icon(self._home(), "home", "Home", "go-home-symbolic")
+        self.stack.add_titled_with_icon(self._actions(), "actions", "Actions", "view-grid-symbolic")
         self.stack.add_titled_with_icon(self._lock(), "lock", "MK Lock", "changes-prevent-symbolic")
         self.stack.add_titled_with_icon(self._security(), "security", "Security", "security-high-symbolic")
         head.set_title_widget(Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE))
@@ -89,7 +157,7 @@ class Center(Adw.ApplicationWindow):
         self.toast.set_child(self.stack)
         view.set_content(self.toast)
         self.set_content(view)
-        self.stack.set_visible_child_name(page if page in ("home", "lock", "security") else "home")
+        self.stack.set_visible_child_name(page if page in ("home", "actions", "lock", "security") else "home")
 
     def say(self, text):
         self.toast.add_toast(Adw.Toast(title=text, timeout=3))
@@ -140,14 +208,98 @@ class Center(Adw.ApplicationWindow):
                                  ("Keyboard shortcuts", "Every shortcut and gesture, live", [tool("show-shortcuts")]),
                                  ("Photo Booth", "Your webcam with live looks and stickers", [tool("camera-controls")]),
                                  ("Tour", "The walkthrough again", [tool("mk-tour")]),
-                                 ("Health check", "mk doctor, in a terminal", ["ptyxis", "--", "bash", "-c", f"{tool('mk')} doctor; read -rp 'Press Enter to close'"]),
-                                 ("Update everything", "mk update, in a terminal", ["ptyxis", "--", "bash", "-c", f"{tool('mk')} update; read -rp 'Press Enter to close'"])):
+                                 ("Health check", "mk doctor, in a terminal", terminal(f"{shlex.quote(tool('mk'))} doctor")),
+                                 ("Update everything", "mk update, in a terminal", terminal(f"{shlex.quote(tool('mk'))} update"))):
             r = Adw.ActionRow(title=title, subtitle=sub, activatable=True)
             r.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
             r.connect("activated", lambda _r, a=argv: run_bg(a))
             desk.add(r)
         page.add(desk)
         return page
+
+    # ---------------------------------------------------------------- actions
+    def _actions(self):
+        self.pins = read_list(PINS.name)
+        self.cards = {}
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18,
+                      margin_top=18, margin_bottom=24, margin_start=24, margin_end=24)
+        self.action_search = Gtk.SearchEntry(placeholder_text="Find an action…", hexpand=True)
+        self.action_search.connect("search-changed", lambda *_: self._fill_actions())
+        box.append(self.action_search)
+        self.action_groups = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        box.append(self.action_groups)
+        self._fill_actions()
+        clamp = Adw.Clamp(maximum_size=1000, child=box)
+        return Gtk.ScrolledWindow(child=clamp, vexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER)
+
+    def _fill_actions(self):
+        while child := self.action_groups.get_first_child():
+            self.action_groups.remove(child)
+        query = self.action_search.get_text().strip().lower()
+        shown = [a for a in ACTIONS if not query or query in f"{a[1]} {a[3]} {a[4]}".lower()]
+        pinned = [a for pin in self.pins for a in shown if a[0] == pin]
+        sections = ([("Pinned", pinned)] if pinned else []) + \
+            [(c, [a for a in shown if a[1] == c]) for c in CATEGORIES]
+        for title, actions in sections:
+            if not actions:
+                continue
+            self.action_groups.append(Gtk.Label(label=title, xalign=0, css_classes=["heading"]))
+            flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True,
+                               min_children_per_line=1, max_children_per_line=4,
+                               column_spacing=10, row_spacing=10)
+            for action in actions:
+                flow.append(self._card(action))
+            self.action_groups.append(flow)
+        if not shown:
+            self.action_groups.append(Adw.StatusPage(icon_name="edit-find-symbolic", title="No action matches"))
+
+    def _card(self, action):
+        ident, _cat, icon, title, sub, _how = action
+        row = Gtk.Box(spacing=12)
+        row.append(Gtk.Image(icon_name=icon, pixel_size=24, valign=Gtk.Align.CENTER))
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, valign=Gtk.Align.CENTER)
+        text.append(Gtk.Label(label=title, xalign=0, css_classes=["title"], ellipsize=3))
+        text.append(Gtk.Label(label=sub, xalign=0, css_classes=["subtitle"], wrap=True, lines=2, ellipsize=3))
+        row.append(text)
+        button = Gtk.Button(child=row, css_classes=["card", "mk-card"], hexpand=True)
+        button.connect("clicked", lambda _b: self._run_action(action))
+        star = Gtk.Button(icon_name="starred-symbolic" if ident in self.pins else "non-starred-symbolic",
+                          css_classes=["flat", "circular"], valign=Gtk.Align.CENTER,
+                          tooltip_text="Unpin" if ident in self.pins else "Pin to the top")
+        star.connect("clicked", lambda _b: self._toggle_pin(ident))
+        outer = Gtk.Box(spacing=4)
+        outer.append(button)
+        outer.append(star)
+        return outer
+
+    def _toggle_pin(self, ident):
+        self.pins = [p for p in self.pins if p != ident] if ident in self.pins else self.pins + [ident]
+        CONFIG.mkdir(parents=True, exist_ok=True)
+        PINS.write_text("".join(f"{p}\n" for p in self.pins))
+        self._fill_actions()
+
+    def _run_action(self, action):
+        _id, _cat, _icon, title, _sub, (how, what) = action
+        if how == "page":
+            self.stack.set_visible_child_name(what)
+        elif how == "term":
+            mk_cmd = shlex.quote(tool("mk"))
+            run_bg(terminal(mk_cmd + what[2:] if what.startswith("mk ") else what))
+        elif how == "show":
+            run_bg(what, lambda _c, out: self._show_output(title, out))
+        else:
+            self.say(f"{title}…")
+            run_bg(what, lambda c, out: self.say(
+                (ANSI.sub("", out).strip().splitlines() or [title + (" done" if c == 0 else " failed")])[-1].strip("✔ ")))
+
+    def _show_output(self, title, out):
+        label = Gtk.Label(label=ANSI.sub("", out).strip() or "(nothing)", xalign=0, selectable=True,
+                          wrap=True, css_classes=["mk-report"])
+        dialog = Adw.AlertDialog(heading=title)
+        dialog.set_extra_child(Gtk.ScrolledWindow(child=label, min_content_height=200, max_content_height=440,
+                                                  propagate_natural_height=True))
+        dialog.add_response("close", "Close")
+        dialog.present(self)
 
     def _profile(self):
         try:

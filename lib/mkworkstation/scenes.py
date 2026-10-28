@@ -523,20 +523,13 @@ class NightWatch(Scene):
         super().draw(cr, w, h, t)
         dt = min(0.1, t - self.last) if self.last is not None else 0
         self.last = t
-        # clouds drifting across the moon
+        # clouds drifting across the moon: one soft sprite, painted five times
+        sprite = self._cloud()
         for i in range(5):
             x = ((t * (8 + i * 3) + i * 400) % (w + 600)) - 300
             y = h * (0.12 + 0.07 * i)
-            cloud = cairo.RadialGradient(x, y, 10, x, y, 260)
-            cloud.add_color_stop_rgba(0, 0.16, 0.18, 0.24, 0.55)
-            cloud.add_color_stop_rgba(1, 0.16, 0.18, 0.24, 0)
-            cr.set_source(cloud)
-            cr.save()
-            cr.translate(x, y)
-            cr.scale(1.8, 0.45)
-            cr.arc(0, 0, 260, 0, 2 * math.pi)
-            cr.restore()
-            cr.fill()
+            cr.set_source_surface(sprite, x - sprite.get_width() / 2, y - sprite.get_height() / 2)
+            cr.paint()
         # searchlight sweeping the clouds, from a projector on the roof
         sc = min(w, h) / 1080 * 1.6
         roof_y = h * 0.42 + 120 * sc
@@ -594,6 +587,27 @@ class NightWatch(Scene):
             cr.paint()
             self.flash = max(0, self.flash - dt * 2.2)
         caption(cr, w, h, [(time.strftime("%H:%M"), 44, 0.85), (time.strftime("%A, %d %B"), 16, 0.5)])
+
+    def _cloud(self):
+        """A soft elliptical cloud. The gradient is made inside the squashed
+        space, so it fades to nothing at every edge: built outside it, it was
+        still a circle and the ellipse cut it off in hard bands."""
+        if getattr(self, "_cloud_sprite", None) is None:
+            rx, ry = 468, 117
+            self._cloud_sprite = cairo.ImageSurface(cairo.FORMAT_ARGB32, rx * 2, ry * 2)
+            c = cairo.Context(self._cloud_sprite)
+            c.translate(rx, ry)
+            c.scale(rx / 260, ry / 260)
+            soft = cairo.RadialGradient(0, 0, 0, 0, 0, 260)
+            for k in range(9):  # ease-out, like the moon's glow: no visible rim
+                u = k / 8
+                soft.add_color_stop_rgba(u, 0.16, 0.18, 0.24, 0.55 * (1 - u) ** 1.8)
+            c.set_source(soft)
+            c.paint()
+            c.identity_matrix()
+            c.set_operator(cairo.OPERATOR_ATOP)  # grain only where there's cloud
+            dither(c, rx * 2, ry * 2)
+        return self._cloud_sprite
 
     def _ledge(self, cr, w, h, t):
         s = min(w, h) / 1080 * 1.6

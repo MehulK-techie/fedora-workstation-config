@@ -3091,14 +3091,19 @@ class NotesWindow(Adw.ApplicationWindow):
         self._queue_save()
         if hasattr(self, "save_stat_lbl"):
             self.save_stat_lbl.set_text("Saving…")
-        self._update_doc_stats()
+        # Counting re-reads the whole note: once typing pauses, not per key.
+        if getattr(self, "_stats_id", 0):
+            GLib.source_remove(self._stats_id)
+        self._stats_id = GLib.timeout_add(300, self._update_doc_stats)
 
     def _update_doc_stats(self):
+        self._stats_id = 0
         txt = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), False)
         words = len(txt.split())
         chars = len(txt)
         if hasattr(self, "doc_stat_lbl"):
             self.doc_stat_lbl.set_text(f"{words} words · {chars} chars")
+        return False
 
     def _queue_save(self):
         if self.save_id:

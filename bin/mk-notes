@@ -17,7 +17,6 @@ Upgrades in v6:
    - Formatting buttons (Bold, Italic, Underline, Strikethrough, Highlight, Color, Headings) apply to selection OR stay active during continuous typing.
 6. 6 Vibrant Themes & Paper Patterns (Dots, Grid, Lined, Plain).
 """
-import hashlib
 import io
 import json
 import math
@@ -51,6 +50,7 @@ def _add_lib_path():
 
 
 _add_lib_path()
+from mkworkstation import auth  # noqa: E402
 from mkworkstation import notes as nv  # noqa: E402
 from mkworkstation import notes_sync  # noqa: E402
 
@@ -1770,64 +1770,22 @@ class NotesWindow(Adw.ApplicationWindow):
         return False
 
     def _authenticate(self, heading, on_success):
+        """The MK unlock dialog: fingerprint (in the app), the system check, or the PIN."""
         pin_hash = nv.load_conf().get("NOTE_LOCK_HASH", "")
-        dialog = Adw.AlertDialog(
-            heading=heading,
-            body="Enter your PIN and press Enter (or click Fingerprint / Face Unlock):",
-        )
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        entry = Gtk.PasswordEntry(
-            placeholder_text="Enter PIN and press Enter…" if pin_hash else "Create a new PIN and press Enter…",
-            show_peek_icon=True,
-            activates_default=True,
-        )
-        box.append(entry)
-        bio_btn = Gtk.Button(label="Use Fingerprint / Face Unlock", icon_name="fingerprint-symbolic")
-        box.append(bio_btn)
-        dialog.set_extra_child(box)
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("ok", "Unlock" if pin_hash else "Set PIN & Lock")
-        dialog.set_default_response("ok")
-        dialog.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
 
-        verified = [False]
-
-        def verify_pin():
-            if verified[0]:
-                return
-            val = entry.get_text().strip()
-            if not val:
-                return
-            h = hashlib.sha256(val.encode()).hexdigest()
+        def check(pin):
             if not pin_hash:
-                verified[0] = True
-                conf_set("NOTE_LOCK_HASH", h)
-                dialog.close()
-                on_success()
-            elif h == pin_hash:
-                verified[0] = True
-                dialog.close()
-                on_success()
-            else:
-                self.toast.add_toast(Adw.Toast(title="Incorrect PIN", timeout=2))
+                if len(pin) < 4:
+                    return "Use at least 4 characters."
+                conf_set("NOTE_LOCK_HASH", auth.hash_pin(pin))
+                return True
+            if not auth.check_pin(pin, pin_hash):
+                return False
+            if auth.pin_needs_upgrade(pin_hash):
+                conf_set("NOTE_LOCK_HASH", auth.hash_pin(pin))
+            return True
 
-        entry.connect("activate", lambda *_: verify_pin())
-        ek = Gtk.EventControllerKey()
-        ek.connect("key-pressed", lambda _c, kv, _cd, _s: (verify_pin(), True)[1] if kv in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) else False)
-        entry.add_controller(ek)
-
-        def try_bio(*_):
-            def work():
-                ok = subprocess.run(["pkexec", "true"], capture_output=True).returncode == 0
-                if ok and not verified[0]:
-                    verified[0] = True
-                    GLib.idle_add(lambda: (dialog.close(), on_success(), False)[2])
-            threading.Thread(target=work, daemon=True).start()
-
-        bio_btn.connect("clicked", try_bio)
-        dialog.connect("response", lambda _d, r: r == "ok" and verify_pin())
-        dialog.present(self)
-        GLib.idle_add(entry.grab_focus)
+        auth.present_unlock(self, heading, check, on_success, creating=not pin_hash)
 
     def _build_ui(self):
         root_view = Adw.ToolbarView()
@@ -3743,7 +3701,14 @@ class NotesWindow(Adw.ApplicationWindow):
         self._toggle_folder_lock(folder)
 
     def _change_pin_dialog(self):
-        dlg = Adw.AlertDialog(heading="Set New Lock PIN", body="Enter a new PIN for your locked Notebooks and Notes:")
+        if nv.load_conf().get("NOTE_LOCK_HASH", ""):
+            # The current PIN (or fingerprint) first: else anyone at the window could reset it.
+            self._authenticate("Confirm it's you", self._new_pin_dialog)
+        else:
+            self._new_pin_dialog()
+
+    def _new_pin_dialog(self):
+        dlg = Adw.AlertDialog(heading="Set New Lock PIN", body="Enter a new PIN (4+ characters) for your locked Notebooks and Notes:")
         entry = Gtk.PasswordEntry(placeholder_text="New PIN…", show_peek_icon=True)
         dlg.set_extra_child(entry)
         dlg.add_response("cancel", "Cancel")
@@ -3753,8 +3718,8 @@ class NotesWindow(Adw.ApplicationWindow):
 
         def save_it(*_):
             val = entry.get_text().strip()
-            if val:
-                conf_set("NOTE_LOCK_HASH", hashlib.sha256(val.encode()).hexdigest())
+            if len(val) >= 4:
+                conf_set("NOTE_LOCK_HASH", auth.hash_pin(val))
                 dlg.close()
                 self.toast.add_toast(Adw.Toast(title="Lock PIN updated ✓", timeout=2))
 

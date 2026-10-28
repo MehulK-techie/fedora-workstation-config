@@ -39,7 +39,9 @@ scan() {
     else
         finding high firewall "The firewall is off" "Anything listening on the network can be reached" "mk security fix firewall"
     fi
-    if mokutil --sb-state 2> /dev/null | grep -q enabled; then
+    if ! command -v mokutil > /dev/null; then
+        note "Secure Boot not checked: mokutil isn't installed (sudo dnf install mokutil)"
+    elif mokutil --sb-state 2> /dev/null | grep -q enabled; then
         pass "Secure Boot is on"
     else
         finding low secureboot "Secure Boot is off" "Boot-level malware isn't blocked; turn it on in the firmware (BIOS) settings" ""
@@ -50,7 +52,8 @@ scan() {
         finding medium encryption "The disk isn't encrypted" "A lost or stolen laptop gives away every file; only a reinstall with encryption fixes this" ""
     fi
     # --- updates
-    sec=$(dnf -q updateinfo list --security 2> /dev/null | grep -c . || true)
+    # dnf5 prints a column header even with -q: count only advisory rows.
+    sec=$(dnf -q updateinfo list --security 2> /dev/null | awk '$2 == "security"' | wc -l)
     if (( sec > 0 )); then
         finding high updates "$sec security update(s) waiting" "Known holes stay open until they're installed" "mk security fix updates"
     else

@@ -123,7 +123,7 @@ ACTIONS = [
     ("restore", "System Maintenance", "edit-undo-symbolic", "Undo last sync", "Restore the settings snapshot", ("term", "mk restore")),
     ("device", "System Maintenance", "computer-symbolic", "This computer", "What it has, what MK tunes", ("show", mk("device"))),
     ("shortcuts", "System Maintenance", "preferences-desktop-keyboard-shortcuts-symbolic", "Keyboard shortcuts", "Every shortcut, live", ("bg", [tool("show-shortcuts")])),
-    ("tour", "System Maintenance", "help-browser-symbolic", "Tour", "The walkthrough, or the cheat sheet", ("bg", [tool("mk-tour")])),
+    ("tour", "System Maintenance", "help-browser-symbolic", "Quick reference", "Every shortcut and command, searchable", ("bg", [tool("mk-tour")])),
 ]
 
 

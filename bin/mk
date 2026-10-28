@@ -851,7 +851,7 @@ KEYRING
         echo "  optimize   Free cached memory (ram) or switch to full speed (cpu)"
         echo "  users      Another person's account: mk users add NAME (their own settings and face)"
         echo "  guest      A Guest login with no password that starts empty every time: mk guest on|off"
-        echo "  tour       A short walkthrough of the desktop (also Super+Shift+/)"
+        echo "  tour       The welcome the first time, then a cheat sheet of shortcuts and commands (also Super+Shift+/)"
         echo "  keyring    Why apps ask for the keyring password after fingerprint login, and the fixes"
         echo "  uninstall  Remove MK tools, shortcuts and helpers from your account"
         tips=("Tip: Alt+Tab, then 1-9 sends the selected window to that desktop."
@@ -862,7 +862,7 @@ KEYRING
               "Tip: Ctrl+\\ in MK Notes shows a live preview next to your text."
               "Tip: mk screensaver show web, if you can't wait."
               "Tip: mk lock app Settings makes Settings ask for your fingerprint."
-              "Tip: mk tour, if you ever want the walkthrough again."
+              "Tip: mk tour is a searchable cheat sheet; its Full tour button is the walkthrough."
               "Tip: some commands aren't in this list. Excelsior.")
         echo ""
         echo "${tips[RANDOM % ${#tips[@]}]}"

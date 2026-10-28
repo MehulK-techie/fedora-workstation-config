@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """MK tour: a short walkthrough of the desktop, its gestures and tools.
 
-  mk-tour              open the tour (also mk tour, Super+Shift+/ or the app grid)
-  mk-tour --first-run  open it once after setup, then never by itself again
+  mk-tour              the first time: a four-page welcome (sign-in, shortcuts,
+                       MK Notes); after that: the MK Quick Reference, a
+                       searchable cheat sheet (also mk tour, Super+Shift+/ or
+                       the app grid)
+  mk-tour --full       the whole walkthrough, every page
+  mk-tour --first-run  the welcome once after setup, then never by itself again
 
 Arrow keys or the buttons move between pages; each page can open what it
 describes, so you can try it right away.
 """
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +22,18 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+
+def _add_lib_path():
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for candidate in (Path(__file__).resolve().parent.parent / "lib",
+                      Path(data_home) / "mk-workstation/lib"):
+        if (candidate / "mkworkstation").is_dir():
+            sys.path.insert(0, str(candidate))
+            return
+
+
+_add_lib_path()
+import mkworkstation  # noqa: E402
 
 APP_ID = "io.github.mehulk.MkTour"
 BIN = Path.home() / ".local/bin"
@@ -101,6 +118,33 @@ PAGES = [
 ]
 
 
+# The first-run welcome: the four things worth knowing on day one.
+WELCOME = [
+    ("starred-symbolic", "Welcome to your workstation",
+     "Four quick pages: how you sign in, the shortcuts you'll use every day, and MK Notes. "
+     "Later, Super+Shift+/ (or mk tour) opens a cheat sheet of everything instead.",
+     []),
+    ("fingerprint-detection-symbolic", "Sign in with your finger or face", "SIGNIN", []),
+    ("input-keyboard-symbolic", "Five shortcuts to start with",
+     "Super+/ every shortcut, live · Super+V clipboard history · Super+. emoji · "
+     "Alt+Tab windows (or three fingers sideways) · Super+E Files. "
+     "Four fingers sideways switch desktops.",
+     [("Open Shortcuts", "show-shortcuts")]),
+    ("accessories-text-editor-symbolic", "MK Notes",
+     "Super+N: notes as plain Markdown with links, tags, checklists, drawings and screenshots; "
+     "lock a note with your fingerprint or a PIN; Ctrl+Shift+E exports a PDF. "
+     "Every MK command is a click away in mk hub.",
+     [("Open MK Notes", "mk-notes"), ("Open the Actions hub", "mk-center actions")]),
+]
+
+# The cheat sheet's last group: the commands people reach for.
+COMMANDS = [("mk hub", "Every command as a card you can click and pin"), ("mk update", "Update everything"),
+            ("mk doctor", "Health check"), ("mk security", "Security score and fixes"),
+            ("mk face · mk fingerprint", "Face and fingerprint sign-in"), ("mk vault", "Your encrypted folder"),
+            ("mk optimize ram", "Free cached memory"), ("mk watchdog", "Leftover and runaway processes"),
+            ("mk notes today", "Today's note"), ("mk focus 25", "Focus timer")]
+
+
 def has_fingerprint_reader():
     try:
         out = subprocess.run(["fprintd-list", os.environ.get("USER", "")], capture_output=True, text=True,
@@ -151,7 +195,9 @@ def run(command):
         return
     if command.startswith("terminal:"):
         inner = command[len("terminal:"):]
-        argv = ["ptyxis", "--", "bash", "-c", f"{inner}; read -rp 'Press Enter to close'"]
+        term = next((t for t in ("ptyxis", "kgx", "gnome-terminal") if shutil.which(t)), "xdg-terminal-exec")
+        argv = [term] + (["--"] if term != "xdg-terminal-exec" else []) + \
+            ["bash", "-c", f"{inner}; read -rp 'Press Enter to close'"]
     else:
         argv = command.split()
         exe = BIN / argv[0]
@@ -164,12 +210,12 @@ def run(command):
 
 
 class Tour(Adw.ApplicationWindow):
-    def __init__(self, app):
+    def __init__(self, app, pages=PAGES):
         super().__init__(application=app, title="Tour", default_width=720, default_height=520)
         view = Adw.ToolbarView()
         view.add_top_bar(Adw.HeaderBar(show_title=False))
         self.carousel = Adw.Carousel(hexpand=True, vexpand=True, allow_scroll_wheel=True)
-        for icon, title, text, buttons in PAGES:
+        for icon, title, text, buttons in pages:
             if text == "SIGNIN":
                 text, buttons = signin_page()
             page = Adw.StatusPage(icon_name=icon, title=title, description=text, hexpand=True)
@@ -228,24 +274,111 @@ class Tour(Adw.ApplicationWindow):
         return True
 
 
+def gtk_accel(key):
+    """Mutter's Above_Tab is the key above Tab: ` on most keyboards."""
+    return key.replace("Above_Tab", "grave")
+
+
+def pretty_keys(keys):
+    """'<Super><Shift>n' -> 'Super+Shift+N', for search; the labels themselves
+    are drawn by Gtk.ShortcutLabel."""
+    out = []
+    for k in keys:
+        ok, key, mods = Gtk.accelerator_parse(gtk_accel(k))
+        out.append(Gtk.accelerator_get_label(key, mods) if ok and (key or mods) else k)
+    return out
+
+
+class CheatSheet(Adw.ApplicationWindow):
+    """MK Quick Reference: every shortcut from the live catalogue (your changes
+    included), the handy commands, and a way back to the full tour."""
+
+    def __init__(self, app):
+        super().__init__(application=app, title="MK Quick Reference", default_width=760, default_height=720)
+        head = Adw.HeaderBar()
+        full = Gtk.Button(label="Full tour")
+        full.connect("clicked", lambda *_: (self.get_application().show(PAGES), self.close()))
+        head.pack_start(full)
+        welcome = Gtk.Button(label="Welcome again")
+        welcome.connect("clicked", lambda *_: (self.get_application().show(WELCOME), self.close()))
+        head.pack_start(welcome)
+        self.search = Gtk.SearchEntry(placeholder_text="Find a shortcut or command…", width_chars=30)
+        head.set_title_widget(self.search)
+        self.page = Adw.PreferencesPage()
+        self.rows = []
+        groups = {}
+        for sc in mkworkstation.load_shortcuts():
+            if not sc.hidden and sc.keys:
+                groups.setdefault(sc.group, []).append(sc)
+        for name, shortcuts in groups.items():
+            group = Adw.PreferencesGroup(title=name)
+            for sc in shortcuts:
+                row = Adw.ActionRow(title=GLib.markup_escape_text(sc.label))
+                keys = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+                for i, k in enumerate(sc.keys[:2]):
+                    if i:
+                        keys.append(Gtk.Label(label="or", css_classes=["dim-label"]))
+                    keys.append(Gtk.ShortcutLabel(accelerator=gtk_accel(k)))
+                row.add_suffix(keys)
+                group.add(row)
+                self.rows.append((row, group, f"{name} {sc.label} {' '.join(pretty_keys(sc.keys))}".lower()))
+            self.page.add(group)
+        group = Adw.PreferencesGroup(title="Commands", description="In a terminal; mk alone lists them all")
+        for cmd, what in COMMANDS:
+            row = Adw.ActionRow(title=what, subtitle=cmd, subtitle_selectable=True)
+            group.add(row)
+            self.rows.append((row, group, f"commands {cmd} {what}".lower()))
+        self.page.add(group)
+        self.search.connect("search-changed", self._filter)
+        view = Adw.ToolbarView(content=self.page)
+        view.add_top_bar(head)
+        self.set_content(view)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", lambda _c, kv, *_: kv == Gdk.KEY_Escape and (self.close() or True))
+        self.add_controller(keys)
+        GLib.idle_add(self.search.grab_focus)
+
+    def _filter(self, entry):
+        query = entry.get_text().strip().lower()
+        shown = {}
+        for row, group, text in self.rows:
+            visible = all(word in text for word in query.split())
+            row.set_visible(visible)
+            shown[group] = shown.get(group, False) or visible
+        for group, any_visible in shown.items():
+            group.set_visible(any_visible)
+
+
 class TourApp(Adw.Application):
-    def __init__(self):
+    def __init__(self, mode):
         super().__init__(application_id=APP_ID)
+        self.mode = mode
+
+    def show(self, pages):
+        Tour(self, pages).present()
 
     def do_activate(self):
-        (self.get_active_window() or Tour(self)).present()
+        window = self.get_active_window()
+        if window:
+            window.present()
+        elif self.mode == "cheatsheet":
+            CheatSheet(self).present()
+        else:
+            self.show(PAGES if self.mode == "full" else WELCOME)
 
 
 def main():
     if "-h" in sys.argv or "--help" in sys.argv:
         print(__doc__.strip())
         return 0
-    if "--first-run" in sys.argv:
-        if DONE.exists():
-            return 0
+    first_time = not DONE.exists()
+    if "--first-run" in sys.argv and not first_time:
+        return 0
+    if first_time:
         DONE.parent.mkdir(parents=True, exist_ok=True)
         DONE.write_text("shown\n")
-    return TourApp().run([sys.argv[0]])
+    mode = "full" if "--full" in sys.argv else "welcome" if first_time else "cheatsheet"
+    return TourApp(mode).run([sys.argv[0]])
 
 
 if __name__ == "__main__":

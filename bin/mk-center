@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import gi
@@ -709,7 +710,12 @@ class Center(Adw.ApplicationWindow):
         self.deep_btn.connect("clicked", lambda *_: self._scan("deep"))
         for btn in (self.scan_btn, self.virus_btn, self.deep_btn):
             buttons.append(btn)
+        self.cancel_btn = Gtk.Button(label="Cancel scan", css_classes=["pill", "destructive-action"], visible=False)
+        self.cancel_btn.connect("clicked", lambda *_: self._cancel_scan())
+        buttons.append(self.cancel_btn)
         top.append(buttons)
+        self.scan_bar = Gtk.ProgressBar(visible=False, show_text=True, margin_top=6)
+        top.append(self.scan_bar)
         head.add(top)
         page.add(head)
         self.sec_groups = {}
@@ -779,42 +785,114 @@ class Center(Adw.ApplicationWindow):
             self.notes_group.add(row)
         self.notes_group.set_visible(bool(notes))
 
+    SCAN_LOG = Path(GLib.get_user_data_dir()) / "mk-security/latest-scan.log"
+
+    def _cancel_scan(self):
+        """Stop the scan: ending mk-security makes the root helper stop too
+        (it watches its caller) and free the lock."""
+        proc = getattr(self, "_scan_proc", None)
+        if proc:
+            self._scan_cancelled = True
+            proc.force_exit()
+            self._scan_finished("cancelled", 1, "")  # the buttons come back now
+
     def _scan(self, mode):
+        """Run mk-security --raw MODE and read its lines as they come:
+        PROGRESS|scanned|total (ClamAV's real file count) and STEP|n|of|what
+        (the deep scan's stages) move the bar; the rest is the report."""
+        if getattr(self, "_scan_proc", None):
+            return
         for btn in (self.scan_btn, self.virus_btn, self.deep_btn):
             btn.set_sensitive(False)
-        self.score_sub.set_label({"": "Checking… (a few seconds)", "virus": "Scanning recent downloads… (~10 s)",
+        self.cancel_btn.set_visible(mode != "")
+        self.scan_bar.set_visible(mode != "")
+        self.scan_bar.set_fraction(0)
+        self.scan_bar.set_text("Starting…")
+        self.score_sub.set_label({"": "Checking… (a few seconds)", "virus": "Scanning downloads and running programs…",
                                   "deep": "Deep scan… (a few minutes, at low priority)"}[mode])
+        argv = [tool("mk-security"), "--raw"] + ([mode] if mode else [])
+        self._scan_cancelled = False
+        try:
+            proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE)
+        except GLib.Error as e:
+            self._scan_finished(mode, 1, str(e.message))
+            return
+        self._scan_proc = proc
+        stream = Gio.DataInputStream.new(proc.get_stdout_pipe())
+        lines = []
 
-        def done(code, out):
-            for btn in (self.scan_btn, self.virus_btn, self.deep_btn):
-                btn.set_sensitive(True)
-            if code != 0:
-                self.score_sub.set_label("The check couldn't run: " +
-                                         ((out.strip().splitlines() or ["run sudo ./setup.sh"])[-1]))
+        def got(src, res):
+            try:
+                text, _n = src.read_line_finish_utf8(res)
+            except GLib.Error:
+                text = None
+            if text is None:
+                def ended(p, r):
+                    p.wait_finish(r)
+                    if self._scan_proc is p:  # not already cancelled
+                        self._scan_finished(mode, p.get_exit_status() if p.get_if_exited() else 1, "\n".join(lines))
+                proc.wait_async(None, ended)
                 return
-            score, lynis, notes = 100, None, []
-            for line in out.splitlines():
-                f = line.split("|")
-                if f[0] == "PASS" and len(f) >= 3:
-                    self.sec_results[f[1]] = ("pass", f[2], "")
-                elif f[0] == "FINDING" and len(f) >= 6:
-                    level, ident = f[1], f[2]
-                    self.sec_results[ident] = (level, f[3], f[4], f[5])
-                elif f[0] == "NOTE" and len(f) >= 2:
-                    notes.append(f[1])
-                elif f[0] == "LYNIS" and len(f) >= 2 and f[1].isdigit():
-                    lynis = int(f[1])
-            for level, *_ in self.sec_results.values():
-                score -= {"high": 15, "medium": 7, "low": 2}.get(level, 0)
-            score = max(0, score)
-            if lynis is not None:
-                score = (score * 2 + lynis) // 3
-            verdict = "Good" if score >= 85 else "Fair" if score >= 65 else "Needs attention"
-            self.score.set_label(f"{score} / 100 · {verdict}")
-            self.score_sub.set_label("Checked just now" + (f"; includes the Lynis hardening index {lynis}"
-                                                           if lynis is not None else "") + ".")
-            self._fill_security(notes)
-        run_bg([tool("mk-security"), "--raw", mode] if mode else [tool("mk-security"), "--raw"], done)
+            f = text.split("|")
+            if f[0] == "PROGRESS" and len(f) == 3 and f[1].isdigit() and f[2].isdigit():
+                done_n, total = int(f[1]), max(1, int(f[2]))
+                if mode == "virus":
+                    self.scan_bar.set_fraction(min(1.0, done_n / total))
+                self.scan_bar.set_text(f"{done_n:,} of {total:,} files scanned")
+            elif f[0] == "STEP" and len(f) == 4 and f[1].isdigit() and f[2].isdigit():
+                self.scan_bar.set_fraction((int(f[1]) - 1) / max(1, int(f[2])))
+                self.scan_bar.set_text(f"Step {f[1]} of {f[2]}: {f[3]}")
+            else:
+                lines.append(text)
+            src.read_line_async(GLib.PRIORITY_DEFAULT, None, got)
+        stream.read_line_async(GLib.PRIORITY_DEFAULT, None, got)
+
+    def _scan_finished(self, mode, code, out):
+        self._scan_proc = None
+        for btn in (self.scan_btn, self.virus_btn, self.deep_btn):
+            btn.set_sensitive(True)
+        self.cancel_btn.set_visible(False)
+        self.scan_bar.set_visible(False)
+        try:
+            self.SCAN_LOG.parent.mkdir(parents=True, exist_ok=True)
+            self.SCAN_LOG.write_text(f"# mk security {mode or 'check'} · {time.strftime('%Y-%m-%d %H:%M:%S')}\n{out}\n")
+        except OSError:
+            pass
+        if self._scan_cancelled:
+            self.score_sub.set_label("Scan cancelled.")
+            self._scan_cancelled = False
+            return
+        self._scan_report(mode, code, out)
+
+    def _scan_report(self, mode, code, out):
+        if code != 0:
+            self.score_sub.set_label("The check couldn't run: " +
+                                     ((out.strip().splitlines() or ["run sudo ./setup.sh"])[-1]))
+            return
+        score, lynis, notes = 100, None, []
+        for line in out.splitlines():
+            f = line.split("|")
+            if f[0] == "PASS" and len(f) >= 3:
+                self.sec_results[f[1]] = ("pass", f[2], "")
+            elif f[0] == "FINDING" and len(f) >= 6:
+                level, ident = f[1], f[2]
+                self.sec_results[ident] = (level, f[3], f[4], f[5])
+            elif f[0] == "NOTE" and len(f) >= 2:
+                notes.append(f[1])
+            elif f[0] == "LYNIS" and len(f) >= 2 and f[1].isdigit():
+                lynis = int(f[1])
+        for level, *_ in self.sec_results.values():
+            score -= {"high": 15, "medium": 7, "low": 2}.get(level, 0)
+        score = max(0, score)
+        if lynis is not None:
+            score = (score * 2 + lynis) // 3
+        verdict = "Good" if score >= 85 else "Fair" if score >= 65 else "Needs attention"
+        self.score.set_label(f"{score} / 100 · {verdict}")
+        self.score_sub.set_label("Checked just now" + (f"; includes the Lynis hardening index {lynis}"
+                                                       if lynis is not None else "") + ".")
+        self._fill_security(notes)
+        if mode == "virus" and not any(lv == "high" and i == "malware" for i, (lv, *_r) in self.sec_results.items()):
+            self.say("✓ No threats detected")
 
 
 class CenterApp(Adw.Application):

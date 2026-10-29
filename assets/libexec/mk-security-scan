@@ -49,33 +49,58 @@ slow() {
 # ClamAV over FILES (a list), time-limited, at the lowest priority, and as
 # the user who asked (never as root): a file swapped for a symlink after the
 # list was made then reaches nothing that user couldn't read anyway.
+# It reports its real progress on fd 3 (PROGRESS|scanned|total, every 25
+# files) and prints the number of infected files. With the clamd daemon
+# running (clamd@scan) it uses clamdscan: the signatures are already loaded,
+# so it starts at once instead of spending 10-20 s loading them.
 clam() {
-    local list=$1 limit=$2 infected=0 gid
+    local list=$1 limit=$2 infected=0 scanned=0 total gid line
+    local -a engine
     gid=$(getent passwd "$uid" | cut -d: -f4)
+    total=$(wc -l < "$list")
     if [[ -s "$list" && "$uid" =~ ^[0-9]+$ && "$uid" != 0 && -n "$gid" ]]; then
         chown "$uid:$gid" "$list"  # readable by that user only (mktemp made it 0600)
-        infected=$(slow "$limit" setpriv --reuid="$uid" --regid="$gid" --init-groups -- \
-            clamscan -i --no-summary --max-filesize=200M --follow-file-symlinks=0 --follow-dir-symlinks=0 \
-            --file-list="$list" 2> /dev/null | grep -c 'FOUND$' || true)
+        if command -v clamdscan > /dev/null && systemctl is-active --quiet clamd@scan 2> /dev/null; then
+            engine=(clamdscan --fdpass --no-summary --file-list="$list")
+        else
+            engine=(clamscan --no-summary --max-filesize=200M --follow-file-symlinks=0 --follow-dir-symlinks=0
+                    --file-list="$list")
+        fi
+        while IFS= read -r line; do
+            scanned=$((scanned + 1))
+            [[ "$line" == *" FOUND" ]] && infected=$((infected + 1))
+            (( scanned % 25 == 0 )) && printf 'PROGRESS|%d|%d\n' "$scanned" "$total" >&3
+        done < <(slow "$limit" setpriv --reuid="$uid" --regid="$gid" --init-groups -- "${engine[@]}" 2> /dev/null)
+        printf 'PROGRESS|%d|%d\n' "$scanned" "$total" >&3
     fi
     echo "$infected"
 }
+
+# A step of the deep scan, for the progress bar: STEP|n|of|what.
+step() { printf 'STEP|%d|%d|%s\n' "$1" "$2" "$3" >&3; }
 
 virus() {
     if ! command -v clamscan > /dev/null; then
         note "ClamAV isn't installed (sudo dnf install clamav clamav-freshclam)"
         return
     fi
-    local list n infected
+    local list n infected pid exe
     list=$(mktemp)
-    [[ -d "$home/Downloads" ]] && find "$home/Downloads" -xdev -type f -mtime -14 -size -25M 2> /dev/null | head -n 2000 > "$list"
+    {
+        [[ -d "$home/Downloads" ]] && find "$home/Downloads" -xdev -type f -mtime -14 -size -25M 2> /dev/null | head -n 2000
+        # the programs running for you right now, from the files they started from
+        for pid in /proc/[0-9]*; do
+            [[ "$(stat -c %u "$pid" 2> /dev/null)" == "$uid" ]] || continue
+            exe=$(readlink -f "$pid/exe" 2> /dev/null) && [[ -f "$exe" ]] && echo "$exe"
+        done | sort -u
+    } > "$list"
     n=$(wc -l < "$list")
     infected=$(clam "$list" 60)
     rm -f "$list"
     if (( infected > 0 )); then
-        finding high malware "ClamAV: $infected infected file(s) in Downloads" "Details: clamscan -r -i ~/Downloads" ""
+        finding high malware "ClamAV: $infected infected file(s) in Downloads or running programs" "Details: clamscan -r -i ~/Downloads" ""
     else
-        pass malware "ClamAV: nothing in $n recent file(s) in Downloads"
+        pass malware "ClamAV: no threats in $n files (recent downloads and running programs)"
     fi
 }
 
@@ -180,6 +205,7 @@ scan() {
     # --- Lynis: its last hardening index, quick; a fresh audit with deep
     if command -v lynis > /dev/null; then
         if [[ "$deep" == deep ]]; then
+            step 1 4 "Lynis hardening audit"
             slow 300 lynis audit system --quick --no-colors --quiet > /dev/null 2>&1
         fi
         index=$(awk -F= '/^hardening_index=/ { print $2 }' /var/log/lynis-report.dat 2> /dev/null)
@@ -194,6 +220,7 @@ scan() {
         note "Quick scan. Rootkit and virus checks: mk security deep (a few minutes, low priority)"
         return
     fi
+    step 2 4 "rkhunter (rootkits)"
     # --- rootkit checks
     if command -v rkhunter > /dev/null; then
         [[ -s /var/lib/rkhunter/db/rkhunter.dat ]] || slow 120 rkhunter --propupd --nocolors > /dev/null 2>&1
@@ -207,6 +234,7 @@ scan() {
         note "rkhunter isn't installed (sudo dnf install rkhunter)"
     fi
     if command -v chkrootkit > /dev/null; then
+        step 3 4 "chkrootkit"
         hits=$(slow 120 chkrootkit -q 2> /dev/null | grep -v -E '^$|not (infected|found)|nothing found' | grep -c -i -E 'infected|suspicious|warning' || true)
         if (( hits > 0 )); then
             finding high chkrootkit "chkrootkit: $hits suspicious result(s)" "Read: sudo chkrootkit -q" ""
@@ -218,6 +246,7 @@ scan() {
     fi
     # --- viruses in what arrived lately: files changed in the last 14 days in
     # Downloads, Desktop and /tmp, skipping code checkouts and build trees.
+    step 4 4 "ClamAV (recent files)"
     if command -v clamscan > /dev/null; then
         command -v freshclam > /dev/null && slow 60 freshclam --quiet > /dev/null 2>&1
         list=$(mktemp)
@@ -282,12 +311,20 @@ fi
 
 case "${1:-scan}" in
     scan)
-        # One scan at a time: a second one waits for nothing, it just stops.
+        exec 3>&1  # progress lines (PROGRESS|, STEP|) go straight out
+        # One scan at a time. A scan never outlives whoever started it: when
+        # the caller goes (Cancel, a closed window, Ctrl+C), this stops too and
+        # frees the lock, so no orphan can keep the next scan waiting.
         exec 9> /run/mk-security-scan.lock
-        if ! flock -n 9; then
+        if ! flock -w 3 9; then
             echo "NOTE|Another security scan is still running; wait for it to finish"
             exit 0
         fi
+        caller=$PPID
+        ( while kill -0 "$caller" 2> /dev/null; do sleep 1; done
+          pkill -TERM -P $$ 2> /dev/null; kill -TERM $$ 2> /dev/null ) 9>&- &
+        watchdog=$!
+        trap 'kill "$watchdog" 2> /dev/null' EXIT
         if [[ "${2:-}" == virus ]]; then virus; else scan "${2:-}"; fi
         exit 0 ;;
     fix) fix "${2:-}" ;;

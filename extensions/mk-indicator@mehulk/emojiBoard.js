@@ -63,7 +63,8 @@ export class EmojiBoard {
             return;
         this._target = global.display.focus_window;
         const caret = caretRect();  // read before the board takes the focus
-        const dialog = new ModalDialog.ModalDialog({styleClass: 'mk-emoji-dialog', destroyOnClose: true});
+        // shellReactive: no dimmed backdrop; the board is a small popover by the caret.
+        const dialog = new ModalDialog.ModalDialog({styleClass: 'mk-emoji-dialog', destroyOnClose: true, shellReactive: true});
         this._dialog = dialog;
         const box = dialog.contentLayout;
         this._entry = new St.Entry({hint_text: 'Search emoji (heart, laugh, pizza…)', can_focus: true,

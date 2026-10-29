@@ -1,8 +1,10 @@
-// Clipboard history (Super+V), Windows 11 style: it opens beside the text
-// cursor, a click copies an entry back to the clipboard (nothing is typed for
-// you: paste with Ctrl+V), copied pictures show as previews with their size,
-// text can be edited before you paste it, entries can be pinned to the top,
-// and a search box filters as you type. Clear keeps the pinned ones.
+// Clipboard history (Super+V): a deck in the middle of the screen over a
+// dimmed, blurred backdrop (Esc or a click outside closes it). A click copies
+// an entry back to the clipboard (nothing is typed for you: paste with
+// Ctrl+V). Tabs: All, Images, Text, Pinned. Pictures show as previews with
+// their size, 👁 opens one full size; text can be edited before you paste
+// it; 🏷 tags an entry (#code, #receipt) and the search box finds tags with #;
+// pins stay on top. Clear keeps the pinned ones.
 //
 // Kept in ~/.cache/mk-workstation/clipboard (a folder only you can open): the
 // last 60 entries plus pinned ones. Copies from password managers (and any
@@ -16,7 +18,7 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
-import { anchorDialog, caretRect } from './caret.js';
+const TABS = [['all', '📋 All'], ['images', '🖼️ Images'], ['text', '📝 Text'], ['pinned', '⭐ Pinned']];
 
 const DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'clipboard']);
 const STORE = GLib.build_filenamev([DIR, 'history.json']);
@@ -135,9 +137,18 @@ export class ClipboardHistory {
     open() {
         if (this._dialog)
             return;
-        const caret = caretRect();
         const dialog = new ModalDialog.ModalDialog({styleClass: 'mk-clip-dialog', destroyOnClose: true});
         this._dialog = dialog;
+        // The backdrop: dimmed and blurred; a click on it closes the deck.
+        if (dialog._lightbox) {
+            dialog._lightbox.add_effect(new Shell.BlurEffect({radius: 24, brightness: 0.55,
+                mode: Shell.BlurMode.BACKGROUND}));
+            dialog._lightbox.connect('button-press-event', () => {
+                dialog.close();
+                return Clutter.EVENT_STOP;
+            });
+        }
+        this._tab = 'all';
         const box = dialog.contentLayout;
         const head = new St.BoxLayout({style_class: 'mk-clip-head'});
         this._entry = new St.Entry({hint_text: 'Search the clipboard', can_focus: true, x_expand: true,
@@ -148,6 +159,20 @@ export class ClipboardHistory {
         clear.connect('clicked', () => this._clear());
         head.add_child(clear);
         box.add_child(head);
+        const tabs = new St.BoxLayout({style_class: 'mk-clip-tabs'});
+        this._tabButtons = TABS.map(([key, label]) => {
+            const b = new St.Button({label, style_class: 'mk-clip-tab', can_focus: true, toggle_mode: true,
+                checked: key === 'all'});
+            b.connect('clicked', () => {
+                this._tab = key;
+                for (const [k, other] of this._tabButtons)
+                    other.checked = k === key;
+                this._fill();
+            });
+            tabs.add_child(b);
+            return [key, b];
+        });
+        box.add_child(tabs);
         this._list = new St.BoxLayout({vertical: true, style_class: 'mk-clip-list'});
         const scroll = new St.ScrollView({style_class: 'mk-clip-scroll', child: this._list,
             hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC});
@@ -165,7 +190,6 @@ export class ClipboardHistory {
             this._dialog = null;
         });
         this._fill();
-        anchorDialog(dialog, caret);
         dialog.open();
         global.stage.set_key_focus(this._entry.clutter_text);
     }
@@ -173,8 +197,19 @@ export class ClipboardHistory {
     _fill() {
         this._list.destroy_all_children();
         const q = this._entry.get_text().toLowerCase().trim();
+        const inTab = i => this._tab === 'all' || (this._tab === 'images' && i.image) ||
+            (this._tab === 'text' && i.text) || (this._tab === 'pinned' && i.pinned);
+        const matches = i => {
+            if (!q)
+                return true;
+            const tags = (i.tags ?? []).map(t => `#${t}`);
+            if (q.startsWith('#'))
+                return tags.some(t => t.startsWith(q));
+            return tags.some(t => t.includes(q)) ||
+                (i.text ? i.text.toLowerCase().includes(q) : 'image picture screenshot'.includes(q));
+        };
         const shown = [...this._items.filter(i => i.pinned), ...this._items.filter(i => !i.pinned)]
-            .filter(i => !q || (i.text ? i.text.toLowerCase().includes(q) : 'image picture screenshot'.includes(q)));
+            .filter(i => inTab(i) && matches(i));
         this._first = shown[0] ?? null;
         this._firstButton = null;
         if (!shown.length) {
@@ -204,6 +239,13 @@ export class ClipboardHistory {
             label.clutter_text.line_wrap = true;
             main.set_child(label);
         }
+        if (item.tags?.length) {
+            const column = new St.BoxLayout({vertical: true, x_expand: true, style: 'spacing: 4px;'});
+            const content = main.get_child();
+            main.set_child(column);
+            column.add_child(content);
+            column.add_child(new St.Label({text: item.tags.map(t => `#${t}`).join('  '), style_class: 'mk-clip-tags'}));
+        }
         main.connect('clicked', () => this._copy(item));
         this._firstButton ??= main;
         card.add_child(main);
@@ -219,8 +261,11 @@ export class ClipboardHistory {
             this._save();
             this._fill();
         });
+        if (item.image)
+            tool('view-reveal-symbolic', 'Preview full size', () => this._preview(item));
         if (item.text)
             tool('document-edit-symbolic', 'Edit', () => this._edit(card, item));
+        tool('bookmark-new-symbolic', 'Tags', () => this._tagEdit(card, item));
         tool('edit-delete-symbolic', 'Delete', () => {
             this._items = this._items.filter(i => i !== item);
             if (item.image)
@@ -230,6 +275,43 @@ export class ClipboardHistory {
         });
         card.add_child(tools);
         return card;
+    }
+
+    // The picture full size, inside the deck; Back (or Esc) returns.
+    _preview(item) {
+        this._list.destroy_all_children();
+        const scale = Math.min(1, 500 / Math.max(1, item.w || 500), 360 / Math.max(1, item.h || 360));  // fits the deck
+        const big = new St.Widget({style_class: 'mk-clip-preview', x_align: Clutter.ActorAlign.CENTER,
+            width: Math.round((item.w || 500) * scale), height: Math.round((item.h || 360) * scale),
+            style: `background-image: url("file://${item.image}");`});
+        const row = new St.BoxLayout({style: 'spacing: 8px;', x_align: Clutter.ActorAlign.END});
+        const back = new St.Button({label: 'Back', style_class: 'button', can_focus: true});
+        back.connect('clicked', () => this._fill());
+        const copy = new St.Button({label: 'Copy', style_class: 'button default', can_focus: true});
+        copy.connect('clicked', () => this._copy(item));
+        row.add_child(back);
+        row.add_child(copy);
+        this._list.add_child(big);
+        this._list.add_child(row);
+        global.stage.set_key_focus(copy);
+    }
+
+    // Tags: words to find an entry by (#code, #receipt), space-separated.
+    _tagEdit(card, item) {
+        card.destroy_all_children();
+        const entry = new St.Entry({text: (item.tags ?? []).join(' '), hint_text: 'Tags, e.g. code receipt',
+            can_focus: true, x_expand: true, style_class: 'mk-clip-search'});
+        const save = () => {
+            item.tags = [...new Set(entry.get_text().toLowerCase().split(/[\s,#]+/).filter(Boolean))].slice(0, 8);
+            this._save();
+            this._fill();
+        };
+        entry.clutter_text.connect('activate', save);
+        const ok = new St.Button({label: 'Save', style_class: 'button default', can_focus: true});
+        ok.connect('clicked', save);
+        card.add_child(entry);
+        card.add_child(ok);
+        global.stage.set_key_focus(entry.clutter_text);
     }
 
     // Change the text in place: Save keeps it in the history (and copies it).

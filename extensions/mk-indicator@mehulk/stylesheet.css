@@ -238,7 +238,7 @@
 .mk-clip-search { border-radius: 12px; padding: 8px 12px; }
 .mk-clip-clear { padding: 7px 14px; border-radius: 12px; color: white; font-weight: 600; background-color: rgba(255, 255, 255, 0.10); }
 .mk-clip-clear:hover, .mk-clip-clear:focus { background-color: rgba(255, 92, 110, 0.35); }
-.mk-clip-scroll { min-width: 440px; max-width: 440px; max-height: 380px; min-height: 380px; }
+.mk-clip-scroll { min-width: 520px; max-width: 860px; max-height: 560px; min-height: 420px; }
 .mk-clip-list { spacing: 8px; padding-right: 6px; }
 .mk-clip-card { spacing: 4px; padding: 4px; border-radius: 12px; background-color: rgba(255, 255, 255, 0.06); }
 .mk-clip-card.pinned { background-color: rgba(255, 196, 64, 0.12); }
@@ -251,6 +251,11 @@
 .mk-clip-tool { padding: 5px; border-radius: 8px; }
 .mk-clip-tool:hover, .mk-clip-tool:focus { background-color: rgba(255, 255, 255, 0.14); }
 .mk-clip-edit { min-height: 80px; border-radius: 10px; padding: 8px; }
+.mk-clip-tabs { spacing: 4px; }
+.mk-clip-tab { padding: 5px 12px; border-radius: 99px; font-size: 0.9em; font-weight: 600; }
+.mk-clip-tab:checked, .mk-clip-tab:hover { background-color: rgba(255, 255, 255, 0.14); }
+.mk-clip-tags { font-size: 0.8em; color: rgba(140, 180, 255, 0.95); }
+.mk-clip-preview { border-radius: 10px; background-size: contain; background-position: center; }
 .mk-clip-empty { padding: 40px 10px; color: rgba(255, 255, 255, 0.55); text-align: center; }
 
 /* Task badge (taskBadge.js) */

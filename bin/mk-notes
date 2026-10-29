@@ -2774,8 +2774,12 @@ class NotesWindow(Adw.ApplicationWindow):
         div_btn = Gtk.Button(label="─── Divider", icon_name="list-remove-symbolic", tooltip_text="Insert Section Divider Line", css_classes=["flat"])
         div_btn.connect("clicked", lambda *_: self.insert_divider_line())
         ribbon.append(div_btn)
-        table_btn = Gtk.MenuButton(icon_name="view-grid-symbolic", tooltip_text="Insert a table",
-                                   css_classes=["flat"], popover=self._table_picker())
+        # Insert Table: one click drops a 3 x 3 table in the middle of the
+        # view; the arrow opens the grid to pick another size
+        table_btn = Adw.SplitButton(child=Adw.ButtonContent(icon_name="view-grid-symbolic", label="Insert Table"),
+                                    tooltip_text="Insert a 3 x 3 table", dropdown_tooltip="Pick the table's size",
+                                    css_classes=["flat"], popover=self._table_picker())
+        table_btn.connect("clicked", lambda *_: self.insert_table(3, 3, centre=True))
         ribbon.append(table_btn)
 
         ribbon.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=2, margin_end=2))
@@ -3205,11 +3209,13 @@ class NotesWindow(Adw.ApplicationWindow):
         area.add_controller(motion)
         click = Gtk.GestureClick()
 
-        def pressed(*_):
-            if hover[0] and hover[1]:
-                pop.popdown()
-                self.insert_table(*hover)
-        click.connect("released", pressed)
+        def pressed(_g, _n, x, y):
+            # sized from where the click is, not the last motion: a tap
+            # with no hover before it still inserts
+            moved(None, x, y)
+            pop.popdown()
+            self.insert_table(*hover, centre=True)
+        click.connect("pressed", pressed)
         area.add_controller(click)
         box.append(label)
         box.append(area)
@@ -3365,16 +3371,23 @@ class NotesWindow(Adw.ApplicationWindow):
         buf.place_cursor(buf.get_iter_at_line_offset(top + min(r + 1, len(lines)), 2)[1])
         return True
 
-    def insert_table(self, cols, rows):
-        """A COLS x ROWS table (TableItem) on the page under the cursor's
-        line: a header row, then ROWS - 1 empty rows. Drag it by ⠿ Move
-        anywhere; saved with the note."""
+    def insert_table(self, cols, rows, centre=False):
+        """A COLS x ROWS table (TableItem): a header row, then ROWS - 1 empty
+        rows, under the cursor's line, or with CENTRE in the middle of what's
+        on screen. Drag it by ⠿ Move anywhere; saved with the note."""
         z = max(0.5, self.zoom)
-        loc = self.view.get_iter_location(self.buffer.get_iter_at_mark(self.buffer.get_insert()))
+        col_w = max(TableItem.MIN_COL, min(140, round((self.page_width() / z - 112) / cols)))
+        if centre:
+            adj = self.page_scroll.get_vadjustment()
+            x = max(16.0, round((self.page_width() / z - col_w * cols) / 2))
+            y = max(16.0, round((adj.get_value() + adj.get_page_size() / 2) / z - rows * 18))
+        else:
+            loc = self.view.get_iter_location(self.buffer.get_iter_at_mark(self.buffer.get_insert()))
+            x, y = 56.0, round((loc.y + loc.height) / z + 16)
         data = {"rows": [[f"Column {i + 1}" for i in range(cols)]] + [[""] * cols for _ in range(max(1, rows - 1))],
-                "col_w": [max(TableItem.MIN_COL, min(140, round((self.page_width() / z - 112) / cols)))] * cols,
-                "x": 56.0, "y": round((loc.y + loc.height) / z + 16), "z": self._next_z()}
-        self._add_table(data)
+                "col_w": [col_w] * cols, "x": x, "y": y, "z": self._next_z()}
+        widget = self._add_table(data)
+        widget.select(True)
         self.dirty = True
         self.save_note_meta()
         self.ensure_page_height_for_images()

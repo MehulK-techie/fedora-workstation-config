@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""MK tour: a short walkthrough of the desktop, its gestures and tools.
+"""MK tour: the workstation in six slides, GNOME Tour style.
 
-  mk-tour              the first time: a four-page welcome (sign-in, shortcuts,
-                       MK Notes); after that: the MK Quick Reference, a
-                       searchable cheat sheet (also mk tour, Super+Shift+/ or
-                       the app grid)
-  mk-tour --full       the whole walkthrough, every page
-  mk-tour --first-run  the welcome once after setup, then never by itself again
+  mk-tour              the six-slide tour (also mk tour, Super+Shift+/,
+                       MK Control Center or the app grid)
+  mk-tour --reference  the MK Quick Reference: a searchable cheat sheet
+  mk-tour --full       the long walkthrough, every page
+  mk-tour --first-run  the tour once after setup, then never by itself again
 
 Arrow keys or the buttons move between pages; each page can open what it
 describes, so you can try it right away.
@@ -116,33 +115,6 @@ PAGES = [
      "Everything is plain text in the MK repo: change it, run mk sync, and it's yours. Enjoy.",
      []),
 ]
-
-
-# The first-run welcome: the four things worth knowing on day one.
-WELCOME = [
-    ("starred-symbolic", "Welcome to your workstation",
-     "Four quick pages: how you sign in, the shortcuts you'll use every day, and MK Notes. "
-     "Later, Super+Shift+/ (or mk tour) opens a cheat sheet of everything instead.",
-     []),
-    ("fingerprint-detection-symbolic", "Sign in with your finger or face", "SIGNIN", []),
-    ("input-keyboard-symbolic", "Five shortcuts to start with",
-     "Super+/ every shortcut, live · Super+V clipboard history · Super+. emoji · "
-     "Alt+Tab windows (or three fingers sideways) · Super+E Files. "
-     "Four fingers sideways switch desktops.",
-     [("Open Shortcuts", "show-shortcuts")]),
-    ("accessories-text-editor-symbolic", "MK Notes",
-     "Super+N: notes as plain Markdown with links, tags, checklists, drawings and screenshots; "
-     "lock a note with your fingerprint or a PIN; Ctrl+Shift+E exports a PDF. "
-     "Every MK command is a click away in mk hub.",
-     [("Open MK Notes", "mk-notes"), ("Open the Actions hub", "mk-center actions")]),
-]
-
-# The cheat sheet's last group: the commands people reach for.
-COMMANDS = [("mk hub", "Every command as a card you can click and pin"), ("mk update", "Update everything"),
-            ("mk doctor", "Health check"), ("mk security", "Security score and fixes"),
-            ("mk face · mk fingerprint", "Face and fingerprint sign-in"), ("mk vault", "Your encrypted folder"),
-            ("mk optimize ram", "Free cached memory"), ("mk watchdog", "Leftover and runaway processes"),
-            ("mk notes today", "Today's note"), ("mk focus 25", "Focus timer")]
 
 
 def has_fingerprint_reader():
@@ -300,7 +272,7 @@ class CheatSheet(Adw.ApplicationWindow):
         full.connect("clicked", lambda *_: (self.get_application().show(PAGES), self.close()))
         head.pack_start(full)
         welcome = Gtk.Button(label="Welcome again")
-        welcome.connect("clicked", lambda *_: (self.get_application().show(WELCOME), self.close()))
+        welcome.connect("clicked", lambda *_: (Showcase(self.get_application()).present(), self.close()))
         head.pack_start(welcome)
         self.search = Gtk.SearchEntry(placeholder_text="Find a shortcut or command…", width_chars=30)
         head.set_title_widget(self.search)
@@ -349,6 +321,145 @@ class CheatSheet(Adw.ApplicationWindow):
             group.set_visible(any_visible)
 
 
+
+# The six slides: (icon, title, text, (button label, action) or None).
+# action: a command to start, "face" (try Face ID here) or "done".
+SLIDES = [
+    ("org.fedoraproject.AnacondaInstaller-symbolic", "Let's Begin",
+     "An optimized, student-first workstation for Fedora Linux. Built with passion, open-source spirit "
+     "and pure Infrastructure-as-Code.", None),
+    ("camera-web-symbolic", "Native Face Unlock",
+     "Unlock apps, folders and system prompts with your standard webcam, with your password or "
+     "fingerprint always there as the fallback.", ("Try Face ID", "face")),
+    ("accessories-text-editor-symbolic", "Zero-Bloat Note Taking",
+     "A4 pages that grow as you write, real tables, sketching, PDF printouts and Word or PDF export: "
+     "completely offline, no accounts, no paywalls.", ("Open MK Notes", "mk-notes")),
+    ("input-keyboard-symbolic", "Speed at Your Fingertips",
+     "macOS fluidity meets Windows window management: Super+1…9 opens dock apps, Super+V the clipboard "
+     "deck, Super+. the emoji board at your cursor, Super+Tab switches apps.", None),
+    ("applications-graphics-symbolic", "Personality & Performance",
+     "Cairo-drawn skylines: Spider-Man with Stan Lee's window-light tribute and Batman in Gotham, "
+     "cached so a frame takes a few milliseconds.", ("Choose a scene", "mk-screensaver settings")),
+    ("utilities-terminal-symbolic", "One Command Setup",
+     "Reproduce the whole workspace with ./sync.sh. 100 % open source under the MIT License.",
+     ("Start Using MK-Workstation", "done")),
+]
+SHOW_CSS = b"""
+.mk-slide-art { min-width: 132px; min-height: 132px; border-radius: 66px;
+                background: alpha(@accent_bg_color, 0.18); color: @accent_color; }
+.mk-slide-title { font-size: 26px; font-weight: 800; }
+.mk-slide-text { font-size: 15px; opacity: 0.8; }
+.mk-tour-arrow { min-width: 44px; min-height: 44px; border-radius: 22px; padding: 0;
+                 background: alpha(@window_fg_color, 0.10); transition: background 150ms ease-out; }
+.mk-tour-arrow:hover { background: alpha(@window_fg_color, 0.22); }
+"""
+
+
+class Showcase(Adw.ApplicationWindow):
+    """GNOME Tour style: a centred card of slides, page dots on top, round
+    arrows at the sides. Left/Right, Space or Enter move; Esc closes."""
+
+    def __init__(self, app):
+        super().__init__(application=app, title="MK Tour", default_width=740, default_height=530)
+        css = Gtk.CssProvider()
+        css.load_from_data(SHOW_CSS)
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
+                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.toast = Adw.ToastOverlay()
+        view = Adw.ToolbarView()
+        head = Adw.HeaderBar()  # the page dots are its title
+        self.carousel = Adw.Carousel(hexpand=True, vexpand=True, allow_scroll_wheel=True)
+        head.set_title_widget(Adw.CarouselIndicatorDots(carousel=self.carousel))
+        view.add_top_bar(head)
+        for icon, title, text, action in SLIDES:
+            page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, valign=Gtk.Align.CENTER,
+                           halign=Gtk.Align.CENTER, margin_start=72, margin_end=72)
+            art = Gtk.Box(css_classes=["mk-slide-art"], halign=Gtk.Align.CENTER)
+            art.append(Gtk.Image(icon_name=icon, pixel_size=72, hexpand=True, vexpand=True))
+            page.append(art)
+            page.append(Gtk.Label(label=title, css_classes=["mk-slide-title"], wrap=True,
+                                  justify=Gtk.Justification.CENTER))
+            page.append(Gtk.Label(label=text, css_classes=["mk-slide-text"], wrap=True, max_width_chars=52,
+                                  justify=Gtk.Justification.CENTER))
+            if action:
+                label, what = action
+                b = Gtk.Button(label=label, css_classes=["pill", "suggested-action"], halign=Gtk.Align.CENTER,
+                               margin_top=8)
+                b.connect("clicked", lambda _b, w=what: self.act(w))
+                page.append(b)
+            self.carousel.append(page)
+        stage = Gtk.Overlay(child=self.carousel)
+        self.prev = Gtk.Button(icon_name="go-previous-symbolic", css_classes=["mk-tour-arrow"],
+                               halign=Gtk.Align.START, valign=Gtk.Align.CENTER, margin_start=14,
+                               tooltip_text="Back (←)")
+        self.prev.connect("clicked", lambda *_: self.step(-1))
+        self.next = Gtk.Button(icon_name="go-next-symbolic", css_classes=["mk-tour-arrow"],
+                               halign=Gtk.Align.END, valign=Gtk.Align.CENTER, margin_end=14,
+                               tooltip_text="Next (→)")
+        self.next.connect("clicked", lambda *_: self.step(1))
+        stage.add_overlay(self.prev)
+        stage.add_overlay(self.next)
+        self.toast.set_child(stage)
+        view.set_content(self.toast)
+        self.set_content(view)
+        self.carousel.connect("page-changed", lambda *_: self.sync())
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.on_key)
+        self.add_controller(keys)
+        self.sync()
+
+    def position(self):
+        return round(self.carousel.get_position())
+
+    def step(self, delta):
+        target = self.position() + delta
+        if 0 <= target < self.carousel.get_n_pages():
+            self.carousel.scroll_to(self.carousel.get_nth_page(target), True)
+
+    def sync(self):
+        pos = self.position()
+        self.prev.set_visible(pos > 0)
+        self.next.set_visible(pos < self.carousel.get_n_pages() - 1)
+
+    def on_key(self, _c, keyval, _code, _state):
+        if keyval in (Gdk.KEY_Right, Gdk.KEY_space, Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            if keyval != Gdk.KEY_Right and self.position() == self.carousel.get_n_pages() - 1:
+                self.close()
+            else:
+                self.step(1)
+        elif keyval == Gdk.KEY_Left:
+            self.step(-1)
+        elif keyval == Gdk.KEY_Escape:
+            self.close()
+        else:
+            return False
+        return True
+
+    def act(self, what):
+        if what == "done":
+            self.close()
+        elif what == "face":
+            self.try_face()
+        else:
+            run(what)
+
+    def try_face(self):
+        """A real check with the MK unlock window; a friendly word when
+        there's nothing to check with yet."""
+        try:
+            from mkworkstation import auth
+        except ImportError:
+            auth = None
+        if not auth or not auth.face_available():
+            hint = ("Face ID isn't set up yet: MK Control Center › MK Lock › Face & Fingerprint › Add a face"
+                    if shutil.which("howdy") else "Face ID needs Howdy: run ./setup.sh, then add your face")
+            self.toast.add_toast(Adw.Toast(title=hint, timeout=5))
+            return
+        dialog = auth.UnlockDialog("Try Face ID", None,
+                                   lambda: self.toast.add_toast(Adw.Toast(title="It's you ✓", timeout=3)))
+        dialog.present(self)
+
+
 class TourApp(Adw.Application):
     def __init__(self, mode):
         super().__init__(application_id=APP_ID)
@@ -363,8 +474,10 @@ class TourApp(Adw.Application):
             window.present()
         elif self.mode == "cheatsheet":
             CheatSheet(self).present()
+        elif self.mode == "full":
+            self.show(PAGES)
         else:
-            self.show(PAGES if self.mode == "full" else WELCOME)
+            Showcase(self).present()
 
 
 def main():
@@ -377,7 +490,7 @@ def main():
     if first_time:
         DONE.parent.mkdir(parents=True, exist_ok=True)
         DONE.write_text("shown\n")
-    mode = "full" if "--full" in sys.argv else "welcome" if first_time else "cheatsheet"
+    mode = "full" if "--full" in sys.argv else "cheatsheet" if "--reference" in sys.argv else "showcase"
     return TourApp(mode).run([sys.argv[0]])
 
 

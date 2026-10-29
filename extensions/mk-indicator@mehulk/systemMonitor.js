@@ -441,7 +441,7 @@ export class SystemMonitor {
                 r.disk.hide(true);
             }
         }
-        r.io.set(`Read ${fmtRate(s.diskRead)}   Write ${fmtRate(s.diskWrite)}`);
+        r.io.set(`R ${fmtRate(s.diskRead)} · W ${fmtRate(s.diskWrite)}`);
         const temps = [['CPU', s.cpuTemp], ['GPU', s.gpuTemp], ['SSD', s.ssdTemp]].filter(t => t[1]);
         r.temp.hide(!temps.length);
         r.temp.set(temps.map(([n, t]) => `${n} ${Math.round(t)} °C`).join('   '));

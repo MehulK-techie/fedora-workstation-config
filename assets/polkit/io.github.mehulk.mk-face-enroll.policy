@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- MK Control Center: add or remove face models for your own account
+     (yourself, or a guest such as a hackathon judge) without a terminal.
+     A face model is a way into the account, so an administrator's password
+     is asked (kept for a few minutes, so enrolling two looks asks once). -->
+<policyconfig>
+  <vendor>MK Workstation</vendor>
+  <action id="io.github.mehulk.mk-face-enroll">
+    <description>Add or remove face unlock models for your account</description>
+    <message>Authentication is required to change who can unlock this account with a face</message>
+    <icon_name>camera-web-symbolic</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/libexec/mk-face-enroll</annotate>
+  </action>
+</policyconfig>

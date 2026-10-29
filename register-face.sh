@@ -282,6 +282,12 @@ recorded=0
 for (( i = 0; i < MODEL_COUNT; i++ )); do
     label="${SCENES[$i]%%|*}"
     tip="${SCENES[$i]#*|}"
+    # Never two models with one name: an existing one is kept as it is.
+    if howdy -U "$TARGET_USER" --plain list 2> /dev/null | awk -F, -v want="$label" '$3 == want { found = 1 } END { exit !found }'; then
+        echo ""
+        echo "  Face model \"${label}\" is already recorded: kept (remove it with: sudo howdy -U ${TARGET_USER} remove ID)."
+        continue
+    fi
     echo ""
     echo "  Face model $((i + 1)) of ${MODEL_COUNT}: ${label}"
     echo "  ${tip}"

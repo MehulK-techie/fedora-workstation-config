@@ -37,7 +37,12 @@ for _lib in (Path(__file__).resolve().parent.parent / "lib",
     if (_lib / "mkworkstation").is_dir():
         sys.path.insert(0, str(_lib))
         break
-from mkworkstation import saver_conf  # noqa: E402
+from mkworkstation import auth, saver_conf  # noqa: E402
+
+FACE_HELPER = "/usr/local/libexec/mk-face-enroll"
+FINGERS = [("Right index", "right-index-finger"), ("Right thumb", "right-thumb"),
+           ("Right middle", "right-middle-finger"), ("Left index", "left-index-finger"),
+           ("Left thumb", "left-thumb"), ("Left middle", "left-middle-finger")]
 
 APP_ID = "io.github.mehulk.MkCenter"
 HOME = Path.home()
@@ -124,8 +129,9 @@ ACTIONS = [
     ("lock-page", "Security & Vault", "changes-prevent-symbolic", "MK Lock", "Lock apps, folders and notebooks", ("page", "lock")),
     ("keyring", "Security & Vault", "dialog-password-symbolic", "Passwords and Keys", "Why apps ask for the keyring", ("bg", mk("keyring", "open"))),
     ("face", "Biometrics & Lock", "camera-web-symbolic", "Face unlock setup", "Guided: camera, light, face models", ("term", "mk face")),
+    ("face-add", "Biometrics & Lock", "camera-web-symbolic", "Add a face", "You, or a guest / judge, in a window", ("dialog", "face")),
     ("face-tune", "Biometrics & Lock", "camera-web-symbolic", "Re-tune the camera", "After a new webcam; faces kept", ("term", "mk face --tune-only")),
-    ("finger", "Biometrics & Lock", "auth-fingerprint-symbolic", "Enroll a finger", "Login, lock screen and sudo", ("term", "mk fingerprint enroll")),
+    ("finger", "Biometrics & Lock", "auth-fingerprint-symbolic", "Enroll a finger", "You or someone else; never the same finger twice", ("dialog", "finger")),
     ("finger-check", "Biometrics & Lock", "auth-fingerprint-symbolic", "Fingerprint check", "Is it set up everywhere?", ("show", mk("fingerprint", "check"))),
     ("saver", "Screensavers & Wallpapers", "preferences-desktop-screensaver-symbolic", "Screensaver", "Scenes, delay, lock screen", ("bg", [tool("mk-screensaver"), "settings"])),
     ("saver-show", "Screensavers & Wallpapers", "media-playback-start-symbolic", "Show a scene now", "Shuffle", ("bg", mk("screensaver", "show"))),
@@ -321,6 +327,8 @@ class Center(Adw.ApplicationWindow):
         _id, _cat, _icon, title, _sub, (how, what) = action
         if how == "page":
             self.stack.set_visible_child_name(what)
+        elif how == "dialog":
+            (self._face_dialog if what == "face" else self._finger_dialog)()
         elif how == "term":
             mk_cmd = shlex.quote(tool("mk"))
             run_bg(terminal(mk_cmd + what[2:] if what.startswith("mk ") else what))
@@ -355,6 +363,7 @@ class Center(Adw.ApplicationWindow):
         tabs.add_titled_with_icon(self._lock_apps(), "apps", "Apps", "view-app-grid-symbolic")
         tabs.add_titled_with_icon(self._lock_folders(), "folders", "Folders & Vault", "folder-symbolic")
         tabs.add_titled_with_icon(self._lock_notes(), "notes", "Notes", "accessories-text-editor-symbolic")
+        tabs.add_titled_with_icon(self._lock_biometrics(), "biometrics", "Face & Fingerprint", "camera-web-symbolic")
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         bar = Adw.ViewSwitcher(stack=tabs, policy=Adw.ViewSwitcherPolicy.WIDE, halign=Gtk.Align.CENTER,
                                margin_top=6)
@@ -461,6 +470,168 @@ class Center(Adw.ApplicationWindow):
         self.say(f"Encrypting {Path(path).name}…")
         run_bg([tool("mk-lock"), "folder", "add", path],
                lambda c, o: (self._fill_folders(), self.say((o.strip().splitlines() or ["Done"])[-1].strip("✔[-] "))))
+
+    # ---------------------------------------------------------------- face and fingerprint
+    def _lock_biometrics(self):
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(title="Sign in with your face or finger",
+                                     description="New faces are added next to the ones you have; nothing is "
+                                                 "cleared. Each face or finger is recorded once.")
+        for title, sub, icon, fn in (
+                ("Add a face", "You, or a guest such as a hackathon judge: then try it at once",
+                 "camera-web-symbolic", self._face_dialog),
+                ("Enroll a finger", "You or someone else; asks which finger, never the same one twice",
+                 "auth-fingerprint-symbolic", self._finger_dialog),
+                ("Full face setup", "Camera, light and several looks (in a terminal: it asks questions)",
+                 "utilities-terminal-symbolic", lambda: run_bg(terminal(f"{shlex.quote(tool('mk'))} face"))),
+                ("Try Face ID", "The unlock window MK's apps use", "security-high-symbolic", self._try_face)):
+            row = Adw.ActionRow(title=title, subtitle=sub, activatable=True)
+            row.add_prefix(Gtk.Image(icon_name=icon))
+            row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
+            row.connect("activated", lambda _r, f=fn: f())
+            group.add(row)
+        page.add(group)
+        return page
+
+    def _try_face(self):
+        dialog = auth.UnlockDialog("Try Face ID", None, lambda: self.say("Face ID: it's you ✓"))
+        dialog.present(self)
+
+    def _face_dialog(self):
+        """Record one face model for this account: yours (primary) or a
+        guest's (a judge at a demo), named so it's never recorded twice."""
+        dlg = Adw.AlertDialog(heading="Add a face",
+                              body="Sit about an arm's length from the camera, facing the light.")
+        box = Adw.PreferencesGroup()
+        who = Adw.ComboRow(title="Enroll for", model=Gtk.StringList.new(["You (primary)", "Guest / Judge"]))
+        name = Adw.EntryRow(title="Name of this face model", text="primary_model")
+        who.connect("notify::selected", lambda r, _p: name.set_text(["primary_model", "guest_judge"][r.get_selected()]))
+        box.add(who)
+        box.add(name)
+        note = Gtk.Label(wrap=True, xalign=0, css_classes=["dim-label", "caption"],
+                         label="A guest's face unlocks YOUR account (login, sudo, locked apps). "
+                               "Remove it after the demo with Remove this model.")
+        holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        holder.append(box)
+        holder.append(note)
+        dlg.set_extra_child(holder)
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("remove", "Remove this model")
+        dlg.add_response("record", "Record")
+        dlg.set_response_appearance("record", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_response_appearance("remove", Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.set_default_response("record")
+
+        def answered(_d, response):
+            label = name.get_text().strip()
+            if response not in ("record", "remove") or not label:
+                return
+            if not Path(FACE_HELPER).exists():
+                self.say("Face setup isn't installed yet: run ./setup.sh")
+                return
+            if response == "remove":
+                run_bg(["pkexec", FACE_HELPER, "remove", label],
+                       lambda c, o: self.say(f"Removed face model “{label}”" if c == 0 else o.strip() or "Not removed"))
+                return
+            self.say("Look at the camera… (up to 30 s)")
+
+            def recorded(code, out):
+                if code == 0:
+                    self.say(f"Recorded “{label}”: try it now")
+                    self._try_face()
+                elif code == 3:
+                    self.say(f"“{label}” already exists: pick another name, or remove it first")
+                elif code in (126, 127):
+                    self.say("Not confirmed; nothing changed")
+                elif code == 124:
+                    self.say("The camera didn't answer in 30 s: close apps that use it and try again")
+                else:
+                    self.say((out.strip().splitlines() or ["No face found: face the light and try again"])[-1])
+            run_bg(["pkexec", FACE_HELPER, "add", label], recorded)
+        dlg.connect("response", answered)
+        dlg.present(self)
+
+    def _finger_dialog(self):
+        """Enroll a finger with fprintd, in this window: who and which finger;
+        a finger that's already enrolled is only scanned again if you say so."""
+        if not shutil.which("fprintd-enroll"):
+            self.say("fprintd isn't installed: sudo dnf install fprintd fprintd-pam")
+            return
+        dlg = Adw.Dialog(title="Enroll a finger", content_width=420)
+        box = Adw.PreferencesGroup(description="Lift and touch the reader until it's done.")
+        who = Adw.ComboRow(title="Enroll for", model=Gtk.StringList.new(["You (primary)", "Someone else"]))
+        user = Adw.EntryRow(title="Their account name", visible=False)
+        who.connect("notify::selected", lambda r, _p: user.set_visible(r.get_selected() == 1))
+        finger = Adw.ComboRow(title="Finger", model=Gtk.StringList.new([f[0] for f in FINGERS]))
+        for row in (who, user, finger):
+            box.add(row)
+        self.enroll_bar = Gtk.ProgressBar(visible=False, pulse_step=0.12)
+        self.enroll_text = Gtk.Label(wrap=True, xalign=0, css_classes=["dim-label"])
+        start = Gtk.Button(label="Enroll", css_classes=["pill", "suggested-action"], halign=Gtk.Align.CENTER)
+        holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=18,
+                         margin_start=18, margin_end=18)
+        holder.append(box)
+        holder.append(self.enroll_bar)
+        holder.append(self.enroll_text)
+        holder.append(start)
+        view = Adw.ToolbarView(content=holder)
+        view.add_top_bar(Adw.HeaderBar())
+        dlg.set_child(view)
+
+        def enroll(_b):
+            account = user.get_text().strip() if who.get_selected() == 1 else GLib.get_user_name()
+            if not re.fullmatch(r"[a-z_][a-z0-9_.-]{0,31}", account or ""):
+                self.enroll_text.set_label("Type their account name first.")
+                return
+            label, fname = FINGERS[finger.get_selected()]
+            listed = subprocess.run(["fprintd-list", account], capture_output=True, text=True).stdout
+            if re.search(rf"\b{re.escape(fname)}\b", listed):
+                again = Adw.AlertDialog(heading=f"{label} is already enrolled",
+                                        body=f"{account} already signs in with this finger. Scan it again?")
+                again.add_response("no", "Keep it")
+                again.add_response("yes", "Scan again")
+                again.connect("response", lambda _a, r: r == "yes" and self._run_enroll(account, fname, True))
+                again.present(self)
+                return
+            self._run_enroll(account, fname, False)
+        start.connect("clicked", enroll)
+        dlg.present(self)
+
+    def _run_enroll(self, account, fname, rescan):
+        """fprintd-enroll in the background; its stage lines move the bar."""
+        argv = ["fprintd-enroll", "-f", fname, account]
+        if rescan:
+            argv = ["sh", "-c", 'fprintd-delete "$1" -f "$2" >/dev/null 2>&1; exec fprintd-enroll -f "$2" "$1"',
+                    "sh", account, fname]
+        self.enroll_bar.set_visible(True)
+        self.enroll_bar.set_fraction(0)
+        self.enroll_text.set_label("Touch the reader…")
+        proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE)
+        stream = Gio.DataInputStream.new(proc.get_stdout_pipe())
+        messages = {"enroll-stage-passed": "Good: lift and touch again", "enroll-retry-scan": "Try again",
+                    "enroll-swipe-too-short": "Too short: again", "enroll-finger-not-centered": "Centre your finger",
+                    "enroll-remove-and-retry": "Lift your finger and try again",
+                    "enroll-duplicate": "That finger is already enrolled (for this or another account)",
+                    "enroll-completed": "Done ✓ This finger now signs in", "enroll-failed": "It didn't work: try again"}
+
+        def line(src, res):
+            try:
+                text, _len = src.read_line_finish_utf8(res)
+            except GLib.Error:
+                text = None
+            if text is None:
+                return
+            for key, say in messages.items():
+                if key in text:
+                    self.enroll_text.set_label(say)
+                    if key == "enroll-stage-passed":
+                        self.enroll_bar.set_fraction(min(0.95, self.enroll_bar.get_fraction() + 0.1))
+                    elif key == "enroll-completed":
+                        self.enroll_bar.set_fraction(1)
+            if "Not Authorized" in text or "PermissionDenied" in text:
+                self.enroll_text.set_label("Not allowed: enrolling someone else needs an administrator")
+            stream.read_line_async(GLib.PRIORITY_DEFAULT, None, line)
+        stream.read_line_async(GLib.PRIORITY_DEFAULT, None, line)
 
     def _lock_notes(self):
         page = Adw.PreferencesPage()

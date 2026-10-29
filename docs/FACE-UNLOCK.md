@@ -69,6 +69,23 @@ Each person can only unlock **their own** account. Another person's face never o
 
 The wizard picks an IR camera automatically when your computer has one. On laptops with only a regular webcam (for example the HP Wide Vision HD), it warns you and keeps `sudo` password-only unless you choose otherwise.
 
+### Add a face from the Control Center (you, or a guest or judge)
+
+MK Control Center › MK Lock › Face & Fingerprint › **Add a face**: pick
+*You (primary)* or *Guest / Judge*, keep or change the model's name
+(`primary_model`, `guest_judge`) and press Record; polkit asks for an
+administrator's password once, then the camera records for up to 30 s and
+the unlock window opens so the new face can try it straight away.
+Existing models are never cleared, and a name can only be recorded once
+(the wizard's lighting models too). A guest's face unlocks **your** account
+(login, sudo, locked apps): remove it after the demo with **Remove this
+model** (the same name). The helper is `/usr/local/libexec/mk-face-enroll`
+and only ever touches the caller's own account.
+
+**Enroll a finger** in the same tab: for you or another account, and which
+finger; a finger that's already enrolled is only scanned again if you say
+so. Enrolling someone else asks for an administrator (fprintd's own rule).
+
 ### In MK's own apps
 
 MK Notes' lock, locked apps, locked folders and the vault all use one unlock

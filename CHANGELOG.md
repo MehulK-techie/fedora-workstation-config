@@ -3,6 +3,13 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Live wallpaper:** any screensaver scene behind your windows (Control Center › Home), paused under maximized windows.
+- **Control Center:** Home actions (Vault, Speed test, Live wallpaper, Scratchpad, Distraction-free, System health); MK Lock › Face & Fingerprint: add a face for you or a guest/judge (named, never duplicated, then try it), enroll a chosen finger (never twice), all in windows.
+- **Web Hang:** Stan Lee's portrait and quote lit in a tower's windows; no lightning; clock top right.
+- **MK Notes:** margin comments, tables shown as tables with Tab, sticky colours/titles and PDF callouts, Lock Now and 60 s auto-lock, A4 page guides, PDF attach or printout, a clean mind map, fits 1366 px screens.
+- **Photo Booth:** six new looks in three kinds, grid rows per kind at 30 fps, more card finishes, event-badge stamps, Times and script lettering.
+- **Shortcuts:** Super+1–4 workspaces, Super+Shift+1–4 move the window; Super+Tab switches apps again.
+- **Lock screen:** no screenshots while locked. Status notifications expire on their own.
 - **Clipboard history (Super+V)** of MK's own: beside the text cursor, click copies (no auto-paste), image previews with size, edit, pin, search, Clear; replaces Clipboard Indicator.
 - **Dock** hides over windows right after login (intellihide on, re-checked after startup).
 - **Stan Lee tribute** uses a real photo (Gage Skidmore, CC BY-SA 3.0), halftoned.

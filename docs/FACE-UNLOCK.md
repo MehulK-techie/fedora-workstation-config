@@ -84,7 +84,11 @@ demo with **Remove this model** (the same name), or `mk-face-add NAME --remove`.
 
 **Enroll a finger** in the same tab: for you or another account, and which
 finger; a finger that's already enrolled is only scanned again if you say
-so. A ring fills with each accepted touch (1 of 5 … done). Enrolling
+so. A ring fills with each accepted touch, as many as your reader needs
+(fprintd's `num-enroll-stages`: 11 on a Synaptics 06cb:00e7, not 5); a
+missed touch shows an amber "Center your finger and hold it firm" and keeps
+listening. It talks to fprintd over D-Bus directly and always releases the
+reader (done, failed or closed). Enrolling
 someone else asks for an administrator (fprintd's own rule).
 
 ### In MK's own apps

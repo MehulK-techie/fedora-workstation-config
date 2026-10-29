@@ -50,6 +50,7 @@ BIN = HOME / ".local/bin"
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "mk-workstation"
 NOTES = HOME / "Notes"
 CSS = b"""
+.mk-warn-pill { background: alpha(#f5a524, 0.22); color: #f5c542; border-radius: 99px; padding: 4px 12px; font-weight: 700; }
 .mk-action { padding: 18px 10px; border-radius: 16px; }
 .mk-action image { -gtk-icon-size: 28px; }
 .mk-report { font-family: monospace; font-size: 0.92em; }
@@ -554,15 +555,15 @@ class Center(Adw.ApplicationWindow):
         finger = Adw.ComboRow(title="Finger", model=Gtk.StringList.new([f[0] for f in FINGERS]))
         for row in (who, user, finger):
             box.add(row)
-        self.enroll_bar = Gtk.ProgressBar(visible=False, pulse_step=0.12)
         self.enroll_ring = FingerRing()
+        self.enroll_pill = Gtk.Label(visible=False, css_classes=["mk-warn-pill"], halign=Gtk.Align.CENTER)
         self.enroll_text = Gtk.Label(wrap=True, xalign=0, css_classes=["dim-label"])
         start = Gtk.Button(label="Enroll", css_classes=["pill", "suggested-action"], halign=Gtk.Align.CENTER)
         holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=18,
                          margin_start=18, margin_end=18)
         holder.append(box)
         holder.append(self.enroll_ring)
-        holder.append(self.enroll_bar)
+        holder.append(self.enroll_pill)
         holder.append(self.enroll_text)
         holder.append(start)
         view = Adw.ToolbarView(content=holder)
@@ -575,7 +576,7 @@ class Center(Adw.ApplicationWindow):
                 self.enroll_text.set_label("Type their account name first.")
                 return
             label, fname = FINGERS[finger.get_selected()]
-            listed = subprocess.run(["fprintd-list", account], capture_output=True, text=True).stdout
+            listed = subprocess.run(["fprintd-list", account], capture_output=True, text=True, timeout=10).stdout
             if re.search(rf"\b{re.escape(fname)}\b", listed):
                 again = Adw.AlertDialog(heading="This finger is already registered",
                                         body=f"{label} already signs in {account}. Choose another finger or re-enroll it.")
@@ -586,44 +587,115 @@ class Center(Adw.ApplicationWindow):
                 return
             self._run_enroll(account, fname, False)
         start.connect("clicked", enroll)
+        self._finger_dlg = dlg
+        # closing the dialog always gives the reader back
+        dlg.connect("closed", lambda *_: (self._fp_release(), setattr(self, "_finger_dlg", None)))
         dlg.present(self)
 
     def _run_enroll(self, account, fname, rescan):
-        """fprintd-enroll in the background; its stage lines move the bar."""
-        argv = ["fprintd-enroll", "-f", fname, account]
-        if rescan:
-            argv = ["sh", "-c", 'fprintd-delete "$1" -f "$2" >/dev/null 2>&1; exec fprintd-enroll -f "$2" "$1"',
-                    "sh", account, fname]
-        self.enroll_bar.set_visible(False)
+        """Enroll through fprintd's D-Bus API, all asynchronous: Claim the
+        reader for ACCOUNT, EnrollStart, then follow EnrollStatus signals.
+        The ring has as many steps as this reader needs (num-enroll-stages,
+        often 8-15, not 5). The reader is always released: on completion,
+        failure, Cancel or closing the dialog."""
+        if getattr(self, "_fp", None):
+            return
         self.enroll_ring.reset()
-        self.enroll_text.set_label("Touch the reader (1 of 5)…")
-        proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE)
-        stream = Gio.DataInputStream.new(proc.get_stdout_pipe())
-        messages = {"enroll-stage-passed": "Good: lift and touch again", "enroll-retry-scan": "Try again",
-                    "enroll-swipe-too-short": "Too short: again", "enroll-finger-not-centered": "Centre your finger",
-                    "enroll-remove-and-retry": "Lift your finger and try again",
-                    "enroll-duplicate": "That finger is already enrolled (for this or another account)",
-                    "enroll-completed": "Done ✓ This finger now signs in", "enroll-failed": "It didn't work: try again"}
+        self.enroll_text.set_label("Connecting to the reader…")
+        self._fp_retry_pill(None)
+        bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
 
-        def line(src, res):
-            try:
-                text, _len = src.read_line_finish_utf8(res)
-            except GLib.Error:
-                text = None
-            if text is None:
+        def proxy(path, iface):
+            return Gio.DBusProxy.new_sync(bus, Gio.DBusProxyFlags.NONE, None, "net.reactivated.Fprint", path, iface, None)
+        try:
+            manager = proxy("/net/reactivated/Fprint/Manager", "net.reactivated.Fprint.Manager")
+            path = manager.call_sync("GetDefaultDevice", None, Gio.DBusCallFlags.NONE, 3000, None).unpack()[0]
+            dev = proxy(path, "net.reactivated.Fprint.Device")
+        except GLib.Error as e:
+            self.enroll_text.set_label(f"No fingerprint reader answered ({e.message.split(':')[-1].strip()})")
+            return
+        stages = dev.get_cached_property("num-enroll-stages")
+        self.enroll_ring.stages = max(1, stages.unpack()) if stages and stages.unpack() > 0 else 5
+        self._fp = {"dev": dev, "claimed": False, "done": 0}
+
+        def fail(msg):
+            self.enroll_ring.fail()
+            self.enroll_text.set_label(msg)
+            self._fp_release()
+
+        def on_signal(_p, _sender, signal, params):
+            if signal != "EnrollStatus" or not self._fp:
                 return
-            for key, say in messages.items():
-                if key in text:
-                    self.enroll_text.set_label(say)
-                    if key == "enroll-stage-passed":
-                        self.enroll_ring.step()
-                        self.enroll_text.set_label(f"Good: lift and touch again ({min(5, self.enroll_ring.done + 1)} of 5)")
-                    elif key == "enroll-completed":
-                        self.enroll_ring.complete()
-            if "Not Authorized" in text or "PermissionDenied" in text:
-                self.enroll_text.set_label("Not allowed: enrolling someone else needs an administrator")
-            stream.read_line_async(GLib.PRIORITY_DEFAULT, None, line)
-        stream.read_line_async(GLib.PRIORITY_DEFAULT, None, line)
+            result, done = params.unpack()
+            if result == "enroll-stage-passed":
+                self._fp["done"] += 1
+                self.enroll_ring.step()
+                self._fp_retry_pill(None)
+                left = self.enroll_ring.stages - self._fp["done"]
+                self.enroll_text.set_label(f"Good: lift and touch again ({self._fp['done']} of "
+                                           f"{self.enroll_ring.stages})" if left > 0 else "Almost there…")
+            elif result in ("enroll-retry-scan", "enroll-swipe-too-short", "enroll-finger-not-centered",
+                            "enroll-remove-and-retry"):
+                self._fp_retry_pill("Center your finger and hold it firm")  # still listening
+            elif result == "enroll-completed":
+                self.enroll_ring.complete()
+                self.enroll_text.set_label("Done ✓ This finger now signs in")
+                self._fp_retry_pill(None)
+                if shutil.which("canberra-gtk-play"):
+                    subprocess.Popen(["canberra-gtk-play", "-i", "complete"], stderr=subprocess.DEVNULL)
+                self._fp_release()
+                GLib.timeout_add(1400, lambda: (self._finger_dlg and self._finger_dlg.close(), False)[1])
+            elif result == "enroll-duplicate":
+                fail("That finger is already enrolled (on this or another account)")
+            elif done:
+                fail("It didn't work (" + result.replace("enroll-", "") + "): try again")
+        self._fp["signal"] = dev.connect("g-signal", on_signal)
+
+        def call(method, args, then):
+            def finished(px, res):
+                try:
+                    px.call_finish(res)
+                except GLib.Error as e:
+                    text = e.message.split(":")[-1].strip()
+                    fail("Not allowed: enrolling someone else needs an administrator"
+                         if "PermissionDenied" in e.message or "NotAuthorized" in e.message else f"Reader: {text}")
+                    return
+                then()
+            dev.call(method, args, Gio.DBusCallFlags.ALLOW_INTERACTIVE_AUTHORIZATION, 60000, None, finished)
+
+        def start():
+            self._fp["claimed"] = True
+            self.enroll_text.set_label(f"Touch the reader (1 of {self.enroll_ring.stages})…")
+            call("EnrollStart", GLib.Variant("(s)", (fname,)), lambda: None)
+
+        def claimed():
+            self._fp["claimed"] = True
+            if rescan:  # the old print goes first, then the new scan
+                call("DeleteEnrolledFinger", GLib.Variant("(s)", (fname,)), start)
+            else:
+                start()
+        call("Claim", GLib.Variant("(s)", ("" if account == GLib.get_user_name() else account,)), claimed)
+
+    def _fp_retry_pill(self, text):
+        self.enroll_pill.set_label(text or "")
+        self.enroll_pill.set_visible(bool(text))
+
+    def _fp_release(self):
+        """Stop and release the reader without waiting on the main loop."""
+        fp, self._fp = getattr(self, "_fp", None), None
+        if not fp:
+            return
+        dev = fp["dev"]
+        if fp.get("signal"):
+            dev.disconnect(fp["signal"])
+        if fp["claimed"]:
+            def released(px, res):
+                try:
+                    px.call_finish(res)
+                except GLib.Error:
+                    pass
+                dev.call("Release", None, Gio.DBusCallFlags.NONE, 5000, None, None)
+            dev.call("EnrollStop", None, Gio.DBusCallFlags.NONE, 5000, None, released)
 
     def _lock_notes(self):
         page = Adw.PreferencesPage()
@@ -887,30 +959,34 @@ class Center(Adw.ApplicationWindow):
 
 
 class FingerRing(Gtk.DrawingArea):
-    """A ring that fills a fifth per accepted touch, easing into place, and
-    turns green with a tick when the finger is enrolled."""
-
-    STAGES = 5
+    """A ring that fills a step per accepted touch (as many steps as the
+    reader needs), easing into place; green with a tick when the finger is
+    enrolled, red when it failed."""
 
     def __init__(self):
         super().__init__(content_width=120, content_height=120, halign=Gtk.Align.CENTER)
-        self.done, self.shown, self.finished = 0, 0.0, False
+        self.stages = 5   # set from the reader (num-enroll-stages)
+        self.done, self.shown, self.finished, self.failed = 0, 0.0, False, False
         self.set_draw_func(self._draw)
 
     def reset(self):
-        self.done, self.shown, self.finished = 0, 0.0, False
+        self.done, self.shown, self.finished, self.failed = 0, 0.0, False, False
         self.queue_draw()
 
     def step(self):
-        self.done = min(self.STAGES, self.done + 1)
+        self.done = min(self.stages, self.done + 1)
         self._animate()
 
     def complete(self):
-        self.done, self.finished = self.STAGES, True
+        self.done, self.finished = self.stages, True
         self._animate()
 
+    def fail(self):
+        self.failed = True
+        self.queue_draw()
+
     def _animate(self):
-        start, end = self.shown, self.done / self.STAGES
+        start, end = self.shown, self.done / self.stages
 
         def frame(v):
             self.shown = start + (end - start) * v
@@ -922,7 +998,7 @@ class FingerRing(Gtk.DrawingArea):
     def _draw(self, _a, cr, w, h):
         cx, cy, r = w / 2, h / 2, min(w, h) / 2 - 8
         green = (0.30, 0.80, 0.45)
-        accent = green if self.finished else (0.21, 0.52, 0.89)
+        accent = green if self.finished else (0.93, 0.33, 0.33) if self.failed else (0.21, 0.52, 0.89)
         cr.set_line_width(6)
         cr.set_source_rgba(1, 1, 1, 0.1)
         cr.arc(cx, cy, r, 0, 2 * math.pi)

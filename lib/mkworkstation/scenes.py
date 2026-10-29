@@ -480,6 +480,41 @@ QUOTE = ("WITH GREAT POWER COMES", "GREAT RESPONSIBILITY.")
 TRIBUTE_LINE = "STAN LEE • 1922-2018"
 
 
+# Stan Lee by Gage Skidmore, CC BY-SA 3.0 (assets/screensaver/CREDITS.md)
+_PHOTO = Path(__file__).resolve().parents[2] / "assets/screensaver/stan-lee.jpg"
+_PHOTO_CACHE = {}
+
+
+def _photo_levels(cols):
+    """The photo as COLS x COLS luminance levels (0-1), sharpened so his
+    features survive at a few dozen windows; the background faded out.
+    None without the photo (the drawn portrait is used instead)."""
+    if cols in _PHOTO_CACHE:
+        return _PHOTO_CACHE[cols]
+    levels = None
+    try:
+        from PIL import Image, ImageFilter, ImageOps
+        img = Image.open(_PHOTO).convert("L")
+        img = ImageOps.autocontrast(ImageOps.fit(img, (cols * 6, cols * 6)), cutoff=2)
+        img = img.point(lambda v: round(255 * (v / 255) ** 0.8))  # lift the mid tones
+        img = img.filter(ImageFilter.UnsharpMask(radius=4, percent=180, threshold=2))
+        img = img.resize((cols, cols), Image.Resampling.LANCZOS)
+        px = img.load()
+
+        def oval(c, r):
+            dx, dy = (c + 0.5) / cols - 0.5, (r + 0.5) / cols - 0.46
+            d = math.hypot(dx / 0.42, dy / 0.54)
+            return 1.0 if d < 0.85 else max(0.0, 1 - (d - 0.85) / 0.18)
+        levels = [[px[c, r] / 255 * oval(c, r) for c in range(cols)] for r in range(cols)]
+    except Exception:  # noqa: BLE001 - no Pillow or no photo: the drawn one
+        levels = None
+    _PHOTO_CACHE[cols] = levels
+    return levels
+
+
+UNLIT = (0x16 / 255, 0x19 / 255, 0x24 / 255)   # unlit office glass
+
+
 def _stan_lee_cell(u, v, t):
     """The portrait as office windows: what the window at (u, v) (0-1 across
     the portrait square) shows, or None for dark. T is its ordered-dither
@@ -606,8 +641,8 @@ def tribute_tower(cr, w, h):
     # where the portrait and the frieze go, on the main tier
     # The portrait's windows are a finer grid (a glass curtain wall), so the
     # face has ~40 x 40 of them; it ends above the far city's rooftops.
-    ppitch = max(4.0, 6.2 * k)
-    pcols = 40
+    ppitch = max(3.4, 5.2 * k)
+    pcols = 48
     pside = pcols * ppitch
     py0 = tiers[0][1] + pitch * 1.2
     px0 = cx - pside / 2
@@ -647,22 +682,28 @@ def tribute_tower(cr, w, h):
 
     # the portrait: each window on, dimmed or dark by the photo, ordered-
     # dithered so shading reads as a pattern of lit offices
-    cr.set_source_rgba(0.015, 0.015, 0.04, 0.85)
-    cr.rectangle(px0 - pitch * 0.4, py0 - pitch * 0.4, pside + pitch * 0.4, pside + pitch * 0.4)
-    cr.fill()
+    # From the photo: highlights warm white, mid tones amber, shadows unlit
+    # glass (the lenses, the jacket), dithered between the steps.
+    levels = _photo_levels(pcols)
     for r in range(pcols):
         for c in range(pcols):
-            cell = _stan_lee_cell((c + 0.5) / pcols, (r + 0.5) / pcols, (BAYER[r % 4][c % 4] + 0.5) / 16)
-            if cell:
-                lit(px0 + c * ppitch, py0 + r * ppitch, cell[0], cell[1], ppitch)
+            t = (BAYER[r % 4][c % 4] + 0.5) / 16
+            x, y = px0 + c * ppitch, py0 + r * ppitch
+            if levels is None:
+                cell = _stan_lee_cell((c + 0.5) / pcols, (r + 0.5) / pcols, t)
+                if cell:
+                    lit(x, y, cell[0], cell[1], ppitch)
+                continue
+            v = levels[r][c]
+            if v > 0.86 + 0.1 * t:
+                lit(x, y, WARM_WHITE if v < 0.93 else (1.0, 1.0, 1.0), 0.95, ppitch)
+            elif v > 0.36 + 0.32 * t:
+                lit(x, y, GOLD, 0.45 + 0.5 * v, ppitch)
+            elif v > 0.08:
+                lit(x, y, UNLIT, 0.9, ppitch)
     # the frieze: a lit band with the quote and the dates
-    band = cairo.LinearGradient(0, frieze_top, 0, frieze_bottom)
-    band.add_color_stop_rgba(0, 0.12, 0.10, 0.06, 0.95)
-    band.add_color_stop_rgba(1, 0.05, 0.04, 0.03, 0.95)
+    # the frieze: no box, two thin lit cornice lines framing the lit letters
     fx0, fx1 = x0 + pitch, x1 - pitch
-    cr.set_source(band)
-    cr.rectangle(fx0, frieze_top, fx1 - fx0, frieze_h)
-    cr.fill()
     cr.set_source_rgba(*GOLD, 0.55)
     for yline in (frieze_top + 1.5, frieze_bottom - 1.5):
         cr.rectangle(fx0, yline - 0.75, fx1 - fx0, 1.5)
@@ -833,7 +874,8 @@ def tower(cr, w, h, sign="MK"):
 
 @scene("knight", "Night Watch")
 class NightWatch(Scene):
-    """A brick-built caped knight on a gargoyle, rain, lightning, a searchlight."""
+    """A brick-built caped knight on a gargoyle, rain, lightning, a searchlight
+    projecting the MK signal onto the clouds; the clock top right."""
 
     def __init__(self):
         super().__init__()
@@ -919,7 +961,7 @@ class NightWatch(Scene):
             cr.set_source_rgba(0.85, 0.9, 1, 0.35 * self.flash * (0.6 + 0.4 * math.sin(t * 60)))
             cr.paint()
             self.flash = max(0, self.flash - dt * 2.2)
-        caption(cr, w, h, [(time.strftime("%H:%M"), 44, 0.85), (time.strftime("%A, %d %B"), 16, 0.5)])
+        caption(cr, w, h, [(time.strftime("%H:%M"), 44, 0.85), (time.strftime("%A, %d %B"), 16, 0.5)], "top-right")
 
     def _cloud(self):
         """A soft elliptical cloud. The gradient is made inside the squashed
@@ -961,10 +1003,6 @@ class NightWatch(Scene):
         cr.line_to(x0 - 160 * s, y0 + 92 * s)
         cr.curve_to(x0 - 120 * s, y0 + 130 * s, x0 - 60 * s, y0 + 150 * s, x0, y0 + 160 * s)
         cr.close_path()
-        cr.fill()
-        cr.move_to(x0 - 90 * s, y0 + 100 * s)
-        cr.line_to(x0 - 70 * s, y0 + 40 * s)
-        cr.line_to(x0 - 40 * s, y0 + 105 * s)
         cr.fill()
         cr.set_source_rgba(0.75, 0.78, 0.85, 0.30)  # rim light on the gargoyle's back
         cr.set_line_width(2 * s)

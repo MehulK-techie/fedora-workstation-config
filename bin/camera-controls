@@ -4,14 +4,16 @@
   camera-controls            open the booth (app grid: Photo Booth, Super+C)
 
 Camera page: a live, mirrored preview; looks (Polaroid, Thermal, Pop Art,
-Noir, Comic, Neon...) applied as you watch; Adjust opens the webcam's own
+Noir, Comic, Neon...) applied as you watch, sorted into Vintage, Artistic and
+Fun with a search box; Adjust opens the webcam's own
 hardware controls (brightness, contrast, saturation, gamma, sharpness, white
 balance) with Reset to hardware defaults. Space or the shutter button takes
 the photo, after an optional 3-2-1 countdown.
 
 G shows nine looks at once, live (3 x 3); click one to use it.
 
-Decorate page: type text or pick an emoji sticker, then click the photo to
+Decorate page (the camera and its light are off here; Retake turns them
+back on): type text or pick an emoji sticker, then click the photo to
 place it. A placed layer can be selected and moved, resized from its
 corners and turned from the knob on top (the angle shows as you turn);
 bring it forward or send it back, or delete it. With a Polaroid frame,
@@ -62,6 +64,12 @@ APP_ID = "io.github.mehulk.MkCamera"
 OUT_DIR = Path(GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES) or Path.home() / "Pictures") / "MK Booth"
 PREVIEW_W = 640
 GRID_W = 320
+# The looks tray's kinds (photo.py's names); a look missing here shows under All only.
+LOOK_CATEGORIES = {
+    "Vintage": ("polaroid", "instant", "film", "retro", "noir"),
+    "Artistic": ("popart", "comic", "neon", "hue", "glow", "vignette", "flash"),
+    "Fun": ("thermal", "distort", "mirror"),
+}
 GRID_LOOKS = [None, "polaroid", "flash", "instant", "film", "noir", "thermal", "popart", "comic"]
 STICKERS = "😀😂😍🥳😎🤩😜🥰🤪😇👻🤖👑🎉🎈🎂🌈⭐✨🔥💖💯👍✌️🙌🍕🍿🌸🦄🐶🐱"
 COLORS = [("White", (1, 1, 1)), ("Black", (0.08, 0.08, 0.1)), ("Pink", (1, 0.35, 0.65)),
@@ -288,6 +296,23 @@ class Booth(Adw.ApplicationWindow):
         top.append(revealer)
 
         # Room under the pills for the scrollbar, so they never overlap.
+        # The looks, by kind, with a search box: All / Vintage / Artistic / Fun.
+        tray = Gtk.Box(spacing=8, margin_start=16, margin_end=16, margin_top=4)
+        self.look_search = Gtk.SearchEntry(placeholder_text="Find a look…", width_chars=16)
+        self.look_search.connect("search-changed", lambda *_: self._filter_looks())
+        tray.append(self.look_search)
+        cats = Gtk.Box(css_classes=["linked"])
+        self.look_cat = "All"
+        cat_group = None
+        for cat in ("All",) + tuple(LOOK_CATEGORIES):
+            c = Gtk.ToggleButton(label=cat, active=cat == "All")
+            if cat_group:
+                c.set_group(cat_group)
+            cat_group = cat_group or c
+            c.connect("toggled", lambda btn, k=cat: btn.get_active() and (setattr(self, "look_cat", k),
+                                                                           self._filter_looks()))
+            cats.append(c)
+        tray.append(cats)
         looks = Gtk.Box(spacing=6, margin_start=12, margin_end=12, margin_top=4, margin_bottom=12)
         group = None
         self.look_buttons = {}
@@ -324,9 +349,16 @@ class Booth(Adw.ApplicationWindow):
 
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         page.append(top)
+        page.append(tray)
         page.append(scroller)
         page.append(bottom)
         return page
+
+    def _filter_looks(self):
+        query = self.look_search.get_text().strip().lower()
+        for key, b in self.look_buttons.items():
+            in_cat = key is None or self.look_cat == "All" or key in LOOK_CATEGORIES.get(self.look_cat, ())
+            b.set_visible(in_cat and (not query or query in b.get_label().lower()))
 
     def _adjust_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, width_request=280,
@@ -391,6 +423,11 @@ class Booth(Adw.ApplicationWindow):
         self._stop_camera()
         self.stack.set_visible_child_name("none")
         print(f"camera: {err.message}", file=sys.stderr)
+
+    def _back_to_camera(self):
+        self.stack.set_visible_child_name("camera")
+        if not self.pipeline:
+            self._start_camera()
 
     def _stop_camera(self):
         if self.pipeline:
@@ -501,6 +538,11 @@ class Booth(Adw.ApplicationWindow):
         self.caption.set_text("")
         self._compose()
         self.stack.set_visible_child_name("decorate")
+        # The photo is taken: the camera goes off (its light too) while you
+        # decorate, and comes back on with Retake or after saving.
+        self._stop_camera()
+        with self.frame_lock:
+            self.frame = None
 
     # ----- decorate page
     def _decorate_page(self):
@@ -580,7 +622,7 @@ class Booth(Adw.ApplicationWindow):
 
         row = Gtk.Box(spacing=6, margin_top=6)
         retake = Gtk.Button(label="Retake", css_classes=["pill"])
-        retake.connect("clicked", lambda *_: self.stack.set_visible_child_name("camera"))
+        retake.connect("clicked", lambda *_: self._back_to_camera())
         save = Gtk.Button(label="Save", css_classes=["pill", "suggested-action"], hexpand=True)
         save.connect("clicked", lambda *_: self.save())
         row.append(retake)
@@ -807,13 +849,16 @@ class Booth(Adw.ApplicationWindow):
         toast = Adw.Toast(title=f"Saved {path.name}", button_label="Open", timeout=4)
         toast.connect("button-clicked", lambda *_: Gio.AppInfo.launch_default_for_uri(path.as_uri(), None))
         self.toast.add_toast(toast)
-        self.stack.set_visible_child_name("camera")
+        self._back_to_camera()
 
     def _open_folder(self):
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         Gio.AppInfo.launch_default_for_uri(OUT_DIR.as_uri(), None)
 
     def _on_key(self, _c, keyval, _code, _state):
+        focus = self.get_focus()
+        if focus and (focus is self.look_search or focus.is_ancestor(self.look_search)):
+            return False  # typing in the looks search: Space and G are letters there
         if keyval == Gdk.KEY_space and self.stack.get_visible_child_name() == "camera":
             self.take()
             return True
@@ -830,7 +875,7 @@ class Booth(Adw.ApplicationWindow):
                     self.selected = None
                     self.handles.queue_draw()
                 else:
-                    self.stack.set_visible_child_name("camera")
+                    self._back_to_camera()
                 return True
         return False
 

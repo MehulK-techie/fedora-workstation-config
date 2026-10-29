@@ -593,7 +593,8 @@ def cmd_vault():
 def notify_gui(text):
     """Errors from the Files right-click script: show them, there's no terminal."""
     if not sys.stdin.isatty() and shutil.which("notify-send"):
-        subprocess.run(["notify-send", "-i", "changes-prevent-symbolic", "MK Lock", text], check=False)
+        subprocess.run(["notify-send", "-e", "-t", "3500", "-i", "changes-prevent-symbolic", "MK Lock", text],
+                       check=False)  # transient: a status, never left in the list
 
 
 def cmd_folder(args):

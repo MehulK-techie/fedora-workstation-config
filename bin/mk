@@ -657,7 +657,7 @@ case "${1:-help}" in
                     echo "SOUNDS=$(gsettings get org.gnome.desktop.sound event-sounds)"
                     echo "PROFILE=${profile:-balanced}"
                 } > "$state"
-                notify-send -a MK -i preferences-system-notifications-symbolic "Exam mode on" "Notifications, alert sounds and media off. Super+F10 again to end it." 2> /dev/null || true
+                notify-send -e -t 3500 -a MK -i preferences-system-notifications-symbolic "Exam mode on" "Notifications, alert sounds and media off. Super+F10 again to end it." 2> /dev/null || true
                 gsettings set org.gnome.desktop.notifications show-banners false
                 gsettings set org.gnome.desktop.sound event-sounds false
                 if command -v playerctl > /dev/null; then playerctl -a pause 2> /dev/null || true; fi
@@ -674,7 +674,7 @@ case "${1:-help}" in
                 gdbus call "${profiles[@]}" --method org.freedesktop.DBus.Properties.Set \
                     org.freedesktop.UPower.PowerProfiles ActiveProfile "<'${profile:-balanced}'>" > /dev/null 2>&1 || true
                 rm -f "$state"
-                notify-send -a MK -i preferences-system-notifications-symbolic "Exam mode off" "Everything is back as it was." 2> /dev/null || true
+                notify-send -e -t 3500 -a MK -i preferences-system-notifications-symbolic "Exam mode off" "Everything is back as it was." 2> /dev/null || true
                 echo "✔ Exam mode off: notifications, sounds and power mode back as they were" ;;
             *) echo "Usage: mk exam [on | off]" >&2; exit 2 ;;
         esac
@@ -723,7 +723,7 @@ case "${1:-help}" in
         [[ "${3:-}" == "--notify" || "${2:-}" == "--notify" ]] && notify=1
         say() {
             echo "$1"
-            (( notify )) && notify-send -i utilities-system-monitor-symbolic "MK" "$1" 2> /dev/null
+            (( notify )) && notify-send -e -t 3500 -i utilities-system-monitor-symbolic "MK" "$1" 2> /dev/null
             return 0
         }
         mem_avail() { awk '/MemAvailable/ { printf "%.1f", $2 / 1048576 }' /proc/meminfo; }

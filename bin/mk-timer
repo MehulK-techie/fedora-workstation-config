@@ -631,6 +631,8 @@ class TimerWindow(Adw.ApplicationWindow):
         note.set_priority(Gio.NotificationPriority.HIGH)
         note.set_default_action("app.show")
         app.send_notification("done", note)
+        # A status, not a to-do: it leaves the notification list by itself.
+        GLib.timeout_add(6000, lambda: (app.withdraw_notification("done"), False)[1])
         self.present()
         app.release()
 

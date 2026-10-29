@@ -63,7 +63,7 @@ tesseract "$TMP_IMG" "${TMP_TXT%.txt}" -l eng 2>/dev/null
 
 EXTRACTED=$(sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//' "$TMP_TXT" 2>/dev/null || echo "")
 if [[ -z "$EXTRACTED" ]]; then
-    notify-send -u low -t 2000 "OCR Extractor" "No text detected."
+    notify-send -e -u low -t 2000 "OCR Extractor" "No text detected."
     exit 0
 fi
 
@@ -75,6 +75,6 @@ CHOSEN_TEXT=$(zenity --text-info \
 
 if [[ -n "$CHOSEN_TEXT" ]]; then
     printf "%s" "$CHOSEN_TEXT" | wl-copy
-    notify-send -i edit-copy -t 2000 "Copied" "$(echo "$CHOSEN_TEXT" | head -n 2 | cut -c 1-50)"
+    notify-send -e -i edit-copy -t 2000 "Copied" "$(echo "$CHOSEN_TEXT" | head -n 2 | cut -c 1-50)"
     canberra-gtk-play -i camera-shutter 2>/dev/null || true
 fi

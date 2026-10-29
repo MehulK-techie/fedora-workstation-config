@@ -497,38 +497,64 @@ TRIBUTE_LINE = "STAN LEE • 1922-2018"
 
 
 # Stan Lee by Gage Skidmore, CC BY-SA 3.0 (assets/screensaver/CREDITS.md)
-_PHOTO = Path(__file__).resolve().parents[2] / "assets/screensaver/stan-lee.jpg"
+_PHOTO = Path(__file__).resolve().parents[2] / "assets/screensaver/stan-lee-portrait.png"
 _PHOTO_CACHE = {}
 
 
-def _photo_levels(cols):
-    """The photo as COLS x COLS luminance levels (0-1), sharpened so his
-    features survive at a few dozen windows; the background faded out.
-    None without the photo (the drawn portrait is used instead)."""
-    if cols in _PHOTO_CACHE:
-        return _PHOTO_CACHE[cols]
+def _photo_levels(cols, rows):
+    """The portrait (head, collar and shoulders; the backdrop cut away in
+    the picture's alpha) as ROWS x COLS levels: 0-1 luminance, or None where
+    there's no Stan Lee (that window stays ordinary facade). Sharpened so
+    his features survive at a few dozen windows. None without the photo
+    (the drawn portrait is used instead)."""
+    if (cols, rows) in _PHOTO_CACHE:
+        return _PHOTO_CACHE[(cols, rows)]
     levels = None
     try:
         from PIL import Image, ImageFilter, ImageOps
-        img = Image.open(_PHOTO).convert("L")
-        img = ImageOps.autocontrast(ImageOps.fit(img, (cols * 6, cols * 6)), cutoff=2)
-        img = img.point(lambda v: round(255 * (v / 255) ** 0.8))  # lift the mid tones
-        img = img.filter(ImageFilter.UnsharpMask(radius=3, percent=200, threshold=1))
-        img = img.resize((cols, cols), Image.Resampling.LANCZOS)
-        px = img.load()
-
-        def oval(c, r):
-            dx, dy = (c + 0.5) / cols - 0.5, (r + 0.5) / cols - 0.46
-            d = math.hypot(dx / 0.42, dy / 0.54)
-            return 1.0 if d < 0.85 else max(0.0, 1 - (d - 0.85) / 0.18)
-        levels = [[px[c, r] / 255 * oval(c, r) for c in range(cols)] for r in range(cols)]
+        img = Image.open(_PHOTO)
+        lum, alpha = img.convert("LA").split()
+        big = (cols * 6, rows * 6)
+        # contrast from his own pixels only (not the cut-away backdrop)
+        mask = alpha.resize(big).point(lambda a: 255 if a > 128 else 0)
+        lum = lum.resize(big)
+        lum = ImageOps.autocontrast(Image.composite(lum, Image.new("L", big, 128), mask), cutoff=1)
+        lum = lum.filter(ImageFilter.UnsharpMask(radius=3, percent=200, threshold=1))
+        lum = lum.resize((cols, rows), Image.Resampling.LANCZOS).load()
+        alpha = alpha.resize((cols, rows), Image.Resampling.BILINEAR).load()
+        levels = []
+        for r in range(rows):
+            # the shirt is bright: dimmer below the chin, so the face leads,
+            # and his shoulders fade out at the bottom and the sides, so the
+            # photo's straight edges don't show
+            dim = 1.0 if r < rows * 0.66 else 0.45
+            row = []
+            for c in range(cols):
+                fade = min(1.0, (rows - r) / (rows * 0.16))
+                if r > rows * 0.55:
+                    fade = min(fade, min(c + 1, cols - c) / (cols * 0.18))
+                if alpha[c, r] <= 128 or (fade < 1.0 and (c * 7 + r * 13) % 10 >= fade * 10):
+                    row.append(None)
+                else:
+                    row.append(lum[c, r] / 255 * dim * fade)
+            levels.append(row)
     except Exception:  # noqa: BLE001 - no Pillow or no photo: the drawn one
         levels = None
-    _PHOTO_CACHE[cols] = levels
+    _PHOTO_CACHE[(cols, rows)] = levels
     return levels
 
 
 UNLIT = (0x16 / 255, 0x19 / 255, 0x24 / 255)   # unlit office glass
+
+
+def _tone(v):
+    """A lit window's colour for photo level V: amber in the mid tones,
+    warming to #fff8e7 and white in the highlights."""
+    if v < 0.7:
+        return GOLD
+    a = min(1.0, (v - 0.7) / 0.25)
+    top = WARM_WHITE if v < 0.95 else (1.0, 1.0, 1.0)
+    return tuple(g + (w - g) * a for g, w in zip(GOLD, top))
 
 
 def _stan_lee_cell(u, v, t):
@@ -658,13 +684,14 @@ def tribute_tower(cr, w, h):
     # The portrait's windows are a finer grid (a glass curtain wall), so the
     # face has ~40 x 40 of them; it ends above the far city's rooftops.
     ppitch = max(3.0, 4.2 * k)
-    pcols = 64  # enough windows for the glasses' frames, the nose and the smile
-    pside = pcols * ppitch
+    pcols, prows = 56, 70  # head and shoulders, 4:5; enough windows for the glasses' frames and the smile
+    pside = pcols * ppitch     # the portrait's width
+    pheight = prows * ppitch
     py0 = tiers[0][1] + pitch * 1.2
     px0 = cx - pside / 2
     widest = max(sign_cells(line)[1] for line in QUOTE)
     tp = min(2.6 * k + 0.5, (width - 4 * pitch) / widest)
-    frieze_top = py0 + pside + pitch * 0.8
+    frieze_top = py0 + pheight + pitch * 0.8
     frieze_h = tp * 7 * 3 + tp * 10
     frieze_bottom = frieze_top + frieze_h
 
@@ -674,7 +701,8 @@ def tribute_tower(cr, w, h):
         cr.fill()
     dense = (0.86, 0.86)  # the portrait's glass wall: almost no mullion between panes
 
-    # every office window on every tier
+    levels = _photo_levels(pcols, prows)
+    # every office window on every tier (around Stan Lee's silhouette, not a box)
     for tx, tw, top, bottom in spans:
         cols = int((tw - pitch) / pitch)
         left = tx + (tw - cols * pitch) / 2
@@ -685,7 +713,9 @@ def tribute_tower(cr, w, h):
             busy = rand.uniform(0.25, 0.65)            # how many are still in
             for c in range(cols):
                 x = left + c * pitch
-                inside_portrait = px0 - pitch <= x <= px0 + pside and py0 - pitch <= floor_y <= py0 + pside + pitch * 0.5
+                inside_portrait = (px0 - pitch <= x <= px0 + pside and py0 - pitch <= floor_y <= py0 + pheight
+                                   and (levels is None or levels[min(prows - 1, max(0, int((floor_y - py0) / ppitch)))]
+                                        [min(pcols - 1, max(0, int((x - px0) / ppitch)))] is not None))
                 inside_frieze = frieze_top - pitch * 0.5 <= floor_y <= frieze_bottom
                 if inside_portrait or inside_frieze:
                     continue
@@ -697,27 +727,26 @@ def tribute_tower(cr, w, h):
             floor_y += pitch * 1.25
             floor += 1
 
-    # the portrait: each window on, dimmed or dark by the photo, ordered-
-    # dithered so shading reads as a pattern of lit offices
-    # From the photo: highlights warm white, mid tones amber, shadows unlit
-    # glass (the lenses, the jacket), dithered between the steps.
-    levels = _photo_levels(pcols)
-    for r in range(pcols):
+    # the portrait: every window is one pixel of the photo, its glow the
+    # pixel's brightness: highlights white, mid tones amber, the darkest
+    # (the lenses, the shadows) unlit glass
+    for r in range(prows):
         for c in range(pcols):
             t = (BAYER[r % 4][c % 4] + 0.5) / 16
             x, y = px0 + c * ppitch, py0 + r * ppitch
             if levels is None:
-                cell = _stan_lee_cell((c + 0.5) / pcols, (r + 0.5) / pcols, t)
+                cell = _stan_lee_cell((c + 0.5) / pcols, (r + 0.5) / prows, t)
                 if cell:
                     lit(x, y, cell[0], cell[1], ppitch)
                 continue
             v = levels[r][c]
-            if v > 0.90 + 0.08 * t:
-                lit(x, y, WARM_WHITE if v < 0.95 else (1.0, 1.0, 1.0), 0.95, ppitch, dense)
-            elif v > 0.36 + 0.32 * t:
-                lit(x, y, GOLD, 0.45 + 0.5 * v, ppitch, dense)
-            elif v > 0.08:
+            if v is None:  # not him: the facade's own windows are there
+                continue
+            if v < 0.14 + 0.06 * t:
                 lit(x, y, UNLIT, 0.9, ppitch, dense)
+                continue
+            colour = _tone(v)
+            lit(x, y, colour, 0.18 + 0.82 * v, ppitch, dense)
     # the frieze: a lit band with the quote and the dates
     # the frieze: no box, two thin lit cornice lines framing the lit letters
     fx0, fx1 = x0 + pitch, x1 - pitch

@@ -5,10 +5,15 @@
 // GTK, Qt, Firefox and Chromium apps accept. For an app that doesn't take it,
 // the emoji goes on the clipboard and the board presses Ctrl+V (Ctrl+Shift+V
 // in terminals). Recent picks come first; emoji.json is generated from the
-// Unicode character names.
+// Unicode character names. A Kaomoji tab holds text faces ¯\_(ツ)_/¯.
+//
+// The board opens beside the text cursor (the caret rectangle apps report
+// to the input method), or in the middle of the screen when the app
+// doesn't report one.
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
+import Mtk from 'gi://Mtk';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -17,7 +22,26 @@ import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
 const RECENT = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'emoji-recent.json']);
 const COLUMNS = 10, MAX_SHOWN = 240;
 const TABS = [['recent', '🕘'], ['smileys', '😀'], ['people', '👋'], ['nature', '🌿'], ['food', '🍕'],
-    ['activities', '⚽'], ['travel', '✈️'], ['objects', '💡'], ['symbols', '❤️']];
+    ['activities', '⚽'], ['travel', '✈️'], ['objects', '💡'], ['symbols', '❤️'], ['kaomoji', '(ツ)']];
+// [text, words to search by]
+const KAOMOJI = [
+    ['¯\\_(ツ)_/¯', 'shrug whatever'], ['(╯°□°)╯︵ ┻━┻', 'table flip angry rage'], ['┬─┬ノ( º _ ºノ)', 'table put back calm'],
+    ['( ͡° ͜ʖ ͡°)', 'lenny smirk'], ['ʕ•ᴥ•ʔ', 'bear cute'], ['(◕‿◕)', 'happy smile'], ['(＾▽＾)', 'happy joy'],
+    ['(≧▽≦)', 'excited happy'], ['ヽ(•‿•)ノ', 'cheer yay'], ['\\(^o^)/', 'yay hooray'], ['(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧', 'sparkle magic excited'],
+    ['(｡♥‿♥｡)', 'love heart eyes'], ['(っ˘з(˘⌣˘ )', 'kiss love'], ['(づ｡◕‿‿◕｡)づ', 'hug'], ['(っ◔◡◔)っ ♥', 'hug heart love'],
+    ['(T_T)', 'cry sad'], ['(╥﹏╥)', 'cry sad tears'], ['(ಥ﹏ಥ)', 'cry sob'], ['(._.)', 'awkward quiet'],
+    ['(¬_¬)', 'suspicious side eye'], ['(ಠ_ಠ)', 'disapproval look'], ['(⊙_⊙)', 'shocked stare'], ['(°ロ°)', 'shock surprise'],
+    ['(；一_一)', 'annoyed'], ['(−_−) zzZ', 'sleep tired'], ['(￣ω￣)', 'smug content'], ['(•̀ᴗ•́)و', 'determined fighting'],
+    ['ᕙ(⇀‸↼‶)ᕗ', 'strong flex muscle'], ['(ง •̀_•́)ง', 'fight ready'], ['(☞ﾟヮﾟ)☞', 'point you'], ['☜(ﾟヮﾟ☜)', 'point you'],
+    ['(•_•) ( •_•)>⌐■-■ (⌐■_■)', 'deal with it sunglasses cool'], ['(⌐■_■)', 'cool sunglasses'], ['ಠ‿ಠ', 'evil grin'],
+    ['(✿◠‿◠)', 'flower happy cute'], ['(=^･ω･^=)', 'cat'], ['(^･o･^)ﾉ"', 'cat wave'], ['U・ᴥ・U', 'dog'],
+    ['(•ㅅ•)', 'bunny cute'], ['＼(＾O＾)／', 'banzai celebrate'], ['m(_ _)m', 'bow sorry thanks'], ['(*^‿^*)', 'blush happy'],
+    ['(⁄ ⁄•⁄ω⁄•⁄ ⁄)', 'blush shy'], ['(￣▽￣)ノ', 'wave hello hi'], ['(^_^)/', 'wave hi'], ['(・_・ヾ', 'confused scratch'],
+    ['(・・?)', 'question confused'], ['┐(￣ヘ￣)┌', 'shrug dunno'], ['(╬ Ò﹏Ó)', 'angry mad'], ['(ノಠ益ಠ)ノ', 'rage angry'],
+    ['(っ•́｡•́)♪♬', 'music sing'], ['♪~ ᕕ(ᐛ)ᕗ', 'dance happy walk'], ['(~˘▾˘)~', 'dance groove'], ['〜(￣▽￣〜)', 'dance'],
+    ['(ﾟoﾟ)', 'wow'], ['(✧ω✧)', 'sparkle eyes excited'], ['( ˘▽˘)っ♨', 'coffee tea hot'], ['(っ˘ڡ˘ς)', 'yummy food'],
+    ['φ(．．)', 'writing notes'], ['(⌐□_□)', 'nerd glasses'], ['( •_•)>⌐■-■', 'put on sunglasses'], ['（＾ｖ＾）', 'peace happy'],
+].map(([text, words]) => [text, `kaomoji ${words}`, 'kaomoji']);
 const TERMINALS = /terminal|ptyxis|kgx|console|kitty|alacritty|wezterm|ghostty|foot|tilix|konsole/i;
 
 function readJson(path, fallback) {
@@ -31,13 +55,41 @@ function readJson(path, fallback) {
 
 export class EmojiBoard {
     constructor(dir) {
-        this._all = readJson(GLib.build_filenamev([dir, 'emoji.json']), []);
+        this._all = [...readJson(GLib.build_filenamev([dir, 'emoji.json']), []), ...KAOMOJI];
+    }
+
+    // Where the text cursor is, if the focused app told the input method.
+    _caret() {
+        const im = Main.inputMethod;
+        const r = im?.currentFocus ? im._cursorRect : null;
+        return r && (r.x || r.y) ? r : null;
+    }
+
+    // Move the board next to the caret: below it, or above when there's no
+    // room; kept inside the caret's monitor.
+    _anchor(dialog, caret) {
+        const stack = dialog.backgroundStack;
+        const monitor = Main.layoutManager.monitors[global.display.get_monitor_index_for_rect(
+            new Mtk.Rectangle({x: caret.x, y: caret.y, width: Math.max(1, caret.width), height: Math.max(1, caret.height)}))]
+            ?? Main.layoutManager.primaryMonitor;
+        stack.x_align = Clutter.ActorAlign.START;
+        stack.y_align = Clutter.ActorAlign.START;
+        const [, w] = stack.get_preferred_width(-1);
+        const [, h] = stack.get_preferred_height(w);
+        const gap = 8;
+        let x = caret.x - monitor.x;
+        let y = caret.y + caret.height + gap - monitor.y;
+        if (y + h > monitor.height)
+            y = caret.y - h - gap - monitor.y;
+        stack.translation_x = Math.max(gap, Math.min(x, monitor.width - w - gap));
+        stack.translation_y = Math.max(gap, Math.min(y, monitor.height - h - gap));
     }
 
     open() {
         if (this._dialog)
             return;
         this._target = global.display.focus_window;
+        const caret = this._caret();  // read before the board takes the focus
         const dialog = new ModalDialog.ModalDialog({styleClass: 'mk-emoji-dialog', destroyOnClose: true});
         this._dialog = dialog;
         const box = dialog.contentLayout;
@@ -63,12 +115,21 @@ export class EmojiBoard {
         box.add_child(scroll);
         this._entry.clutter_text.connect('text-changed', () => this._search());
         this._entry.clutter_text.connect('activate', () => this._first && this._pick(this._first));
+        // Down from the search box goes into the grid; arrows move there.
+        this._entry.clutter_text.connect('key-press-event', (_a, event) => {
+            if (event.get_key_symbol() !== Clutter.KEY_Down || !this._grid.get_first_child())
+                return Clutter.EVENT_PROPAGATE;
+            this._grid.get_first_child().grab_key_focus();
+            return Clutter.EVENT_STOP;
+        });
         dialog.addButton({label: 'Close', action: () => dialog.close(), key: Clutter.KEY_Escape});
         dialog.connect('destroy', () => {
             this._dialog = null;
         });
         const recent = readJson(RECENT, []);
         this._show(recent.length ? 'recent' : 'smileys');
+        if (caret)
+            this._anchor(dialog, caret);
         dialog.open();
         global.stage.set_key_focus(this._entry.clutter_text);
     }
@@ -100,13 +161,16 @@ export class EmojiBoard {
         const layout = this._grid.layout_manager;
         list = list.slice(0, MAX_SHOWN);
         this._first = list[0]?.[0] ?? null;
+        // Kaomoji are wide: three to a row, in text size.
+        const wide = list.length && list.every(e => e[2] === 'kaomoji');
+        const columns = wide ? 3 : COLUMNS;
         list.forEach(([ch, name], i) => {
             const b = new St.Button({label: ch, style_class: 'mk-emoji-cell', can_focus: true,
-                style: 'font-size: 26px;'});
+                style: wide ? 'font-size: 15px; padding: 8px 4px;' : 'font-size: 26px;'});
             if (name)
                 b.accessible_name = name;
             b.connect('clicked', () => this._pick(ch));
-            layout.attach(b, i % COLUMNS, Math.floor(i / COLUMNS), 1, 1);
+            layout.attach(b, i % columns, Math.floor(i / columns), 1, 1);
         });
     }
 

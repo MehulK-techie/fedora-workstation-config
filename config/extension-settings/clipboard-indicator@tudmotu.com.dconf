@@ -1,8 +1,10 @@
 # dconf path: /org/gnome/shell/extensions/clipboard-indicator/
 # Super+V opens the menu under its top-bar icon (never at the pointer); type
-# to search, arrows to move, one click pastes and moves the entry to the top.
-# Copied images are kept with a preview button; per-entry buttons are only
-# pin, delete and preview (no tag, edit or extra paste buttons). Ctrl+F11/F12
+# to search, arrows to move. A click copies the entry back to the clipboard
+# and moves it to the top: nothing is typed for you, paste it with Ctrl+V.
+# Copied images are kept with a preview button; per-entry buttons are pin,
+# edit (change the text before you paste it), delete and preview; Clear
+# History at the bottom. Ctrl+F11/F12
 # cycle entries without opening it. Password managers' copies never enter history.
 [/]
 cache-images=true
@@ -13,9 +15,10 @@ next-history-clear=-1
 notify-on-cycle=false
 open-at-cursor=false
 paste-button=false
-paste-on-select=true
+paste-on-select=false
+show-clear-history-button=true
 show-delete-button=true
-show-edit-button=false
+show-edit-button=true
 show-pin-button=true
 show-preview-button=true
 show-search-bar=true

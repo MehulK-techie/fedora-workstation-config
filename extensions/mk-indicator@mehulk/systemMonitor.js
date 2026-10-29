@@ -16,7 +16,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { accentRGB } from './accent.js';
-import { InternetSection } from './speedTest.js';
+import { InternetSection } from './network.js';
 
 const USER_CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'monitor.conf']);
 const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'monitor.conf']);
@@ -217,7 +217,7 @@ class Sampler {
         this._procLast = seen;
         this._procTotal = total;
         this._cores = (read('/proc/stat')?.match(/^cpu\d+/gm) || []).length;
-        return out.filter(p => p.cpu > 0.5).sort((a, b) => b.cpu - a.cpu).slice(0, 5);
+        return out.filter(p => p.cpu > 0.5).sort((a, b) => b.cpu - a.cpu).slice(0, 3);
     }
 }
 
@@ -338,19 +338,33 @@ export class SystemMonitor {
         this._rows.power = new Row(menu, 'Battery');
         this._internet = new InternetSection(menu);
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Busiest right now'));
-        this._procRows = [0, 1, 2, 3, 4].map(() => new Row(menu, ''));
+        this._procRows = [0, 1, 2].map(() => new Row(menu, ''));
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         // Free cached memory: no password (mk-drop-caches' polkit action);
         // the item shows how much came back for a few seconds. Power modes
-        // live in GNOME's Quick Settings, the full speed test app in the grid.
-        this._freeItem = menu.addAction('Free cached memory', () => this._freeMemory());
-        menu.addAction('Open System Monitor', () => {
+        // live in GNOME's Quick Settings; the speed test is its own app.
+        // One fixed footer row, two buttons side by side: always in view.
+        const footer = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false,
+            style_class: 'mk-monitor-footer'});
+        const freeLabel = new St.Label({text: 'Free cached memory'});
+        const free = new St.Button({child: freeLabel, style_class: 'mk-monitor-action', can_focus: true,
+            x_expand: true});
+        free.connect('clicked', () => this._freeMemory());
+        const monitor = new St.Button({label: 'System Monitor', style_class: 'mk-monitor-action', can_focus: true});
+        monitor.connect('clicked', () => {
+            menu.close();
             try {
                 Gio.AppInfo.create_from_commandline('gnome-system-monitor', null, Gio.AppInfoCreateFlags.NONE).launch([], null);
             } catch (e) {
                 console.warn(`mk-indicator: ${e.message}`);
             }
         });
+        const row = new St.BoxLayout({x_expand: true, style: 'spacing: 8px;'});
+        row.add_child(free);
+        row.add_child(monitor);
+        footer.add_child(row);
+        menu.addMenuItem(footer);
+        this._freeItem = {label: freeLabel};  // its text shows what came back
         this._openId = menu.connect('open-state-changed', (_m, open) => {
             this._restart(open ? 1 : Number(this._conf.INTERVAL) || 2);
             if (open)

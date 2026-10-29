@@ -106,7 +106,9 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - A settings snapshot before every sync, undone with `mk restore`
 - Daily background check that tells you when a new version of this repo is available
 - **Shortcuts window (Super+/):** every shortcut and gesture, live, each marked working, clashing, unset or broken; click to change keys, + to add your own commands, Reset to go back
-- **MK Notes (Super+N, quick note on Super+Ctrl+N):** the notes app, for the laptop and the phone, with encrypted phone sync. Plain Markdown files with links, backlinks, a graph and tags; three panes, pins, checklists and pasted screenshots; pen drawing with pressure. Edit with a live preview, a Tasks view of every checkbox, a daily-notes calendar, focus mode, your own fonts and layout, PDF export, a website from your notes, version history. The phone app (browser or Android) syncs over Wi-Fi. See [docs/NOTES.md](docs/NOTES.md)
+- **MK Notes (Super+N):** notes on A4 pages that grow as you write (Page X of Y), real tables (resize columns, add rows with Tab, move them), rich text, comments in the margin, sticky notes with colours and layer order, pictures with Word-style rotation and resizing, shapes and graphs, drawing, PDFs attached or laid out as printouts, notebooks, links and a mind map, PDF and Word export, locks with auto-lock, and encrypted phone sync. Saved as Markdown files. See [docs/NOTES.md](docs/NOTES.md)
+- **A private lock screen:** only the clock and your scene; no notifications, media player or screenshots while locked
+- **MK Control Center and tour:** quick actions, every `mk` command as a card, MK Lock, face and fingerprint enrollment in windows, the security check; a six-slide tour (Super+Shift+/)
 - **Companion (Super+Shift+N):** notes you can pin, reorder and fold away; a task list you tick off and pin; one click to MK Notes or the focus timer
 - **Reminders:** on any note or task, in 10 min, at 18:00, or every day; they fire even with the Companion closed, with Open and Snooze
 - **Capture from the terminal:** `mk note "idea"`, `mk task "pay rent" 18:00`, `mk remind "stretch" 45m`, `mk list`

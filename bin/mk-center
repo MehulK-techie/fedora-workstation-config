@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """MK Control Center: the MK tools in one window.
 
-  mk-center [home | actions | lock | security]   (also: mk center, the app grid)
-  mk-center hub        MK Commands Hub: the Actions page in a window of its own
-                       (also: mk hub, and in the app grid)
+  mk-center [home | actions | lock | security]   (also: mk center, the app grid;
+                                                 mk hub opens Actions)
 
 Actions: every mk command as a card, by category, with a search box; star
 the ones you use most and they stay on top (~/.config/mk-workstation/hub-pins).
@@ -16,6 +15,7 @@ Everything here calls the same tools as the mk command (mk-lock, mk-security,
 mk power...), so the terminal and this window always agree.
 """
 import json
+import math
 import os
 import re
 import shlex
@@ -32,13 +32,10 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 APP_ID = "io.github.mehulk.MkCenter"
-HUB_ID = "io.github.mehulk.MkCommands"
 HOME = Path.home()
 BIN = HOME / ".local/bin"
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config") / "mk-workstation"
 NOTES = HOME / "Notes"
-PROFILES = ("org.freedesktop.UPower.PowerProfiles", "/org/freedesktop/UPower/PowerProfiles",
-            "org.freedesktop.UPower.PowerProfiles")
 CSS = b"""
 .mk-action { padding: 18px 10px; border-radius: 16px; }
 .mk-action image { -gtk-icon-size: 28px; }
@@ -46,7 +43,21 @@ CSS = b"""
 .mk-card { padding: 12px 14px; border-radius: 14px; }
 .mk-card .title { font-weight: 700; }
 .mk-card .subtitle { font-size: 0.88em; opacity: 0.7; }
+.mk-card { border-left: 3px solid transparent; }
+.mk-cat-cyan { border-left-color: #33c7de; }
+.mk-cat-cyan image { color: #33c7de; }
+.mk-cat-emerald { border-left-color: #2ec27e; }
+.mk-cat-emerald image { color: #2ec27e; }
+.mk-cat-purple { border-left-color: #c061cb; }
+.mk-cat-purple image { color: #c061cb; }
+.mk-cat-amber { border-left-color: #f5c211; }
+.mk-cat-amber image { color: #f5c211; }
+.mk-cat-blue { border-left-color: #62a0ea; }
+.mk-cat-blue image { color: #62a0ea; }
 """
+# Card accents: security cyan, performance emerald, system purple.
+CATEGORY_COLOUR = {"Performance": "emerald", "Security & Vault": "cyan", "Biometrics & Lock": "cyan",
+                   "Screensavers & Wallpapers": "amber", "Notes & Focus": "blue", "System Maintenance": "purple"}
 PINS = CONFIG / "hub-pins"
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
@@ -94,9 +105,6 @@ CATEGORIES = ("Performance", "Security & Vault", "Biometrics & Lock", "Screensav
               "Notes & Focus", "System Maintenance")
 ACTIONS = [
     ("free-ram", "Performance", "media-flash-symbolic", "Free memory", "Drop file caches (no password)", ("bg", mk("optimize", "ram"))),
-    ("quiet", "Performance", "power-profile-power-saver-symbolic", "Quiet mode", "Cooler and quieter, longest battery", ("bg", mk("power", "quiet"))),
-    ("comfort", "Performance", "power-profile-balanced-symbolic", "Comfort mode", "Balanced speed and battery", ("bg", mk("power", "comfort"))),
-    ("performance", "Performance", "power-profile-performance-symbolic", "Performance mode", "Full speed, warmer", ("bg", mk("power", "performance"))),
     ("effects-lite", "Performance", "applications-graphics-symbolic", "Lite effects", "Blur and window effects off", ("bg", mk("effects", "lite"))),
     ("effects-full", "Performance", "applications-graphics-symbolic", "Full effects", "Every visual effect on", ("bg", mk("effects", "full"))),
     ("nap", "Performance", "weather-clear-night-symbolic", "App Nap", "Which unused apps are paused", ("show", mk("nap"))),
@@ -165,7 +173,7 @@ class Center(Adw.ApplicationWindow):
         self.toast.set_child(self.stack)
         view.set_content(self.toast)
         self.set_content(view)
-        self.stack.set_visible_child_name(page if page in ("home", "actions", "lock", "security") else "home")
+        self.stack.set_visible_child_name(page)
 
     def say(self, text):
         self.toast.add_toast(Adw.Toast(title=text, timeout=3))
@@ -192,21 +200,8 @@ class Center(Adw.ApplicationWindow):
         quick.add(grid)
         page.add(quick)
 
-        power = Adw.PreferencesGroup(title="Power", description="The same modes as Quick Settings › Power Mode")
-        row = Adw.ActionRow(title="Mode")
-        modes = Gtk.Box(css_classes=["linked"], valign=Gtk.Align.CENTER)
-        self.mode_buttons = {}
-        group = None
-        current = self._profile()
-        for key, label in (("power-saver", "Quiet"), ("balanced", "Comfort"), ("performance", "Performance")):
-            b = Gtk.ToggleButton(label=label, active=key == current)
-            if group:
-                b.set_group(group)
-            group = group or b
-            b.connect("toggled", lambda btn, k=key: btn.get_active() and self._set_profile(k))
-            modes.append(b)
-        row.add_suffix(modes)
-        power.add(row)
+        # Power modes live in GNOME's Quick Settings (top right): not repeated here.
+        power = Adw.PreferencesGroup(title="Performance")
         nap = Adw.ActionRow(title="App Nap", subtitle=self._nap_text())
         power.add(nap)
         page.add(power)
@@ -262,15 +257,15 @@ class Center(Adw.ApplicationWindow):
             self.action_groups.append(Adw.StatusPage(icon_name="edit-find-symbolic", title="No action matches"))
 
     def _card(self, action):
-        ident, _cat, icon, title, sub, _how = action
+        ident, cat, icon, title, sub, _how = action
         row = Gtk.Box(spacing=12)
         row.append(Gtk.Image(icon_name=icon, pixel_size=24, valign=Gtk.Align.CENTER))
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, valign=Gtk.Align.CENTER)
         text.append(Gtk.Label(label=title, xalign=0, css_classes=["title"], ellipsize=3))
         text.append(Gtk.Label(label=sub, xalign=0, css_classes=["subtitle"], wrap=True, lines=2, ellipsize=3))
         row.append(text)
-        button = Gtk.Button(child=row, css_classes=["card", "mk-card"], hexpand=True)
-        button.connect("clicked", lambda _b: self._run_action(action))
+        button = Gtk.Button(child=row, css_classes=["card", "mk-card", f"mk-cat-{CATEGORY_COLOUR[cat]}"], hexpand=True)
+        button.connect("clicked", lambda b: (self._pulse(b), self._run_action(action)))
         star = Gtk.Button(icon_name="starred-symbolic" if ident in self.pins else "non-starred-symbolic",
                           css_classes=["flat", "circular"], valign=Gtk.Align.CENTER,
                           tooltip_text="Unpin" if ident in self.pins else "Pin to the top")
@@ -279,6 +274,11 @@ class Center(Adw.ApplicationWindow):
         outer.append(button)
         outer.append(star)
         return outer
+
+    def _pulse(self, widget):
+        """A quick dip and back in opacity: the card was clicked."""
+        target = Adw.CallbackAnimationTarget.new(lambda v: widget.set_opacity(1 - 0.35 * math.sin(v * math.pi)))
+        Adw.TimedAnimation.new(widget, 0, 1, 260, target).play()
 
     def _toggle_pin(self, ident):
         self.pins = [p for p in self.pins if p != ident] if ident in self.pins else self.pins + [ident]
@@ -289,10 +289,7 @@ class Center(Adw.ApplicationWindow):
     def _run_action(self, action):
         _id, _cat, _icon, title, _sub, (how, what) = action
         if how == "page":
-            if hasattr(self, "stack"):
-                self.stack.set_visible_child_name(what)
-            else:  # the Hub has no other pages: Control Center opens there
-                run_bg([tool("mk-center"), what])
+            self.stack.set_visible_child_name(what)
         elif how == "term":
             mk_cmd = shlex.quote(tool("mk"))
             run_bg(terminal(mk_cmd + what[2:] if what.startswith("mk ") else what))
@@ -311,24 +308,6 @@ class Center(Adw.ApplicationWindow):
                                                   propagate_natural_height=True))
         dialog.add_response("close", "Close")
         dialog.present(self)
-
-    def _profile(self):
-        try:
-            bus = Gio.bus_get_sync(Gio.BusType.SYSTEM)
-            v = bus.call_sync(PROFILES[0], PROFILES[1], "org.freedesktop.DBus.Properties", "Get",
-                              GLib.Variant("(ss)", (PROFILES[2], "ActiveProfile")), None, 0, 1000, None)
-            return v.unpack()[0]
-        except GLib.Error:
-            return "balanced"
-
-    def _set_profile(self, key):
-        try:
-            Gio.bus_get_sync(Gio.BusType.SYSTEM).call_sync(
-                PROFILES[0], PROFILES[1], "org.freedesktop.DBus.Properties", "Set",
-                GLib.Variant("(ssv)", (PROFILES[2], "ActiveProfile", GLib.Variant("s", key))), None, 0, 2000, None)
-            self.say({"power-saver": "Quiet", "balanced": "Comfort", "performance": "Performance"}[key] + " mode")
-        except GLib.Error as e:
-            self.say(f"Couldn't change the power mode: {e.message}")
 
     def _nap_text(self):
         try:
@@ -543,37 +522,32 @@ class Center(Adw.ApplicationWindow):
         run_bg([tool("mk-security")], done)
 
 
-class Hub(Center):
-    """MK Commands Hub: only the Actions page, with its own app id, icon and
-    window (io.github.mehulk.MkCommands), so it sits in the app grid by itself."""
-
-    def __init__(self, app):  # noqa: super().__init__ would build every page
-        Adw.ApplicationWindow.__init__(self, application=app, title="MK Commands Hub",
-                                       default_width=900, default_height=760)
-        load_css()
-        self.toast = Adw.ToastOverlay(child=self._actions())
-        view = Adw.ToolbarView(content=self.toast)
-        view.add_top_bar(Adw.HeaderBar())
-        self.set_content(view)
-        GLib.idle_add(self.action_search.grab_focus)
-
-
 class CenterApp(Adw.Application):
-    def __init__(self, page):
-        super().__init__(application_id=HUB_ID if page == "hub" else APP_ID)
-        self.page = page
+    """One window; mk-center PAGE (or mk hub) switches it to that page."""
 
-    def do_activate(self):
-        window = self.get_active_window() or (Hub(self) if self.page == "hub" else Center(self, self.page))
+    PAGES = ("home", "actions", "lock", "security")
+
+    def __init__(self):
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+
+    def do_command_line(self, cmd):
+        args = cmd.get_arguments()[1:]
+        page = {"hub": "actions"}.get(args[0], args[0]) if args else "home"
+        page = page if page in self.PAGES else "home"
+        window = self.get_active_window()
+        if window:
+            window.stack.set_visible_child_name(page)
+        else:
+            window = Center(self, page)
         window.present()
+        return 0
 
 
 def main():
     if "-h" in sys.argv or "--help" in sys.argv:
         print(__doc__.strip())
         return 0
-    page = sys.argv[1] if len(sys.argv) > 1 else "home"
-    return CenterApp(page).run([sys.argv[0]])
+    return CenterApp().run(sys.argv)
 
 
 if __name__ == "__main__":

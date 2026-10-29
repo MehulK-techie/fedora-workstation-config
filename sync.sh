@@ -149,7 +149,7 @@ mkdir -p "$ICON_DIR/scalable/apps" "$ICON_DIR/256x256/apps" "$APP_DIR"
 declare -A ICON_NAMES=([companion]=MkCompanion [timer]=MkTimer [shortcuts]=MkShortcuts
                        [camera]=MkCamera [ocr]=MkOcr [notes]=MkNotes [screensaver]=MkScreensaver
                        [tour]=MkTour [vault]=MkVault [speedtest]=MkSpeedtest
-                       [center]=MkCenter [commands]=MkCommands)
+                       [center]=MkCenter)
 for short in "${!ICON_NAMES[@]}"; do
     id="io.github.mehulk.${ICON_NAMES[$short]}"
     rm -f "$ICON_DIR/scalable/apps/$id.svg" "$ICON_DIR/256x256/apps/$id.png"
@@ -162,6 +162,8 @@ for short in "${!ICON_NAMES[@]}"; do
     fi
     sed "s|@BIN@|$HOME/.local/bin|" "$SCRIPT_DIR/assets/applications/$id.desktop" > "$APP_DIR/$id.desktop"
 done
+# Retired launchers (MK Commands Hub is the Actions page of MK Control Center now).
+rm -f "$APP_DIR/io.github.mehulk.MkCommands.desktop" "$ICON_DIR/scalable/apps/io.github.mehulk.MkCommands.svg"
 touch "$ICON_DIR"
 gtk-update-icon-cache -q -t "$ICON_DIR" 2>/dev/null || true
 update-desktop-database -q "$APP_DIR" 2>/dev/null || true

@@ -47,7 +47,7 @@ Every command, file and format. How the parts fit together is in
 | `mk power comfort\|quiet\|performance` | Power profile through the PowerProfiles D-Bus API (balanced, power-saver, performance) |
 | `mk optimize ram\|cpu` | Drop file caches and compact memory (no password at the computer: mk-drop-caches polkit action; also the top bar's "Free cached memory") · Performance mode and the busiest processes |
 | `mk watchdog [status\|on\|off\|kill PID]` | Every 2 min (mk-watchdog.timer): stops VS Code helpers left running after the editor closed; warns once about Node/Python using a full core for ~4 min or over a quarter of RAM (never kills those) |
-| `mk hub` | MK Control Center › Actions: every command as a card, searchable, with pins |
+| `mk hub` | MK Control Center › Actions: every command as a card, searchable, with pins (colour by category) |
 | `mk check` | Notify if a new version of the repo is available (run daily by a timer) |
 | `mk uninstall` | Remove MK's tools, shortcuts, timers and top-bar extension from your account |
 

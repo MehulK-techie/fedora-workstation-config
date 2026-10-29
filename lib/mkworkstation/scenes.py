@@ -284,16 +284,33 @@ class WebHang(Scene):
             self.layers = ((w, h), surfaces)
         return self.layers[1]
 
-    def draw(self, cr, w, h, t):
-        super().draw(cr, w, h, t)
-        # parallax: the far city drifts less than the near one
-        for (surf, pad), depth in zip(self._city(w, h), (0.35, 1.0)):
-            cr.set_source_surface(surf, -pad / 2 + math.sin(t * 0.05) * pad / 2 * depth, 0)
-            cr.paint()
+    def _still(self, w, h, t, anchor_x, ledge):
+        """Sky, towers, both city layers and the cornice, composed once per
+        whole-pixel parallax offset. The city drifts about a pixel a second,
+        so this is redrawn about once a second, not every frame (the frame
+        then costs one blit plus the hero and his web)."""
+        offsets = tuple(round(-pad / 2 + math.sin(t * 0.05) * pad / 2 * depth)
+                        for (_surf, pad), depth in zip(self._city(w, h), (0.35, 1.0)))
+        key = (w, h, offsets)
+        if getattr(self, "_still_key", None) != key:
+            if getattr(self, "_still_surf", None) is None or self._still_key[:2] != (w, h):
+                self._still_surf = cairo.ImageSurface(cairo.FORMAT_RGB24, w, h)
+            c = cairo.Context(self._still_surf)
+            c.set_source_surface(self.background(w, h), 0, 0)
+            c.paint()
+            for (surf, _pad), x in zip(self._city(w, h), offsets):
+                c.set_source_surface(surf, x, 0)
+                c.paint()
+            cornice(c, w, ledge, anchor_x)
+            self._still_key = key
+        return self._still_surf
 
+    def draw(self, cr, w, h, t):
         # The web hangs from the cornice of the rooftop at the top of the view.
         anchor_x, length = w * 0.40, h * 0.30
         ledge = h * 0.07
+        cr.set_source_surface(self._still(w, h, t, anchor_x, ledge), 0, 0)
+        cr.paint()
         swing = 0.10 * math.sin(t * 0.7) + 0.02 * math.sin(t * 1.9)
         end_x = anchor_x + math.sin(swing) * length
         end_y = math.cos(swing) * length
@@ -309,7 +326,6 @@ class WebHang(Scene):
         cr.set_source_rgba(1, 1, 1, 0.9 * math.sin(glint * math.pi))
         cr.arc(anchor_x + (end_x - anchor_x) * glint, ledge + (end_y - ledge) * glint, 2.5, 0, 2 * math.pi)
         cr.fill()
-        cornice(cr, w, ledge, anchor_x)
 
 
         cr.save()
@@ -478,11 +494,21 @@ def _portrait_levels(cols, rows):
         return None
     try:
         from PIL import Image, ImageOps
-        img = ImageOps.autocontrast(ImageOps.fit(Image.open(path).convert("L"), (cols, rows)), cutoff=2)
+        # equalized: the face's mid tones spread out, so features (eyes,
+        # glasses, smile) survive at a few dozen windows across
+        img = ImageOps.equalize(ImageOps.fit(Image.open(path).convert("L"), (cols * 4, rows * 4)))
+        img = img.resize((cols, rows), Image.Resampling.LANCZOS)
     except Exception:  # noqa: BLE001 - any bad file: the windows stay dark
         return None
     px = img.load()
-    return [[px[c, r] / 255 for c in range(cols)] for r in range(rows)]
+
+    def oval(c, r):
+        """1 on the head and shoulders, fading to 0 outside: the photo's
+        background (a curtain) shouldn't light up as noise around him."""
+        dx, dy = (c + 0.5) / cols - 0.5, (r + 0.5) / rows - 0.46
+        d = math.hypot(dx / 0.40, dy / 0.52)
+        return 1.0 if d < 0.85 else max(0.0, 1 - (d - 0.85) / 0.2)
+    return [[px[c, r] / 255 * oval(c, r) for c in range(cols)] for r in range(rows)]
 
 
 def _lit_text(cr, text, cx, top, pitch, colour, alpha=0.95):
@@ -496,58 +522,141 @@ def _lit_text(cr, text, cx, top, pitch, colour, alpha=0.95):
     return top + 7 * pitch
 
 
+WARM_WHITE = (1.0, 0xf5 / 255, 0xdb / 255)
+BAYER = ((0, 8, 2, 10), (12, 4, 14, 6), (3, 11, 1, 9), (15, 7, 13, 5))  # ordered-dither thresholds
+
+
 def tribute_tower(cr, w, h):
-    """Stan Lee's tribute, lit in a skyscraper's windows: his portrait (from
-    the photo, bright offices gold, mid tones cyan) and his line beneath it
-    in the window font, with 1922-2018. Part of the still background, so
-    the drift never shakes it."""
+    """Stan Lee's tribute: an Art Deco tower (stepped setbacks, a finned
+    crown) whose office windows carry his portrait, dithered from the photo
+    onto the same window grid, over a frieze with his line and dates. The
+    other offices are lit the way a real tower is: whole floors dark, the
+    rest a mix of gold, cyan and warm white at varying brightness. Part of
+    the still background, so the drift never shakes it."""
     rand = random.Random(57)
-    bx, top = w * 0.035, h * 0.20
-    bw = w * 0.28
-    body = cairo.LinearGradient(bx, 0, bx + bw, 0)
-    body.add_color_stop_rgb(0, 0.09, 0.08, 0.18)
-    body.add_color_stop_rgb(1, 0.04, 0.035, 0.09)
-    cr.set_source(body)
-    cr.rectangle(bx, top, bw, h - top)
+    k = h / 1080
+    pitch = max(5.0, 9.5 * k)                    # one office window
+    x0, x1 = w * 0.035, w * 0.315
+    cx = (x0 + x1) / 2
+    width = x1 - x0
+    # tiers: (width fraction, top y); the crown sits on the last
+    tiers = [(1.0, h * 0.20), (0.80, h * 0.155), (0.58, h * 0.12), (0.36, h * 0.095)]
+    body = cairo.LinearGradient(x0, 0, x1, 0)
+    body.add_color_stop_rgb(0, 0.10, 0.09, 0.19)
+    body.add_color_stop_rgb(0.55, 0.06, 0.055, 0.13)
+    body.add_color_stop_rgb(1, 0.035, 0.03, 0.08)
+    spans = []
+    for i, (frac, top) in enumerate(tiers):
+        tw = width * frac
+        tx = cx - tw / 2
+        bottom = h if i == 0 else tiers[i - 1][1]
+        cr.set_source(body)
+        cr.rectangle(tx, top, tw, bottom - top)
+        cr.fill()
+        cr.set_source_rgba(0.55, 0.65, 0.95, 0.28)  # moonlight on the left edge
+        cr.rectangle(tx, top, 1.5, bottom - top)
+        cr.fill()
+        cr.set_source_rgba(0.75, 0.8, 1.0, 0.12)    # the setback's ledge
+        cr.rectangle(tx, top, tw, 2)
+        cr.fill()
+        spans.append((tx, tw, top, bottom))
+    # the crown: stepped fins rising to a spire, with a red beacon
+    ctop = tiers[-1][1]
+    for f in range(-3, 4):
+        fh = h * (0.02 + 0.012 * (3 - abs(f)))
+        fw = width * 0.03
+        cr.set_source_rgb(0.07, 0.065, 0.14)
+        cr.rectangle(cx + f * fw * 1.5 - fw / 2, ctop - fh, fw, fh)
+        cr.fill()
+    spire_top = ctop - h * 0.075
+    cr.move_to(cx - width * 0.02, ctop - h * 0.05)
+    cr.line_to(cx, spire_top)
+    cr.line_to(cx + width * 0.02, ctop - h * 0.05)
+    cr.close_path()
     cr.fill()
-    cr.set_source_rgba(0.55, 0.65, 0.95, 0.3)  # rim light
-    cr.rectangle(bx + bw - 2, top, 2, h - top)
+    glow = cairo.RadialGradient(cx, spire_top, 0, cx, spire_top, 14 * k + 4)
+    glow.add_color_stop_rgba(0, 1, 0.3, 0.3, 0.9)
+    glow.add_color_stop_rgba(1, 1, 0.3, 0.3, 0)
+    cr.set_source(glow)
+    cr.arc(cx, spire_top, 14 * k + 4, 0, 2 * math.pi)
     cr.fill()
-    cr.set_source_rgb(0.06, 0.05, 0.12)  # a crown on the roof
-    cr.rectangle(bx + bw * 0.3, top - h * 0.025, bw * 0.4, h * 0.025)
-    cr.fill()
-    # the portrait: a square of office windows
-    side = min(bw * 0.62, h * 0.22)
-    cols = 34
-    pitch = side / cols
-    px0, py0 = bx + (bw - side) / 2, top + h * 0.03
-    levels = _portrait_levels(cols, cols)
-    for r in range(cols):
-        for c in range(cols):
-            x, y = px0 + c * pitch, py0 + r * pitch
-            v = levels[r][c] if levels else 0.0
-            if v > 0.62:
-                cr.set_source_rgba(*GOLD, 0.45 + 0.55 * (v - 0.62) / 0.38)
-            elif v > 0.36:
-                cr.set_source_rgba(*CYAN, 0.18 + 0.5 * (v - 0.36) / 0.26)
-            else:
-                cr.set_source_rgba(0.02, 0.02, 0.05, 0.9)
-            cr.rectangle(x, y, pitch * 0.8, pitch * 0.8)
-            cr.fill()
-    # the quote and the dates, in lit windows
+
+    # where the portrait and the frieze go, on the main tier
+    # The portrait's windows are a finer grid (a glass curtain wall), so the
+    # face has ~40 x 40 of them; it ends above the far city's rooftops.
+    ppitch = max(4.0, 6.2 * k)
+    pcols = 40
+    pside = pcols * ppitch
+    py0 = tiers[0][1] + pitch * 1.2
+    px0 = cx - pside / 2
+    levels = _portrait_levels(pcols, pcols)
     widest = max(sign_cells(line)[1] for line in QUOTE)
-    tp = min(3.2, (bw - 24) / widest)
-    y = py0 + side + tp * 4
+    tp = min(2.6 * k + 0.5, (width - 4 * pitch) / widest)
+    frieze_top = py0 + pside + pitch * 0.8
+    frieze_h = tp * 7 * 3 + tp * 10
+    frieze_bottom = frieze_top + frieze_h
+
+    def lit(x, y, colour, alpha, size=pitch):
+        cr.set_source_rgba(*colour, alpha)
+        cr.rectangle(x, y, size * 0.62, size * 0.72)
+        cr.fill()
+
+    # every office window on every tier
+    for tx, tw, top, bottom in spans:
+        cols = int((tw - pitch) / pitch)
+        left = tx + (tw - cols * pitch) / 2
+        floor_y = top + pitch
+        floor = 0
+        while floor_y < bottom - pitch:
+            dark_floor = rand.random() < 0.18          # a whole floor gone home
+            busy = rand.uniform(0.25, 0.65)            # how many are still in
+            for c in range(cols):
+                x = left + c * pitch
+                inside_portrait = px0 - pitch <= x <= px0 + pside and py0 - pitch <= floor_y <= py0 + pside + pitch * 0.5
+                inside_frieze = frieze_top - pitch * 0.5 <= floor_y <= frieze_bottom
+                if inside_portrait or inside_frieze:
+                    continue
+                if dark_floor or rand.random() > busy:
+                    continue
+                roll = rand.random()
+                colour = GOLD if roll < 0.55 else WARM_WHITE if roll < 0.82 else CYAN
+                lit(x, floor_y, colour, rand.uniform(0.28, 0.85))
+            floor_y += pitch * 1.25
+            floor += 1
+
+    # the portrait: each window on, dimmed or dark by the photo, ordered-
+    # dithered so shading reads as a pattern of lit offices
+    cr.set_source_rgba(0.015, 0.015, 0.04, 0.85)
+    cr.rectangle(px0 - pitch * 0.4, py0 - pitch * 0.4, pside + pitch * 0.4, pside + pitch * 0.4)
+    cr.fill()
+    if levels:
+        for r in range(pcols):
+            for c in range(pcols):
+                v = levels[r][c]
+                t = (BAYER[r % 4][c % 4] + 0.5) / 16
+                x, y = px0 + c * ppitch, py0 + r * ppitch
+                if v > 0.80 + 0.15 * t:
+                    lit(x, y, WARM_WHITE, 0.95, ppitch)
+                elif v > 0.35 + 0.4 * t:
+                    lit(x, y, GOLD, 0.45 + 0.5 * v, ppitch)
+                elif v > 0.12 + 0.25 * t:
+                    lit(x, y, CYAN, 0.2 + 0.35 * v, ppitch)
+    # the frieze: a lit band with the quote and the dates
+    band = cairo.LinearGradient(0, frieze_top, 0, frieze_bottom)
+    band.add_color_stop_rgba(0, 0.12, 0.10, 0.06, 0.95)
+    band.add_color_stop_rgba(1, 0.05, 0.04, 0.03, 0.95)
+    fx0, fx1 = x0 + pitch, x1 - pitch
+    cr.set_source(band)
+    cr.rectangle(fx0, frieze_top, fx1 - fx0, frieze_h)
+    cr.fill()
+    cr.set_source_rgba(*GOLD, 0.55)
+    for yline in (frieze_top + 1.5, frieze_bottom - 1.5):
+        cr.rectangle(fx0, yline - 0.75, fx1 - fx0, 1.5)
+    cr.fill()
+    y = frieze_top + tp * 3
     for line in QUOTE:
-        y = _lit_text(cr, line, bx + bw / 2, y, tp, GOLD) + tp * 2.5
-    _lit_text(cr, TRIBUTE_LINE, bx + bw / 2, y + tp, tp * 0.8, CYAN, 0.85)
-    # ordinary offices further down
-    for wy in range(int(y + tp * 14), int(h) - 8, 18):
-        for wx in range(int(bx) + 10, int(bx + bw) - 10, 14):
-            if rand.random() < 0.3:
-                cr.set_source_rgba(*(GOLD if rand.random() < 0.8 else CYAN), rand.uniform(0.3, 0.7))
-                cr.rectangle(wx, wy, 7, 9)
-                cr.fill()
+        y = _lit_text(cr, line, cx, y, tp, GOLD) + tp * 2
+    _lit_text(cr, TRIBUTE_LINE, cx, y, tp * 0.85, WARM_WHITE, 0.8)
 
 
 def plastic(cr, x, y, w, h, color, radius=4):

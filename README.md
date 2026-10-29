@@ -119,7 +119,8 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - **Screensaver:** step away and a scene plays: a brick-built hero hanging beside a skyscraper, a brick-built caped knight in the rain, or a cyan-and-amber hex terminal decoding the time; pick one from live previews or shuffle in the Screensaver app (`mk screensaver`)
 - **Window switcher:** Alt+Tab and three-finger swipes open a compact card of live windows at once; 1–9 sends a window to that desktop
 - **Top bar:** a system monitor (CPU, GPU, memory, disk activity, temperatures in °C) with an internet speed test (also `mk speedtest`), and a media tile for Spotify or any player (album art, seek, choose speakers)
-- **Locks:** `mk lock app Settings` makes an app ask for your fingerprint first; `mk lock ~/Private` encrypts a folder that opens only after the same check and closes when the screen locks
+- **Locks:** `mk lock app Settings` makes an app ask for your fingerprint first; `mk lock ~/Private` encrypts a folder that opens only after the same check and closes when the screen locks; manage them in the MK Control Center (`mk center`) or right-click a folder in Files
+- **MK Control Center:** quick actions, power modes, MK Lock and the security check in one window
 - **App Nap:** when memory runs short, apps you left minimized for a while are paused and wake the moment you switch back
 - **Accounts:** `mk users add NAME` for a second person (their own settings and face), `mk guest on` for a Guest login that starts empty every time
 - **Tour:** `mk tour` or Super+Shift+/ walks through the desktop, with a button to try each thing

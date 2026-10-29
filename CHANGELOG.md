@@ -3,6 +3,13 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Control Center** (`mk center`): quick actions, power modes, App Nap, MK Lock (apps, folders, vault, notebooks) and security in one window.
+- **Speed test window** (`mk speedtest --gui`): a gauge, ping, jitter, multi-stream download/upload; `--ookla` uses speedtest-cli.
+- **Files:** right-click Lock / Unlock, with a badge on locked folders (nautilus-python).
+- **Photo Booth:** a live 3 x 3 grid (G), Flash / Instant 600 / Film looks, stickers with resize, rotate and layer handles, date stamps.
+- **MK Notes:** Word export, `[[` link suggestions, a switch for the graph view; tasks moved to the Companion.
+- **Top bar:** an "N Tasks" pill and a spoken briefing of today's tasks.
+- **Touchpad:** calmer desktop swipes (speed 0.85), one desktop per swipe.
 - **Photo Booth (Super+C):** live webcam looks (Polaroid, Thermal, Pop Art, Noir, Retro, Comic, Neon, Mirror, Dreamy, Vignette, Hue Shift, Distort), countdown, text and colour-emoji stickers, Polaroid captions, hardware sliders with reset.
 - **`mk security`:** a scored security check with one-line fixes (root half via pkexec).
 - **Lock screen:** the screensaver scene behind the clock; Space slides it up to the prompt.

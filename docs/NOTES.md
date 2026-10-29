@@ -135,6 +135,7 @@ closes it without saving.
 - **Export to Word** (menu, or right-click a note): a `.docx` written
   directly, no extra software: headings, lists, checklists, callouts, code,
   tables, links and pictures at their set width.
+- **Graph view** (Ctrl+G) can be switched off in Preferences › Writing.
 - **Publish vault as website:** writes a folder of HTML pages with a note
   list and working links. Upload it to GitHub Pages, Netlify or any web
   host. This is Obsidian Publish without the subscription.

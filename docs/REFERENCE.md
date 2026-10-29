@@ -37,7 +37,9 @@ Every command, file and format. How the parts fit together is in
 | `mk lock PATH` · `mk unlock PATH` · `mk lock close PATH` · `mk unlock --remove PATH` · `mk lock list` | Encrypt a folder (first time) or close it · open it after the check · close it · decrypt it for good · list |
 | `mk users add NAME [--admin]` · `mk users remove NAME` · `mk users list` | Another account (sudo); the MK desktop applies itself at their first login |
 | `mk guest on\|off` | A Guest login: no password, no admin rights, home emptied at every login (sudo) |
-| `mk speedtest [--ping]` | Ping, jitter, download and upload (speed.cloudflare.com, about 35 MB) |
+| `mk speedtest [--ping] [--gui] [--ookla]` | Ping, jitter, download and upload (speed.cloudflare.com, several streams); `--gui` a gauge window; `--ookla` uses speedtest-cli |
+| `mk center [lock\|security]` | MK Control Center |
+| `mk tasks badge on\|off` | The top-bar "N Tasks" pill |
 | `mk nap` | Apps App Nap has paused |
 | `mk keyring [open]` | Why apps ask for the keyring after fingerprint or face login, and the two fixes |
 | `mk tour` | The walkthrough (also Super+Shift+/) |
@@ -74,6 +76,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `mk-lock` | | `mk lock` (apps, folders, `run -- COMMAND`, `close-all`, `reapply`) |
 | `mk-users` | | `mk users`, `mk guest` |
 | `mk-speedtest` | | `mk speedtest` |
+| `mk-center` | | `mk center`: Control Center |
 | `mk-tour [--first-run]` | Super+Shift+/ | The walkthrough; `--first-run` shows it only once |
 | `mk-doctor` | | Same as `mk doctor` |
 | `mk-apps missing \| capture` | | Used by `mk update` / `mk save` |

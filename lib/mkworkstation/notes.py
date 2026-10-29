@@ -547,6 +547,34 @@ class Vault:
         return re.sub(r'<img src="(?!file:|https?:|data:)([^"]+)"',
                       lambda m: f'<img src="{base}{m.group(1)}"', out)
 
+    def pdf_pages(self, rel, limit=30, width=1240):
+        """Every page of a PDF (up to LIMIT) as PNG bytes, WIDTH pixels wide,
+        made by pdftoppm in the same bubblewrap sandbox as pdf_thumbnail.
+        [] without bwrap or pdftoppm, or for a PDF it can't read."""
+        bwrap, pdftoppm = shutil.which("bwrap"), shutil.which("pdftoppm")
+        src = self.path(rel)
+        if not bwrap or not pdftoppm or not src.is_file():
+            return []
+        import stat as stat_mod
+        import tempfile
+        pages = []
+        with tempfile.TemporaryDirectory() as fresh:
+            sandbox = [bwrap, "--unshare-all", "--die-with-parent", "--new-session",
+                       "--ro-bind", "/usr", "/usr", "--symlink", "usr/lib64", "/lib64", "--symlink", "usr/lib", "/lib",
+                       "--symlink", "usr/bin", "/bin", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+                       "--ro-bind", str(src), "/in.pdf", "--bind", fresh, "/out"]
+            try:
+                subprocess.run(sandbox + [pdftoppm, "-png", "-f", "1", "-l", str(limit), "-scale-to-x", str(width),
+                                          "-scale-to-y", "-1", "/in.pdf", "/out/page"],
+                               capture_output=True, timeout=120, check=True)
+            except (OSError, subprocess.SubprocessError):
+                return []
+            for made in sorted(Path(fresh).glob("page-*.png"), key=lambda q: int(q.stem.rsplit("-", 1)[1])):
+                info = os.lstat(made)
+                if stat_mod.S_ISREG(info.st_mode) and info.st_size <= 16 * 1024 * 1024:
+                    pages.append(made.read_bytes())
+        return pages
+
     def pdf_thumbnail(self, rel):
         """First page of a PDF as a picture (cached). The PDF may have come from
         the phone or a download, so pdftoppm runs in a bubblewrap sandbox: no

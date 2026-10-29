@@ -1736,7 +1736,9 @@ class SimpleNotePicker(Adw.Dialog):
 
 class NotesWindow(Adw.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(application=app, title="MK Notes", default_width=1360, default_height=860)
+        # Fits a 1366 x 768 laptop screen with the top bar and dock.
+        super().__init__(application=app, title="MK Notes", default_width=1100, default_height=680)
+        self.set_size_request(720, 560)
         self.vault = nv.Vault()
         self.rel = None
         self.dirty = False
@@ -1992,15 +1994,15 @@ class NotesWindow(Adw.ApplicationWindow):
         self.nb_toggle = Gtk.ToggleButton(icon_name="sidebar-show-symbolic", active=True,
                                           tooltip_text="Show / Hide Notebooks Sidebar (F9)")
         self.nb_toggle.connect("toggled", self._on_nb_toggle)
-        self.top_bar.pack_start(self.nb_toggle)
-        focus_btn = Gtk.Button(label="⤢", tooltip_text="Focus: hide the notebooks and the list (Ctrl+Shift+F)",
+        # One button folds both side panels away and back (F9 / F8 still
+        # toggle the notebooks / the list on their own).
+        focus_btn = Gtk.Button(label="⤢", tooltip_text="Hide or show the notebooks and the list (Ctrl+Shift+F)",
                                action_name="win.focus-canvas", css_classes=["flat"])
         self.top_bar.pack_start(focus_btn)
 
         self.list_toggle = Gtk.ToggleButton(icon_name="view-dual-symbolic", active=True,
                                             tooltip_text="Show / Hide Notes List (F8)")
         self.list_toggle.connect("toggled", self._on_list_toggle)
-        self.top_bar.pack_start(self.list_toggle)
 
         new_note_btn = Gtk.Button(icon_name="list-add-symbolic", css_classes=["suggested-action"],
                                   tooltip_text="New Note (Ctrl+N)")
@@ -2306,7 +2308,11 @@ class NotesWindow(Adw.ApplicationWindow):
         self.shapes_revealer = Gtk.Revealer(child=self.shapes_bar, transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
         ribbon_outer.append(self.shapes_revealer)
 
-        self.doc_col.append(ribbon_outer)
+        # On a narrow (1366 px) screen the ribbon and its tool bars scroll
+        # sideways instead of making the window wider than the screen.
+        self.doc_col.append(Gtk.ScrolledWindow(child=ribbon_outer, vscrollbar_policy=Gtk.PolicyType.NEVER,
+                                               hscrollbar_policy=Gtk.PolicyType.EXTERNAL,
+                                               propagate_natural_height=True))
 
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
                             margin_start=32, margin_end=32, margin_top=6, margin_bottom=4)
@@ -2357,6 +2363,7 @@ class NotesWindow(Adw.ApplicationWindow):
         ed_keys.connect("key-pressed", self._on_editor_key)
         self.view.add_controller(ed_keys)
 
+        self.view.set_extra_menu(self._table_menu())
         ed_click = Gtk.GestureClick(button=1)
         ed_click.connect("released", self._on_editor_click)
         self.view.add_controller(ed_click)
@@ -2644,6 +2651,90 @@ class NotesWindow(Adw.ApplicationWindow):
                                           area.queue_draw()))
         return pop
 
+    def _table_menu(self):
+        """Right-click items for the Markdown table under the cursor."""
+        menu = Gio.Menu()
+        section = Gio.Menu()
+        for label, name in (("Insert row below", "row-add"), ("Delete row", "row-del"),
+                            ("Insert column right", "col-add"), ("Delete column", "col-del"),
+                            ("Align column: left", "align-l"), ("Align column: centre", "align-c"),
+                            ("Align column: right", "align-r")):
+            section.append(label, f"win.table-{name}")
+            action = Gio.SimpleAction.new(f"table-{name}", None)
+            action.connect("activate", lambda *_a, n=name: self.edit_table(n))
+            self.add_action(action)
+        menu.append_section("Table", section)
+        return menu
+
+    def _table_at_cursor(self):
+        """(first line, lines, row index, column index) of the table around
+        the cursor, or None. Rows are '| a | b |' lines."""
+        buf = self.buffer
+        cur = buf.get_iter_at_mark(buf.get_insert())
+        lines = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).split("\n")
+        row = cur.get_line()
+        if row >= len(lines) or not lines[row].lstrip().startswith("|"):
+            return None
+        top = row
+        while top > 0 and lines[top - 1].lstrip().startswith("|"):
+            top -= 1
+        bottom = row
+        while bottom + 1 < len(lines) and lines[bottom + 1].lstrip().startswith("|"):
+            bottom += 1
+        col = max(0, lines[row][:cur.get_line_offset()].count("|") - 1)
+        return top, lines[top:bottom + 1], row - top, col
+
+    def edit_table(self, what):
+        found = self._table_at_cursor()
+        if not found:
+            self.toast.add_toast(Adw.Toast(title="Put the cursor in a table first", timeout=2))
+            return
+        top, lines, r, c = found
+        cells = [[x.strip() for x in ln.strip().strip("|").split("|")] for ln in lines]
+        ncol = max(len(row) for row in cells)
+        cells = [row + [""] * (ncol - len(row)) for row in cells]
+        rule = 1 if len(cells) > 1 and all(set(x) <= set("-: ") and x for x in cells[1]) else None
+        c = min(c, ncol - 1)
+        if what == "row-add":
+            cells.insert(max(r, rule or 0) + 1, [""] * ncol)
+        elif what == "row-del" and r != 0 and r != rule and len(cells) > 3:
+            cells.pop(r)
+        elif what == "col-add":
+            for i, row in enumerate(cells):
+                row.insert(c + 1, "---" if i == rule else ("Column" if i == 0 else ""))
+        elif what == "col-del" and ncol > 1:
+            for row in cells:
+                row.pop(c)
+        elif what.startswith("align") and rule is not None:
+            cells[rule][c] = {"align-l": ":---", "align-c": ":---:", "align-r": "---:"}[what]
+        ncol = max(len(row) for row in cells)
+        widths = [max(3, max(len(row[k]) for j, row in enumerate(cells) if j != rule)) for k in range(ncol)]
+
+        def fmt(j, row):
+            if j == rule:
+                out = []
+                for k, cell in enumerate(row):
+                    left, right = cell.startswith(":"), cell.endswith(":") and len(cell) > 1
+                    dash = "-" * (widths[k] - left - right)
+                    out.append((":" if left else "") + dash + (":" if right else ""))
+                return "| " + " | ".join(out) + " |"
+            return "| " + " | ".join(cell.ljust(widths[k]) for k, cell in enumerate(row)) + " |"
+        text = "\n".join(fmt(j, row) for j, row in enumerate(cells))
+        buf = self.buffer
+        start = buf.get_iter_at_line(top)[1]
+        end = buf.get_iter_at_line(top + len(lines) - 1)[1]
+        if not end.ends_line():
+            end.forward_to_line_end()
+        buf.begin_user_action()
+        buf.delete(start, end)
+        start = buf.get_iter_at_line(top)[1]
+        offset = start.get_offset()
+        buf.insert(start, text)
+        buf.apply_tag_by_name("mono", buf.get_iter_at_offset(offset), buf.get_iter_at_offset(offset + len(text)))
+        buf.end_user_action()
+        self.dirty = True
+        self._queue_save()
+
     def insert_table(self, cols, rows):
         """A Markdown table, columns padded so it lines up in the mono font:
         a header row, the separator, then ROWS - 1 empty rows."""
@@ -2687,6 +2778,8 @@ class NotesWindow(Adw.ApplicationWindow):
         add_tag("underline", underline=Pango.Underline.SINGLE)
         add_tag("strike", strikethrough=True)
         add_tag("mono", family="Monospace")
+        add_tag("pdf-chip", background="rgba(239,68,68,0.18)", foreground="#ffb4b4", weight=Pango.Weight.BOLD,
+                underline=Pango.Underline.SINGLE)
         add_tag("h1", weight=Pango.Weight.BOLD, scale=1.60, pixels_above_lines=10, pixels_below_lines=6)
         add_tag("h2", weight=Pango.Weight.BOLD, scale=1.35, pixels_above_lines=8, pixels_below_lines=4)
         add_tag("h3", weight=Pango.Weight.semibold if hasattr(Pango.Weight, "semibold") else Pango.Weight.BOLD,
@@ -3066,7 +3159,7 @@ class NotesWindow(Adw.ApplicationWindow):
         .mk-list-col {{ background: {preset['list_bg']}; }}
         .mk-page-col {{ background: {preset['page_bg']}; }}
         .mk-ribbon {{ background: {preset['ribbon_bg']}; }}
-        .mk-editor, .mk-editor text {{ font-size: {base_size * z:.1f}px; color: {preset['fg']}; }}
+        .mk-editor, .mk-editor text {{ font-size: {base_size * z:.1f}px; color: {'#ffffff' if preset['dark'] else preset['fg']}; }}
         """
         if not getattr(self, "_dyn_css", None):
             self._dyn_css = Gtk.CssProvider()
@@ -3107,7 +3200,7 @@ class NotesWindow(Adw.ApplicationWindow):
             return
         spans = []
         table = self.buffer.get_tag_table()
-        tag_names = ["bold", "italic", "underline", "strike", "mono", "h1", "h2", "h3", "title", "hl-yellow",
+        tag_names = ["bold", "italic", "underline", "strike", "mono", "pdf-chip", "h1", "h2", "h3", "title", "hl-yellow",
                      "comment-mark"]
         table.foreach(lambda t: t.get_property("name") and t.get_property("name").startswith("fg-") and tag_names.append(t.get_property("name")))
 
@@ -3475,6 +3568,12 @@ class NotesWindow(Adw.ApplicationWindow):
         if not line_e.ends_line():
             line_e.forward_to_line_end()
         line = self.buffer.get_text(line_s, line_e, False)
+        chip = self.buffer.get_tag_table().lookup("pdf-chip")
+        if chip and it.has_tag(chip) and line.startswith("📎 "):
+            rel = self.vault.resolve(line[2:].strip())
+            if rel:
+                Gio.AppInfo.launch_default_for_uri(self.vault.path(rel).as_uri(), None)
+            return
         if it.get_line_offset() <= 3 and line.lstrip().startswith(("☐ ", "☑ ")):
             swapped = line.replace("☐ ", "☑ ", 1) if "☐ " in line[:4] else line.replace("☑ ", "☐ ", 1)
             self.buffer.begin_user_action()
@@ -3612,7 +3711,75 @@ class NotesWindow(Adw.ApplicationWindow):
                 p = Path(f.get_path() or "")
                 if p.is_file() and p.suffix.lower() in nv.IMAGE_EXT:
                     self._add_image_bytes(p.read_bytes(), p.suffix.lower(), p.stem)
+                elif p.is_file() and p.suffix.lower() == ".pdf":
+                    self.insert_pdf(p)
         dlg.open_multiple(self, None, chosen)
+
+    def insert_pdf(self, src):
+        """OneNote's choice: a file chip in the text, or the pages laid on the
+        page as pictures you can draw on."""
+        dlg = Adw.AlertDialog(heading=f"Insert “{src.name}”",
+                              body="Attach it as a file, or lay its pages on the note to write on them.")
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("attach", "📎 Attach file")
+        dlg.add_response("printout", "📄 Insert as printout")
+        dlg.set_response_appearance("printout", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response("printout")
+
+        def answered(_d, response):
+            if response == "attach":
+                self._attach_pdf_chip(src)
+            elif response == "printout":
+                self._insert_printout(src)
+        dlg.connect("response", answered)
+        dlg.present(self)
+
+    def _attach_pdf_chip(self, src):
+        rel = self.vault.save_attachment(src.read_bytes(), ".pdf", src.stem)
+        name = Path(rel).name
+        buf = self.buffer
+        if not buf.get_iter_at_mark(buf.get_insert()).starts_line():
+            buf.insert_at_cursor("\n")
+        start = buf.get_iter_at_mark(buf.get_insert()).get_offset()
+        chip = f"📎 {name}"
+        buf.insert_at_cursor(chip + "\n")
+        buf.apply_tag_by_name("pdf-chip", buf.get_iter_at_offset(start), buf.get_iter_at_offset(start + len(chip)))
+        self.dirty = True
+        self._queue_save()
+        self.toast.add_toast(Adw.Toast(title=f"Attached {name}: click it to open", timeout=3))
+
+    def _insert_printout(self, src):
+        """Every page (up to 30) as a picture, one under the other, made in a
+        sandbox (the PDF may come from anywhere)."""
+        rel = self.vault.save_attachment(src.read_bytes(), ".pdf", src.stem)
+        self.toast.add_toast(Adw.Toast(title="Laying out the pages…", timeout=2))
+
+        def work():
+            pages = self.vault.pdf_pages(rel)
+            GLib.idle_add(lambda: (self._place_printout(src.stem, pages), False)[1])
+        threading.Thread(target=work, daemon=True).start()
+
+    def _place_printout(self, stem, pages):
+        if not pages:
+            self.toast.add_toast(Adw.Toast(title="Couldn't read that PDF's pages (needs bubblewrap and poppler-utils)",
+                                           timeout=4))
+            return
+        # below the last line of text, so the pages never cover it
+        end = self.view.get_iter_location(self.buffer.get_end_iter())
+        y = max(80.0, round((end.y + end.height) / max(0.5, self.zoom) + 60.0))
+        width = 620.0
+        for i, data in enumerate(pages):
+            prel = self.vault.save_attachment(data, ".png", f"{stem} page {i + 1}")
+            item = {"name": Path(prel).name, "x": 56.0, "y": y, "w": width, "angle": 0, "printout": True}
+            widget = FreeCanvasImage(self.vault.path(prel), item, self)
+            self.canvas_fixed.put(widget, round(item["x"] * self.zoom), round(item["y"] * self.zoom))
+            self.canvas_images.append(widget)
+            y += widget.data.get("h", width * 1.414) + 24
+        self.ensure_page_height_for_images()
+        self.dirty = True
+        self.save_note_meta()
+        self._save_now()
+        self.toast.add_toast(Adw.Toast(title=f"{len(pages)} page(s) inserted: draw on them with Draw", timeout=3))
 
     def take_note_screenshot(self):
         def done(path):

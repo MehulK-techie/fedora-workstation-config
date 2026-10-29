@@ -10,7 +10,8 @@ them live and lets you change any of them. Your changes go to
 | Action | Keys |
 | :--- | :--- |
 | Switch windows (all workspaces) | Alt+Tab |
-| Overview (every window spread out) | Super+Tab, Super+S |
+| Switch apps | Super+Tab |
+| Go to workspace 1–4 · move the window there | Super+1–4 · Super+Shift+1–4 |
 | Switch windows of this app | Alt+` · Super+` |
 | Close window | Super+Q · Alt+F4 |
 | Snap left half | Super+Left · Super+Keypad 4 |

@@ -16,7 +16,7 @@ Touchpad Gesture Customization, Blur my Shell, Transparent Top Bar, WACK Lockscr
 ### KEYBINDING & UTILITY MATRIX
 - `Super + Shift + T` / `Super + Alt + T` : OCR (`ocr-snip` via the screenshot portal / Text Extractor)
 - `Super + V` : Clipboard history
-- Windows/macOS keymap: Super+E/I/D/R/S, Ctrl+Shift+Esc, Super+1-9 dock apps, Super+Shift+3/4 screenshots, Ctrl+Alt+T terminal, Super+Alt+1-4 workspaces, Super+Ctrl+D new desktop (full table in README)
+- Windows/macOS keymap: Super+E/I/D/R/S, Ctrl+Shift+Esc, Super+5-9 dock apps, Super+1-4 workspaces, Super+Shift+3/4 screenshots, Ctrl+Alt+T terminal, Super+Alt+1-4 workspaces, Super+Ctrl+D new desktop (full table in README)
 - Touchpad: 4 fingers ←/→ workspaces, 3 fingers ←/→ windows, 3 fingers ↑ overview, 4-finger pinch show desktop
 - `Super + .` : Emoji Board (GNOME Characters)
 - `Super + /` : Live Shortcuts HUD

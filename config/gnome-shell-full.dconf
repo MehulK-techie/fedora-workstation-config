@@ -465,7 +465,7 @@ screenshot-window=['<Alt>Print']
 show-screenshot-ui=['<Shift>Print', '<Super><Shift>s', '<Super><Shift>4']
 toggle-application-view=['<Super>a']
 toggle-message-tray=['<Super>m']
-toggle-overview=['<Super>s', '<Super>Tab']
+toggle-overview=['<Super>s']
 toggle-quick-settings=['<Super><Shift>a']
 
 [weather]

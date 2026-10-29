@@ -143,8 +143,9 @@ closes it without saving.
   text to find its comment. On a small window the side panels step aside
   while the margin is open (⤢ brings them back).
 - **Sticky notes**: rename the title, pick a colour from the palette
-  (Yellow, Mint, Sky, Rose, Lavender, Coral, Dark); they're printed as
+  (Yellow, Mint, Sky, Rose, Lavender, Coral, Charcoal); they're printed as
   coloured callouts at the end of a PDF.
+- **Layers**: pictures and sticky notes have an order; a new one goes on top. A picture's bar and a sticky's layers button (▤) have Bring Forward, Send Backward, Bring to Front and Send to Back. Drawings stay on their own layer above the page.
 - **Pages**: dashed lines mark where each A4 page ends.
 - **Locks**: right-click a locked note for Lock Now or Remove Lock
   Permanently; a note you unlocked locks again after a minute without input.

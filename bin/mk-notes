@@ -72,14 +72,17 @@ NOTEBOOK_COLORS = [
 INK_COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#ffffff", "#1e293b"]
 
 STICKY_PALETTES = [
-    ("Sunny Yellow", "#fef08a", "#854d0e"),
-    ("Mint Green", "#bbf7d0", "#166534"),
+    ("Yellow", "#fff3a8", "#854d0e"),
+    ("Mint", "#c8f7dc", "#166534"),
     ("Sky Blue", "#bae6fd", "#075985"),
     ("Rose Pink", "#fbcfe8", "#9d174d"),
-    ("Lavender", "#e9d5ff", "#5b21b6"),
-    ("Coral", "#fecaca", "#9f1239"),
-    ("Dark", "#1f2328", "#e6e6e6"),
+    ("Lavender", "#e8d5ff", "#5b21b6"),
+    ("Coral", "#ffc4b8", "#9f1239"),
+    ("Charcoal", "#2c2e33", "#e6e6e6"),
 ]
+# Layer order for pictures and stickies: (icon, label, how)
+LAYER_ACTIONS = (("go-up-symbolic", "Bring Forward", "forward"), ("go-down-symbolic", "Send Backward", "backward"),
+                 ("go-top-symbolic", "Bring to Front", "front"), ("go-bottom-symbolic", "Send to Back", "back"))
 
 AUTOLOCK_S = 60  # seconds without input before unlocked notes lock again
 
@@ -456,6 +459,18 @@ class StickyNoteWidget(Gtk.Box):
         color_btn = Gtk.MenuButton(icon_name="color-select-symbolic", css_classes=["flat"],
                                    tooltip_text="Sticky colour", popover=pop)
         head.append(color_btn)
+        layers = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=4, margin_bottom=4)
+        lpop = Gtk.Popover(child=layers)
+        for icon, tip, how in LAYER_ACTIONS:
+            row = Gtk.Button(css_classes=["flat"])
+            line = Gtk.Box(spacing=8)
+            line.append(Gtk.Image(icon_name=icon))
+            line.append(Gtk.Label(label=tip))
+            row.set_child(line)
+            row.connect("clicked", lambda _b, h=how: (lpop.popdown(), self.win.restack(self, h)))
+            layers.append(row)
+        head.append(Gtk.MenuButton(icon_name="view-stack-symbolic", css_classes=["flat"], tooltip_text="Layer order",
+                                   popover=lpop))
 
         del_btn = Gtk.Button(icon_name="window-close-symbolic", css_classes=["flat"],
                              tooltip_text="Delete Sticky Note")
@@ -541,6 +556,10 @@ class FreeCanvasImage(Gtk.Box):
         snap_r = Gtk.Button(icon_name="format-justify-right-symbolic", tooltip_text="Snap Right", css_classes=["flat"])
         snap_r.connect("clicked", lambda *_: self._snap_x("right"))
         self.toolbar.append(snap_r)
+        for icon, tip, how in LAYER_ACTIONS:
+            lb = Gtk.Button(icon_name=icon, tooltip_text=tip, css_classes=["flat"])
+            lb.connect("clicked", lambda _b, h=how: self.win.restack(self, h))
+            self.toolbar.append(lb)
 
         # In-canvas Crop & Filter Popover (zero modal popups)
         filter_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
@@ -3227,6 +3246,7 @@ class NotesWindow(Adw.ApplicationWindow):
             "w": 220.0,
             "h": 160.0,
             "color_idx": len(self.sticky_notes) % len(STICKY_PALETTES),
+            "z": self._next_z(),
         }
         st = StickyNoteWidget(data, self)
         self.canvas_fixed.put(st, round(data["x"] * self.zoom), round(data["y"] * self.zoom))
@@ -3235,6 +3255,36 @@ class NotesWindow(Adw.ApplicationWindow):
             self.dirty = True
             self.save_note_meta()
             GLib.idle_add(lambda: st.text_view.grab_focus() and False)  # once: True would repeat it forever
+
+    # ---------- layers: every picture and sticky has a z; higher is in front
+    def _layers(self):
+        items = self.canvas_images + self.sticky_notes
+        return sorted(items, key=lambda w: (w.data.get("z", 0), items.index(w)))
+
+    def _next_z(self):
+        return 1 + max((w.data.get("z", 0) for w in self.canvas_images + self.sticky_notes), default=0)
+
+    def _apply_z_order(self):
+        """Re-add the items in z order: a Gtk.Fixed draws its last child on top."""
+        for w in self._layers():
+            if w.get_parent() is self.canvas_fixed:
+                self.canvas_fixed.remove(w)
+            self.canvas_fixed.put(w, round(w.data["x"] * self.zoom), round(w.data["y"] * self.zoom))
+
+    def restack(self, widget, how):
+        """Bring Forward / Send Backward one step, or to the front / back."""
+        order = self._layers()
+        if widget not in order:
+            return
+        i = order.index(widget)
+        order.pop(i)
+        j = {"forward": i + 1, "backward": i - 1, "front": len(order), "back": 0}[how]
+        order.insert(max(0, min(len(order), j)), widget)
+        for z, w in enumerate(order):
+            w.data["z"] = z
+        self._apply_z_order()
+        self.dirty = True
+        self.save_note_meta()
 
     def remove_sticky_note(self, st):
         if st in self.sticky_notes:
@@ -3676,6 +3726,7 @@ class NotesWindow(Adw.ApplicationWindow):
             self.canvas_fixed.put(st, round(st.data["x"] * self.zoom), round(st.data["y"] * self.zoom))
             self.sticky_notes.append(st)
 
+        self._apply_z_order()
         self.ensure_page_height_for_images()
 
     def ensure_page_height_for_images(self):
@@ -3902,7 +3953,8 @@ class NotesWindow(Adw.ApplicationWindow):
         name = Path(rel).name
         path = self.vault.path(rel)
         scroll_y = self.page_scroll.get_vadjustment().get_value() / max(0.5, self.zoom)
-        item = {"name": name, "x": 56.0, "y": max(80.0, round(scroll_y + 90.0)), "w": 400.0, "angle": 0}
+        item = {"name": name, "x": 56.0, "y": max(80.0, round(scroll_y + 90.0)), "w": 400.0, "angle": 0,
+                "z": self._next_z()}
         widget = FreeCanvasImage(path, item, self)
         self.canvas_fixed.put(widget, round(item["x"] * self.zoom), round(item["y"] * self.zoom))
         self.canvas_images.append(widget)
@@ -4043,7 +4095,8 @@ class NotesWindow(Adw.ApplicationWindow):
         width = 620.0
         for i, data in enumerate(pages):
             prel = self.vault.save_attachment(data, ".png", f"{stem} page {i + 1}")
-            item = {"name": Path(prel).name, "x": 56.0, "y": y, "w": width, "angle": 0, "printout": True}
+            item = {"name": Path(prel).name, "x": 56.0, "y": y, "w": width, "angle": 0, "printout": True,
+                    "z": self._next_z()}
             widget = FreeCanvasImage(self.vault.path(prel), item, self)
             self.canvas_fixed.put(widget, round(item["x"] * self.zoom), round(item["y"] * self.zoom))
             self.canvas_images.append(widget)

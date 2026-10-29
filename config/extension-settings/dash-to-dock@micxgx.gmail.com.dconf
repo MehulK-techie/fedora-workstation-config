@@ -1,6 +1,6 @@
 # dconf path: /org/gnome/shell/extensions/dash-to-dock/
 [/]
-animation-time=0.25
+animation-time=0.29999999999999999
 autohide=true
 background-opacity=0.29999999999999999
 click-action='focus-minimize-or-previews'
@@ -11,7 +11,7 @@ disable-overview-on-startup=true
 dock-fixed=false
 dock-position='BOTTOM'
 extend-height=false
-hide-delay=0.17999999999999999
+hide-delay=0.25
 hide-tooltip=true
 hot-keys=false
 intellihide=false
@@ -23,7 +23,7 @@ require-pressure-to-show=true
 running-indicator-dominant-color=true
 running-indicator-style='DOT'
 scroll-action='cycle-windows'
-show-delay=0.050000000000000003
+show-delay=0.10000000000000001
 show-title=false
 show-windows-preview=true
 transparency-mode='FIXED'

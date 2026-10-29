@@ -186,7 +186,8 @@ export class DockMagnify {
             scale_x: scale,
             scale_y: scale,
             duration: this.conf.MAGNIFY_MS,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            // Cubic: quick start, long soft landing, like the macOS dock.
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
         });
     }
 
@@ -196,7 +197,7 @@ export class DockMagnify {
             scale_x: 1,
             scale_y: 1,
             duration: this.conf.MAGNIFY_MS,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            mode: Clutter.AnimationMode.EASE_IN_OUT_CUBIC,
             // interrupted by a new hover: keep the clone, it grows again
             onStopped: finished => finished && this._drop(tile),
         });

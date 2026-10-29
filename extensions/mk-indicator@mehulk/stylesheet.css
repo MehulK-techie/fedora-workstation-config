@@ -66,8 +66,9 @@
   color: #4fd3ff;
 }
 
-/* Lively hover feedback: top bar buttons, dock icons, overview windows and
-   workspace thumbnails ease into a soft cyan glow instead of snapping. */
+/* Lively hover feedback: top bar buttons, overview windows and workspace
+   thumbnails ease into a soft cyan glow instead of snapping (dock icons
+   magnify instead, below). */
 #panel .panel-button {
   transition-duration: 180ms;
 }
@@ -86,8 +87,16 @@
   border-radius: 999px;
 }
 
-#dashtodockContainer .show-apps:hover .overview-icon {
-  background-color: rgba(255, 255, 255, 0.08);
+/* No hover box, tint or halo behind dock icons (macOS-like): the icon itself
+   magnifies, that's the feedback. Covers the theme's own hover/focus too. */
+#dashtodockContainer .overview-tile:hover .overview-icon,
+#dashtodockContainer .overview-tile:focus .overview-icon,
+#dashtodockContainer .overview-tile:active .overview-icon,
+#dashtodockContainer .show-apps:hover .overview-icon,
+#dashtodockContainer .show-apps:focus .overview-icon,
+#dashtodockContainer .show-apps:checked .overview-icon {
+  background-color: transparent;
+  box-shadow: none;
 }
 
 /* dockMagnify.js: the whole tile is magnified as one clone (its glow scales

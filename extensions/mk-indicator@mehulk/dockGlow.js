@@ -1,6 +1,7 @@
-// Dock hover glow in each app's own colour: Spotify glows green, VS Code
-// blue, Firefox orange. The colour comes from the app's icon (its most
-// saturated hue), worked out once per app and cached.
+// Dock tiles: finds them, hands their hover to the magnifier, and keeps
+// them free of hover tints (no glow box: the icon magnifying is the
+// feedback). appColour() (an app's own colour from its icon, cached) stays
+// for other parts that tint by app.
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -138,22 +139,9 @@ export class DockGlow {
 
     _hover(tile) {
         this._magnify?.hover(tile);
-        const icon = findOverviewIcon(tile);
-        if (!icon)
-            return;
-        // Native hover while magnifying: the zoom is the feedback, no glow.
-        const colour = tile.hover && !this._magnify?.enabled ? appColour(tile.app) : null;
-        if (!colour) {
-            icon.set_style(null);
-            return;
-        }
-        // Subtle on purpose: a soft circular tint and a faint halo, not a neon ring.
-        const [r, g, b] = colour;
-        icon.set_style(
-            'border-radius: 999px;' +
-            `background-color: rgba(${r},${g},${b},0.10);` +
-            `box-shadow: 0 0 10px 0 rgba(${r},${g},${b},0.22);` +
-            'transition-duration: 220ms;');
+        // No coloured halo or tint behind the icon (it read as a glow box):
+        // magnification is the hover feedback. Clears any left from before.
+        findOverviewIcon(tile)?.set_style(null);
     }
 
     // Overview opening, screen locking: no magnified icons left behind.

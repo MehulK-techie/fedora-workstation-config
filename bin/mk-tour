@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""MK tour: the workstation in six slides, GNOME Tour style.
+"""MK Workstation Tour: the workstation in eight slides, GNOME Tour style.
 
-  mk-tour              the six-slide tour (also mk tour, Super+Shift+/,
+  mk-tour              the eight-slide tour (also mk tour, Super+Shift+/,
                        MK Control Center or the app grid)
   mk-tour --reference  the MK Quick Reference: a searchable cheat sheet
   mk-tour --full       the long walkthrough, every page
@@ -175,6 +175,16 @@ def run(command):
         exe = BIN / argv[0]
         if exe.exists():
             argv[0] = str(exe)
+        # Through GTK's launch context: the new window gets an activation
+        # token and comes to the front, instead of opening unseen behind
+        # the tour (GNOME's focus-stealing prevention).
+        try:
+            info = Gio.AppInfo.create_from_commandline(" ".join(GLib.shell_quote(a) for a in argv), None,
+                                                       Gio.AppInfoCreateFlags.NONE)
+            info.launch([], Gdk.Display.get_default().get_app_launch_context())
+            return
+        except GLib.Error:
+            pass
     try:
         subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError:
@@ -325,24 +335,32 @@ class CheatSheet(Adw.ApplicationWindow):
 # The six slides: (icon, title, text, (button label, action) or None).
 # action: a command to start, "face" (try Face ID here) or "done".
 SLIDES = [
-    ("org.fedoraproject.AnacondaInstaller-symbolic", "Welcome to MK-Workstation",
-     "An optimized, student-first workstation for Fedora Linux. Built with passion, open-source spirit "
-     "and pure Infrastructure-as-Code.", None),
-    ("camera-web-symbolic", "Webcam-First Biometrics",
-     "Unlock apps, folders and system prompts with your standard webcam, with your password or "
-     "fingerprint always there as the fallback.", ("Try Face ID", "face")),
-    ("accessories-text-editor-symbolic", "MK Notes Engine",
-     "A4 pages that grow as you write, real tables, sketching, PDF printouts and Word or PDF export: "
-     "completely offline, no accounts, no paywalls.", ("Open MK Notes", "mk-notes")),
-    ("input-keyboard-symbolic", "Fluid Compositor & Shortcuts",
-     "macOS fluidity meets Windows window management: Super+1…9 opens dock apps, Super+V the clipboard "
-     "deck, Super+. the emoji board at your cursor, Super+Tab switches apps.", None),
-    ("applications-graphics-symbolic", "Creative Visual Engines",
-     "Cairo-drawn skylines: Spider-Man with Stan Lee's window-light tribute and Batman in Gotham, "
-     "cached so a frame takes a few milliseconds.", ("Choose a scene", "mk-screensaver settings")),
-    ("utilities-terminal-symbolic", "Infrastructure-as-Code",
-     "Reproduce the whole workspace with ./sync.sh. 100 % open source under the MIT License.",
-     ("Start Using MK-Workstation", "done")),
+    ("org.fedoraproject.AnacondaInstaller-symbolic", "Your Laptop, Supercharged.",
+     "A student-first Fedora workstation blending macOS fluidity, Windows 11 window snapping and pure "
+     "open-source Infrastructure-as-Code. Born from lockdown late nights, mentor wisdom, and zero bloat.",
+     ("Let's Explore", "next")),
+    ("camera-web-symbolic", "Instant Unlocking, No New Hardware.",
+     "Unlock apps, the terminal's sudo and the desktop in about a second with your laptop's own webcam. "
+     "Your password or fingerprint is always the fallback; strict matching, and an IR camera even stops photos. "
+     "The camera only runs while it's checking.", ("Try Face ID", "face")),
+    ("accessories-text-editor-symbolic", "Your Ideas, Beautifully Structured.",
+     "A4 pages that grow as you write, real tables you resize and move, text boxes on PDF printouts, "
+     "highlighters, drawing and one-click PDF or Word export. Completely offline.", ("Open MK Notes", "mk-notes")),
+    ("view-list-bullet-symbolic", "Distraction-Free Quick Capture.",
+     "A floating companion for task lists, study reminders and quick notes, tucked away until you need it "
+     "(Super+Shift+N).", ("Launch Companion", "mk-companion")),
+    ("input-keyboard-symbolic", "Speed at Your Fingertips.",
+     "Super+1…9 opens your dock apps, Super+Tab switches apps, Super+. puts an emoji right at your cursor, "
+     "Super+Left/Right snaps windows. Every shortcut is listed and editable.", ("View Shortcuts", "show-shortcuts")),
+    ("edit-paste-symbolic", "Never Lose What You Copy.",
+     "Super+V opens a translucent clipboard deck in a few milliseconds: images, text and pinned items, "
+     "search, tags, arrow keys and Enter to paste.", ("Test Clipboard", "clip")),
+    ("applications-graphics-symbolic", "Personality Meets Performance.",
+     "Live Cairo skylines: Spider-Man swinging past Stan Lee's window-light tribute, and Batman over Gotham "
+     "under the MK signal. Cached, so a frame takes a few milliseconds.", ("Choose a scene", "mk-screensaver settings")),
+    ("utilities-terminal-symbolic", "Reproducible Anywhere in Minutes.",
+     "Fresh install? Run ./setup.sh and ./sync.sh and your exact workspace is back. 100 % open source under "
+     "the MIT License.", ("Finish Tour", "done")),
 ]
 SHOW_CSS = b"""
 .mk-slide-art { min-width: 140px; min-height: 140px; border-radius: 70px; color: white;
@@ -351,8 +369,10 @@ SHOW_CSS = b"""
 .mk-art-1 { background: linear-gradient(135deg, #0ea5e9, #22d3ee); }
 .mk-art-2 { background: linear-gradient(135deg, #f59e0b, #f97316); }
 .mk-art-3 { background: linear-gradient(135deg, #8b5cf6, #ec4899); }
-.mk-art-4 { background: linear-gradient(135deg, #ef4444, #1e3a8a); }
+.mk-art-4 { background: linear-gradient(135deg, #6366f1, #a855f7); }
 .mk-art-5 { background: linear-gradient(135deg, #10b981, #0ea5e9); }
+.mk-art-6 { background: linear-gradient(135deg, #ef4444, #1e3a8a); }
+.mk-art-7 { background: linear-gradient(135deg, #22c55e, #15803d); }
 .mk-slide-title { font-size: 26px; font-weight: 800; }
 .mk-slide-text { font-size: 15px; opacity: 0.8; }
 .mk-tour-arrow { min-width: 44px; min-height: 44px; border-radius: 22px; padding: 0;
@@ -366,7 +386,7 @@ class Showcase(Adw.ApplicationWindow):
     arrows at the sides. Left/Right, Space or Enter move; Esc closes."""
 
     def __init__(self, app):
-        super().__init__(application=app, title="MK Workstation Tour", default_width=740, default_height=530)
+        super().__init__(application=app, title="MK Workstation Tour", default_width=760, default_height=540)
         css = Gtk.CssProvider()
         css.load_from_data(SHOW_CSS)
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
@@ -444,6 +464,11 @@ class Showcase(Adw.ApplicationWindow):
     def act(self, what):
         if what == "done":
             self.close()
+        elif what == "next":
+            self.step(1)
+        elif what == "clip":
+            self.get_clipboard().set("Hello from the MK Workstation Tour 👋")
+            self.toast.add_toast(Adw.Toast(title="Copied a line for you: now press Super+V", timeout=5))
         elif what == "face":
             self.try_face()
         else:

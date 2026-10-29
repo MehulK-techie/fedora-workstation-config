@@ -46,11 +46,17 @@ slow() {
     timeout --kill-after=5 "$limit" nice -n 19 ionice -c 3 "$@"
 }
 
-# ClamAV over FILES (a list), time-limited, at the lowest priority.
+# ClamAV over FILES (a list), time-limited, at the lowest priority, and as
+# the user who asked (never as root): a file swapped for a symlink after the
+# list was made then reaches nothing that user couldn't read anyway.
 clam() {
-    local list=$1 limit=$2 infected=0
-    if [[ -s "$list" ]]; then
-        infected=$(slow "$limit" clamscan -i --no-summary --max-filesize=200M --file-list="$list" 2> /dev/null | grep -c 'FOUND$' || true)
+    local list=$1 limit=$2 infected=0 gid
+    gid=$(getent passwd "$uid" | cut -d: -f4)
+    if [[ -s "$list" && "$uid" =~ ^[0-9]+$ && "$uid" != 0 && -n "$gid" ]]; then
+        chmod 644 "$list"
+        infected=$(slow "$limit" setpriv --reuid="$uid" --regid="$gid" --init-groups -- \
+            clamscan -i --no-summary --max-filesize=200M --follow-file-symlinks=0 --follow-dir-symlinks=0 \
+            --file-list="$list" 2> /dev/null | grep -c 'FOUND$' || true)
     fi
     echo "$infected"
 }

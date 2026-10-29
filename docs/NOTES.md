@@ -135,10 +135,16 @@ closes it without saving.
 
 ## Tables, comments, stickies and pages
 
-- **Tables** show as tables: a shaded header row, faint column lines, the
-  `|---|` rule shrunk to a hairline (the note is still Markdown). Tab moves
-  to the next cell and adds a row at the end; right-click for rows, columns
-  and alignment.
+- **Tables** (grid button: hover up to 8 x 8, click): a real table in the
+  text, Google Docs style. Cells wrap their text and a row grows to its
+  tallest cell; drag the line between two columns (the pointer turns into
+  ⟷) to resize them; ▼ adds or deletes rows and columns around the cell
+  you're in, or deletes the table; ⠿ Move table drags it to another place in
+  the text; Tab goes to the next cell and adds a row from the last one.
+  Text above and below never overlaps it. MK Notes keeps the cells with the
+  note and also writes the tables as Markdown at the end of the file, so
+  other apps and the phone see them. Older notes' Markdown tables still
+  show as styled text tables.
 - **Comments** open as a slim card in the right margin; click highlighted
   text to find its comment. On a small window the side panels step aside
   while the margin is open (⤢ brings them back).

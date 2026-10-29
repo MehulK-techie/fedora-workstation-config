@@ -84,6 +84,7 @@ STICKY_PALETTES = [
 LAYER_ACTIONS = (("go-up-symbolic", "Bring Forward", "forward"), ("go-down-symbolic", "Send Backward", "backward"),
                  ("go-top-symbolic", "Bring to Front", "front"), ("go-bottom-symbolic", "Send to Back", "back"))
 
+TABLES_MARK = "\n<!-- MK Notes tables (shown as tables in MK Notes) -->"
 AUTOLOCK_S = 60  # seconds without input before unlocked notes lock again
 
 THEMES = {
@@ -168,6 +169,14 @@ THEMES = {
 
 BASE_CSS = """
 .mk-sidebar row { border-radius: 8px; margin: 2px 4px; padding: 7px 8px; }
+.mk-table-grid { border: 1px solid alpha(@window_fg_color, 0.25); border-radius: 6px; }
+.mk-table-cell, .mk-table-cell text { background: transparent; }
+.mk-table-cell { border-right: 1px solid alpha(@window_fg_color, 0.2); border-bottom: 1px solid alpha(@window_fg_color, 0.2); }
+.mk-table-head, .mk-table-head text { font-weight: 700; background: alpha(@accent_bg_color, 0.16); }
+.mk-table-divider { min-width: 5px; margin: 0 -3px; background: transparent; }
+.mk-table-divider:hover { background: alpha(@accent_color, 0.5); }
+.mk-table-pill { font-size: 0.82em; padding: 2px 10px; min-height: 0; border-radius: 99px;
+                 background: alpha(@window_fg_color, 0.08); }
 .mk-comment-active { box-shadow: inset 3px 0 0 @accent_color; background: alpha(@accent_bg_color, 0.18); }
 .mk-sidebar row:selected { background: alpha(@accent_bg_color, 0.25); font-weight: 700; }
 .mk-list row { border-radius: 9px; margin: 3px 6px; padding: 8px 10px; }
@@ -517,6 +526,178 @@ class StickyNoteWidget(Gtk.Box):
         py = max(8, round(self.data["y"] * z))
         if self.get_parent() is self.win.canvas_fixed:
             self.win.canvas_fixed.move(self, px, py)
+
+
+
+class TableItem(Gtk.Box):
+    """A table in the page, Google Docs style: a grid of cells you type in
+    (each wraps its text; a row grows to its tallest cell), solid borders,
+    column dividers you drag to resize (the pointer turns into <->), a
+    ▼ menu for rows and columns, and a ⠿ handle to move the table to
+    another place in the text. Tab moves to the next cell, and from the last
+    cell adds a row. It sits in the text flow (a child anchor), so text
+    above and below never overlaps it. DATA: {"rows": [[text]], "col_w":
+    [px at 100 %]}, saved with the note's meta (not as Markdown pipes)."""
+
+    MIN_COL = 56
+
+    def __init__(self, data, note_win):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, css_classes=["mk-table"],
+                         halign=Gtk.Align.START)
+        self.win = note_win
+        self.data = data
+        rows = data.setdefault("rows", [["", ""], ["", ""]])
+        width = max(len(r) for r in rows)
+        for r in rows:
+            r.extend([""] * (width - len(r)))
+        data.setdefault("col_w", [140] * width)
+        data["col_w"] = (data["col_w"] + [140] * width)[:width]
+        self.active = (0, 0)
+        self.anchor = None
+        self.grid = Gtk.Grid(css_classes=["mk-table-grid"])
+        self.append(self.grid)
+        bar = Gtk.Box(spacing=6)
+        move = Gtk.Label(label="⠿ Move table", css_classes=["mk-table-pill"],
+                         cursor=Gdk.Cursor.new_from_name("grab"),
+                         tooltip_text="Drag to another place in the text")
+        drag = Gtk.GestureDrag()
+        drag.connect("drag-end", self._moved)
+        move.add_controller(drag)
+        bar.append(move)
+        menu = Gio.Menu()
+        for label, what in (("Add row above", "row-above"), ("Add row below", "row-below"), ("Delete row", "row-del"),
+                            ("Add column left", "col-left"), ("Add column right", "col-right"),
+                            ("Delete column", "col-del"), ("Delete table", "table-del")):
+            menu.append(label, f"table.{what}")
+        group = Gio.SimpleActionGroup()
+        for what in ("row-above", "row-below", "row-del", "col-left", "col-right", "col-del", "table-del"):
+            act = Gio.SimpleAction.new(what, None)
+            act.connect("activate", lambda *_a, w=what: self.edit(w))
+            group.add_action(act)
+        self.insert_action_group("table", group)
+        bar.append(Gtk.MenuButton(label="▼", menu_model=menu, css_classes=["mk-table-pill"],
+                                  tooltip_text="Rows and columns (for the cell you're in)"))
+        self.append(bar)
+        self.build()
+
+    # ----- the grid: cells at even columns, dividers between them
+    def build(self, focus=None):
+        while (child := self.grid.get_first_child()) is not None:
+            self.grid.remove(child)
+        z = max(0.5, self.win.zoom)
+        rows = self.data["rows"]
+        self.cells = []
+        for r, row in enumerate(rows):
+            line = []
+            for c, text in enumerate(row):
+                view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=6, bottom_margin=6,
+                                    left_margin=8, right_margin=8, accepts_tab=False,
+                                    css_classes=["mk-table-cell"] + (["mk-table-head"] if r == 0 else []))
+                view.set_size_request(round(self.data["col_w"][c] * z), -1)
+                view.get_buffer().set_text(text)
+                view.get_buffer().connect("changed", self._typed, r, c)
+                keys = Gtk.EventControllerKey()
+                keys.connect("key-pressed", self._key, r, c)
+                view.add_controller(keys)
+                focus_ctl = Gtk.EventControllerFocus()
+                focus_ctl.connect("enter", lambda *_a, rc=(r, c): setattr(self, "active", rc))
+                view.add_controller(focus_ctl)
+                self.grid.attach(view, 2 * c, r, 1, 1)
+                line.append(view)
+            self.cells.append(line)
+        for c in range(len(rows[0]) - 1):  # the drag handles between columns
+            div = Gtk.Box(css_classes=["mk-table-divider"], cursor=Gdk.Cursor.new_from_name("col-resize"),
+                          vexpand=True)
+            g = Gtk.GestureDrag()
+            g.connect("drag-begin", lambda *_a, k=c: setattr(self, "_drag", (k, list(self.data["col_w"]))))
+            g.connect("drag-update", self._resize)
+            g.connect("drag-end", lambda *_a: self.win._queue_save_meta())
+            div.add_controller(g)
+            self.grid.attach(div, 2 * c + 1, 0, 1, len(rows))
+        if focus:
+            r, c = focus
+            GLib.idle_add(lambda: (self.cells[r][c].grab_focus(), False)[1])
+
+    def sync_zoom(self):
+        z = max(0.5, self.win.zoom)
+        for line in self.cells:
+            for c, view in enumerate(line):
+                view.set_size_request(round(self.data["col_w"][c] * z), -1)
+
+    def _resize(self, _g, dx, _dy):
+        """The divider moves: the column on its left grows by as much as the
+        one on its right shrinks (the table keeps its width)."""
+        k, start = self._drag
+        dx /= max(0.5, self.win.zoom)
+        total = start[k] + start[k + 1]
+        left = max(self.MIN_COL, min(total - self.MIN_COL, start[k] + dx))
+        self.data["col_w"][k], self.data["col_w"][k + 1] = round(left), round(total - left)
+        self.sync_zoom()
+
+    def _typed(self, buf, r, c):
+        self.data["rows"][r][c] = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        self.win._queue_save_meta()
+
+    def _key(self, _ctl, keyval, _code, state, r, c):
+        if keyval not in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
+            return False
+        rows, cols = len(self.data["rows"]), len(self.data["rows"][0])
+        back = keyval == Gdk.KEY_ISO_Left_Tab or state & Gdk.ModifierType.SHIFT_MASK
+        i = r * cols + c + (-1 if back else 1)
+        if i >= rows * cols:  # Tab in the last cell: a new row
+            self.active = (r, c)
+            self.edit("row-below")
+            return True
+        i = max(0, i)
+        self.cells[i // cols][i % cols].grab_focus()
+        return True
+
+    def edit(self, what):
+        rows, widths = self.data["rows"], self.data["col_w"]
+        r, c = self.active
+        r, c = min(r, len(rows) - 1), min(c, len(rows[0]) - 1)
+        focus = (r, c)
+        if what == "row-above":
+            rows.insert(r, [""] * len(rows[0]))
+        elif what == "row-below":
+            rows.insert(r + 1, [""] * len(rows[0]))
+            focus = (r + 1, 0)
+        elif what == "row-del" and len(rows) > 1:
+            rows.pop(r)
+            focus = (min(r, len(rows) - 1), c)
+        elif what in ("col-left", "col-right"):
+            at = c if what == "col-left" else c + 1
+            for row in rows:
+                row.insert(at, "")
+            widths.insert(at, 120)
+            focus = (r, at)
+        elif what == "col-del" and len(rows[0]) > 1:
+            for row in rows:
+                row.pop(c)
+            widths.pop(c)
+            focus = (r, min(c, len(rows[0]) - 1))
+        elif what == "table-del":
+            self.win.remove_table(self)
+            return
+        self.build(focus)
+        self.win._queue_save_meta()
+
+    def _moved(self, gesture, dx, dy):
+        """Dropped somewhere: the table moves to that place in the text."""
+        if abs(dx) + abs(dy) < 8:
+            return
+        ok, sx, sy = gesture.get_start_point()
+        point = self.translate_coordinates(self.win.view, sx + dx, sy + dy)
+        if point:
+            self.win.move_table(self, *point)
+
+    def to_markdown(self):
+        rows = self.data["rows"]
+        def cell(t):
+            return t.replace("|", "\\|").replace("\n", "<br>")
+        out = ["| " + " | ".join(cell(t) for t in rows[0]) + " |", "|" + "---|" * len(rows[0])]
+        out += ["| " + " | ".join(cell(t) for t in row) + " |" for row in rows[1:]]
+        return "\n".join(out)
 
 
 class FreeCanvasImage(Gtk.Box):
@@ -1727,7 +1908,7 @@ PDF_FONTS = {"title": "Sans Heavy 22", "h1": "Sans Bold 18", "h2": "Sans Bold 15
              "h3": "Sans Semi-Bold 13", "body": "Sans 11"}
 
 
-def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_img_fn, stickies=()):
+def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_img_fn, stickies=(), tables=()):
     """Render a note to PDF with Cairo (no print dialog). LINES: (Pango markup,
     kind) pairs from NotesWindow._export_lines; kind picks the font. STICKIES
     (the note's sticky notes) come after the text as coloured callout cards."""
@@ -1804,6 +1985,40 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
             cr.paint()
             cr.restore()
             y += th + 14.0
+
+    for tdata in tables:  # each table as a ruled grid, scaled to the page width
+        rows, widths = tdata.get("rows") or [], tdata.get("col_w") or []
+        if not rows:
+            continue
+        k = min(1.0, CONTENT_W / max(1.0, float(sum(widths))))
+        cws = [w * k for w in widths]
+        for r, row in enumerate(rows):
+            layouts = []
+            for c, text in enumerate(row):
+                lay = PangoCairo.create_layout(cr)
+                lay.set_width(int(max(20.0, cws[c] - 10) * Pango.SCALE))
+                lay.set_wrap(Pango.WrapMode.WORD_CHAR)
+                lay.set_font_description(Pango.FontDescription("Sans Bold 9" if r == 0 else "Sans 9"))
+                lay.set_text(text, -1)
+                layouts.append(lay)
+            row_h = max(18.0, *(lay.get_pixel_extents()[1].height + 10.0 for lay in layouts))
+            ensure_space(row_h)
+            x = MARGIN
+            for c, lay in enumerate(layouts):
+                if r == 0:
+                    cr.set_source_rgba(0.49, 0.61, 1.0, 0.18)
+                    cr.rectangle(x, y, cws[c], row_h)
+                    cr.fill()
+                cr.set_source_rgba(0.2, 0.25, 0.35, 0.6)
+                cr.set_line_width(0.6)
+                cr.rectangle(x, y, cws[c], row_h)
+                cr.stroke()
+                cr.set_source_rgb(0.1, 0.12, 0.16)
+                cr.move_to(x + 5, y + 5)
+                PangoCairo.show_layout(cr, lay)
+                x += cws[c]
+            y += row_h
+        y += 14.0
 
     for sticky in stickies:
         text = (sticky.get("text") or "").strip()
@@ -1904,6 +2119,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.rows = {}
         self.canvas_images = []
         self.sticky_notes = []
+        self.table_items = []
         self.comments = []
         self.selected_img = None
         self.nav_history = []
@@ -2966,26 +3182,67 @@ class NotesWindow(Adw.ApplicationWindow):
         return True
 
     def insert_table(self, cols, rows):
-        """A Markdown table, columns padded so it lines up in the mono font:
-        a header row, the separator, then ROWS - 1 empty rows."""
-        width = 10
-        header = "| " + " | ".join(f"Column {i + 1}".ljust(width) for i in range(cols)) + " |"
-        rule = "| " + " | ".join("-" * width for _ in range(cols)) + " |"
-        empty = "| " + " | ".join(" " * width for _ in range(cols)) + " |"
-        text = "\n".join([header, rule] + [empty] * max(1, rows - 1))
+        """A table (TableItem) on its own line where the cursor is: header
+        row, then ROWS - 1 empty rows. In the text flow, saved with the note."""
         buf = self.buffer
-        cursor = buf.get_iter_at_mark(buf.get_insert())
-        if not cursor.starts_line():
+        if not buf.get_iter_at_mark(buf.get_insert()).starts_line():
             buf.insert_at_cursor("\n")
-        start = buf.get_iter_at_mark(buf.get_insert()).get_offset()
-        buf.insert_at_cursor(text + "\n")
-        buf.apply_tag_by_name("mono", buf.get_iter_at_offset(start), buf.get_iter_at_offset(start + len(text)))
-        # the cursor goes into the first empty cell
-        cell = buf.get_iter_at_offset(start + len(header) + 1 + len(rule) + 1 + 2)
-        buf.place_cursor(cell)
+        data = {"rows": [[f"Column {i + 1}" for i in range(cols)]] + [[""] * cols for _ in range(max(1, rows - 1))],
+                "col_w": [140] * cols}
+        self._add_table(data, buf.get_iter_at_mark(buf.get_insert()))
+        buf.insert_at_cursor("\n")
         self.dirty = True
         self._queue_save()
-        self.view.grab_focus()
+        self.save_note_meta()
+
+    def _add_table(self, data, where):
+        anchor = self.buffer.create_child_anchor(where)
+        widget = TableItem(data, self)
+        widget.anchor = anchor
+        self.view.add_child_at_anchor(widget, anchor)
+        self.table_items.append(widget)
+        return widget
+
+    def remove_table(self, widget):
+        if widget.anchor and not widget.anchor.get_deleted():
+            it = self.buffer.get_iter_at_child_anchor(widget.anchor)
+            end = it.copy()
+            end.forward_char()
+            self.buffer.delete(it, end)
+        if widget in self.table_items:
+            self.table_items.remove(widget)
+        self.dirty = True
+        self._queue_save()
+        self.save_note_meta()
+
+    def move_table(self, widget, x, y):
+        """Re-anchor WIDGET at the text position under (x, y) of the editor."""
+        bx, by = self.view.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(x), int(y))
+        ok, target = self.view.get_iter_at_location(bx, by)
+        if not ok or widget.anchor is None:
+            return
+        data = widget.data
+        target.set_line_offset(0)
+        mark = self.buffer.create_mark(None, target, True)
+        self.remove_table(widget)
+        where = self.buffer.get_iter_at_mark(mark)
+        self.buffer.delete_mark(mark)
+        self._add_table(data, where)
+        self.save_note_meta()
+
+    def _queue_save_meta(self):
+        if getattr(self, "_meta_id", 0):
+            return
+
+        def run():
+            self._meta_id = 0
+            self.save_note_meta()
+            return False
+        self._meta_id = GLib.timeout_add(400, run)
+
+    def _live_tables(self):
+        self.table_items = [t for t in self.table_items if t.anchor and not t.anchor.get_deleted()]
+        return self.table_items
 
     def insert_divider_line(self):
         divider_text = "\n────────────────────────────────────────\n"
@@ -3450,6 +3707,8 @@ class NotesWindow(Adw.ApplicationWindow):
             img_w.sync_zoom_geometry()
         for st in self.sticky_notes:
             st.sync_zoom_geometry()
+        for t in self._live_tables():
+            t.sync_zoom()
         self.paper_bg.queue_draw()
         self.ink_canvas.queue_draw()
         if not quiet:
@@ -3540,6 +3799,8 @@ class NotesWindow(Adw.ApplicationWindow):
             "spans": spans,
             "images": [w.data for w in self.canvas_images],
             "stickies": [s.data for s in self.sticky_notes],
+            "tables": [dict(t.data, offset=self.buffer.get_iter_at_child_anchor(t.anchor).get_offset())
+                       for t in self._live_tables()],
             "comments": self.comments,
             "strokes": self.ink_canvas.strokes,
             "links": getattr(self, "note_links", []),
@@ -3645,6 +3906,8 @@ class NotesWindow(Adw.ApplicationWindow):
         self.loading = True
         raw_md = self.vault.read(rel)
         meta = self._load_meta(rel)
+        if meta and meta.get("tables"):  # the Markdown copy of the tables isn't text to edit
+            raw_md = raw_md.split(TABLES_MARK.strip())[0].rstrip() + "\n"
 
         if not meta:
             clean_txt, line_styles, ext_imgs, ext_links, ext_tags = self._import_markdown_to_clean_doc(raw_md)
@@ -3662,6 +3925,7 @@ class NotesWindow(Adw.ApplicationWindow):
             self.note_links = ext_links
             self.note_tags = ext_tags
             self.comments = []
+            self.table_items = []
             self._rebuild_canvas_objects(ext_imgs, [])
             self.ink_canvas.strokes = []
             self.loading = False
@@ -3669,6 +3933,11 @@ class NotesWindow(Adw.ApplicationWindow):
         else:
             clean_txt, _ls, _ei, _el, _et = self._import_markdown_to_clean_doc(raw_md)
             self.buffer.set_text(clean_txt)
+            self.table_items = []
+            for t in sorted(meta.get("tables", []), key=lambda t: t.get("offset", 0)):
+                end = self.buffer.get_end_iter().get_offset()
+                data = {k: v for k, v in t.items() if k != "offset"}
+                self._add_table(data, self.buffer.get_iter_at_offset(max(0, min(end, int(t.get("offset", end))))))
             table = self.buffer.get_tag_table()
             end_off = self.buffer.get_end_iter().get_offset()
             for tname, s_off, e_off in meta.get("spans", []):
@@ -3842,6 +4111,11 @@ class NotesWindow(Adw.ApplicationWindow):
         for w in self.canvas_images:
             tail.append(f"![[{w.data['name']}]]")
         full_md = body + ("\n\n" + "\n".join(tail) if tail else "") + "\n"
+        # The tables as Markdown at the end, so the file reads well in other
+        # apps and on the phone; MK Notes keeps them in the meta and drops
+        # this copy when it opens the note.
+        if self._live_tables():
+            full_md += TABLES_MARK + "\n" + "\n\n".join(t.to_markdown() for t in self.table_items) + "\n"
         self.vault.write(self.rel, full_md)
         self.save_note_meta()
         self.dirty = False
@@ -4706,7 +4980,7 @@ class NotesWindow(Adw.ApplicationWindow):
         resolve = self._resolve_attachment
         if fmt == "docx":
             body = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), False)
-            md_lines = [body] + [f"![[{it['name']}]]" for it in imgs]
+            md_lines = [body] + [t.to_markdown() for t in self._live_tables()] + [f"![[{it['name']}]]" for it in imgs]
 
             def write_docx():
                 from mkworkstation import docx
@@ -4722,7 +4996,8 @@ class NotesWindow(Adw.ApplicationWindow):
             meta += " · " + " ".join(f"#{t}" for t in tags)
         lines = self._export_lines()
         stickies = [dict(st.data) for st in self.sticky_notes]
-        return lambda: export_pdf_direct(title, meta, lines, imgs, out_path, resolve, stickies)
+        tables = [dict(t.data) for t in self._live_tables()]
+        return lambda: export_pdf_direct(title, meta, lines, imgs, out_path, resolve, stickies, tables)
 
     def _do_export(self, out_path, fmt):
         self._export_job(out_path, fmt)()

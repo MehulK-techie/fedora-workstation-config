@@ -102,7 +102,7 @@ test with `journalctl --user -f -o cat /usr/bin/gnome-shell`.
 | `accent.js` | Accent colour from the wallpaper: writes `~/.cache/mk-workstation/accent.css`, loads it over `stylesheet.css`, sets GNOME's accent |
 | `systemMonitor.js` | Top-bar system monitor: samples `/proc` and `/sys` (CPU, memory, hwmon temperatures, network, battery, `gpu_busy_percent`), sparkline and menu |
 | `windowGrid.js` | The window switcher grid over GNOME's own switcher: live clones, ring, pointer read from the stage (the switcher holds the grab), 1–9 to move windows |
-| `speedTest.js` | Internet section of the monitor: live graph, active connection, speed test (Soup 3, Cloudflare) |
+| `network.js` | Network section of the monitor: active connection and its live traffic graph (no network access of its own) |
 | `mediaTile.js` | MPRIS media tile: art (5 MB cap, image check), seek, controls, output sinks via `getMixerControl()` |
 | `colour.js` | RGB/HSV helpers and the dominant-hue histogram (dock glow, accent) |
 | `dockMagnify.js` | macOS-style magnification: magnified icons are clones on the UI layer (Dash to Dock clips its own icons), cosine falloff across neighbours |

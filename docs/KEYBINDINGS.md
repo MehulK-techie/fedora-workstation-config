@@ -11,7 +11,8 @@ them live and lets you change any of them. Your changes go to
 | :--- | :--- |
 | Switch windows (all workspaces) | Alt+Tab |
 | Switch apps | Super+Tab |
-| Go to workspace 1–4 · move the window there | Super+1–4 · Super+Shift+1–4 |
+| Dock apps 1–9 | Super+1–9 |
+| Go to workspace 1–4 · move the window there | Super+Alt+1–4 · Super+Shift+Alt+1–4 |
 | Switch windows of this app | Alt+` · Super+` |
 | Close window | Super+Q · Alt+F4 |
 | Snap left half | Super+Left · Super+Keypad 4 |

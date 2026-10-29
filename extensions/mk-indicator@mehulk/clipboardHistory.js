@@ -72,6 +72,8 @@ export class ClipboardHistory {
         if (this._fillId)
             GLib.source_remove(this._fillId);
         this._fillId = 0;
+        this._thumbCancel?.cancel();
+        this._thumbQueue = [];
         this._dialog?.destroy();
         this._dialog = null;
         this._cards.clear();
@@ -139,7 +141,7 @@ export class ClipboardHistory {
     }
 
     _thumbPath(item) {
-        return item.image.replace(/\.png$/, '-thumb.png');
+        return item.image ? item.image.replace(/\.png$/, '-thumb.png') : null;
     }
 
     // Shrink pictures to card size off the main thread (GdkPixbuf decodes in
@@ -162,17 +164,22 @@ export class ClipboardHistory {
             this._nextThumb();
             return;
         }
-        GdkPixbuf.Pixbuf.new_from_stream_at_scale_async(stream, THUMB_W, THUMB_W, true, null, (_s, res) => {
+        this._thumbCancel ??= new Gio.Cancellable();
+        GdkPixbuf.Pixbuf.new_from_stream_at_scale_async(stream, THUMB_W, THUMB_W, true, this._thumbCancel, (_s, res) => {
             try {
                 const pix = GdkPixbuf.Pixbuf.new_from_stream_finish(res);
-                pix.savev(this._thumbPath(item), 'png', [], []);
-                this._forget(item);  // its card is rebuilt with the thumbnail
+                // Deleted (or cleared) while it was decoding: write nothing.
+                if (this._items.includes(item) && GLib.file_test(item.image, GLib.FileTest.EXISTS)) {
+                    pix.savev(this._thumbPath(item), 'png', [], []);
+                    this._forget(item);  // its card is rebuilt with the thumbnail
+                }
             } catch (e) {
                 // a picture GdkPixbuf can't read keeps the plain card
             }
             stream.close(null);
             this._thumbBusy = false;
-            this._nextThumb();
+            if (!this._thumbCancel?.is_cancelled())
+                this._nextThumb();
         });
     }
 
@@ -489,9 +496,10 @@ export class ClipboardHistory {
         tool('edit-delete-symbolic', 'Delete', () => {
             this._forget(item);
             this._items = this._items.filter(i => i !== item);
-            if (item.image)
+            if (item.image) {
                 removeFile(item.image);
                 removeFile(this._thumbPath(item));
+            }
             this._save();
             this._fill();
         });

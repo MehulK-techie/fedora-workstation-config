@@ -587,12 +587,20 @@ class FreeCanvasImage(Gtk.Box):
         z = self.win.zoom
         self.disp_w = max(50, round(self.data["w"] * z))
         self.disp_h = max(40, round(self.data["h"] * z))
-        cw = self.disp_w + 2 * self.PAD_SIDE
-        ch = self.disp_h + self.PAD_TOP + self.PAD_SIDE
+        # Rotated, the image needs its bounding box: the canvas grows by the
+        # overhang on each side (ex, ey) and moves back by as much, so the
+        # image stays put and its corners are never cut off.
+        a = math.radians(self.data.get("angle", 0))
+        bw = abs(self.disp_w * math.cos(a)) + abs(self.disp_h * math.sin(a))
+        bh = abs(self.disp_w * math.sin(a)) + abs(self.disp_h * math.cos(a))
+        self.ex = math.ceil(max(0.0, (bw - self.disp_w) / 2))
+        self.ey = math.ceil(max(0.0, (bh - self.disp_h) / 2))
+        cw = self.disp_w + 2 * (self.PAD_SIDE + self.ex)
+        ch = self.disp_h + self.PAD_TOP + self.PAD_SIDE + 2 * self.ey
         self.canvas.set_size_request(cw, ch)
         self.set_size_request(cw, ch + (38 if self.selected else 0))
-        px = max(4, round(self.data["x"] * z))
-        py = max(4, round(self.data["y"] * z))
+        px = max(4, round(self.data["x"] * z) - self.ex)
+        py = max(4, round(self.data["y"] * z) - self.ey)
         if self.get_parent() is self.win.canvas_fixed:
             self.win.canvas_fixed.move(self, px, py)
         self.canvas.queue_draw()
@@ -604,11 +612,16 @@ class FreeCanvasImage(Gtk.Box):
         self.toolbar.set_visible(sel)
         self.sync_zoom_geometry()
 
-    def _handles(self):
-        x0, y0 = self.PAD_SIDE, self.PAD_TOP
+    def _origin(self):
+        """Top-left of the unrotated image inside the canvas."""
+        return self.PAD_SIDE + getattr(self, "ex", 0), self.PAD_TOP + getattr(self, "ey", 0)
+
+    def _handles(self, rotated=True):
+        """Handle positions; rotated (canvas coordinates) unless asked not to."""
+        x0, y0 = self._origin()
         x1, y1 = x0 + self.disp_w, y0 + self.disp_h
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-        return {
+        plain = {
             "nw": (x0, y0),
             "n": (cx, y0),
             "ne": (x1, y0),
@@ -619,6 +632,12 @@ class FreeCanvasImage(Gtk.Box):
             "w": (x0, cy),
             "rotate": (cx, y0 - 20),
         }
+        a = math.radians(self.data.get("angle", 0))
+        if not rotated or not a:
+            return plain
+        ca, sa = math.cos(a), math.sin(a)
+        return {k: (cx + (hx - cx) * ca - (hy - cy) * sa, cy + (hx - cx) * sa + (hy - cy) * ca)
+                for k, (hx, hy) in plain.items()}
 
     def hit_handle(self, x, y):
         if not self.selected:
@@ -652,7 +671,7 @@ class FreeCanvasImage(Gtk.Box):
 
     def _set_angle(self, deg):
         self.data["angle"] = deg % 360
-        self.canvas.queue_draw()
+        self.sync_zoom_geometry()  # the bounding box changes with the angle
         self.win.save_note_meta()
 
     def _snap_x(self, mode):
@@ -745,7 +764,7 @@ class FreeCanvasImage(Gtk.Box):
         self.win.remove_canvas_image(self)
 
     def _draw(self, _area, cr, _w, _h):
-        x0, y0 = self.PAD_SIDE, self.PAD_TOP
+        x0, y0 = self._origin()
         cx, cy = x0 + self.disp_w / 2, y0 + self.disp_h / 2
         angle = int(self.data.get("angle", 0))
 
@@ -764,16 +783,30 @@ class FreeCanvasImage(Gtk.Box):
         if not self.selected:
             return
 
+        # The frame, its handles and the rotate stalk turn with the image.
+        cr.save()
+        cr.translate(cx, cy)
+        cr.rotate(math.radians(angle))
+        cr.translate(-cx, -cy)
         cr.set_source_rgba(0.22, 0.58, 0.98, 0.95)
         cr.set_line_width(2.0)
         cr.rectangle(x0, y0, self.disp_w, self.disp_h)
         cr.stroke()
+        cr.move_to(cx, y0)
+        cr.line_to(cx, y0 - 20)
+        cr.stroke()
+        for key in ("nw", "n", "ne", "e", "se", "s", "sw", "w"):
+            hx, hy = self._handles(rotated=False)[key]
+            cr.rectangle(hx - 5, hy - 5, 10, 10)
+            cr.set_source_rgb(1, 1, 1)
+            cr.fill_preserve()
+            cr.set_source_rgba(0.22, 0.58, 0.98, 1.0)
+            cr.set_line_width(2.0)
+            cr.stroke()
+        cr.restore()
 
         handles = self._handles()
         rx, ry = handles["rotate"]
-        cr.move_to(cx, y0)
-        cr.line_to(rx, ry)
-        cr.stroke()
 
         # Word-Style Circular Rotation Handle with Curved Arrow ⟳ symbol drawn cleanly
         cr.arc(rx, ry, 9, 0, 2 * math.pi)
@@ -788,15 +821,6 @@ class FreeCanvasImage(Gtk.Box):
         cr.set_source_rgba(0.22, 0.58, 0.98, 1.0)
         cr.set_line_width(1.5)
         cr.stroke()
-
-        for key in ("nw", "n", "ne", "e", "se", "s", "sw", "w"):
-            hx, hy = handles[key]
-            cr.rectangle(hx - 5, hy - 5, 10, 10)
-            cr.set_source_rgb(1, 1, 1)
-            cr.fill_preserve()
-            cr.set_source_rgba(0.22, 0.58, 0.98, 1.0)
-            cr.set_line_width(2.0)
-            cr.stroke()
 
         if self.drag_mode == "rotate":
             hud = f"{angle}°"
@@ -1591,10 +1615,18 @@ class NotesWindow(Adw.ApplicationWindow):
         self._setup_actions()
         self.apply_theme_and_zoom()
 
+        # Back where you left off: the note, its scroll position and the
+        # notebooks sidebar. A locked note is never reopened at launch (no
+        # unlock prompt before the window is even up): the newest unlocked one is.
+        self.nb_toggle.set_active(self.vault.state.get("sidebar", True))
         self.refresh_lists()
         last = self.vault.state.get("last")
-        first = last if last and self.vault.path(last).exists() else self._first_note()
-        self.open_note(first)
+        if not (last and self.vault.path(last).exists()) or self._is_note_protected(last):
+            last = self._first_note()
+        self.open_note(last)
+        scroll = self.vault.state.get("scroll", {}).get(last or "", 0)
+        if scroll:
+            GLib.timeout_add(150, lambda: self.page_scroll.get_vadjustment().set_value(scroll) and False)
         if nv.load_conf().get("SYNC", "off") == "on":
             self.set_sync(True)
         self.connect("close-request", self._on_close)
@@ -1638,7 +1670,8 @@ class NotesWindow(Adw.ApplicationWindow):
                 return
 
         for img in reversed(self.canvas_images):
-            ix, iy = img.data["x"] * z, img.data["y"] * z
+            # where the widget really is: moved back by a rotation's overhang
+            ix, iy = img.data["x"] * z - getattr(img, "ex", 0), img.data["y"] * z - getattr(img, "ey", 0)
             iw, ih = img.get_width(), img.get_height()
             if ix <= x <= ix + iw and iy <= y <= iy + ih:
                 tb_h = 38 if img.selected else 0
@@ -1847,6 +1880,10 @@ class NotesWindow(Adw.ApplicationWindow):
         sec2.append("Keyboard Shortcuts", "win.shortcuts")
         menu.append_section(None, sec2)
         self.top_bar.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, tooltip_text="Menu"))
+
+        full_btn = Gtk.Button(icon_name="view-fullscreen-symbolic", tooltip_text="Full screen (F11)",
+                              action_name="win.fullscreen")
+        self.top_bar.pack_end(full_btn)
 
         self.comments_toggle = Gtk.ToggleButton(icon_name="user-available-symbolic",
                                                 tooltip_text="Show / Hide Google Docs Style Margin Comments Sidebar")
@@ -2507,10 +2544,7 @@ class NotesWindow(Adw.ApplicationWindow):
                 t = table.lookup(h_name)
                 if t:
                     buf.remove_tag(t, loc_prev, location)
-            self.active_para_style = None
-            self._syncing_ribbon = True
-            self.style_drop.set_selected(0)
-            self._syncing_ribbon = False
+            self._reset_typing_style()
             return
         char_len = len(text)
         start = location.copy()
@@ -2529,6 +2563,21 @@ class NotesWindow(Adw.ApplicationWindow):
             if t:
                 buf.apply_tag(t, start, location)
 
+    def _reset_typing_style(self):
+        """A new paragraph (or a line emptied with Backspace) starts as plain
+        body text: bold, italic, colour or a heading don't carry over unless
+        you switch them on again."""
+        self.active_formats.clear()
+        self.active_para_style = None
+        self.active_fg_tag = None
+        self._syncing_ribbon = True
+        try:
+            for btn in (self.bold_btn, self.italic_btn, self.under_btn, self.strike_btn, self.hl_btn):
+                btn.set_active(False)
+            self.style_drop.set_selected(0)
+        finally:
+            self._syncing_ribbon = False
+
     def clear_selection_formatting(self):
         self.active_formats.clear()
         self.active_para_style = None
@@ -2544,6 +2593,9 @@ class NotesWindow(Adw.ApplicationWindow):
         if mark != self.buffer.get_insert():
             return
         it = self.buffer.get_iter_at_mark(mark)
+        if it.starts_line() and it.ends_line():  # an empty line: plain body text
+            self._reset_typing_style()
+            return
         if not it.starts_line() and it.get_line_offset() > 0:
             check_it = it.copy()
             check_it.backward_char()
@@ -2895,8 +2947,13 @@ class NotesWindow(Adw.ApplicationWindow):
         return clean_text, line_styles, extracted_images, extracted_links, extracted_tags
 
     def _first_note(self):
-        notes = [n for n in self.vault.notes() if n["folder"] != "Daily"] or self.vault.notes()
-        return notes[0]["rel"] if notes else self.vault.create("", "Welcome")
+        """The newest note you can open without unlocking (Daily notes last);
+        a new empty one when every note is locked."""
+        notes = [n for n in self.vault.notes() if not self._is_note_protected(n["rel"])]
+        notes.sort(key=lambda n: (n["folder"] == "Daily", -n.get("mtime", 0)))
+        if notes:
+            return notes[0]["rel"]
+        return self.vault.create("", "Welcome" if not self.vault.notes() else "Untitled")
 
     def open_note(self, rel, record_history=True):
         if not rel:
@@ -3520,7 +3577,12 @@ class NotesWindow(Adw.ApplicationWindow):
                 self.vault.save_state()
                 self.refresh_lists()
                 self.toast.add_toast(Adw.Toast(title=f"Notebook “{folder}” locked 🔒", timeout=2))
-            self._authenticate(f"Lock Entire Notebook “{folder}”", do_lock)
+                if self.rel and Path(self.rel).parent.as_posix() == folder:
+                    self.open_note(self._first_note(), record_history=False)
+            if nv.load_conf().get("NOTE_LOCK_HASH", ""):
+                do_lock()
+            else:  # the first lock sets up the PIN
+                self._authenticate(f"Lock Entire Notebook “{folder}”", do_lock)
 
     def _popup_note_menu(self, row, x, y):
         rel = row.rel
@@ -3702,11 +3764,17 @@ class NotesWindow(Adw.ApplicationWindow):
             def do_lock():
                 if rel not in locked:
                     locked.append(rel)
-                self._unlocked_items.add(rel)
+                self._unlocked_items.discard(rel)  # locked now, not after the next restart
                 self.vault.save_state()
                 self.refresh_lists()
                 self.toast.add_toast(Adw.Toast(title="Note locked 🔒", timeout=2))
-            self._authenticate(f"Lock Note “{Path(rel).stem}”", do_lock)
+                if self.rel == rel:  # don't leave it on screen
+                    self.open_note(self._first_note(), record_history=False)
+            # Locking asks nothing; only the very first lock sets up the PIN.
+            if nv.load_conf().get("NOTE_LOCK_HASH", ""):
+                do_lock()
+            else:
+                self._authenticate(f"Lock Note “{Path(rel).stem}”", do_lock)
 
     def _toggle_current_note_lock(self):
         if self.rel:
@@ -3887,8 +3955,7 @@ class NotesWindow(Adw.ApplicationWindow):
         docs = Path(GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS) or Path.home() / "Documents") / "Notes" / sub
         docs.mkdir(parents=True, exist_ok=True)
         title_stem = re.sub(r'[^\w\- ]', '_', Path(self.rel).stem).strip() or "Untitled"
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_path = docs / f"{title_stem}_{timestamp}.{fmt}"
+        out_path = docs / f"{title_stem}.{fmt}"  # one file per note, refreshed by each export
 
         if not self.lookup_action("open-last-export"):
             act = Gio.SimpleAction.new("open-last-export", None)
@@ -4053,6 +4120,7 @@ class NotesWindow(Adw.ApplicationWindow):
             ("delete", lambda: self.confirm_delete_note(self.rel), []),
             ("toggle-list", lambda: self.list_toggle.set_active(not self.list_toggle.get_active()), ["F8"]),
             ("toggle-nb", lambda: self.nb_toggle.set_active(not self.nb_toggle.get_active()), ["F9"]),
+            ("fullscreen", self.toggle_fullscreen, ["F11"]),
             ("zoom-in", lambda: self.set_zoom(self.zoom + 0.1), ["<Control>plus", "<Control>equal"]),
             ("zoom-out", lambda: self.set_zoom(self.zoom - 0.1), ["<Control>minus"]),
             ("zoom-reset", lambda: self.set_zoom(1.0), ["<Control>0"]),
@@ -4068,6 +4136,12 @@ class NotesWindow(Adw.ApplicationWindow):
                 app.set_accels_for_action(f"win.{name}", accels)
         self._shortcut_list = [(n.replace("-", " ").title(), ", ".join(ac)) for n, _c, ac in acts if ac]
 
+    def toggle_fullscreen(self):
+        if self.is_fullscreen():
+            self.unfullscreen()
+        else:
+            self.fullscreen()
+
     def show_shortcuts(self):
         txt = "\n".join(f"{k:<20} {lbl}" for lbl, k in self._shortcut_list)
         dlg = Adw.AlertDialog(heading="Keyboard Shortcuts")
@@ -4078,6 +4152,14 @@ class NotesWindow(Adw.ApplicationWindow):
     def _on_close(self, *_):
         self._save_now()
         self._commit_title()
+        if self.rel:
+            scrolls = self.vault.state.setdefault("scroll", {})
+            scrolls[self.rel] = round(self.page_scroll.get_vadjustment().get_value())
+            if len(scrolls) > 50:  # remember the 50 most recent notes
+                for old in list(scrolls)[:-50]:
+                    scrolls.pop(old)
+        self.vault.state["sidebar"] = self.nb_toggle.get_active()
+        self.vault.save_state()
         if self.server:
             self.server.stop()
         return False

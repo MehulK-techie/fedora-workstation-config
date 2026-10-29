@@ -85,6 +85,7 @@ LAYER_ACTIONS = (("go-up-symbolic", "Bring Forward", "forward"), ("go-down-symbo
                  ("go-top-symbolic", "Bring to Front", "front"), ("go-bottom-symbolic", "Send to Back", "back"))
 
 TABLES_MARK = "\n<!-- MK Notes tables (shown as tables in MK Notes) -->"
+PAGE_W = 800  # the sheet's width at 100 %; A4 height is 1.414 times that
 AUTOLOCK_S = 60  # seconds without input before unlocked notes lock again
 
 THEMES = {
@@ -177,6 +178,9 @@ BASE_CSS = """
 .mk-table-divider:hover { background: alpha(@accent_color, 0.5); }
 .mk-table-pill { font-size: 0.82em; padding: 2px 10px; min-height: 0; border-radius: 99px;
                  background: alpha(@window_fg_color, 0.08); }
+.mk-sheet { border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
+.mk-page-badge { background: alpha(black, 0.55); color: white; border-radius: 99px; padding: 3px 10px;
+                 font-size: 0.85em; font-weight: 600; }
 .mk-comment-active { box-shadow: inset 3px 0 0 @accent_color; background: alpha(@accent_bg_color, 0.18); }
 .mk-sidebar row:selected { background: alpha(@accent_bg_color, 0.25); font-weight: 700; }
 .mk-list row { border-radius: 9px; margin: 3px 6px; padding: 8px 10px; }
@@ -1544,23 +1548,21 @@ class PaperPatternBackground(Gtk.DrawingArea):
         pattern = look_conf().get("PAPER_PATTERN", "dots")
         preset = THEMES.get(look_conf().get("THEME_PRESET", "obsidian"), THEMES["obsidian"])
         is_dark = preset["dark"]
-        # Where each A4 page ends (1123 px at 96 dpi, times the zoom), like
-        # Word's page breaks: new pages appear as the note grows.
-        page_h = 1123 * max(0.5, self.win.zoom)
-        y, n = page_h, 1
-        cr.set_line_width(1.0)
-        cr.set_dash([6.0, 6.0])
-        while y < h:
-            cr.set_source_rgba(1, 1, 1, 0.16) if is_dark else cr.set_source_rgba(0, 0, 0, 0.14)
-            cr.move_to(0, round(y) + 0.5)
-            cr.line_to(w, round(y) + 0.5)
-            cr.stroke()
-            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
-            cr.set_font_size(10)
-            cr.move_to(w - 64, y - 6)
-            cr.show_text(f"Page {n} ⌄")
-            y, n = y + page_h, n + 1
-        cr.set_dash([])
+        # Between two A4 sheets: a gap of the workspace's colour with a soft
+        # shadow under the page above, like Google Docs' page breaks.
+        page_h = self.win.page_height()
+        gap = 24 * max(0.5, self.win.zoom)
+        r, g, b = hex_rgb(preset["win_bg"])
+        y = page_h
+        while y < h - 1:
+            shade = cairo.LinearGradient(0, y, 0, y + gap)
+            shade.add_color_stop_rgba(0, 0, 0, 0, 0.45)
+            shade.add_color_stop_rgba(0.25, r, g, b, 1)
+            shade.add_color_stop_rgba(1, r, g, b, 1)
+            cr.set_source(shade)
+            cr.rectangle(0, y - gap / 2, w, gap)
+            cr.fill()
+            y += page_h
         if pattern == "plain":
             return
         cr.set_source_rgba(1, 1, 1, 0.06) if is_dark else cr.set_source_rgba(0, 0, 0, 0.07)
@@ -2764,14 +2766,27 @@ class NotesWindow(Adw.ApplicationWindow):
         self.paper_bg = PaperPatternBackground(self)
         self.canvas_fixed = PassThroughFixed()
 
-        self.page_overlay = Gtk.Overlay(child=self.paper_bg, hexpand=True, vexpand=True)
+        # The page: an A4 sheet (PAGE_W wide, 1:1.414) centred on the darker
+        # workspace, as long as the note needs in whole pages (_update_pages).
+        self.page_overlay = Gtk.Overlay(child=self.paper_bg, hexpand=False, vexpand=True, halign=Gtk.Align.CENTER,
+                                        margin_top=24, margin_bottom=24, css_classes=["mk-sheet"])
         self.page_overlay.add_overlay(self.view)
+        self.page_overlay.set_measure_overlay(self.view, True)
         self.page_overlay.add_overlay(self.canvas_fixed)
         self.ink_canvas = StudioInkCanvas(self)
         self.page_overlay.add_overlay(self.ink_canvas)
 
         self.page_scroll = Gtk.ScrolledWindow(child=self.page_overlay, hexpand=True, vexpand=True)
-        doc_body_hbox.append(self.page_scroll)
+        # "Page X of Y" by the scrollbar, as in Google Docs
+        self.page_badge = Gtk.Label(css_classes=["mk-page-badge"], halign=Gtk.Align.END, valign=Gtk.Align.END,
+                                    margin_end=18, margin_bottom=14, can_target=False)
+        scroll_box = Gtk.Overlay(child=self.page_scroll, hexpand=True, vexpand=True)
+        scroll_box.add_overlay(self.page_badge)
+        doc_body_hbox.append(scroll_box)
+        self.page_scroll.get_vadjustment().connect("value-changed", lambda *_: self._update_badge())
+        # the column's width changed (window resized, a panel folded): re-fit the sheet
+        self.page_scroll.get_hadjustment().connect("changed", lambda *_: self._queue_pages())
+        self.buffer.connect("changed", lambda *_: self._queue_pages())
 
         # Google Docs Style Margin Comments Sidebar (Right side, distinct card container with Resolve / Delete)
         self.comments_sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, width_request=260,
@@ -3709,6 +3724,8 @@ class NotesWindow(Adw.ApplicationWindow):
             st.sync_zoom_geometry()
         for t in self._live_tables():
             t.sync_zoom()
+        self.pages = 0
+        self._update_pages()
         self.paper_bg.queue_draw()
         self.ink_canvas.queue_draw()
         if not quiet:
@@ -3730,7 +3747,8 @@ class NotesWindow(Adw.ApplicationWindow):
         window {{ background: {preset['win_bg']}; color: {preset['fg']}; }}
         .mk-sidebar {{ background: {preset['side_bg']}; }}
         .mk-list-col {{ background: {preset['list_bg']}; }}
-        .mk-page-col {{ background: {preset['page_bg']}; }}
+        .mk-page-col {{ background: {preset['win_bg']}; }}
+        .mk-sheet {{ background: {preset['page_bg']}; }}
         .mk-ribbon {{ background: {preset['ribbon_bg']}; }}
         .mk-editor, .mk-editor text {{ font-size: {base_size * z:.1f}px; color: {'#ffffff' if preset['dark'] else preset['fg']}; }}
         """
@@ -3998,6 +4016,51 @@ class NotesWindow(Adw.ApplicationWindow):
         self._apply_z_order()
         self.ensure_page_height_for_images()
 
+    # ---------- pages
+    def page_width(self):
+        """PAGE_W at the zoom, narrower when the editor column is (keeping
+        the A4 shape), with room for the workspace around it."""
+        avail = self.page_scroll.get_width() - 48
+        full = PAGE_W * max(0.5, self.zoom)
+        return round(min(full, avail) if avail > 300 else full)
+
+    def page_height(self):
+        return self.page_width() * 1.414
+
+    def _queue_pages(self):
+        if getattr(self, "_pages_id", 0):
+            return
+
+        def run():
+            self._pages_id = 0
+            self._update_pages()
+            return False
+        self._pages_id = GLib.timeout_add(150, run)
+
+    def _update_pages(self):
+        """As many A4 sheets as the text, tables, pictures and stickies need:
+        a new page appears as soon as anything passes the last one's bottom."""
+        z = max(0.5, self.zoom)
+        width = self.page_width()
+        self.page_overlay.set_size_request(width, -1)
+        _min, text_h, _b1, _b2 = self.view.measure(Gtk.Orientation.VERTICAL, width)
+        bottom = text_h
+        for w in self.canvas_images + self.sticky_notes:
+            bottom = max(bottom, (w.data.get("y", 0) + w.data.get("h", 160)) * z)
+        pages = max(1, math.ceil((bottom + 40 * z) / self.page_height()))
+        if pages != getattr(self, "pages", 0) or width != getattr(self, "_sheet_w", 0):
+            self.pages, self._sheet_w = pages, width
+            self.paper_bg.set_size_request(width, round(pages * self.page_height()))
+            self.paper_bg.queue_draw()
+        self._update_badge()
+
+    def _update_badge(self):
+        pages = getattr(self, "pages", 1)
+        adj = self.page_scroll.get_vadjustment()
+        here = adj.get_value() + adj.get_page_size() / 2 - 24
+        current = max(1, min(pages, int(here // self.page_height()) + 1))
+        self.page_badge.set_label(f"{current} of {pages}")
+
     def ensure_page_height_for_images(self):
         max_bottom = 260
         for w in self.canvas_images:
@@ -4009,6 +4072,7 @@ class NotesWindow(Adw.ApplicationWindow):
             if b > max_bottom:
                 max_bottom = b
         self.view.set_bottom_margin(max_bottom)
+        self._queue_pages()
 
     def select_canvas_image(self, target):
         self.selected_img = target

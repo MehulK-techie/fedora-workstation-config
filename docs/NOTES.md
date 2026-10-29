@@ -152,7 +152,7 @@ closes it without saving.
   (Yellow, Mint, Sky, Rose, Lavender, Coral, Charcoal); they're printed as
   coloured callouts at the end of a PDF.
 - **Layers**: pictures and sticky notes have an order; a new one goes on top. A picture's bar and a sticky's layers button (▤) have Bring Forward, Send Backward, Bring to Front and Send to Back. Drawings stay on their own layer above the page.
-- **Pages**: dashed lines mark where each A4 page ends.
+- **Pages**: the note is an A4 sheet (800 px wide at 100 %, narrower in a narrow window) centred on a darker workspace with a soft shadow; a new page appears as soon as text, a table, a picture or a sticky passes the bottom of the last one, with a page gap between sheets; a *Page X of Y* badge sits by the scrollbar. Text flows on through a page gap (the editor is one continuous text view); the PDF export lays out its own A4 pages.
 - **Locks**: right-click a locked note for Lock Now or Remove Lock
   Permanently; a note you unlocked locks again after a minute without input.
 - **PDFs**: insert one as a 📎 chip (click to open) or as printout pages to

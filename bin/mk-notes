@@ -1528,7 +1528,7 @@ class SimpleNotePicker(Adw.Dialog):
         view.set_content(box)
         self.set_child(view)
         self._fill()
-        GLib.idle_add(self.entry.grab_focus)
+        GLib.idle_add(lambda: self.entry.grab_focus() and False)  # once: True would repeat it forever
 
     def _fill(self):
         while (r := self.list.get_row_at_index(0)) is not None:
@@ -2621,7 +2621,7 @@ class NotesWindow(Adw.ApplicationWindow):
         if item_data is None:
             self.dirty = True
             self.save_note_meta()
-            GLib.idle_add(st.text_view.grab_focus)
+            GLib.idle_add(lambda: st.text_view.grab_focus() and False)  # once: True would repeat it forever
 
     def remove_sticky_note(self, st):
         if st in self.sticky_notes:
@@ -2675,7 +2675,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
         dlg.connect("response", done)
         dlg.present(self)
-        GLib.idle_add(entry.grab_focus)
+        GLib.idle_add(lambda: entry.grab_focus() and False)  # once: True would repeat it forever
 
     def _rebuild_comments_panel(self):
         while (c := self.comments_list.get_first_child()) is not None:
@@ -2985,7 +2985,7 @@ class NotesWindow(Adw.ApplicationWindow):
             self.list.select_row(row)
         self._refresh_header_pills()
         if not self.ink_canvas.active:
-            GLib.idle_add(self.view.grab_focus)
+            GLib.idle_add(lambda: self.view.grab_focus() and False)  # once: True would repeat it forever
 
     def _rebuild_canvas_objects(self, images_list, stickies_list):
         for w in self.canvas_images + self.sticky_notes:
@@ -3674,6 +3674,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
         dlg.connect("response", done)
         dlg.present(self)
+        GLib.idle_add(lambda: entry.grab_focus() and False)
 
     def _remove_tag(self, tag):
         if tag in getattr(self, "note_tags", []):
@@ -3744,7 +3745,7 @@ class NotesWindow(Adw.ApplicationWindow):
         entry.connect("activate", save_it)
         dlg.connect("response", lambda _d, r: r == "save" and save_it())
         dlg.present(self)
-        GLib.idle_add(entry.grab_focus)
+        GLib.idle_add(lambda: entry.grab_focus() and False)  # once: True would repeat it forever
 
     def _on_pin_toggled(self, btn):
         if getattr(self, "_quiet_pin", False) or not self.rel:

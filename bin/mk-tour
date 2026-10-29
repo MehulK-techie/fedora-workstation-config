@@ -336,7 +336,7 @@ class CheatSheet(Adw.ApplicationWindow):
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", lambda _c, kv, *_: kv == Gdk.KEY_Escape and (self.close() or True))
         self.add_controller(keys)
-        GLib.idle_add(self.search.grab_focus)
+        GLib.idle_add(lambda: self.search.grab_focus() and False)  # once: True would repeat it forever
 
     def _filter(self, entry):
         query = entry.get_text().strip().lower()

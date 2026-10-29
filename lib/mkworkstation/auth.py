@@ -308,7 +308,7 @@ class UnlockDialog(Adw.Dialog):
 
         if creating:
             self.status.set_label("Choose a PIN. You'll type it to unlock.")
-            GLib.idle_add(self.entry.grab_focus)
+            GLib.idle_add(lambda: self.entry.grab_focus() and False)  # once: True would repeat it forever
         else:
             self._say()
             if face_available():

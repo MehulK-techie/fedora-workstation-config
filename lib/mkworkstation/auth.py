@@ -116,28 +116,57 @@ class FingerprintListener:
         self.device = None
         self.claimed = False
 
-    @staticmethod
-    def _proxy(path, iface):
-        return Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, None,
-                                              FPRINT, path, iface, None)
-
     def start(self):
-        try:
-            manager = self._proxy("/net/reactivated/Fprint/Manager", FPRINT + ".Manager")
-            path = manager.call_sync("GetDefaultDevice", None, Gio.DBusCallFlags.NONE, 2000, None).unpack()[0]
-            self.device = self._proxy(path, FPRINT + ".Device")
-            fingers = self.device.call_sync("ListEnrolledFingers", GLib.Variant("(s)", (getpass.getuser(),)),
-                                            Gio.DBusCallFlags.NONE, 2000, None).unpack()[0]
-            if not fingers:
-                raise GLib.Error("no finger enrolled")
-            self.device.connect("g-signal", self._on_signal)
-            self.device.call_sync("Claim", GLib.Variant("(s)", ("",)), Gio.DBusCallFlags.NONE, 3000, None)
-            self.claimed = True
-            self._verify()
-        except GLib.Error:
+        """Find the reader and start listening, all asynchronously: no call
+        here waits on the window's main loop (a busy reader used to freeze
+        it for seconds). on_status('unavailable') when there's none."""
+        def failed(*_a):
             self.stop()
             self.on_status("unavailable")
-            return False
+
+        def call(proxy, method, args, then):
+            def done(px, res):
+                try:
+                    value = px.call_finish(res)
+                except GLib.Error:
+                    failed()
+                    return
+                then(value)
+            proxy.call(method, args, Gio.DBusCallFlags.NONE, 3000, None, done)
+
+        def got_manager(_src, res):
+            try:
+                manager = Gio.DBusProxy.new_for_bus_finish(res)
+            except GLib.Error:
+                failed()
+                return
+            call(manager, "GetDefaultDevice", None, got_path)
+
+        def got_path(value):
+            Gio.DBusProxy.new_for_bus(Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, None, FPRINT, value.unpack()[0],
+                                      FPRINT + ".Device", None, got_device)
+
+        def got_device(_src, res):
+            try:
+                self.device = Gio.DBusProxy.new_for_bus_finish(res)
+            except GLib.Error:
+                failed()
+                return
+            call(self.device, "ListEnrolledFingers", GLib.Variant("(s)", (getpass.getuser(),)), got_fingers)
+
+        def got_fingers(value):
+            if not value.unpack()[0]:
+                failed()
+                return
+            self.device.connect("g-signal", self._on_signal)
+            call(self.device, "Claim", GLib.Variant("(s)", ("",)), claimed)
+
+        def claimed(_value):
+            self.claimed = True
+            self._verify()
+
+        Gio.DBusProxy.new_for_bus(Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, None, FPRINT,
+                                  "/net/reactivated/Fprint/Manager", FPRINT + ".Manager", None, got_manager)
         return True
 
     def _verify(self):

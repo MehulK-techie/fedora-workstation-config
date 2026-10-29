@@ -79,13 +79,18 @@ STICKY_PALETTES = [
     ("Lavender", "#e8d5ff", "#5b21b6"),
     ("Coral", "#ffc4b8", "#9f1239"),
     ("Charcoal", "#2c2e33", "#e6e6e6"),
+    ("Clear (text box)", "transparent", "#ffffff"),
 ]
+TEXT_BOX = len(STICKY_PALETTES) - 1  # a sticky without paper: text on a printout or picture
 # Layer order for pictures and stickies: (icon, label, how)
 LAYER_ACTIONS = (("go-up-symbolic", "Bring Forward", "forward"), ("go-down-symbolic", "Send Backward", "backward"),
                  ("go-top-symbolic", "Bring to Front", "front"), ("go-bottom-symbolic", "Send to Back", "back"))
 
 TABLES_MARK = "\n<!-- MK Notes tables (shown as tables in MK Notes) -->"
 PAGE_W = 800  # the sheet's width at 100 %; A4 height is 1.414 times that
+# Highlighter colours: (tag, name, colour); hl-yellow is the default.
+HIGHLIGHTS = (("hl-yellow", "Yellow", "#fff59d"), ("hl-mint", "Mint", "#a7f3d0"), ("hl-cyan", "Cyan", "#a5f3fc"),
+              ("hl-pink", "Pink", "#fbcfe8"), ("hl-orange", "Orange", "#fed7aa"))
 AUTOLOCK_S = 60  # seconds without input before unlocked notes lock again
 
 THEMES = {
@@ -507,8 +512,9 @@ class StickyNoteWidget(Gtk.Box):
     def _apply_palette(self):
         idx = int(self.data.get("color_idx", 0)) % len(STICKY_PALETTES)
         _name, bg, fg = STICKY_PALETTES[idx]
+        border = "1px dashed alpha(white, 0.45)" if idx == TEXT_BOX else f"1px solid alpha({fg}, 0.22)"
         self._css_prov.load_from_string(
-            f".mk-sticky {{ background: {bg}; color: {fg}; border: 1px solid alpha({fg}, 0.22); }}"
+            f".mk-sticky {{ background: {bg}; color: {fg}; border: {border}; box-shadow: none; }}"
             f"textview, textview text {{ background: transparent; color: {fg}; font-size: 0.95em; }}"
             f"entry.mk-sticky-title, entry.mk-sticky-title text {{ background: transparent; color: {fg}; "
             f"font-weight: 700; box-shadow: none; min-height: 24px; padding: 0 2px; }}"
@@ -565,6 +571,7 @@ class TableItem(Gtk.Box):
                          cursor=Gdk.Cursor.new_from_name("grab"),
                          tooltip_text="Drag to another place in the text")
         drag = Gtk.GestureDrag()
+        drag.connect("drag-begin", lambda *_: (self.set_opacity(0.55), move.set_cursor(Gdk.Cursor.new_from_name("grabbing"))))
         drag.connect("drag-end", self._moved)
         move.add_controller(drag)
         bar.append(move)
@@ -606,6 +613,11 @@ class TableItem(Gtk.Box):
                 focus_ctl = Gtk.EventControllerFocus()
                 focus_ctl.connect("enter", lambda *_a, rc=(r, c): setattr(self, "active", rc))
                 view.add_controller(focus_ctl)
+                # One click types: take the focus (and put the cursor where
+                # the click was) before the page around the table can.
+                click = Gtk.GestureClick(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+                click.connect("pressed", self._cell_pressed, view)
+                view.add_controller(click)
                 self.grid.attach(view, 2 * c, r, 1, 1)
                 line.append(view)
             self.cells.append(line)
@@ -621,6 +633,14 @@ class TableItem(Gtk.Box):
         if focus:
             r, c = focus
             GLib.idle_add(lambda: (self.cells[r][c].grab_focus(), False)[1])
+
+    def _cell_pressed(self, _gesture, _n, x, y, view):
+        if not view.has_focus():
+            view.grab_focus()
+            bx, by = view.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(x), int(y))
+            ok, it = view.get_iter_at_location(bx, by)
+            buf = view.get_buffer()
+            buf.place_cursor(it if ok else buf.get_end_iter())
 
     def sync_zoom(self):
         z = max(0.5, self.win.zoom)
@@ -688,6 +708,7 @@ class TableItem(Gtk.Box):
 
     def _moved(self, gesture, dx, dy):
         """Dropped somewhere: the table moves to that place in the text."""
+        self.set_opacity(1.0)
         if abs(dx) + abs(dy) < 8:
             return
         ok, sx, sy = gesture.get_start_point()
@@ -2463,8 +2484,9 @@ class NotesWindow(Adw.ApplicationWindow):
         chg_pin_btn.connect("clicked", lambda *_: (self.lock_pop.popdown(), self._change_pin_dialog()))
         lock_box.append(chg_pin_btn)
         self.lock_pop = Gtk.Popover(child=lock_box)
-        self.top_bar.pack_end(Gtk.MenuButton(icon_name="changes-prevent-symbolic", popover=self.lock_pop,
-                                             tooltip_text="Lock / Unlock Note or Entire Notebook"))
+        self.lock_btn = Gtk.MenuButton(icon_name="changes-prevent-symbolic", popover=self.lock_pop,
+                                       tooltip_text="Lock / Unlock Note or Entire Notebook")
+        self.top_bar.pack_end(self.lock_btn)
 
         self.pin_btn = Gtk.ToggleButton(icon_name="view-pin-symbolic", tooltip_text="Pin Note to Top")
         self.pin_btn.connect("toggled", self._on_pin_toggled)
@@ -2579,8 +2601,20 @@ class NotesWindow(Adw.ApplicationWindow):
         ribbon.append(self.strike_btn)
 
         self.hl_btn = Gtk.ToggleButton(icon_name="marker-symbolic", tooltip_text="Highlight Text", css_classes=["flat"])
-        self.hl_btn.connect("toggled", lambda b: self._on_format_btn_toggled("hl-yellow", b.get_active()))
+        self.hl_tag = "hl-yellow"
+        self.hl_btn.connect("toggled", lambda b: self._on_format_btn_toggled(self.hl_tag, b.get_active()))
         ribbon.append(self.hl_btn)
+        hl_box = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
+        hl_pop = Gtk.Popover(child=hl_box)
+        for tname, name, colour in HIGHLIGHTS:
+            sw = Gtk.Button(tooltip_text=name, css_classes=["mk-swatch"])
+            prov = Gtk.CssProvider()
+            prov.load_from_string(f"button {{ background: {colour}; }}")
+            sw.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 3)
+            sw.connect("clicked", lambda _b, t=tname: (hl_pop.popdown(), self._pick_highlight(t)))
+            hl_box.append(sw)
+        ribbon.append(Gtk.MenuButton(icon_name="pan-down-symbolic", popover=hl_pop, css_classes=["flat"],
+                                     tooltip_text="Highlighter colour"))
 
         self.color_dialog = Gtk.ColorDialog(title="Choose Text Color", with_alpha=False)
         init_rgba = Gdk.RGBA()
@@ -2619,7 +2653,8 @@ class NotesWindow(Adw.ApplicationWindow):
         ribbon.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=2, margin_end=2))
 
         # Media & Separate Drawing, Shapes, Laser Tools
-        img_btn = Gtk.Button(icon_name="insert-image-symbolic", tooltip_text="Insert Photo", css_classes=["flat"])
+        img_btn = Gtk.Button(icon_name="insert-image-symbolic", tooltip_text="Insert: a picture, or a PDF (attach or printout)",
+                             css_classes=["flat"])
         img_btn.connect("clicked", lambda *_: self.attach_image())
         ribbon.append(img_btn)
 
@@ -2654,6 +2689,11 @@ class NotesWindow(Adw.ApplicationWindow):
                                 tooltip_text="Add Draggable Sticky Note", css_classes=["flat"])
         sticky_btn.connect("clicked", lambda *_: self.add_sticky_note())
         ribbon.append(sticky_btn)
+        text_btn = Gtk.Button(label="Text", icon_name="format-text-plus-symbolic",
+                              tooltip_text="Text box: type anywhere on the page, on a printout or picture",
+                              css_classes=["flat"])
+        text_btn.connect("clicked", lambda *_: self.add_sticky_note(text_box=True))
+        ribbon.append(text_btn)
 
         comment_btn = Gtk.Button(label="Comment", icon_name="user-available-symbolic",
                                  tooltip_text="Add Margin Comment (Ctrl+Alt+M)", css_classes=["flat"])
@@ -2784,6 +2824,11 @@ class NotesWindow(Adw.ApplicationWindow):
         scroll_box.add_overlay(self.page_badge)
         doc_body_hbox.append(scroll_box)
         self.page_scroll.get_vadjustment().connect("value-changed", lambda *_: self._update_badge())
+        # pinch anywhere on the page (over pictures and tables too), not only on the text
+        page_pinch = Gtk.GestureZoom(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        page_pinch.connect("begin", lambda *_: setattr(self, "_pinch_base", self.zoom))
+        page_pinch.connect("scale-changed", lambda _g, sc: self.set_zoom(self._pinch_base * sc, quiet=True))
+        self.page_scroll.add_controller(page_pinch)
         # the column's width changed (window resized, a panel folded): re-fit the sheet
         self.page_scroll.get_hadjustment().connect("changed", lambda *_: self._queue_pages())
         self.buffer.connect("changed", lambda *_: self._queue_pages())
@@ -3294,9 +3339,11 @@ class NotesWindow(Adw.ApplicationWindow):
                 scale=1.16, pixels_above_lines=6, pixels_below_lines=3)
         add_tag("title", weight=Pango.Weight.HEAVY, scale=1.90, pixels_above_lines=12, pixels_below_lines=8)
 
-        hl_rgba = Gdk.RGBA()
-        hl_rgba.parse("rgba(250, 204, 21, 0.35)")
-        add_tag("hl-yellow", background_rgba=hl_rgba)
+        for tname, _name, colour in HIGHLIGHTS:  # translucent, so text stays readable
+            hl_rgba = Gdk.RGBA()
+            hl_rgba.parse(colour)
+            hl_rgba.alpha = 0.42
+            add_tag(tname, background_rgba=hl_rgba)
 
         cm_rgba = Gdk.RGBA()
         cm_rgba.parse("rgba(245, 158, 11, 0.28)")
@@ -3342,13 +3389,34 @@ class NotesWindow(Adw.ApplicationWindow):
             self._queue_save()
         self.view.grab_focus()
 
+    def _pick_highlight(self, tname):
+        """The highlighter's colour: the selection gets it at once (any other
+        highlight there goes), and so does what you type next."""
+        old = self.hl_tag
+        self.hl_tag = tname
+        bounds = self.buffer.get_selection_bounds()
+        table = self.buffer.get_tag_table()
+        if bounds:
+            for t, _n, _c in HIGHLIGHTS:
+                self.buffer.remove_tag(table.lookup(t), *bounds)
+            self.buffer.apply_tag(table.lookup(tname), *bounds)
+            self.dirty = True
+            self._queue_save()
+        if old in self.active_formats:
+            self.active_formats.discard(old)
+            self.active_formats.add(tname)
+        self._syncing_ribbon = True
+        self.hl_btn.set_active(bool(bounds) or tname in self.active_formats)
+        self._syncing_ribbon = False
+        self.view.grab_focus()
+
     def toggle_shortcut_format(self, tag_name):
         btn_map = {
             "bold": self.bold_btn,
             "italic": self.italic_btn,
             "underline": self.under_btn,
             "strike": self.strike_btn,
-            "hl-yellow": self.hl_btn,
+            "hl-yellow": self.hl_btn,  # Ctrl+Shift+H: the highlighter, in its current colour
         }
         btn = btn_map.get(tag_name)
         if btn:
@@ -3464,7 +3532,7 @@ class NotesWindow(Adw.ApplicationWindow):
                 (self.italic_btn, "italic"),
                 (self.under_btn, "underline"),
                 (self.strike_btn, "strike"),
-                (self.hl_btn, "hl-yellow"),
+                (self.hl_btn, self.hl_tag),
             ):
                 t = table.lookup(tname)
                 has = bool(t and it.has_tag(t))
@@ -3509,7 +3577,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.dirty = True
         self._queue_save()
 
-    def add_sticky_note(self, item_data=None):
+    def add_sticky_note(self, item_data=None, text_box=False):
         # one sticky per click, however fast the clicks come
         if item_data is None:
             now = time.monotonic()
@@ -3523,9 +3591,13 @@ class NotesWindow(Adw.ApplicationWindow):
             "y": float(max(60, round(scroll_y + 70))),
             "w": 220.0,
             "h": 160.0,
-            "color_idx": len(self.sticky_notes) % len(STICKY_PALETTES),
+            "color_idx": TEXT_BOX if text_box else len(self.sticky_notes) % TEXT_BOX,
             "z": self._next_z(),
         }
+        if text_box and not item_data:
+            data["title"] = "Text"
+        if not item_data:  # inside the sheet, however narrow it is
+            data["x"] = float(max(16, min(data["x"], self.page_width() / max(0.5, self.zoom) - data["w"] - 16)))
         st = StickyNoteWidget(data, self)
         self.canvas_fixed.put(st, round(data["x"] * self.zoom), round(data["y"] * self.zoom))
         self.sticky_notes.append(st)
@@ -3804,7 +3876,8 @@ class NotesWindow(Adw.ApplicationWindow):
             return
         spans = []
         table = self.buffer.get_tag_table()
-        tag_names = ["bold", "italic", "underline", "strike", "mono", "pdf-chip", "h1", "h2", "h3", "title", "hl-yellow",
+        tag_names = ["bold", "italic", "underline", "strike", "mono", "pdf-chip", "h1", "h2", "h3", "title",
+                     *(h[0] for h in HIGHLIGHTS),
                      "comment-mark"]
         table.foreach(lambda t: t.get_property("name") and t.get_property("name").startswith("fg-") and tag_names.append(t.get_property("name")))
 
@@ -4113,7 +4186,21 @@ class NotesWindow(Adw.ApplicationWindow):
         rel = self.vault.resolve(name)
         return self.vault.path(rel) if rel else None
 
+    def _sync_padlock(self):
+        """🔓 while the open note is locked (itself or by its notebook) but
+        unlocked for now; 🔒 otherwise."""
+        rel = self.rel
+        if not rel or not hasattr(self, "lock_btn"):
+            return
+        folder = Path(rel).parent.as_posix()
+        locked = rel in self._locked_notes() or (folder != "." and folder in self._locked_folders())
+        open_now = locked and not self._is_note_protected(rel)
+        self.lock_btn.set_icon_name("changes-allow-symbolic" if open_now else "changes-prevent-symbolic")
+        self.lock_btn.set_tooltip_text("Unlocked for now: Lock Now or change the lock" if open_now
+                                       else "Lock / Unlock Note or Entire Notebook")
+
     def _refresh_header_pills(self):
+        self._sync_padlock()
         if not self.rel:
             return
         txt = self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), False)
@@ -4896,6 +4983,7 @@ class NotesWindow(Adw.ApplicationWindow):
             self.dirty = False
             self.open_note(self._first_note(), record_history=False)
         self.refresh_lists()
+        self._sync_padlock()
 
     def _note_activity(self, *_):
         self._last_activity = time.monotonic()
@@ -5043,7 +5131,8 @@ class NotesWindow(Adw.ApplicationWindow):
         """The note as (Pango markup, kind) per line, read from the buffer's
         tags. Main thread only: GTK widgets aren't thread-safe."""
         styles = {"bold": 'weight="bold"', "italic": 'style="italic"', "underline": 'underline="single"',
-                  "strike": 'strikethrough="true"', "hl-yellow": 'bgcolor="#facc15" bgalpha="35%"'}
+                  "strike": 'strikethrough="true"',
+                  **{t: f'bgcolor="{c}" bgalpha="60%"' for t, _n, c in HIGHLIGHTS}}
         out = []
         for n in range(self.buffer.get_line_count()):
             _ok, it = self.buffer.get_iter_at_line(n)

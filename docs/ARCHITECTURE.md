@@ -97,7 +97,7 @@ test with `journalctl --user -f -o cat /usr/bin/gnome-shell`.
 | `dockGlow.js` | Per-app hover colour for dock icons: saturation-weighted hue histogram of the app icon, cached per app |
 | `welcome.js` | Edge light and greeting after login (waits for extensions to settle), Quick Settings menu toggle, optional notification edge light |
 | `timerPill.js` | Focus timer countdown in the top bar, from `~/.cache/mk-workstation/timer.json` |
-| `switcher.js` | Pop-in animation for Alt+Tab / Super+Tab |
+| `switcher.js` | Pop-in animation for the Alt+Tab switchers |
 | `osdStack.js` | Keeps the workspace dots above the volume/brightness pop-up |
 | `accent.js` | Accent colour from the wallpaper: writes `~/.cache/mk-workstation/accent.css`, loads it over `stylesheet.css`, sets GNOME's accent |
 | `systemMonitor.js` | Top-bar system monitor: samples `/proc` and `/sys` (CPU, memory, hwmon temperatures, network, battery, `gpu_busy_percent`), sparkline and menu |

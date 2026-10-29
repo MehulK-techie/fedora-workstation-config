@@ -53,7 +53,7 @@ clam() {
     local list=$1 limit=$2 infected=0 gid
     gid=$(getent passwd "$uid" | cut -d: -f4)
     if [[ -s "$list" && "$uid" =~ ^[0-9]+$ && "$uid" != 0 && -n "$gid" ]]; then
-        chmod 644 "$list"
+        chown "$uid:$gid" "$list"  # readable by that user only (mktemp made it 0600)
         infected=$(slow "$limit" setpriv --reuid="$uid" --regid="$gid" --init-groups -- \
             clamscan -i --no-summary --max-filesize=200M --follow-file-symlinks=0 --follow-dir-symlinks=0 \
             --file-list="$list" 2> /dev/null | grep -c 'FOUND$' || true)

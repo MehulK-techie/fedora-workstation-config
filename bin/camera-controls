@@ -67,11 +67,15 @@ PREVIEW_W = 640
 GRID_W = 240  # each of the nine looks: small enough for all nine at 24 fps
 # The looks tray's kinds (photo.py's names); a look missing here shows under All only.
 LOOK_CATEGORIES = {
-    "Vintage": ("polaroid", "instant", "film", "retro", "noir"),
-    "Artistic": ("popart", "comic", "neon", "hue", "glow", "vignette", "flash"),
-    "Fun": ("thermal", "distort", "mirror"),
+    "Vintage": ("polaroid", "instant", "portra", "film", "noir", "retro"),
+    "Artistic": ("cyberpunk", "popart", "flash", "vignette", "duotone", "neon", "hue", "glow"),
+    "Fun": ("distort", "comic", "vhs", "pixel", "stretch", "thermal", "mirror"),
 }
-GRID_LOOKS = [None, "polaroid", "flash", "instant", "film", "noir", "thermal", "popart", "comic"]
+# The 3 x 3 grid: one row per kind.
+GRID_ROWS = (("🎞️ Vintage", ("polaroid", "portra", "noir")),
+             ("🎨 Artistic", ("cyberpunk", "popart", "duotone")),
+             ("🤪 Fun", ("distort", "vhs", "pixel")))
+GRID_LOOKS = [key for _name, row in GRID_ROWS for key in row]
 STICKERS = "😀😂😍🥳😎🤩😜🥰🤪😇👻🤖👑🎉🎈🎂🌈⭐✨🔥💖💯👍✌️🙌🍕🍿🌸🦄🐶🐱"
 COLORS = [("White", (1, 1, 1)), ("Black", (0.08, 0.08, 0.1)), ("Pink", (1, 0.35, 0.65)),
           ("Yellow", (1, 0.85, 0.15)), ("Blue", (0.25, 0.6, 1)), ("Green", (0.3, 0.9, 0.45)),
@@ -81,6 +85,8 @@ FONTS = {"marker": ("Sharpie marker", "Permanent Marker, Patrick Hand, Comic Neu
          "typewriter": ("Retro typewriter", "Courier Prime, Nimbus Mono PS, Liberation Mono, Monospace Bold"),
          "serif": ("Editorial serif", "Playfair Display, Noto Serif, DejaVu Serif, Serif Bold Italic"),
          "lcd": ("Digital LCD", "DSEG7 Classic, DejaVu Sans Mono, Monospace Bold"),
+         "times": ("Times serif", "Times New Roman, Liberation Serif, Nimbus Roman, Serif"),
+         "script": ("Signature script", "Z003, URW Chancery L, Cursive, Serif Italic"),
          "sans": ("Clean sans", "Sans Bold")}
 DEVELOP_SECONDS = 3.0
 CSS = b"""
@@ -146,9 +152,12 @@ def to_texture(img):
     return Gdk.MemoryTexture.new(img.width, img.height, Gdk.MemoryFormat.R8G8B8, data, img.width * 3)
 
 
-DATE_STYLES = {"digital": ("Digital (90s)", "DSEG7 Classic, Monospace Bold", (1.0, 0.55, 0.1)),
+STAMP_ORANGE, STAMP_WHITE = (1.0, 0.55, 0.1), (0.96, 0.94, 0.9)
+DATE_STYLES = {"digital": ("Digital (90s)", "DSEG7 Classic, Monospace Bold", STAMP_ORANGE),
                "typewriter": ("Typewriter", "Courier Prime, Liberation Mono, Monospace", (0.95, 0.92, 0.85)),
-               "handwritten": ("Handwritten", "Patrick Hand, Comic Neue, Sans Italic", (1.0, 1.0, 1.0))}
+               "handwritten": ("Handwritten", "Patrick Hand, Comic Neue, Sans Italic", (1.0, 1.0, 1.0)),
+               "event": ("Event badge", "DSEG7 Classic, Monospace Bold", STAMP_ORANGE),
+               "clean": ("Today's date", "Sans Bold", (1.0, 1.0, 1.0))}
 
 
 def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=None, caption_font="marker",
@@ -224,8 +233,8 @@ def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=
         px = max(8, min(px, round(px * bw * 0.9 / max(1, layout.get_pixel_size()[0]))))
         text_at(caption, x + bw / 2, y + bh / 2, px, caption_colour, font, outline=False)
     if date and photo_box:
-        style, stamp = date
-        _label, font, colour = DATE_STYLES[style]
+        style, stamp, colour = date
+        font = DATE_STYLES[style][1]
         x, y, bw, bh = photo_box
         px = max(10, round(bw * 0.035))
         layout = PangoCairo.create_layout(cr)
@@ -233,7 +242,7 @@ def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=
         layout.set_text(stamp, -1)
         tw, th = layout.get_pixel_size()
         text_at(stamp, x + bw - tw / 2 - bw * 0.04, y + bh - th / 2 - bh * 0.04, px, colour,
-                font, outline=style != "digital", glow=style == "digital")
+                font, outline=colour != STAMP_ORANGE, glow=colour == STAMP_ORANGE)
     surface.flush()
     out = Image.frombuffer("RGBA", (w, h), bytes(surface.get_data()), "raw", "BGRA", 0, 1)
     return out.convert("RGB"), boxes
@@ -297,7 +306,11 @@ class Booth(Adw.ApplicationWindow):
         self.grid_mode = False
         self.grid = Gtk.Grid(row_spacing=12, column_spacing=12, hexpand=True, vexpand=True,
                              row_homogeneous=True, column_homogeneous=True)
+        row_names = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, homogeneous=True, spacing=12)
         self.grid_cells = []
+        for name, _keys in GRID_ROWS:
+            row_names.append(Gtk.Label(label=name, css_classes=["heading"], xalign=0, valign=Gtk.Align.CENTER,
+                                       width_chars=10))
         for n, key in enumerate(GRID_LOOKS):
             pic = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, css_classes=["mk-booth-photo"],
                               cursor=Gdk.Cursor.new_from_name("pointer"))
@@ -313,8 +326,11 @@ class Booth(Adw.ApplicationWindow):
             self.grid_cells.append((key, pic))
         self.view_stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, hexpand=True, vexpand=True)
         self.view_stack.add_named(self.preview, "single")
-        self.view_stack.add_named(self.grid, "grid")
-        overlay = Gtk.Overlay(child=self.view_stack, margin_start=12, margin_end=12, margin_top=8)
+        grid_page = Gtk.Box(spacing=12)
+        grid_page.append(row_names)
+        grid_page.append(self.grid)
+        self.view_stack.add_named(grid_page, "grid")
+        overlay = Gtk.Overlay(child=self.view_stack, margin_start=16, margin_end=16, margin_top=16)
         overlay.add_overlay(self.flash)
         overlay.add_overlay(self.countdown)
 
@@ -327,7 +343,7 @@ class Booth(Adw.ApplicationWindow):
 
         # Room under the pills for the scrollbar, so they never overlap.
         # The looks, by kind, with a search box: All / Vintage / Artistic / Fun.
-        tray = Gtk.Box(spacing=8, margin_start=16, margin_end=16, margin_top=4)
+        tray = Gtk.Box(spacing=12, margin_start=16, margin_end=16, margin_top=12)
         self.look_search = Gtk.SearchEntry(placeholder_text="Find a look…", width_chars=16)
         self.look_search.connect("search-changed", lambda *_: self._filter_looks())
         tray.append(self.look_search)
@@ -343,7 +359,7 @@ class Booth(Adw.ApplicationWindow):
                                                                            self._filter_looks()))
             cats.append(c)
         tray.append(cats)
-        looks = Gtk.Box(spacing=6, margin_start=12, margin_end=12, margin_top=4, margin_bottom=12)
+        looks = Gtk.Box(spacing=8, margin_start=16, margin_end=16, margin_top=8, margin_bottom=16)
         group = None
         self.look_buttons = {}
         for key, label in [(None, "Original")] + [(k, f.label) for k, f in photo.FILTERS.items()]:
@@ -358,13 +374,13 @@ class Booth(Adw.ApplicationWindow):
                                       hscrollbar_policy=Gtk.PolicyType.AUTOMATIC, propagate_natural_height=True,
                                       overlay_scrolling=False, margin_start=4, margin_end=4)
 
-        bottom = Gtk.CenterBox(margin_top=8, margin_bottom=14, margin_start=16, margin_end=16)
+        bottom = Gtk.CenterBox(margin_top=12, margin_bottom=16, margin_start=16, margin_end=16)
         self.timer_btn = Gtk.ToggleButton(icon_name="alarm-symbolic", tooltip_text="3-2-1 countdown",
                                           css_classes=["circular"], valign=Gtk.Align.CENTER)
         self.grid_btn = Gtk.ToggleButton(icon_name="view-grid-symbolic", tooltip_text="Nine looks at once (G)",
                                          css_classes=["circular"], valign=Gtk.Align.CENTER)
         self.grid_btn.connect("toggled", lambda b: self._set_grid(b.get_active()))
-        left = Gtk.Box(spacing=8)
+        left = Gtk.Box(spacing=16)
         left.append(self.timer_btn)
         left.append(self.grid_btn)
         bottom.set_start_widget(left)
@@ -499,7 +515,7 @@ class Booth(Adw.ApplicationWindow):
         if img is None:
             return GLib.SOURCE_REMOVE
         if self.grid_mode:
-            if now - getattr(self, "last_grid", 0) < 1 / 24:  # nine looks at 24 fps: ~10 ms a frame
+            if now - getattr(self, "last_grid", 0) < 1 / 30:  # nine looks at 30 fps on 240 px tiles
                 return GLib.SOURCE_REMOVE
             self.last_grid = now
             tiny = img.resize((GRID_W, round(GRID_W * img.height / img.width)), Image.Resampling.BILINEAR)
@@ -706,6 +722,16 @@ class Booth(Adw.ApplicationWindow):
         self.year.connect("value-changed", lambda *_: self.date_switch.get_active() and self._compose())
         year_row.append(self.year)
         tools.append(year_row)
+        stamp_row = Gtk.Box(spacing=8)
+        self.event_text = Gtk.Entry(placeholder_text="Event badge text (HACKATHON, TOKYO…)", hexpand=True,
+                                    max_length=16)
+        self.event_text.connect("changed", lambda *_: self.date_switch.get_active() and self._compose())
+        stamp_row.append(self.event_text)
+        stamp_row.append(Gtk.Label(label="White"))
+        self.stamp_white = Gtk.Switch(valign=Gtk.Align.CENTER, tooltip_text="Faded white stamp instead of orange")
+        self.stamp_white.connect("notify::active", lambda *_: self.date_switch.get_active() and self._compose())
+        stamp_row.append(self.stamp_white)
+        tools.append(stamp_row)
 
         row = Gtk.Box(spacing=12, margin_top=12)
         retake = Gtk.Button(label="Retake", css_classes=["pill"])
@@ -778,13 +804,19 @@ class Booth(Adw.ApplicationWindow):
         date = None
         if self.date_switch.get_active():
             style = list(DATE_STYLES)[self.date_style.get_selected()]
-            fmt = "'%y %m %d" if style == "digital" else "%d %b %Y" if style == "typewriter" else "%d/%m/%y"
+            fmt = {"digital": "'%y %m %d", "typewriter": "%d %b %Y", "clean": "%-d %B %Y"}.get(style, "%d/%m/%y")
             taken = datetime.datetime(*self.taken_at[:6])
             try:  # the year you picked (a '98 print), the day it was taken
                 taken = taken.replace(year=int(self.year.get_value()))
             except ValueError:  # 29 February in a year without one
                 taken = taken.replace(year=int(self.year.get_value()), day=28)
-            date = (style, taken.strftime(fmt))
+            text = taken.strftime(fmt)
+            if style == "event":  # HACKATHON '26: your words, the year as '26
+                text = (self.event_text.get_text().strip().upper() or "MK") + taken.strftime(" '%y")
+            if style == "clean":
+                text = time.strftime(fmt)
+            colour = STAMP_WHITE if self.stamp_white.get_active() else DATE_STYLES[style][2]
+            date = (style, text, colour)
         noir = self.frame_on and list(photo.FRAME_COLOURS)[self.frame_colour.get_selected()] == "noir"
         return draw_items(base, placed, self.caption.get_text().strip() if self.frame_on else None,
                           caption_box, date, (px, py, pw, ph), caption_font=self._font_key(),
@@ -985,7 +1017,7 @@ class Booth(Adw.ApplicationWindow):
             return True
         if self.stack.get_visible_child_name() == "decorate" and not self.text_entry.has_focus() \
                 and not self.caption.has_focus():
-            if keyval == Gdk.KEY_Delete:
+            if keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
                 self._delete_selected()
                 return True
             if keyval == Gdk.KEY_Escape:

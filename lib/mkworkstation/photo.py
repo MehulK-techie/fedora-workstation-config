@@ -101,7 +101,7 @@ def popart(img):
     return out
 
 
-@look("distort", "Distort")
+@look("distort", "Funhouse Warp")
 def distort(img, strength=0.55, grid=24):
     """Fisheye bulge: each output point looks closer to the middle of the source."""
     src = rgb(img)
@@ -144,8 +144,13 @@ def _vignette_mask(w, h, start=0.45, strength=0.55):
 
 # Card stock: (paper, its grain) colours.
 FRAME_COLOURS = {"white": ("Classic white", (244, 241, 233), (222, 217, 205)),
-                 "cream": ("Vintage cream", (238, 227, 202), (215, 200, 170)),
-                 "noir": ("Matte noir", (30, 29, 32), (46, 44, 48))}
+                 "aged": ("Aged paper", (226, 211, 178), (196, 176, 136)),
+                 "noir": ("Matte noir", (30, 29, 32), (46, 44, 48)),
+                 "cream": ("Pastel cream", (246, 236, 210), (226, 214, 184)),
+                 "blush": ("Pastel blush", (246, 222, 222), (228, 198, 200)),
+                 "mint": ("Pastel mint", (220, 240, 228), (196, 222, 206)),
+                 "rainbow": ("Rainbow stripe", (244, 241, 233), (222, 217, 205))}
+RAINBOW = ((230, 70, 60), (245, 150, 50), (245, 205, 60), (90, 180, 90), (60, 130, 210))
 
 
 def _paper(w, h, seed=7, colour="white"):
@@ -206,7 +211,22 @@ def polaroid_frame(photo, colour="white"):
     lip = max(1, round(s * 0.003))
     card.paste(Image.new("RGB", (s + lip, lip), edge), (side, top + s))
     card.paste(Image.new("RGB", (lip, s), edge), (side + s, top))
-    return card, (side, top, s, s), (side, top + s, s, bottom)
+    if colour == "aged":  # weathered: darker, tea-stained edges and a few spots
+        mask = _vignette_mask(card_w, card_h, 0.3, 0.75)
+        card = Image.composite(Image.new("RGB", card.size, (150, 118, 72)), card, mask)
+        card.paste(shaded, (side, top))  # the stains stay on the card, not the photo
+        from PIL import ImageDraw
+        rand = random.Random(card_w)
+        d = ImageDraw.Draw(card, "RGBA")
+        for _ in range(14):
+            x, y, r = rand.uniform(0, card_w), rand.uniform(top + s, card_h), rand.uniform(2, card_w * 0.02)
+            d.ellipse((x - r, y - r, x + r, y + r), fill=(120, 90, 50, rand.randint(20, 60)))
+    elif colour == "rainbow":  # the 70s/80s instant-film stripe along the bottom
+        band = max(2, round(bottom * 0.05))
+        y0 = card_h - round(bottom * 0.34)
+        for i, rgb in enumerate(RAINBOW):
+            card.paste(Image.new("RGB", (card_w - 2 * side, band), rgb), (side, y0 + i * band))
+    return card, (side, top, s, s), (side, top + s, s, bottom - (round(bottom * 0.3) if colour == "rainbow" else 0))
 
 
 def _grain(size, seed=5):
@@ -312,7 +332,7 @@ def light_leak(img, kind):
     return Image.composite(lit, photo, _leak_mask(kind, w, h).point(lambda v: round(v * 0.85)))
 
 
-@look("flash", "Flash")
+@look("flash", "High-Contrast Flash")
 def flash(img):
     """Direct flash in a party booth: bright faces, deep shadows, crisp."""
     photo = rgb(img)
@@ -337,7 +357,7 @@ def instant(img):
     return photo.filter(ImageFilter.GaussianBlur(0.6))
 
 
-@look("film", "Film")
+@look("film", "90s Film")
 def film(img):
     """Analog film: organic warmth, muted greens, gentle grain."""
     photo = rgb(img)
@@ -358,6 +378,80 @@ def film(img):
     return ImageChops.overlay(photo, _CACHE[key])
 
 
+@look("portra", "Portrait 400")
+def portra(img):
+    """Portrait colour film: warm, gentle contrast, creamy skin, soft greens."""
+    photo = ImageEnhance.Contrast(rgb(img)).enhance(0.9)
+    r, g, b = photo.split()
+    r = r.point(lambda v: min(255, round(v * 1.05 + 6)))
+    g = g.point(lambda v: min(255, round(v * 1.01 + 3)))
+    b = b.point(lambda v: round(v * 0.93 + 10))
+    photo = ImageEnhance.Color(Image.merge("RGB", (r, g, b))).enhance(0.92)
+    return photo.point(lambda v: 12 + v * (246 - 12) / 255)
+
+
+@look("cyberpunk", "Cyberpunk Bloom")
+def cyberpunk(img):
+    """Teal shadows, magenta highlights, a neon glow over the bright parts."""
+    photo = ImageEnhance.Contrast(rgb(img)).enhance(1.2)
+    grey = photo.convert("L")
+    toned = ImageOps.colorize(grey, (10, 20, 60), (255, 80, 200), mid=(40, 200, 220))
+    photo = Image.blend(photo, toned, 0.6)
+    bright = grey.point(lambda v: 255 if v > 170 else 0).filter(ImageFilter.GaussianBlur(max(2, photo.width / 80)))
+    return ImageChops.screen(photo, Image.merge("RGB", (bright, bright.point(lambda v: v // 3), bright)))
+
+
+@look("duotone", "Duotone")
+def duotone(img):
+    """Two inks: deep blue shadows, coral highlights."""
+    return ImageOps.colorize(ImageOps.autocontrast(rgb(img).convert("L")), (24, 30, 90), (255, 140, 120))
+
+
+@look("vhs", "VHS Glitch")
+def vhs(img):
+    """A worn tape: colour bleeding sideways, scanlines and a glitch band."""
+    photo = rgb(img)
+    w, h = photo.size
+    r, g, b = photo.split()
+    shift = max(2, w // 160)
+    r = ImageChops.offset(r, shift, 0)
+    b = ImageChops.offset(b, -shift, 0)
+    photo = ImageEnhance.Color(Image.merge("RGB", (r, g, b))).enhance(1.2)
+    key = ("scan", w, h)
+    if key not in _CACHE:
+        lines = Image.new("L", (1, h))
+        lines.putdata([200 if y % 3 == 0 else 255 for y in range(h)])
+        _CACHE[key] = lines.resize((w, h))
+    photo = ImageChops.multiply(photo, Image.merge("RGB", [_CACHE[key]] * 3))
+    band_y = int(h * 0.62)
+    band = photo.crop((0, band_y, w, band_y + max(4, h // 18)))
+    photo.paste(ImageChops.offset(band, w // 25, 0), (0, band_y))
+    return photo
+
+
+@look("pixel", "8-Bit Arcade")
+def pixel(img):
+    """Big pixels in a small arcade palette."""
+    photo = rgb(img)
+    w, h = photo.size
+    block = max(4, w // 80)
+    small = photo.resize((max(1, w // block), max(1, h // block)), Image.Resampling.BILINEAR)
+    small = small.quantize(colors=16, method=Image.Quantize.MEDIANCUT).convert("RGB")
+    return small.resize((w, h), Image.Resampling.NEAREST)
+
+
+@look("stretch", "Stretch Fun")
+def stretch(img):
+    """The middle pulled tall, like a funhouse mirror for group photos."""
+    photo = rgb(img)
+    w, h = photo.size
+    third = w // 3
+    middle = photo.crop((third, 0, 2 * third, h)).resize((third, int(h * 1.5)))
+    out = photo.copy()
+    out.paste(middle.crop((0, int(h * 0.25), third, int(h * 0.25) + h)), (third, 0))
+    return out
+
+
 @look("vignette", "Vignette")
 def vignette(img):
     photo = rgb(img)
@@ -372,13 +466,13 @@ def hue_shift(img, degrees=120):
     return Image.merge("HSV", (h.point(lambda x: (x + shift) % 256), s_, v)).convert("RGB")
 
 
-@look("noir", "Noir")
+@look("noir", "Monochrome Noir")
 def noir(img):
     gray = ImageOps.autocontrast(rgb(img).convert("L"), cutoff=2)
     return ImageEnhance.Contrast(gray).enhance(1.35).convert("RGB")
 
 
-@look("retro", "Retro")
+@look("retro", "Warm Sepia")
 def retro(img):
     """Warm sepia, slightly faded, like an old print."""
     gray = rgb(img).convert("L")
@@ -386,7 +480,7 @@ def retro(img):
     return sepia.point(lambda v: 20 + v * 0.9)
 
 
-@look("comic", "Comic")
+@look("comic", "Comic Halftone")
 def comic(img):
     photo = rgb(img)
     flat = ImageOps.posterize(ImageEnhance.Color(photo).enhance(1.6), 3)

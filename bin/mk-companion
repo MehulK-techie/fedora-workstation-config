@@ -43,6 +43,7 @@ from mkworkstation import companion as cstore  # noqa: E402
 from mkworkstation import welcome as wconf  # noqa: E402
 
 APP_ID = "io.github.mehulk.MkCompanion"
+TITLE_MAX = 70  # note titles: long enough for a sentence, short enough for a row
 STORE = cstore.STORE
 OLD_SCRATCHPAD = Path.home() / ".mk_scratchpad.md"
 
@@ -50,6 +51,8 @@ CSS = b"""
 .mk-note-text { background: transparent; font-size: 1.02em; }
 .mk-note-box { background: alpha(@window_fg_color, 0.04); border-radius: 12px; padding: 10px; }
 .mk-title-entry { font-weight: 700; font-size: 1.1em; }
+.mk-title-count { font-size: 0.8em; opacity: 0.5; font-feature-settings: "tnum"; }
+.mk-title-count.mk-near-limit { opacity: 0.9; color: #e5a50a; }
 .mk-done label.title { text-decoration: line-through; opacity: 0.55; }
 .mk-pinned-icon { color: @accent_color; }
 .mk-hero { font-size: 1.5em; font-weight: 800; }
@@ -553,7 +556,7 @@ class CompanionWindow(Adw.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=8,
                       margin_bottom=8, margin_start=8, margin_end=8)
         box.add_css_class("mk-note-box")
-        entry = Gtk.Entry(text=note["title"], placeholder_text="Title")
+        entry = Gtk.Entry(text=note["title"], placeholder_text="Title", max_length=TITLE_MAX)
         entry.add_css_class("flat")
         entry.add_css_class("mk-title-entry")
         text = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=4, bottom_margin=4,
@@ -561,6 +564,35 @@ class CompanionWindow(Adw.ApplicationWindow):
         text.add_css_class("mk-note-text")
         text.get_buffer().set_text(note["body"])
         text.set_size_request(-1, 160)
+        counter = Gtk.Label(css_classes=["mk-title-count"], valign=Gtk.Align.CENTER)
+
+        def count(*_):
+            n = len(entry.get_text())
+            counter.set_label(f"{n}/{TITLE_MAX}")
+            (counter.add_css_class if n >= TITLE_MAX - 10 else counter.remove_css_class)("mk-near-limit")
+        count()
+        entry.connect("changed", count)
+
+        # Enter in the title goes on to the body; Backspace or Up at the very
+        # start of the body comes back to the end of the title.
+        def to_body(*_):
+            text.grab_focus()
+            buf = text.get_buffer()
+            buf.place_cursor(buf.get_start_iter())
+        entry.connect("activate", to_body)
+
+        def body_key(_ctrl, keyval, _code, state):
+            buf = text.get_buffer()
+            at_start = buf.get_iter_at_mark(buf.get_insert()).is_start() and not buf.get_has_selection()
+            if at_start and keyval in (Gdk.KEY_BackSpace, Gdk.KEY_Up) and not state & Gdk.ModifierType.SHIFT_MASK:
+                if keyval == Gdk.KEY_Up or buf.get_char_count() == 0:
+                    entry.grab_focus()
+                    entry.set_position(-1)
+                    return True
+            return False
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", body_key)
+        text.add_controller(keys)
 
         def changed(*_):
             buf = text.get_buffer()
@@ -578,6 +610,7 @@ class CompanionWindow(Adw.ApplicationWindow):
         top = Gtk.Box(spacing=6)
         entry.set_hexpand(True)
         top.append(entry)
+        top.append(counter)
 
         def reminder_changed():
             row.set_subtitle(self._note_subtitle(note))

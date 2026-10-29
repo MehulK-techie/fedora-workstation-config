@@ -3,9 +3,10 @@
 
   aurora   soft light drifting over a dark sky, rising sparks
   web      a brick-built masked hero in red and blue hangs upside down from a
-           web line beside a skyscraper with a neon sign (SIGN_TEXT in
-           screensaver.conf, MK by default), over the city (two parallax
-           layers), with Stan Lee's line on a rooftop billboard; lightning
+           web line beside a skyscraper whose lit windows spell SIGN_TEXT
+           (screensaver.conf, MK by default, up to four letters), over the
+           city (two parallax layers), with a tribute to Stan Lee on a
+           rooftop billboard (TRIBUTE_IMAGE, halftoned); lightning
   knight   a brick-built caped knight stands on a stone gargoyle in the rain;
            the cape moves in the wind, a searchlight sweeps the clouds and
            lights him from behind, lightning
@@ -22,6 +23,7 @@ import math
 import os
 import random
 import time
+from pathlib import Path
 
 import cairo
 
@@ -228,15 +230,19 @@ class Aurora(Scene):
 
 # ---------------------------------------------------------------- web
 
+SIGN_MAX = 4  # letters the tower's window grid holds
+
+
 def sign_text():
-    """The skyscraper's neon sign: SIGN_TEXT in screensaver.conf, up to six
-    letters or digits, upper case; MK when unset."""
+    """The letters lit in the skyscraper's windows: SIGN_TEXT in
+    screensaver.conf, up to four letters or digits, upper case; MK when unset
+    (longer text is cut to four)."""
     try:
         from .saver_conf import conf
         text = conf().get("SIGN_TEXT", "MK")
     except (ImportError, ValueError):
         text = "MK"
-    text = "".join(ch for ch in text.strip().strip('"').upper() if ch.isalnum())[:6]
+    text = "".join(ch for ch in text.strip().strip('"').upper() if ch in GLYPHS)[:SIGN_MAX]
     return text or "MK"
 
 
@@ -257,8 +263,9 @@ class WebHang(Scene):
             cr.arc(rand.uniform(0, w), rand.uniform(0, h * 0.55), rand.uniform(0.4, 1.4), 0, 2 * math.pi)
             cr.fill()
         city_far(cr, w, h, h * 0.62, random.Random(9))
-        tower(cr, w, h)
+        tower(cr, w, h, self.sign)
         self.layers = None
+        self.portrait = None
 
     def _city(self, w, h):
         if self.layers is None or self.layers[0] != (w, h):
@@ -301,10 +308,11 @@ class WebHang(Scene):
         cr.fill()
         cornice(cr, w, ledge, anchor_x)
 
-        neon_sign(cr, w * 0.65, h * 0.37, min(h * 0.075, w * 0.17 / max(2, len(self.sign)) * 1.4), t, self.sign)
-        # the billboard sits on a near rooftop: it drifts with the near city
+        # the tribute sits on a near rooftop: it drifts with the near city
         near = -80 + math.sin(t * 0.05) * 80
-        billboard(cr, w * 0.04 + near, h * 0.62, w * 0.25, h * 0.15, t, h)
+        if self.portrait is None:
+            self.portrait = tribute_portrait(int(h * 0.15))
+        billboard(cr, w * 0.06 + near, h * 0.40, h * 0.20, h * 0.25, t, h, self.portrait)
         self._lightning(cr, w, h, t)
 
         cr.save()
@@ -435,65 +443,103 @@ class WebHang(Scene):
         cr.restore()
 
 
-def neon_sign(cr, cx, cy, size, t, text="MK"):
-    """TEXT in neon tubes mounted straight on the facade, among its lit
-    windows: a soft dark halo keeps it readable, then glow, tube and hot core.
-    It flickers now and then."""
-    tick = int(t * 12)
-    flicker = 0.35 if (tick * 2654435761) % 97 < 3 else 1.0
-    cr.save()
-    cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-    cr.set_font_size(size)
-    ext = cr.text_extents(text)
-    cr.move_to(cx - ext.width / 2 - ext.x_bearing, cy + ext.height / 2)
-    cr.text_path(text)
-    path = cr.copy_path()
-    cr.new_path()
-    # the windows right behind the tubes dim a little, so the letters read
-    for width, alpha in ((size * 0.55, 0.18), (size * 0.32, 0.25)):
-        cr.append_path(path)
-        cr.set_source_rgba(0.02, 0.02, 0.06, alpha)
-        cr.set_line_width(width)
-        cr.stroke()
-    for width, alpha in ((size * 0.42, 0.06), (size * 0.24, 0.12), (size * 0.12, 0.25)):  # glow
-        cr.append_path(path)
-        cr.set_source_rgba(1.0, 0.18, 0.42, alpha * flicker)
-        cr.set_line_width(width)
-        cr.stroke()
-    cr.append_path(path)
-    cr.set_line_width(max(1.5, size * 0.045))
-    cr.set_source_rgba(1.0, 0.55, 0.72, 0.95 * flicker)  # the tube
-    cr.stroke_preserve()
-    cr.set_line_width(max(0.8, size * 0.015))
-    cr.set_source_rgba(1.0, 0.92, 0.96, flicker)  # its hot core
-    cr.stroke()
-    cr.restore()
+# A 5 x 7 window font: each "1" is a lit office window.
+GLYPHS = {
+    "A": "01110 10001 10001 11111 10001 10001 10001", "B": "11110 10001 10001 11110 10001 10001 11110",
+    "C": "01111 10000 10000 10000 10000 10000 01111", "D": "11110 10001 10001 10001 10001 10001 11110",
+    "E": "11111 10000 10000 11110 10000 10000 11111", "F": "11111 10000 10000 11110 10000 10000 10000",
+    "G": "01111 10000 10000 10011 10001 10001 01111", "H": "10001 10001 10001 11111 10001 10001 10001",
+    "I": "11111 00100 00100 00100 00100 00100 11111", "J": "00111 00010 00010 00010 00010 10010 01100",
+    "K": "10001 10010 10100 11000 10100 10010 10001", "L": "10000 10000 10000 10000 10000 10000 11111",
+    "M": "10001 11011 10101 10101 10001 10001 10001", "N": "10001 11001 10101 10011 10001 10001 10001",
+    "O": "01110 10001 10001 10001 10001 10001 01110", "P": "11110 10001 10001 11110 10000 10000 10000",
+    "Q": "01110 10001 10001 10001 10101 10010 01101", "R": "11110 10001 10001 11110 10100 10010 10001",
+    "S": "01111 10000 10000 01110 00001 00001 11110", "T": "11111 00100 00100 00100 00100 00100 00100",
+    "U": "10001 10001 10001 10001 10001 10001 01110", "V": "10001 10001 10001 10001 10001 01010 00100",
+    "W": "10001 10001 10001 10101 10101 11011 10001", "X": "10001 10001 01010 00100 01010 10001 10001",
+    "Y": "10001 10001 01010 00100 00100 00100 00100", "Z": "11111 00001 00010 00100 01000 10000 11111",
+    "0": "01110 10011 10101 10101 11001 10001 01110", "1": "00100 01100 00100 00100 00100 00100 01110",
+    "2": "01110 10001 00001 00110 01000 10000 11111", "3": "11110 00001 00001 01110 00001 00001 11110",
+    "4": "00010 00110 01010 10010 11111 00010 00010", "5": "11111 10000 11110 00001 00001 10001 01110",
+    "6": "00110 01000 10000 11110 10001 10001 01110", "7": "11111 00001 00010 00100 01000 01000 01000",
+    "8": "01110 10001 10001 01110 10001 10001 01110", "9": "01110 10001 10001 01111 00001 00010 01100",
+}
+GOLD, CYAN = (0xf5 / 255, 0xc5 / 255, 0x42 / 255), (0x42 / 255, 0xb6 / 255, 0xf5 / 255)
 
 
-def billboard(cr, x, y, bw, bh, t, ground):
-    """A lit rooftop billboard: Stan Lee's silhouette (1922-2018) and his
-    line, two lamps shining up at it, on steel legs, on top of its own
-    building (down to GROUND)."""
+def sign_cells(text):
+    """The lit (column, row) windows that spell TEXT, one blank column
+    between letters; and the block's width in columns."""
+    cells = []
+    for i, ch in enumerate(text):
+        for row, bits in enumerate(GLYPHS[ch].split()):
+            cells += [(i * 6 + col, row) for col, bit in enumerate(bits) if bit == "1"]
+    return set(cells), max(1, len(text) * 6 - 1)
+
+
+_PORTRAIT = Path.home() / ".config/mk-workstation/tribute.jpg"
+
+
+def tribute_portrait(size):
+    """A square halftone of ~/.config/mk-workstation/tribute.jpg (a photo
+    you choose), SIZE pixels; None without one, and the billboard draws a
+    silhouette instead."""
+    path = Path(conf_value("TRIBUTE_IMAGE", "") or _PORTRAIT).expanduser()
+    if size < 16 or not path.is_file():
+        return False
+    try:
+        from PIL import Image, ImageOps
+        img = ImageOps.autocontrast(ImageOps.fit(Image.open(path).convert("L"), (size, size)), cutoff=2)
+    except Exception:  # noqa: BLE001 - any bad file: fall back to the silhouette
+        return False
+    surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+    cr = cairo.Context(surf)
+    cr.set_source_rgb(0.95, 0.94, 0.9)  # newsprint
+    cr.paint()
+    cr.set_source_rgb(0.05, 0.05, 0.08)
+    cell = max(3, size // 48)
+    px = img.load()
+    for y in range(0, size, cell):
+        for x in range(0, size, cell):
+            dark = 1 - px[x, y] / 255
+            if dark > 0.04:
+                cr.arc(x + cell / 2, y + cell / 2, cell * 0.72 * math.sqrt(dark), 0, 2 * math.pi)
+                cr.fill()
+    return surf
+
+
+def conf_value(key, default):
+    try:
+        from .saver_conf import conf
+        return conf().get(key, default).strip().strip('"')
+    except (ImportError, ValueError):
+        return default
+
+
+def billboard(cr, x, y, bw, bh, t, ground, portrait=None):
+    """Stan Lee's tribute on its own building: a lit frame with his portrait
+    (halftone, or a silhouette), his line beneath it and 1922-2018, two lamps
+    shining up at it, on steel legs on the roof (down to GROUND)."""
     cr.save()
-    roof = y + bh * 1.5
+    roof = y + bh * 1.12
     cr.set_source_rgb(0.03, 0.025, 0.07)  # the building it stands on
-    cr.rectangle(x - bw * 0.08, roof, bw * 1.16, ground - roof)
+    cr.rectangle(x - bw * 0.25, roof, bw * 1.5, ground - roof)
     cr.fill()
     rand = random.Random(41)
     for wy in range(int(roof) + 16, int(ground) - 8, 20):  # its lit windows
-        for wx in range(int(x - bw * 0.08) + 10, int(x + bw * 1.08) - 10, 16):
+        for wx in range(int(x - bw * 0.25) + 10, int(x + bw * 1.25) - 10, 16):
             if rand.random() < 0.3:
-                cr.set_source_rgba(1.0, 0.85, 0.55, rand.uniform(0.3, 0.75))
+                cr.set_source_rgba(*GOLD, rand.uniform(0.3, 0.75))
                 cr.rectangle(wx, wy, 7, 9)
                 cr.fill()
     cr.set_source_rgb(0.05, 0.05, 0.08)  # legs and catwalk
     for lx in (x + bw * 0.2, x + bw * 0.8):
-        cr.rectangle(lx - 3, y + bh, 6, bh * 0.5)
+        cr.rectangle(lx - 3, y + bh, 6, roof - y - bh)
     cr.rectangle(x - 6, y + bh, bw + 12, 5)
     cr.fill()
     panel = cairo.LinearGradient(x, y, x, y + bh)  # lit from below
-    panel.add_color_stop_rgb(0, 0.07, 0.08, 0.14)
-    panel.add_color_stop_rgb(1, 0.20, 0.19, 0.24)
+    panel.add_color_stop_rgb(0, 0.06, 0.07, 0.12)
+    panel.add_color_stop_rgb(1, 0.17, 0.16, 0.21)
     cr.set_source(panel)
     cr.rectangle(x, y, bw, bh)
     cr.fill()
@@ -504,36 +550,61 @@ def billboard(cr, x, y, bw, bh, t, ground):
     flick = 0.85 + 0.15 * math.sin(t * 7.3) * math.sin(t * 2.1)  # old lamps
     for lx in (x + bw * 0.25, x + bw * 0.75):
         beam = cairo.LinearGradient(0, y + bh, 0, y)
-        beam.add_color_stop_rgba(0, 1, 0.92, 0.7, 0.28 * flick)
+        beam.add_color_stop_rgba(0, 1, 0.92, 0.7, 0.22 * flick)
         beam.add_color_stop_rgba(1, 1, 0.92, 0.7, 0.0)
         cr.set_source(beam)
         cr.move_to(lx - 4, y + bh + 2)
-        cr.line_to(lx - bw * 0.22, y)
-        cr.line_to(lx + bw * 0.22, y)
+        cr.line_to(lx - bw * 0.3, y)
+        cr.line_to(lx + bw * 0.3, y)
         cr.line_to(lx + 4, y + bh + 2)
         cr.close_path()
         cr.fill()
         cr.set_source_rgb(0.1, 0.1, 0.12)
         cr.rectangle(lx - 5, y + bh + 2, 10, 5)
         cr.fill()
-    r = bh * 0.3
-    cr.rectangle(x, y, bw, bh)
-    cr.clip()
-    stan_lee(cr, x + bh * 0.42, y + bh * 0.45, r, 1.0)
-    cr.reset_clip()
-    tx = x + bh * 0.95
-    cr.select_font_face("Serif", cairo.FONT_SLANT_ITALIC, cairo.FONT_WEIGHT_BOLD)
-    size = min(bh * 0.15, (bw - (tx - x) - 8) / 13)
+    # the portrait, centred in the top of the frame
+    side = bh * 0.6
+    px, py = x + (bw - side) / 2, y + bh * 0.07
+    if portrait:
+        cr.save()
+        cr.translate(px, py)
+        cr.scale(side / portrait.get_width(), side / portrait.get_height())
+        cr.set_source_surface(portrait, 0, 0)
+        cr.paint_with_alpha(0.92)
+        cr.restore()
+    else:
+        cr.set_source_rgb(0.12, 0.13, 0.2)
+        cr.rectangle(px, py, side, side)
+        cr.fill()
+        cr.save()
+        cr.rectangle(px, py, side, side)
+        cr.clip()
+        stan_lee(cr, px + side * 0.45, py + side * 0.45, side * 0.26, 1.0)
+        cr.restore()
+    cr.set_source_rgba(1, 0.95, 0.85, 0.5)
+    cr.set_line_width(1.5)
+    cr.rectangle(px, py, side, side)
+    cr.stroke()
+    # the quote underneath, centred, sized to the frame
+    lines = ("“With great power comes", "great responsibility.”")
+    cr.select_font_face("Serif", cairo.FONT_SLANT_ITALIC, cairo.FONT_WEIGHT_NORMAL)
+    cr.set_font_size(100)
+    widest = max(cr.text_extents(line).x_advance for line in lines)
+    size = min(bh * 0.075, (bw * 0.9) / widest * 100)
     cr.set_font_size(size)
     cr.set_source_rgba(1, 0.97, 0.9, 0.95)
-    for i, line in enumerate(("With great power", "comes great", "responsibility.")):
-        cr.move_to(tx, y + bh * 0.3 + i * size * 1.2)
+    top = py + side + size * 1.5
+    for i, line in enumerate(lines):
+        ext = cr.text_extents(line)
+        cr.move_to(x + (bw - ext.x_advance) / 2, top + i * size * 1.25)
         cr.show_text(line)
     cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
-    cr.set_font_size(size * 0.6)
-    cr.set_source_rgba(1, 0.85, 0.6, 0.85)
-    cr.move_to(tx, y + bh * 0.3 + 3 * size * 1.2 + size * 0.3)
-    cr.show_text("Excelsior! — Stan Lee, 1922–2018")
+    cr.set_font_size(size * 0.7)
+    cr.set_source_rgba(*GOLD, 0.9)
+    sub = "Stan Lee • 1922–2018"
+    ext = cr.text_extents(sub)
+    cr.move_to(x + (bw - ext.x_advance) / 2, top + 2 * size * 1.25 + size * 0.2)
+    cr.show_text(sub)
     cr.restore()
 
 
@@ -667,9 +738,10 @@ def cornice(cr, w, bottom, anchor_x):
     cr.fill()
 
 
-def tower(cr, w, h):
+def tower(cr, w, h, sign="MK"):
     """The skyscraper the hero hangs beside: setbacks, a spire, rows of lit
-    windows, a cool rim light down one edge."""
+    windows, a cool rim light down one edge. SIGN is spelled in its windows,
+    centred on the main tier, as whole floors lit from inside."""
     rand = random.Random(29)
     x, base = w * 0.55, h
     tiers = [(w * 0.20, h * 0.30), (w * 0.15, h * 0.16), (w * 0.10, h * 0.08)]  # width, top y
@@ -686,13 +758,49 @@ def tower(cr, w, h):
         cr.set_source_rgba(0.55, 0.65, 0.95, 0.35)  # rim light
         cr.rectangle(tx, top, 2, bottom - top)
         cr.fill()
-        for wy in range(int(top) + 14, int(bottom) - 10, 18):  # window rows
-            for wx in range(int(tx + 8), int(tx + tw - 10), 14):
-                if rand.random() < 0.32:
+        # Window grid: 14 x 18 px, finer on the main tier when the sign needs
+        # more columns than fit, so it always stays inside the walls.
+        cells, sign_cols = sign_cells(sign) if i == 0 else (set(), 0)
+        cols = max(int((tw - 18) / 14), sign_cols + 4)
+        pitch = (tw - 18) / cols
+        pitch_y = pitch * 18 / 14
+        rows = int((bottom - top - 24) / pitch_y)
+        # short words use 2 x 2 windows per letter pixel, so they fill the tier
+        k = max(1, min(round(cols * 0.75 / max(1, sign_cols)), (cols - 2) // max(1, sign_cols)))
+        cells = {(c * k + dx, r * k + dy) for c, r in cells for dx in range(k) for dy in range(k)}
+        sign_cols, sign_rows = sign_cols * k, 7 * k
+        col0 = (cols - sign_cols) // 2
+        row0 = min(rows - sign_rows - 1, max(2, int((h * 0.34 - top) / pitch_y)))
+        for r in range(rows):
+            wy = top + 14 + r * pitch_y
+            for c in range(cols):
+                wx = tx + 9 + c * pitch
+                sc, sr = c - col0, r - row0
+                in_block = sign_cols and -1 <= sc <= sign_cols and -1 <= sr <= sign_rows
+                if in_block:
+                    if (sc, sr) in cells:  # a lit floor of the sign
+                        glow = cairo.RadialGradient(wx + pitch * 0.25, wy + pitch * 0.32, 0,
+                                                    wx + pitch * 0.25, wy + pitch * 0.32, pitch * 0.9)
+                        glow.add_color_stop_rgba(0, *GOLD, 0.35)
+                        glow.add_color_stop_rgba(1, *GOLD, 0)
+                        cr.set_source(glow)
+                        cr.rectangle(wx - pitch * 0.6, wy - pitch * 0.6, pitch * 1.7, pitch * 1.9)
+                        cr.fill()
+                        cr.set_source_rgba(*GOLD, 0.97)
+                        cr.rectangle(wx, wy, pitch * 0.72, pitch_y * 0.62)
+                        cr.fill()
+                        continue
+                    elif rand.random() < 0.18:  # dark offices around it, a few on cyan
+                        cr.set_source_rgba(*CYAN, 0.22)
+                    else:
+                        continue
+                elif rand.random() < 0.32:
                     warm = rand.random() < 0.8
-                    cr.set_source_rgba(*((1.0, 0.85, 0.55) if warm else (0.6, 0.85, 1.0)), rand.uniform(0.35, 0.85))
-                    cr.rectangle(wx, wy, 7, 9)
-                    cr.fill()
+                    cr.set_source_rgba(*(GOLD if warm else CYAN), rand.uniform(0.3, 0.75))
+                else:
+                    continue
+                cr.rectangle(wx, wy, pitch * 0.5, pitch * 0.64)
+                cr.fill()
     sx = x + tiers[0][0] / 2
     cr.set_source_rgb(0.08, 0.08, 0.16)  # spire
     cr.move_to(sx - 10, tiers[2][1])

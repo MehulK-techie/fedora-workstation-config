@@ -210,7 +210,7 @@ def unlock_app(app_id):
 def folder_key(path):
     """The folder's key: its own password, or from the root key store after polkit."""
     auth = hello()
-    if auth:
+    if auth and item_file("folder", str(path)).exists():
         return folder_key_gui(auth, path)
     if item_file("folder", str(path)).exists():
         for _attempt in range(3):
@@ -230,10 +230,10 @@ def folder_key(path):
 
 
 def folder_key_gui(auth, path):
-    """The unlock dialog: Face ID fetches the key from the root store
-    (mk-face-auth), the folder's own password opens it here, and "Use your
-    password…" goes through polkit (fingerprint or password) to the store.
-    The in-app fingerprint reader is off: a key needs a root-checked answer."""
+    """The unlock dialog for a folder with its own password: typed here, or
+    "Use the system prompt…" for polkit (fingerprint or account password)
+    and the root key store. No Face ID or in-app fingerprint: those only say
+    "it's you" to whoever asks, so they never release a key."""
     found = {}
     check = None
     if item_file("folder", str(path)).exists():
@@ -252,7 +252,7 @@ def folder_key_gui(auth, path):
             auth.GLib.idle_add(callback, ok, result.stdout if ok else None)
         threading.Thread(target=work, daemon=True).start()
     ok, payload = auth.ask(f"Open {path.name}", check, placeholder="The folder's password",
-                           face_request=f"KEY {path}", fingerprint=False, system=system)
+                           face=False, fingerprint=False, system=system)
     key = found.get("key") or payload
     if not ok or not key:
         die("Not confirmed; the folder stays closed.")

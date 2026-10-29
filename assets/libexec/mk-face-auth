@@ -7,34 +7,26 @@ systemd starts one copy per connection on /run/mk-face-auth.sock
 (mk-face-auth.socket, Accept=yes). It asks the kernel who connected
 (SO_PEERCRED), so an app can only check its own user's face, then runs the
 PAM service mk-auth (/etc/pam.d/mk-auth: pam_howdy only) for that user.
-The client sends one request line (nothing within a second counts as CHECK):
-  CHECK                  is it the user?
-  KEY <folder path>      is it the user? then hand over that folder's mk-lock
-                         key, from the caller's own root-only store
-                         (/var/lib/mk-lock/UID, the one mk-lock-key keeps)
-and gets one line back:
-  OK                     the face matched (CHECK)
-  OK <base64 key>        the face matched; the key (KEY)
+Clients may send "CHECK" first (anything else is refused). It answers one
+line:
+  OK                     the face matched
   NO <reason>            it didn't, or there was nothing to compare with
   BUSY                   another check is running, or one ran under 3 s ago
-A face hands over a folder key only where it already guards sudo
-(pam_howdy in /etc/pam.d/sudo): an IR camera, or a regular webcam you
-explicitly trusted in register-face.sh. A printed photo can fool a regular
-webcam, so otherwise KEY answers NO and the folder takes your password.
 Only the user of seat0's active, local session is checked (not a remote or
 background session): anyone else gets NO, so another account can't keep the
 camera busy for the person at the computer.
+It only ever says yes or no: it never hands out a secret (a folder key). Any
+program running as the user could ask while they sit at the camera and get
+a match without them knowing, so a yes here is a gate, not a key; folder
+keys stay behind polkit's visible prompt (mk-lock-key).
 No password is ever checked here: a root service trying passwords for any
 local caller would be a guessing oracle (and could trip pam_faillock).
 """
-import base64
 import ctypes
 import ctypes.util
 import fcntl
-import hashlib
 import os
 import pwd
-import re
 import signal
 import socket
 import struct
@@ -45,8 +37,6 @@ import time
 SERVICE = "mk-auth"
 MODELS = "/etc/howdy/models"
 STATE = "/run/mk-face-auth"
-KEYS = "/var/lib/mk-lock"
-SUDO_PAM = "/etc/pam.d/sudo"
 MIN_GAP = 3.0       # seconds between two checks for one user
 TIME_LIMIT = 20     # seconds for the whole check
 
@@ -135,37 +125,14 @@ def at_the_seat(uid):
 
 
 def read_request(conn):
-    """("CHECK", None) or ("KEY", path); None for anything else."""
+    """True for CHECK (or nothing sent within a second)."""
     conn.settimeout(1.0)
     try:
-        line = conn.makefile("rb").readline(4200).decode(errors="strict").rstrip("\n")
-    except (OSError, UnicodeDecodeError, socket.timeout):
+        line = conn.makefile("rb").readline(64).decode(errors="replace").strip()
+    except (OSError, socket.timeout):
         line = ""
     conn.settimeout(None)
-    if line in ("", "CHECK"):
-        return "CHECK", None
-    if line.startswith("KEY /") and "\0" not in line:
-        return "KEY", line[4:]
-    return None
-
-
-def folder_key(uid, path):
-    """The key mk-lock-key stored for UID's folder PATH, or None."""
-    name = hashlib.sha256(path.encode()).hexdigest() + ".key"
-    try:
-        with open(os.path.join(KEYS, str(uid), name), "rb") as f:
-            return f.read(4096)
-    except OSError:
-        return None
-
-
-def face_trusted_for_keys():
-    """True when Howdy also guards sudo: the camera was trusted that far."""
-    try:
-        with open(SUDO_PAM) as f:
-            return any(re.match(r"\s*auth\s.*\bpam_howdy\.so\b", line) for line in f)
-    except OSError:
-        return False
+    return line in ("", "CHECK")
 
 
 def answer(conn, text):
@@ -187,16 +154,8 @@ def main():
     except (OSError, KeyError):
         answer(conn, "NO unknown caller")
         return 0
-    request = read_request(conn)
-    if request is None:
+    if not read_request(conn):
         answer(conn, "NO bad request")
-        return 0
-    kind, path = request
-    if kind == "KEY" and not face_trusted_for_keys():
-        answer(conn, "NO this camera can't open folders (use your password)")
-        return 0
-    if kind == "KEY" and folder_key(uid, path) is None:
-        answer(conn, "NO no key stored for that folder")
         return 0
     # Only the person at the computer (seat0's active, local session) can be in
     # front of the camera; anyone else could only keep it busy for them.
@@ -222,13 +181,7 @@ def main():
         pass
     open(stamp, "w").close()
     ok, message = authenticate(user)
-    if not ok:
-        answer(conn, f"NO {message or 'not recognized'}")
-    elif kind == "KEY":
-        key = folder_key(uid, path)
-        answer(conn, "OK " + base64.b64encode(key).decode() if key is not None else "NO key gone")
-    else:
-        answer(conn, "OK")
+    answer(conn, "OK" if ok else f"NO {message or 'not recognized'}")
     return 0
 
 

@@ -88,24 +88,20 @@ def face_available():
     return os.path.exists(FACE_SOCKET)
 
 
-def check_face(callback, request="CHECK"):
+def check_face(callback):
     """Ask mk-face-auth whether the face at the camera is ours; callback(ok,
-    message) on the main loop. Never blocks the window. With request
-    "KEY <folder>", message is the folder's key when ok."""
+    message) on the main loop. Never blocks the window."""
     def work():
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
                 conn.settimeout(25)
                 conn.connect(FACE_SOCKET)
-                conn.sendall(request.encode() + b"\n")
+                conn.sendall(b"CHECK\n")
                 reply = conn.makefile().readline().strip()
         except OSError as err:
             reply = f"NO {err.strerror or 'Face ID unavailable'}"
-        ok = reply == "OK" or reply.startswith("OK ")
-        if ok:
-            message = base64.b64decode(reply[3:]).decode() if request.startswith("KEY ") else ""
-        else:
-            message = "Face ID is busy; try again in a moment" if reply == "BUSY" else reply[3:]
+        ok = reply == "OK"
+        message = "Face ID is busy; try again in a moment" if reply == "BUSY" else reply[3:]
         GLib.idle_add(callback, ok, message)
     threading.Thread(target=work, daemon=True).start()
 
@@ -276,18 +272,17 @@ class UnlockDialog(Adw.Dialog):
     field is hidden). on_success() runs once, after the dialog closes.
     creating=True asks for a new PIN instead (no fingerprint: there's no PIN
     to fall back on yet).
-    face_request: what Face ID asks mk-face-auth ("KEY <folder>" hands back
-    a folder key, kept in self.payload). fingerprint=False skips the reader
-    (when only a root-checked answer will do). system: a function(callback)
+    face=False skips Face ID and fingerprint=False the reader: both only
+    say "it's you", so they can't stand in where a secret must be released. system: a function(callback)
     replacing the polkit check behind "Use the system prompt…", for callers
     that need what the prompt unlocks (callback(ok, payload))."""
 
     def __init__(self, heading, check, on_success, creating=False, placeholder=None,
-                 face_request="CHECK", fingerprint=True, system=None):
+                 face=True, fingerprint=True, system=None):
         super().__init__(title=heading, content_width=360, follows_content_size=True)
         self.check = check
         self.on_success = on_success
-        self.face_request = face_request
+        self.face = face
         self.system = system
         self.payload = None
         self.secret_word = "password" if placeholder else "PIN"
@@ -335,7 +330,7 @@ class UnlockDialog(Adw.Dialog):
             GLib.idle_add(lambda: self.entry.grab_focus() and False)  # once: True would repeat it forever
         else:
             self._say()
-            if face_available():
+            if face and face_available():
                 GLib.idle_add(self._start_face)
             if fingerprint:
                 self.finger = FingerprintListener(self._on_finger)
@@ -360,7 +355,7 @@ class UnlockDialog(Adw.Dialog):
         self.face_state = "looking"
         self.retry_face.set_visible(False)
         self._say()
-        check_face(self._on_face, self.face_request)
+        check_face(self._on_face)
         return False
 
     def _on_face(self, ok, message):
@@ -368,7 +363,6 @@ class UnlockDialog(Adw.Dialog):
             return False
         if ok:
             self.ring.face = True
-            self.payload = message or None
             self._succeed()
             return False
         self.face_state = "missed"

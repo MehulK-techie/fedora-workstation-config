@@ -79,10 +79,11 @@ enrolled finger is connected. The check runs as root in `mk-face-auth`
 
 - **Locked apps:** your face, your fingerprint, the app's own password, or
   your account password in the system prompt.
-- **Locked folders and the vault:** your face hands over the folder's key
-  only when face unlock also guards `sudo` (an IR camera, or a webcam you
-  trusted in step 4). Otherwise use the folder's own password or **Use your
-  password…** (fingerprint or account password, through polkit).
+- **Locked folders and the vault:** the folder's own password, or **Use the
+  system prompt…** (fingerprint or account password, through polkit). Face ID
+  never opens a folder: `mk-face-auth` answers yes or no to any program
+  running as you, so a match could be triggered without you noticing while
+  you sit at the camera. A key needs a prompt you can see.
 - Passwords are never checked by `mk-face-auth`: a root service that tried
   passwords for any caller would be a guessing oracle.
 

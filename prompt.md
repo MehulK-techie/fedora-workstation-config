@@ -83,6 +83,14 @@ its own, all reproducible from plain text in this repository.
     with delete and one sudo per enrollment, stricter Howdy settings, a
     still skyline with twinkling offices, the colourful MK Workstation
     Tour.
+14. **Fixes from real use.** Control Center no longer hangs when an app
+    lock is switched (a dialog presented inside the switch's own handler
+    never returned); Super+V no longer freezes on big screenshots (cards
+    use thumbnails decoded off the main thread), with arrow keys and Enter
+    to paste; a trash button deletes the note; buttons and fields on the
+    page always get their click; tables move freely and scale; sticky
+    notes became text boxes; an eight-slide tour whose buttons open their
+    windows in front.
 
 ## Default keyboard shortcuts
 

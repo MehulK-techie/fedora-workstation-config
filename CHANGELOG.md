@@ -3,6 +3,10 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Fixed:** Control Center hang when switching an app lock; Super+V freezing on big screenshots; Notes' unclickable buttons on the page; the tour's Choose a scene opening behind the tour.
+- **Clipboard:** thumbnails, ↑/↓ between cards, Enter pastes, Page Up/Down.
+- **MK Notes:** a trash button; tables you drag anywhere and scale (⇲); text boxes replace sticky notes.
+- **MK Workstation Tour:** eight slides, each with a working button.
 - **MK Lock:** no more Not Responding when changing a lock (the fingerprint check no longer blocks the window).
 - **MK Notes:** one-click table cells, Text boxes, five highlighter colours, the padlock shows 🔓 while a locked note is open, pinch-to-zoom over the whole page.
 - **Face:** one sudo per enrollment, a face models list with delete, certainty 2.6 and dark_threshold 50.

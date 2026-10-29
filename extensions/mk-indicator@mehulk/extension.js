@@ -169,9 +169,14 @@ export default class MKIndicatorExtension extends Extension {
                 Main.layoutManager.disconnect(this._startupId);
                 this._startupId = 0;
                 greetOnce();
+                // Dash to Dock slides the dock in at login and leaves it up
+                // until the pointer visits it: re-check once its animation
+                // is over, so a window already on screen hides it at once.
+                this._hideDocksSoon(1500);
             });
         } else if (shellAgeSeconds() < 90 && !Main.sessionMode.isLocked) {
             greetOnce();
+            this._hideDocksSoon(1500);
         }
     }
 
@@ -211,17 +216,25 @@ export default class MKIndicatorExtension extends Extension {
         this._wasLocked = locked;
     }
 
-    // After unlocking (and waking from sleep, which unlocks), Dash to Dock
-    // rebuilds its docks and can leave them shown. Hide them once the new
-    // docks exist, unless the pointer is on one: the dock then appears only
-    // when you push the pointer against the screen edge.
-    _hideDocksSoon() {
+    // At login and after unlocking (and waking from sleep, which unlocks),
+    // Dash to Dock (re)builds its docks and can leave them shown until the
+    // pointer visits. Once they exist, let the dock decide again from what's
+    // on screen: hidden over a window (intellihide), hidden when autohide has
+    // nothing under the pointer; the pointer at the screen edge brings it back.
+    _hideDocksSoon(delay = 700) {
         if (this._unlockDockId)
             GLib.source_remove(this._unlockDockId);
-        this._unlockDockId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 700, () => {
+        this._unlockDockId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
             this._unlockDockId = 0;
+            if (Main.overview.visible)
+                return GLib.SOURCE_REMOVE;
             for (const dock of this._docks()) {
-                if (dock.autohideEnabled && !dock._box?.hover && !Main.overview.visible)
+                dock._box?.sync_hover();
+                if (dock._box?.hover)
+                    continue;
+                if (dock.intellihideEnabled && dock.updateDashVisibility)
+                    dock.updateDashVisibility();
+                else if (dock.autohideEnabled)
                     dock.hideDock?.();
             }
             return GLib.SOURCE_REMOVE;

@@ -180,6 +180,7 @@ BASE_CSS = """
 .mk-table-cell { border-right: 1px solid alpha(@window_fg_color, 0.2); border-bottom: 1px solid alpha(@window_fg_color, 0.2); }
 .mk-table-head, .mk-table-head text { font-weight: 700; background: alpha(@accent_bg_color, 0.16); }
 .mk-table-divider { min-width: 5px; margin: 0 -3px; background: transparent; }
+.mk-all-selected { outline: 2px solid #3b82f6; outline-offset: 2px; }
 .mk-table-handle { min-width: 10px; min-height: 10px; margin: -5px; border-radius: 2px;
                    background: white; border: 2px solid #3b82f6; }
 .mk-table-selected .mk-table-grid { outline: 2px solid #3b82f6; outline-offset: 2px; }
@@ -4433,6 +4434,8 @@ class NotesWindow(Adw.ApplicationWindow):
         self.refresh_lists()
 
     def _on_editor_click(self, _gesture, _n, x, y):
+        if getattr(self, "_all_selected", False):
+            self._select_everything(False)
         if self.selected_img:
             self.select_canvas_image(None)
         bx, by = self.view.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(x), int(y))
@@ -4466,7 +4469,38 @@ class NotesWindow(Adw.ApplicationWindow):
             self.dirty = True
             self._queue_save()
 
+    # ---------- Ctrl+A: the whole page
+    def _select_everything(self, on):
+        """Outline every table, picture and text box (the text is selected by
+        the editor itself); off again on the next other key or click."""
+        self._all_selected = on
+        for w in self.canvas_images + self.sticky_notes:
+            (w.add_css_class if on else w.remove_css_class)("mk-all-selected")
+        for t in self.table_items:
+            t._all = on
+            t.select(on)
+
+    def _delete_everything(self):
+        for w in list(self.canvas_images):
+            self.remove_canvas_image(w)
+        for st in list(self.sticky_notes):
+            self.remove_sticky_note(st)
+        for t in list(self.table_items):
+            self.remove_table(t)
+        self._all_selected = False
+        self.save_note_meta()
+
     def _on_editor_key(self, _ctrl, keyval, _code, state):
+        ctrl = state & Gdk.ModifierType.CONTROL_MASK
+        if ctrl and keyval in (Gdk.KEY_a, Gdk.KEY_A):
+            self._select_everything(True)
+            return False  # the editor selects all the text itself
+        if getattr(self, "_all_selected", False):
+            if keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
+                self._delete_everything()  # and the editor deletes the selected text
+                return False
+            if keyval not in (Gdk.KEY_Control_L, Gdk.KEY_Control_R, Gdk.KEY_Shift_L, Gdk.KEY_Shift_R):
+                self._select_everything(False)
         if keyval == Gdk.KEY_Tab and not (state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.SHIFT_MASK)):
             if self._table_tab():
                 return True

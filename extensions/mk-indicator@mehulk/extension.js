@@ -2,6 +2,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { DockGlow } from './dockGlow.js';
@@ -18,6 +19,8 @@ import { AppNap } from './appNap.js';
 import { LockScene } from './lockScene.js';
 import { EmojiBoard, bindEmojiBoard, unbindEmojiBoard } from './emojiBoard.js';
 import { ClipboardHistory, bindClipboardHistory, unbindClipboardHistory } from './clipboardHistory.js';
+
+const SCREENSHOT_KEYS = ['show-screenshot-ui', 'screenshot'];
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -140,6 +143,13 @@ export default class MKIndicatorExtension extends Extension {
         } catch (e) {
             console.warn(`mk-indicator: emoji board key: ${e.message}`);  // schema not compiled yet
         }
+        // GNOME lets the screenshot keys work on the lock screen; keep them to
+        // the unlocked desktop (the lock screen's own UI is all they'd show,
+        // but nothing should be captured or opened until you're signed in).
+        const unlocked = Shell.ActionMode.ALL &
+            ~(Shell.ActionMode.LOGIN_SCREEN | Shell.ActionMode.LOCK_SCREEN | Shell.ActionMode.UNLOCK_SCREEN);
+        for (const name of SCREENSHOT_KEYS)
+            Main.wm.allowKeybinding(name, unlocked);
         this._clipboardHistory = new ClipboardHistory();
         try {
             bindClipboardHistory(this, this._clipboardHistory);
@@ -297,6 +307,8 @@ export default class MKIndicatorExtension extends Extension {
         this._appNap = null;
         this._lockScene?.stop();
         this._lockScene = null;
+        for (const name of SCREENSHOT_KEYS)  // GNOME's own modes again
+            Main.wm.allowKeybinding(name, Shell.ActionMode.ALL & ~Shell.ActionMode.LOGIN_SCREEN);
         if (this._clipboardHistory) {
             unbindClipboardHistory();
             this._clipboardHistory.destroy();

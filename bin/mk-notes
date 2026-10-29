@@ -77,7 +77,11 @@ STICKY_PALETTES = [
     ("Sky Blue", "#bae6fd", "#075985"),
     ("Rose Pink", "#fbcfe8", "#9d174d"),
     ("Lavender", "#e9d5ff", "#5b21b6"),
+    ("Coral", "#fecaca", "#9f1239"),
+    ("Dark", "#1f2328", "#e6e6e6"),
 ]
+
+AUTOLOCK_S = 60  # seconds without input before unlocked notes lock again
 
 THEMES = {
     "obsidian": {
@@ -161,6 +165,7 @@ THEMES = {
 
 BASE_CSS = """
 .mk-sidebar row { border-radius: 8px; margin: 2px 4px; padding: 7px 8px; }
+.mk-comment-active { box-shadow: inset 3px 0 0 @accent_color; background: alpha(@accent_bg_color, 0.18); }
 .mk-sidebar row:selected { background: alpha(@accent_bg_color, 0.25); font-weight: 700; }
 .mk-list row { border-radius: 9px; margin: 3px 6px; padding: 8px 10px; }
 .mk-list row:selected { background: alpha(@accent_bg_color, 0.28); }
@@ -430,14 +435,26 @@ class StickyNoteWidget(Gtk.Box):
         self.data.setdefault("text", "")
 
         head = Gtk.Box(spacing=4)
-        grip = Gtk.Label(label="📌 Sticky Note", xalign=0, hexpand=True,
-                         css_classes=["mk-row-title"], margin_start=4)
+        grip = Gtk.Label(label="📌", margin_start=4)
         grip.set_cursor(Gdk.Cursor.new_from_name("move"))
         head.append(grip)
+        # The title: click it to rename the sticky.
+        self.title = Gtk.Entry(text=self.data.get("title", "Sticky Note"), hexpand=True, has_frame=False,
+                               css_classes=["mk-row-title", "mk-sticky-title"], max_length=40)
+        self.title.connect("changed", lambda e: (self.data.__setitem__("title", e.get_text()), self.win.save_note_meta()))
+        head.append(self.title)
 
-        color_btn = Gtk.Button(icon_name="applications-graphics-symbolic", css_classes=["flat"],
-                               tooltip_text="Change Sticky Color")
-        color_btn.connect("clicked", self._cycle_color)
+        palette = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
+        pop = Gtk.Popover(child=palette)
+        for i, (name, bg, _fg) in enumerate(STICKY_PALETTES):
+            sw = Gtk.Button(tooltip_text=name, css_classes=["mk-swatch"])
+            prov = Gtk.CssProvider()
+            prov.load_from_string(f"button {{ background: {bg}; border: 1px solid alpha(black, 0.25); }}")
+            sw.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 3)
+            sw.connect("clicked", lambda _b, k=i: (self._set_color(k), pop.popdown()))
+            palette.append(sw)
+        color_btn = Gtk.MenuButton(icon_name="color-select-symbolic", css_classes=["flat"],
+                                   tooltip_text="Sticky colour", popover=pop)
         head.append(color_btn)
 
         del_btn = Gtk.Button(icon_name="window-close-symbolic", css_classes=["flat"],
@@ -465,10 +482,12 @@ class StickyNoteWidget(Gtk.Box):
         self._css_prov.load_from_string(
             f".mk-sticky {{ background: {bg}; color: {fg}; border: 1px solid alpha({fg}, 0.22); }}"
             f"textview, textview text {{ background: transparent; color: {fg}; font-size: 0.95em; }}"
+            f"entry.mk-sticky-title, entry.mk-sticky-title text {{ background: transparent; color: {fg}; "
+            f"font-weight: 700; box-shadow: none; min-height: 24px; padding: 0 2px; }}"
         )
 
-    def _cycle_color(self, *_):
-        self.data["color_idx"] = (int(self.data.get("color_idx", 0)) + 1) % len(STICKY_PALETTES)
+    def _set_color(self, idx):
+        self.data["color_idx"] = idx
         self._apply_palette()
         self.win.save_note_meta()
 
@@ -1323,10 +1342,27 @@ class PaperPatternBackground(Gtk.DrawingArea):
 
     def _draw(self, _area, cr, w, h):
         pattern = look_conf().get("PAPER_PATTERN", "dots")
-        if pattern == "plain":
-            return
         preset = THEMES.get(look_conf().get("THEME_PRESET", "obsidian"), THEMES["obsidian"])
         is_dark = preset["dark"]
+        # Where each A4 page ends (1123 px at 96 dpi, times the zoom), like
+        # Word's page breaks: new pages appear as the note grows.
+        page_h = 1123 * max(0.5, self.win.zoom)
+        y, n = page_h, 1
+        cr.set_line_width(1.0)
+        cr.set_dash([6.0, 6.0])
+        while y < h:
+            cr.set_source_rgba(1, 1, 1, 0.16) if is_dark else cr.set_source_rgba(0, 0, 0, 0.14)
+            cr.move_to(0, round(y) + 0.5)
+            cr.line_to(w, round(y) + 0.5)
+            cr.stroke()
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            cr.set_font_size(10)
+            cr.move_to(w - 64, y - 6)
+            cr.show_text(f"Page {n} ⌄")
+            y, n = y + page_h, n + 1
+        cr.set_dash([])
+        if pattern == "plain":
+            return
         cr.set_source_rgba(1, 1, 1, 0.06) if is_dark else cr.set_source_rgba(0, 0, 0, 0.07)
         step = max(18, round(28 * self.win.zoom))
         if pattern == "dots":
@@ -1753,6 +1789,14 @@ class NotesWindow(Adw.ApplicationWindow):
         self.selected_img = None
         self.nav_history = []
         self._unlocked_items = set()
+        self._last_activity = time.monotonic()
+        activity_keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        activity_keys.connect("key-pressed", lambda *a: (self._note_activity(), False)[1])
+        self.add_controller(activity_keys)
+        activity_motion = Gtk.EventControllerMotion(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        activity_motion.connect("motion", self._note_activity)
+        self.add_controller(activity_motion)
+        GLib.timeout_add_seconds(10, self._autolock_tick)
         self.server = None
 
         self.active_formats = set()
@@ -2200,7 +2244,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
         self.color_dialog = Gtk.ColorDialog(title="Choose Text Color", with_alpha=False)
         init_rgba = Gdk.RGBA()
-        init_rgba.parse("#38bdf8")
+        init_rgba.parse("#ffffff")  # the editor's own text colour (dark themes)
         self.text_color_btn = Gtk.ColorDialogButton(dialog=self.color_dialog, rgba=init_rgba,
                                                     tooltip_text="Custom Text Color")
         self.text_color_btn.connect("notify::rgba", self._on_text_color_picked)
@@ -2343,6 +2387,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.buffer = Gtk.TextBuffer()
         self.buffer.connect("changed", self._on_buffer_changed)
         self.buffer.connect_after("insert-text", self._on_after_insert_text)
+        self.buffer.connect("changed", lambda *_: self._queue_table_style())
         self.buffer.connect("mark-set", self._on_cursor_moved)
 
         self.view = Gtk.TextView(
@@ -2391,8 +2436,8 @@ class NotesWindow(Adw.ApplicationWindow):
         doc_body_hbox.append(self.page_scroll)
 
         # Google Docs Style Margin Comments Sidebar (Right side, distinct card container with Resolve / Delete)
-        self.comments_sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, width_request=280,
-                                        css_classes=["mk-sidebar"], visible=False)
+        self.comments_sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, width_request=260,
+                                        css_classes=["mk-sidebar"], visible=False, hexpand=False)
         c_head = Gtk.Box(spacing=6, margin_start=12, margin_end=12, margin_top=12, margin_bottom=8)
         c_head.append(Gtk.Label(label="💬 Margin Comments", xalign=0, hexpand=True, css_classes=["mk-row-title"]))
         new_c_btn = Gtk.Button(icon_name="list-add-symbolic", css_classes=["flat"], tooltip_text="Add Comment")
@@ -2735,6 +2780,69 @@ class NotesWindow(Adw.ApplicationWindow):
         self.dirty = True
         self._queue_save()
 
+    def style_tables(self):
+        """Markdown tables shown as tables: a shaded header, faint column
+        lines, the |---| rule row hidden. Display only: the text stays
+        Markdown (and these tags aren't saved)."""
+        buf = self.buffer
+        table = buf.get_tag_table()
+        tags = [table.lookup(n) for n in ("table-row", "table-head", "table-pipe", "table-rule")]
+        if None in tags:
+            return
+        row_t, head_t, pipe_t, rule_t = tags
+        for t in tags:
+            buf.remove_tag(t, buf.get_start_iter(), buf.get_end_iter())
+        lines = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).split("\n")
+        prev_table = False
+        for n, line in enumerate(lines):
+            is_row = line.lstrip().startswith("|") and line.rstrip().endswith("|") and len(line.strip()) > 1
+            if not is_row:
+                prev_table = False
+                continue
+            start = buf.get_iter_at_line(n)[1]
+            end = start.copy()
+            if not end.ends_line():
+                end.forward_to_line_end()
+            if set(line.strip()) <= set("|-: ") and prev_table:
+                buf.apply_tag(rule_t, start, end)
+                prev_table = True
+                continue
+            buf.apply_tag(row_t, start, end)
+            if not prev_table:
+                buf.apply_tag(head_t, start, end)
+            off = start.get_offset()
+            for i, ch in enumerate(line):
+                if ch == "|":
+                    buf.apply_tag(pipe_t, buf.get_iter_at_offset(off + i), buf.get_iter_at_offset(off + i + 1))
+            prev_table = True
+
+    def _queue_table_style(self):
+        if getattr(self, "_table_style_id", 0):
+            return
+        def run():
+            self._table_style_id = 0
+            self.style_tables()
+            return False
+        self._table_style_id = GLib.timeout_add(250, run)
+
+    def _table_tab(self):
+        """Tab in a table: the next cell; at the end of the last row, a new row."""
+        found = self._table_at_cursor()
+        if not found:
+            return False
+        top, lines, r, _c = found
+        buf = self.buffer
+        cur = buf.get_iter_at_mark(buf.get_insert())
+        line = lines[r]
+        nxt = line.find("|", cur.get_line_offset())
+        if nxt != -1 and nxt < len(line.rstrip()) - 1:
+            buf.place_cursor(buf.get_iter_at_line_offset(cur.get_line(), min(len(line), nxt + 2))[1])
+            return True
+        if r == len(lines) - 1:
+            self.edit_table("row-add")
+        buf.place_cursor(buf.get_iter_at_line_offset(top + min(r + 1, len(lines)), 2)[1])
+        return True
+
     def insert_table(self, cols, rows):
         """A Markdown table, columns padded so it lines up in the mono font:
         a header row, the separator, then ROWS - 1 empty rows."""
@@ -2778,6 +2886,12 @@ class NotesWindow(Adw.ApplicationWindow):
         add_tag("underline", underline=Pango.Underline.SINGLE)
         add_tag("strike", strikethrough=True)
         add_tag("mono", family="Monospace")
+        add_tag("table-row", family="Monospace", paragraph_background="rgba(255,255,255,0.04)",
+                pixels_above_lines=3, pixels_below_lines=3, wrap_mode=Gtk.WrapMode.NONE)
+        add_tag("table-head", weight=Pango.Weight.BOLD, paragraph_background="rgba(124,156,255,0.16)")
+        add_tag("table-pipe", foreground="rgba(160,170,190,0.45)")
+        # The |---| row stays in the text (it's Markdown) but shrinks to a hairline.
+        add_tag("table-rule", foreground="rgba(0,0,0,0)", scale=0.25, pixels_above_lines=0, pixels_below_lines=0)
         add_tag("pdf-chip", background="rgba(239,68,68,0.18)", foreground="#ffb4b4", weight=Pango.Weight.BOLD,
                 underline=Pango.Underline.SINGLE)
         add_tag("h1", weight=Pango.Weight.BOLD, scale=1.60, pixels_above_lines=10, pixels_below_lines=6)
@@ -3042,36 +3156,74 @@ class NotesWindow(Adw.ApplicationWindow):
                 le.forward_to_line_end()
             quote = self.buffer.get_text(ls, le, False).strip()[:60]
 
-        dlg = Adw.AlertDialog(heading="💬 Add Google Docs Style Comment",
-                              body=f"Commenting on: “{quote or 'Selected section'}”")
-        entry = Gtk.Entry(placeholder_text="Write your comment…", activates_default=True)
-        dlg.set_extra_child(entry)
-        dlg.add_response("cancel", "Cancel")
-        dlg.add_response("add", "Add Comment")
-        dlg.set_default_response("add")
-        dlg.set_response_appearance("add", Adw.ResponseAppearance.SUGGESTED)
+        # A slim card at the top of the comments margin, not a dialog.
+        self._open_comment_margin()
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, css_classes=["mk-comment-card"])
+        card.append(Gtk.Label(label=f"“{quote or 'This section'}”", xalign=0, ellipsize=Pango.EllipsizeMode.END,
+                              css_classes=["mk-row-meta"]))
+        entry = Gtk.Entry(placeholder_text="Add a comment…")
+        card.append(entry)
+        row = Gtk.Box(spacing=6, halign=Gtk.Align.END)
+        cancel = Gtk.Button(label="Cancel", css_classes=["flat"])
+        add = Gtk.Button(label="Comment", css_classes=["suggested-action"])
+        row.append(cancel)
+        row.append(add)
+        card.append(row)
+        self.comments_list.prepend(card)
+        marks = (self.buffer.create_mark(None, bounds[0], True), self.buffer.create_mark(None, bounds[1], False)) \
+            if bounds else None
 
-        def done(_d, res):
+        def done(*_):
             txt = entry.get_text().strip()
-            if res == "add" and txt:
-                if bounds:
+            if txt:
+                if marks:
                     t = self.buffer.get_tag_table().lookup("comment-mark")
                     if t:
-                        self.buffer.apply_tag(t, bounds[0], bounds[1])
+                        self.buffer.apply_tag(t, self.buffer.get_iter_at_mark(marks[0]),
+                                              self.buffer.get_iter_at_mark(marks[1]))
                 self.comments.append({
                     "quote": quote or "Note comment",
                     "text": txt,
                     "time": datetime.now().strftime("%d %b, %H:%M"),
                 })
-                self.comments_sidebar.set_visible(True)
-                self.comments_toggle.set_active(True)
-                self._rebuild_comments_panel()
                 self.dirty = True
                 self.save_note_meta()
-
-        dlg.connect("response", done)
-        dlg.present(self)
+            self._rebuild_comments_panel()
+        add.connect("clicked", done)
+        entry.connect("activate", done)
+        cancel.connect("clicked", lambda *_: self._rebuild_comments_panel())
         GLib.idle_add(lambda: entry.grab_focus() and False)  # once: True would repeat it forever
+
+    def _open_comment_margin(self):
+        """Show the comments margin; on a small window the side panels step
+        aside so the page keeps its width (⤢ brings them back)."""
+        if not self.comments_sidebar.get_visible() and self.get_width() < 1400:
+            self.nb_toggle.set_active(False)
+            self.list_toggle.set_active(False)
+        self.comments_sidebar.set_visible(True)
+        self.comments_toggle.set_active(True)
+
+    def focus_comment_at(self, it):
+        """A click on highlighted text: open the margin and point at its comment."""
+        tag = self.buffer.get_tag_table().lookup("comment-mark")
+        if not tag or not it.has_tag(tag):
+            return False
+        start, end = it.copy(), it.copy()
+        if not start.starts_tag(tag):
+            start.backward_to_tag_toggle(tag)
+        if not end.ends_tag(tag):
+            end.forward_to_tag_toggle(tag)
+        text = self.buffer.get_text(start, end, False).strip()
+        self._open_comment_margin()
+        child, i = self.comments_list.get_first_child(), 0
+        while child:
+            cm = self.comments[i] if i < len(self.comments) else {}
+            hit = bool(cm) and (cm.get("quote", "") in text or text[:60] == cm.get("quote", ""))
+            (child.add_css_class if hit else child.remove_css_class)("mk-comment-active")
+            if hit:
+                child.grab_focus()
+            child, i = child.get_next_sibling(), i + 1
+        return True
 
     def _rebuild_comments_panel(self):
         while (c := self.comments_list.get_first_child()) is not None:
@@ -3568,6 +3720,8 @@ class NotesWindow(Adw.ApplicationWindow):
         if not line_e.ends_line():
             line_e.forward_to_line_end()
         line = self.buffer.get_text(line_s, line_e, False)
+        if self.focus_comment_at(it):
+            return
         chip = self.buffer.get_tag_table().lookup("pdf-chip")
         if chip and it.has_tag(chip) and line.startswith("📎 "):
             # Only a PDF that MK Notes attached: attachments/<name>.pdf, a
@@ -3588,6 +3742,9 @@ class NotesWindow(Adw.ApplicationWindow):
             self._queue_save()
 
     def _on_editor_key(self, _ctrl, keyval, _code, state):
+        if keyval == Gdk.KEY_Tab and not (state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.SHIFT_MASK)):
+            if self._table_tab():
+                return True
         if self.selected_img and keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
             self.remove_canvas_image(self.selected_img)
             return True
@@ -4011,7 +4168,12 @@ class NotesWindow(Adw.ApplicationWindow):
         rel = row.rel
         menu = Gio.Menu()
         menu.append("Unpin" if self.vault.is_pinned(rel) else "Pin to Top", f"win.row-pin::{rel}")
-        menu.append("Unlock Note" if rel in self._locked_notes() else "Lock Note 🔒", f"win.row-lock::{rel}")
+        if rel in self._locked_notes():
+            if rel in self._unlocked_items:
+                menu.append("Lock Now 🔒", f"win.row-relock::{rel}")
+            menu.append("Remove Lock Permanently", f"win.row-lock::{rel}")
+        else:
+            menu.append("Lock Note 🔒", f"win.row-lock::{rel}")
         move = Gio.Menu()
         move.append("Main Workspace", f"win.row-move::{rel}|")
         for f in self.vault.folders():
@@ -4024,6 +4186,7 @@ class NotesWindow(Adw.ApplicationWindow):
         for name, cb in (
             ("row-pin", lambda r: (self.vault.set_pinned(r, not self.vault.is_pinned(r)), self.refresh_lists())),
             ("row-lock", self._toggle_specific_note_lock),
+            ("row-relock", self.relock_note),
             ("row-move", self._move_note_to_folder),
             ("row-exp", lambda r: (self.open_note(r), self.quick_export())),
             ("row-del", self.confirm_delete_note),
@@ -4198,6 +4361,26 @@ class NotesWindow(Adw.ApplicationWindow):
                 do_lock()
             else:
                 self._authenticate(f"Lock Note “{Path(rel).stem}”", do_lock)
+
+    def relock_note(self, rel=None):
+        """Close what was unlocked: the note (or all of them) asks again."""
+        if rel:
+            self._unlocked_items.discard(rel)
+        else:
+            self._unlocked_items.clear()
+        if self.rel and self.rel in self._locked_notes() and self.rel not in self._unlocked_items:
+            self.open_note(self._first_note(), record_history=False)
+        self.refresh_lists()
+
+    def _note_activity(self, *_):
+        self._last_activity = time.monotonic()
+
+    def _autolock_tick(self):
+        """Unlocked notes lock again after a minute without typing or the pointer."""
+        if self._unlocked_items and time.monotonic() - getattr(self, "_last_activity", time.monotonic()) > AUTOLOCK_S:
+            self.relock_note()
+            self.toast.add_toast(Adw.Toast(title="Locked again after a minute away 🔒", timeout=3))
+        return GLib.SOURCE_CONTINUE
 
     def _toggle_current_note_lock(self):
         if self.rel:

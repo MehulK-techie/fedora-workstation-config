@@ -1,14 +1,23 @@
 # dconf path: /org/gnome/shell/extensions/clipboard-indicator/
-# Super+V opens it at the pointer (like Windows); type to search; one click
-# pastes the entry and moves it to the top. Ctrl+F11/F12 cycle entries
-# without opening the menu. Password managers' copies never enter history.
+# Super+V opens the menu under its top-bar icon (never at the pointer); type
+# to search, arrows to move, one click pastes and moves the entry to the top.
+# Copied images are kept with a preview button; per-entry buttons are only
+# pin, delete and preview (no tag, edit or extra paste buttons). Ctrl+F11/F12
+# cycle entries without opening it. Password managers' copies never enter history.
 [/]
+cache-images=true
 enable-keybindings=true
 excluded-apps=['KeePassXC', 'org.keepassxc.KeePassXC', 'Bitwarden', '1Password', 'Proton Pass']
 move-item-first=true
 next-history-clear=-1
 notify-on-cycle=false
-open-at-cursor=true
+open-at-cursor=false
+paste-button=false
 paste-on-select=true
+show-delete-button=true
+show-edit-button=false
+show-pin-button=true
+show-preview-button=true
 show-search-bar=true
+show-tag-button=false
 toggle-menu=['<Super>v']

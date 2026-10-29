@@ -1,4 +1,7 @@
 # dconf path: /org/gnome/shell/extensions/tiling-assistant/
+# Super+Left/Right tile on the first press: no "Windows" restore-first step
+# (dynamic-keybinding-behavior=0), and no window picker popping up after a
+# keyboard tile and taking the next key (enable-tiling-popup=false).
 [/]
 activate-layout0=@as []
 activate-layout1=@as []
@@ -10,13 +13,13 @@ center-window=['<Super><Control>c']
 debugging-free-rects=@as []
 debugging-show-tiled-rects=@as []
 default-move-mode=0
-dynamic-keybinding-behavior=3
+dynamic-keybinding-behavior=0
 enable-layout-picker=true
 enable-raise-tile-group=true
 enable-snap-assist=true
 enable-snap-assistant=true
 enable-tile-animations=false
-enable-tiling-popup=true
+enable-tiling-popup=false
 focus-hint=0
 focus-hint-color='rgb(53,132,228)'
 import-layout-examples=false

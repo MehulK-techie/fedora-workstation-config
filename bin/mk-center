@@ -40,7 +40,6 @@ for _lib in (Path(__file__).resolve().parent.parent / "lib",
         break
 from mkworkstation import auth, saver_conf  # noqa: E402
 
-FACE_HELPER = "/usr/local/libexec/mk-face-enroll"
 FINGERS = [("Right index", "right-index-finger"), ("Right thumb", "right-thumb"),
            ("Right middle", "right-middle-finger"), ("Left index", "left-index-finger"),
            ("Left thumb", "left-thumb"), ("Left middle", "left-middle-finger")]
@@ -97,13 +96,16 @@ def run_bg(argv, done=None):
     threading.Thread(target=work, daemon=True).start()
 
 
-def terminal(command):
-    """argv that runs COMMAND (a shell line) in the desktop's terminal and
+def terminal(command, title="MK"):
+    """argv that runs COMMAND (a shell line) in a new terminal window and
     keeps it open until Enter: Ptyxis (Fedora 41+), Console, or GNOME Terminal."""
-    line = f"{command}; read -rp 'Press Enter to close'"
-    for term, flag in (("ptyxis", "--"), ("kgx", "--"), ("gnome-terminal", "--")):
-        if shutil.which(term):
-            return [term, flag, "bash", "-c", line]
+    line = f"{command}; echo; read -rp 'Done. Press Enter to close'"
+    if shutil.which("ptyxis"):  # its own window, even when Ptyxis is already open
+        return ["ptyxis", "--new-window", "-T", title, "--", "bash", "-c", line]
+    if shutil.which("gnome-terminal"):
+        return ["gnome-terminal", f"--title={title}", "--", "bash", "-c", line]
+    if shutil.which("kgx"):
+        return ["kgx", "--", "bash", "-c", line]
     return ["xdg-terminal-exec", "bash", "-c", line]
 
 
@@ -530,58 +532,13 @@ class Center(Adw.ApplicationWindow):
             if not shutil.which("howdy"):
                 self.say("Face unlock needs Howdy: run ./setup.sh (it installs it)")
                 return
-            if not Path(FACE_HELPER).exists():
-                # One-click enrollment comes with ./setup.sh; until then the
-                # guided wizard does the same in a terminal.
-                self.say("Opening the face setup wizard…")
-                run_bg(terminal(f"{shlex.quote(tool('mk'))} face"))
-                return
-            if response == "remove":
-                run_bg(["pkexec", FACE_HELPER, "remove", label],
-                       lambda c, o: self.say(f"Removed face model “{label}”" if c == 0 else o.strip() or "Not removed"))
-                return
-            self._record_face(label, "add")
+            # Howdy itself (sudo howdy add) in a terminal: you see what it
+            # does and answer its questions (replace? close the camera app?).
+            cmd = f"{shlex.quote(tool('mk-face-add'))} {shlex.quote(label)}" + (" --remove" if response == "remove" else "")
+            run_bg(terminal(cmd, "Face Enrollment"))
+            self.say("Face enrollment is in the terminal window; then use Try Face ID")
         dlg.connect("response", answered)
         dlg.present(self)
-
-    def _record_face(self, label, how):
-        """Record (or re-record) LABEL with a scanning ring on screen while
-        the camera works; a name that exists asks before replacing it."""
-        ring = auth.ScannerRing(size=120)
-        ring.face = True
-        ring.set_state("listening")
-        text = Gtk.Label(label="Looking at you… keep still, up to 30 s", css_classes=["dim-label"])
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=18, margin_bottom=24,
-                      margin_start=24, margin_end=24)
-        box.append(ring)
-        box.append(text)
-        view = Adw.ToolbarView(content=box)
-        view.add_top_bar(Adw.HeaderBar())
-        busy = Adw.Dialog(title=f"Recording “{label}”", content_width=340)
-        busy.set_child(view)
-        busy.present(self)
-
-        def recorded(code, out):
-            ring.set_state("match" if code == 0 else "fail")
-            GLib.timeout_add(700, lambda: (busy.close(), False)[1])
-            if code == 0:
-                self.say(f"Recorded “{label}”: try it now")
-                self._try_face()
-            elif code == 3:
-                again = Adw.AlertDialog(heading=f"“{label}” is already recorded",
-                                        body="Record it again and replace the old one?")
-                again.add_response("no", "Keep it")
-                again.add_response("yes", "Replace")
-                again.set_response_appearance("yes", Adw.ResponseAppearance.SUGGESTED)
-                again.connect("response", lambda _a, r: r == "yes" and self._record_face(label, "replace"))
-                GLib.timeout_add(750, lambda: (again.present(self), False)[1])
-            elif code in (126, 127):
-                self.say("Not confirmed; nothing changed")
-            elif code == 124:
-                self.say("The camera didn't answer in 30 s: close apps that use it and try again")
-            else:
-                self.say((out.strip().splitlines() or ["No face found: face the light and try again"])[-1])
-        run_bg(["pkexec", FACE_HELPER, how, label], recorded)
 
     def _finger_dialog(self):
         """Enroll a finger with fprintd, in this window: who and which finger;

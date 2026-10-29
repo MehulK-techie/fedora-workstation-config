@@ -1,0 +1,43 @@
+#!/bin/bash
+# mk-face-add LABEL [--remove]: record one Howdy face model named LABEL for
+# you, straight through `sudo howdy` in this terminal (MK Control Center ›
+# Add a face opens it in a terminal window). It asks before replacing a
+# model with the same name (the new one is recorded first), and before
+# closing apps that hold the camera. Existing models are never cleared.
+set -uo pipefail
+label=${1:-}
+user=$(id -un)
+if [[ ! "$label" =~ ^[A-Za-z0-9_][A-Za-z0-9_\ -]{0,23}$ ]]; then
+    echo "Usage: mk-face-add LABEL [--remove]   (1-24 letters, digits, spaces, - or _)" >&2
+    exit 2
+fi
+command -v howdy > /dev/null || { echo "[-] Howdy isn't installed: run ./setup.sh" >&2; exit 4; }
+model_id() { sudo howdy -U "$user" --plain list 2> /dev/null | awk -F, -v want="$label" '$3 == want { print $1; exit }'; }
+
+echo "Face model \"$label\" for $user (sudo asks for your password once)"
+old=$(model_id)
+if [[ "${2:-}" == --remove ]]; then
+    [[ -n "$old" ]] || { echo "No face model named \"$label\"."; exit 0; }
+    sudo howdy -y -U "$user" remove "$old" && echo "✔ Removed \"$label\"."
+    exit
+fi
+if [[ -n "$old" ]]; then
+    read -rp "A face model named \"$label\" already exists. Record it again and replace it? [y/N] " answer
+    [[ "$answer" =~ ^[yY] ]] || { echo "Kept as it was."; exit 0; }
+fi
+# A browser or call holding the camera makes Howdy wait: name it, ask first.
+holders=$(fuser /dev/video* 2> /dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u | tr '\n' ' ')
+if [[ -n "$holders" ]]; then
+    echo "The camera is in use by: $(for p in $holders; do printf '%s (%s) ' "$(ps -o comm= -p "$p")" "$p"; done)"
+    read -rp "Close them now? [y/N] " close
+    # shellcheck disable=SC2086 # one pid per word
+    [[ "$close" =~ ^[yY] ]] && kill $holders 2> /dev/null && sleep 1
+fi
+echo "Look at the camera (up to 30 s)…"
+if timeout --foreground 30 sudo howdy -y -U "$user" add "$label"; then
+    [[ -n "$old" ]] && sudo howdy -y -U "$user" remove "$old" > /dev/null
+    echo "✔ Recorded \"$label\". Try it: lock the screen, or MK Control Center › Try Face ID."
+else
+    echo "[-] Not recorded (no face found, or the camera didn't answer). Face the light and try again." >&2
+    exit 1
+fi

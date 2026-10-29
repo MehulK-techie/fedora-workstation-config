@@ -72,17 +72,15 @@ The wizard picks an IR camera automatically when your computer has one. On lapto
 ### Add a face from the Control Center (you, or a guest)
 
 MK Control Center › MK Lock › Face & Fingerprint › **Add a face**: pick
-*You (primary)* or *Guest*, keep or change the model's name
-(`primary_model`, `guest`) and press Record; polkit asks for an
-administrator's password once, a scanning ring shows while the camera
-records (up to 30 s), and the unlock window opens so the new face can try
-it straight away. Existing models are never cleared; a name that's already
-recorded asks before it's replaced (the new one is in before the old one
-goes). Before `./setup.sh` has installed the helper, the button opens the
-guided wizard in a terminal instead. A guest's face unlocks **your** account
-(login, sudo, locked apps): remove it after the demo with **Remove this
-model** (the same name). The helper is `/usr/local/libexec/mk-face-enroll`
-and only ever touches the caller's own account.
+*You (primary)* or *Guest*, keep or change the model's name (`primary_model`,
+`guest`) and press Record. A terminal window titled *Face Enrollment* runs
+`mk-face-add`, which calls Howdy directly (`sudo howdy -y -U YOU add NAME`):
+sudo asks for your password once, it asks before replacing a model with the
+same name (the new one is recorded first) and before closing an app that
+holds the camera, and it gives up after 30 s instead of hanging. Existing
+models are never cleared. Then press **Try Face ID**. A guest's face
+unlocks **your** account (login, sudo, locked apps): remove it after the
+demo with **Remove this model** (the same name), or `mk-face-add NAME --remove`.
 
 **Enroll a finger** in the same tab: for you or another account, and which
 finger; a finger that's already enrolled is only scanned again if you say

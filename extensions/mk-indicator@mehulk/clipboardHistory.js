@@ -11,6 +11,7 @@
 // app that marks a copy as a password) never enter it, nor does anything
 // copied while the screen is locked.
 import Clutter from 'gi://Clutter';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
@@ -27,6 +28,8 @@ const MAX_TEXT = 100000;  // characters; longer copies are kept cut short
 const SECRET_HINT = 'x-kde-passwordManagerHint';
 const PASSWORD_APPS = /keepassxc|bitwarden|1password|proton.?pass|org\.gnome\.seahorse|secrets/i;
 const IMAGE_TYPES = ['image/png'];
+const THUMB_W = 360;  // cards show this; the full picture only in the 👁 preview
+const TERMINALS = /terminal|ptyxis|kgx|console|kitty|alacritty|wezterm|ghostty|foot|tilix|konsole/i;
 
 function removeFile(path) {
     try {
@@ -53,6 +56,8 @@ export class ClipboardHistory {
         this._filled = null;         // what the list shows now: [version, tab, query]
         this._orphans = new Set();   // cards to throw away at the next fill
         this._clipboard = St.Clipboard.get_default();
+        this._thumbQueue = this._items.filter(i => i.image && !GLib.file_test(this._thumbPath(i), GLib.FileTest.EXISTS));
+        this._nextThumb();
         this._selection = global.display.get_selection();
         this._ownerId = this._selection.connect('owner-changed', (_s, type) => {
             if (type === Meta.SelectionType.SELECTION_CLIPBOARD)
@@ -70,6 +75,8 @@ export class ClipboardHistory {
         this._dialog?.destroy();
         this._dialog = null;
         this._cards.clear();
+        this._keyboard?.run_dispose();
+        this._keyboard = null;
     }
 
     // ---------------------------------------------------------------- storage
@@ -89,8 +96,10 @@ export class ClipboardHistory {
             Gio.File.new_for_path(DIR).set_attribute_uint32('unix::mode', 0o700, Gio.FileQueryInfoFlags.NONE, null);
             const unpinned = this._items.filter(i => !i.pinned);
             const drop = new Set(unpinned.slice(KEEP).map(i => i.id));
-            for (const item of this._items.filter(i => drop.has(i.id) && i.image))
+            for (const item of this._items.filter(i => drop.has(i.id) && i.image)) {
                 removeFile(item.image);
+                removeFile(this._thumbPath(item));
+            }
             this._items = this._items.filter(i => !drop.has(i.id));
             this._version++;
             GLib.file_set_contents(STORE, JSON.stringify(this._items));
@@ -129,6 +138,44 @@ export class ClipboardHistory {
         });
     }
 
+    _thumbPath(item) {
+        return item.image.replace(/\.png$/, '-thumb.png');
+    }
+
+    // Shrink pictures to card size off the main thread (GdkPixbuf decodes in
+    // a worker), one at a time: a 4K screenshot decoded while drawing the
+    // deck is what made Super+V take seconds.
+    _nextThumb() {
+        if (this._thumbBusy || !this._thumbQueue?.length)
+            return;
+        const item = this._thumbQueue.shift();
+        if (!this._items.includes(item) || !GLib.file_test(item.image, GLib.FileTest.EXISTS)) {
+            this._nextThumb();
+            return;
+        }
+        this._thumbBusy = true;
+        let stream;
+        try {
+            stream = Gio.File.new_for_path(item.image).read(null);
+        } catch (e) {
+            this._thumbBusy = false;
+            this._nextThumb();
+            return;
+        }
+        GdkPixbuf.Pixbuf.new_from_stream_at_scale_async(stream, THUMB_W, THUMB_W, true, null, (_s, res) => {
+            try {
+                const pix = GdkPixbuf.Pixbuf.new_from_stream_finish(res);
+                pix.savev(this._thumbPath(item), 'png', [], []);
+                this._forget(item);  // its card is rebuilt with the thumbnail
+            } catch (e) {
+                // a picture GdkPixbuf can't read keeps the plain card
+            }
+            stream.close(null);
+            this._thumbBusy = false;
+            this._nextThumb();
+        });
+    }
+
     _addImage(bytes) {
         if (!bytes || !bytes.get_size())
             return;
@@ -139,7 +186,13 @@ export class ClipboardHistory {
             const path = GLib.build_filenamev([DIR, `${id}.png`]);
             GLib.file_set_contents(path, bytes.get_data());
             const [w, h] = pngSize(bytes);
-            return {id, image: path, sum, w, h};
+            const item = {id, image: path, sum, w, h};
+            this._thumbQueue.push(item);
+            GLib.idle_add(GLib.PRIORITY_LOW, () => {
+                this._nextThumb();
+                return GLib.SOURCE_REMOVE;
+            });
+            return item;
         });
     }
 
@@ -160,6 +213,7 @@ export class ClipboardHistory {
 
     _show() {
         const d = this._dialog;
+        this._target = global.display.focus_window;  // where Enter pastes
         this._shown = true;
         this._entry.set_text('');
         // Nothing changed since last time: the list is already right.
@@ -258,6 +312,48 @@ export class ClipboardHistory {
         dialog.addButton({label: 'Close', action: () => this._hide(), key: Clutter.KEY_Escape});
     }
 
+    // ↑/↓ between cards (↑ from the first goes back to the search box),
+    // Enter copies the entry and pastes it into the window you came from,
+    // Page Up/Down scroll a screenful.
+    _cardKey(main, item, event) {
+        const key = event.get_key_symbol();
+        const cards = this._list.get_children().map(c => c._mkMain).filter(Boolean);
+        const i = cards.indexOf(main);
+        if (key === Clutter.KEY_Down || key === Clutter.KEY_Up) {
+            const next = cards[i + (key === Clutter.KEY_Down ? 1 : -1)];
+            if (next) {
+                next.grab_key_focus();
+                this._reveal(next);
+            } else if (key === Clutter.KEY_Up) {
+                global.stage.set_key_focus(this._entry.clutter_text);
+            }
+            return Clutter.EVENT_STOP;
+        }
+        if (key === Clutter.KEY_Page_Down || key === Clutter.KEY_Page_Up) {
+            const adj = this._scroll.vadjustment;
+            adj.ease(adj.value + (key === Clutter.KEY_Page_Down ? 1 : -1) * adj.page_size * 0.9,
+                {duration: 180, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            return Clutter.EVENT_STOP;
+        }
+        if (key === Clutter.KEY_Return || key === Clutter.KEY_KP_Enter) {
+            this._copy(item, true);
+            return Clutter.EVENT_STOP;
+        }
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    // Keep the focused card in view.
+    _reveal(actor) {
+        const adj = this._scroll.vadjustment;
+        const [, y] = actor.get_transformed_position();
+        const [, top] = this._scroll.get_transformed_position();
+        const rel = y - top;
+        if (rel < 0)
+            adj.value += rel - 8;
+        else if (rel + actor.height > this._scroll.height)
+            adj.value += rel + actor.height - this._scroll.height + 8;
+    }
+
     // A card changed (pin, edit, tags, delete): build it again next time.
     _forget(item) {
         const card = this._cards.get(item.id);
@@ -346,8 +442,10 @@ export class ClipboardHistory {
         const main = new St.Button({style_class: 'mk-clip-main', can_focus: true, x_expand: true,
             x_align: Clutter.ActorAlign.FILL});
         if (item.image) {
+            const thumb = this._thumbPath(item);
+            const ready = GLib.file_test(thumb, GLib.FileTest.EXISTS);
             const pic = new St.Widget({style_class: 'mk-clip-image',
-                style: `background-image: url("file://${item.image}");`});
+                style: ready ? `background-image: url("file://${thumb}");` : ''});
             const holder = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
             holder.add_child(pic);
             holder.add_child(new St.Label({text: item.w ? `${item.w} × ${item.h}` : 'Image', style_class: 'mk-clip-badge',
@@ -367,6 +465,7 @@ export class ClipboardHistory {
             column.add_child(new St.Label({text: item.tags.map(t => `#${t}`).join('  '), style_class: 'mk-clip-tags'}));
         }
         main.connect('clicked', () => this._copy(item));
+        main.connect('key-press-event', (_a, event) => this._cardKey(main, item, event));
         card._mkMain = main;
         card.add_child(main);
         const tools = new St.BoxLayout({vertical: true, style_class: 'mk-clip-tools'});
@@ -392,6 +491,7 @@ export class ClipboardHistory {
             this._items = this._items.filter(i => i !== item);
             if (item.image)
                 removeFile(item.image);
+                removeFile(this._thumbPath(item));
             this._save();
             this._fill();
         });
@@ -469,7 +569,7 @@ export class ClipboardHistory {
         global.stage.set_key_focus(entry.clutter_text);
     }
 
-    _copy(item) {
+    _copy(item, paste = false) {
         if (item.image) {
             try {
                 const [, data] = GLib.file_get_contents(item.image);
@@ -482,12 +582,36 @@ export class ClipboardHistory {
         }
         this._toTop(i => i === item, () => item);
         this._hide();
+        if (paste)
+            this._pasteInto(this._target);
         Main.osdWindowManager.showAll(Gio.ThemedIcon.new('edit-copy-symbolic'), 'Copied: paste with Ctrl+V', null, null);
     }
 
+    // Enter: back to the window you came from, then Ctrl+V there
+    // (Ctrl+Shift+V in a terminal).
+    _pasteInto(target) {
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 160, () => {
+            if (target && !target.has_focus())
+                Main.activateWindow(target);
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 60, () => {
+                const seat = Clutter.get_default_backend().get_default_seat();
+                this._keyboard ??= seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+                const keys = TERMINALS.test(target?.get_wm_class() ?? '')
+                    ? [Clutter.KEY_Control_L, Clutter.KEY_Shift_L, Clutter.KEY_v] : [Clutter.KEY_Control_L, Clutter.KEY_v];
+                const t = GLib.get_monotonic_time();
+                keys.forEach(k => this._keyboard.notify_keyval(t, k, Clutter.KeyState.PRESSED));
+                [...keys].reverse().forEach(k => this._keyboard.notify_keyval(t, k, Clutter.KeyState.RELEASED));
+                return GLib.SOURCE_REMOVE;
+            });
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
     _clear() {
-        for (const item of this._items.filter(i => !i.pinned && i.image))
+        for (const item of this._items.filter(i => !i.pinned && i.image)) {
             removeFile(item.image);
+            removeFile(this._thumbPath(item));
+        }
         this._items = this._items.filter(i => i.pinned);
         this._save();
         this._fill();

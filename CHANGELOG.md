@@ -3,6 +3,9 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Notes:** tables move without shaking and have 8 resize handles; Ctrl+A selects the whole page and Delete clears it.
+- **Web Hang:** a sharper Stan Lee (64 x 64 windows, near-solid panes).
+- **Clipboard:** the deck is built after login; warm opens ~4 ms.
 - **Fixed:** Control Center hang when switching an app lock; Super+V freezing on big screenshots; Notes' unclickable buttons on the page; the tour's Choose a scene opening behind the tour.
 - **Clipboard:** thumbnails, ↑/↓ between cards, Enter pastes, Page Up/Down.
 - **MK Notes:** a trash button; tables you drag anywhere and scale (⇲); text boxes replace sticky notes.

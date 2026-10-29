@@ -137,8 +137,8 @@ closes it without saving.
 
 - **Tables** (grid button: hover up to 8 x 8, click): exactly that many
   columns and rows, placed under the line you're on and sized to the page.
-  Drag ⠿ Move table anywhere on the page; ⇲ makes the whole table wider or
-  narrower; drag the line between two columns (⟷) to trade width between
+  Drag ⠿ Move table anywhere on the page (smoothly); a selected table has
+  8 blue handles: corners resize both ways, edges one; drag the line between two columns (⟷) to trade width between
   them. One click in a cell types there; cells wrap and a row grows to its
   tallest cell. ▼ adds or deletes rows and columns, or the table; Tab walks
   the cells and adds a row from the last one. Tables are kept with the note,
@@ -151,6 +151,8 @@ closes it without saving.
   over a printout or a picture; drag by the 📌, rename, layer order, delete
   with ×. They print as callouts at the end of a PDF. (Sticky notes from
   older notes open as text boxes, words intact.)
+- **Ctrl+A** in the page selects all the text and outlines every table,
+  picture and text box; Delete then removes everything.
 - **Layers**: pictures and sticky notes have an order; a new one goes on top. A picture's bar and a sticky's layers button (▤) have Bring Forward, Send Backward, Bring to Front and Send to Back. Drawings stay on their own layer above the page.
 - **Pages**: the note is an A4 sheet (800 px wide at 100 %, narrower in a narrow window) centred on a darker workspace with a soft shadow; a new page appears as soon as text, a table, a picture or a sticky passes the bottom of the last one, with a page gap between sheets; a *Page X of Y* badge sits by the scrollbar. Text flows on through a page gap (the editor is one continuous text view); the PDF export lays out its own A4 pages.
 - **Locks**: right-click a locked note for Lock Now or Remove Lock

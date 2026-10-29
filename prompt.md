@@ -25,8 +25,8 @@ its own, all reproducible from plain text in this repository.
 
 | Area | Standard | Measured (headless GNOME Shell, this machine) |
 | :--- | :--- | :--- |
-| Clipboard deck (Super+V) | opens instantly, smooth in and out | first open ~35 ms, then ~17 ms each; 120 ms in, 90 ms out |
-| Screensaver scenes | cached Cairo drawing, little CPU | Web Hang ~4.7 ms a frame at 1080p, ~2.2 ms at the half size of the lock screen and live wallpaper |
+| Clipboard deck (Super+V) | opens instantly, smooth in and out | built after login; warm opens ~4 ms; 120 ms in, 90 ms out; pictures as thumbnails |
+| Screensaver scenes | cached Cairo drawing, little CPU | Web Hang ~4.5 ms a frame at 1080p, ~2.2 ms at the half size of the lock screen and live wallpaper |
 | System monitor menu | fits a 1366 x 768 screen | 480 px, fixed footer, no network use of its own |
 | Webcam | off whenever it isn't needed | Photo Booth stops the pipeline while you decorate |
 | Security scans | real numbers, never stuck | ClamAV file counts from its own output; scans stop with their caller |
@@ -91,6 +91,9 @@ its own, all reproducible from plain text in this repository.
     page always get their click; tables move freely and scale; sticky
     notes became text boxes; an eight-slide tour whose buttons open their
     windows in front.
+15. **Precision.** Tables drag in window coordinates (no shaking) with 8
+    resize handles; Ctrl+A selects the whole page; the Stan Lee portrait
+    on a 64 x 64 window grid; the clipboard deck built ahead of time.
 
 ## Default keyboard shortcuts
 

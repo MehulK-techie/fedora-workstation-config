@@ -47,7 +47,7 @@ Credit for everything in the last two groups belongs to its authors; see
 | **App and folder locks** (`mk-lock`) | Apps that ask for your fingerprint or password before they start; folders encrypted with gocryptfs that open only after the same check and close when the screen locks; an optional password of each item's own; Vault, a hidden encrypted folder | `mk lock app NAME`, `mk lock ~/Folder`, `mk vault`, Files › Scripts |
 | **Security check** (`mk-security`) | A 0-100 score with colour-coded findings: SELinux, firewall, Secure Boot, disk encryption, waiting and automatic security updates, accounts, SSH, listening servers, home permissions, file sharing, screen lock, remote desktop, and rkhunter, chkrootkit, ClamAV and Lynis; one-line fixes | `mk security`, `mk security fix NAME` |
 | **Accounts** (`mk-users`) | A second person's account that gets the MK desktop at their first login; a Guest login with no password that starts empty every time | `mk users add NAME`, `mk guest on` |
-| **OCR snip** | Pick a screen area, get its text in the clipboard | Super+Shift+T |
+| **OCR snip** | Pick a screen area, get its text in the clipboard | Super+Shift+C |
 | **Photo Booth** (`camera-controls`) | Your webcam with live looks (Polaroid with a caption frame, Flash, Instant 600, Film, Thermal, Pop Art, Noir, Retro, Comic, Neon, Mirror, Dreamy, Vignette, Hue Shift, Distort), G for nine looks at once (3 x 3, live), a 3-2-1 countdown, then text and colour-emoji stickers you can move, resize from the corners, turn (live degree readout) and stack, and a date stamp (90s digital, typewriter, handwritten); the webcam's hardware sliders with Reset to hardware defaults; photos in ~/Pictures/MK Booth | Super+C |
 | **Terminal capture** | Add notes and tasks with reminders without opening anything | `mk note`, `mk task`, `mk remind`, `mk list` |
 | **Spoken greeting** | Calm British "JARVIS-style" voice for the welcome (espeak-ng, or the natural Piper voice) | `mk welcome voice install` |
@@ -259,7 +259,7 @@ them live and lets you change any of them.
 | Full screen, instantly | Print · Super+Shift+3 | GNOME |
 | Current window | Alt+Print | GNOME |
 | Pick an area or window | Shift+Print · Super+Shift+S · Super+Shift+4 | GNOME |
-| Copy text from screen (OCR) | Super+Shift+T | MK tool |
+| Copy text from screen (OCR) | Super+Shift+C | MK tool |
 | Copy text (Text Extractor) | Super+Alt+T | Extension |
 
 **System**

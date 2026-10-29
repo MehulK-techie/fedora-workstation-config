@@ -638,6 +638,48 @@ case "${1:-help}" in
         fi
         ;;
 
+    exam|focus-mode)
+        # mk exam [on | off]: toggle a distraction-free mode (Super+F10): no
+        # notification banners or alert sounds, media paused, Quiet power mode.
+        # What it changed is saved and put back exactly by the second press.
+        state="$HOME/.cache/mk-workstation/exam-mode"
+        profiles=(--system --dest org.freedesktop.UPower.PowerProfiles --object-path /org/freedesktop/UPower/PowerProfiles)
+        want=${2:-toggle}
+        [[ "$want" == toggle ]] && { [[ -f "$state" ]] && want=off || want=on; }
+        case "$want" in
+            on)
+                [[ -f "$state" ]] && { echo "Exam mode is already on (mk exam off)"; exit 0; }
+                mkdir -p "$(dirname "$state")"
+                profile=$(gdbus call "${profiles[@]}" --method org.freedesktop.DBus.Properties.Get \
+                    org.freedesktop.UPower.PowerProfiles ActiveProfile 2> /dev/null | grep -oE "'[a-z-]+'" | tr -d "'" || true)
+                {
+                    echo "BANNERS=$(gsettings get org.gnome.desktop.notifications show-banners)"
+                    echo "SOUNDS=$(gsettings get org.gnome.desktop.sound event-sounds)"
+                    echo "PROFILE=${profile:-balanced}"
+                } > "$state"
+                notify-send -a MK -i preferences-system-notifications-symbolic "Exam mode on" "Notifications, alert sounds and media off. Super+F10 again to end it." 2> /dev/null || true
+                gsettings set org.gnome.desktop.notifications show-banners false
+                gsettings set org.gnome.desktop.sound event-sounds false
+                command -v playerctl > /dev/null && playerctl -a pause 2> /dev/null || true
+                gdbus call "${profiles[@]}" --method org.freedesktop.DBus.Properties.Set \
+                    org.freedesktop.UPower.PowerProfiles ActiveProfile "<'power-saver'>" > /dev/null 2>&1 || true
+                echo "✔ Exam mode on: no notifications or alert sounds, media paused, Quiet power mode" ;;
+            off)
+                [[ -f "$state" ]] || { echo "Exam mode is already off"; exit 0; }
+                banners=$(sed -n 's/^BANNERS=//p' "$state")
+                sounds=$(sed -n 's/^SOUNDS=//p' "$state")
+                profile=$(sed -n 's/^PROFILE=//p' "$state")
+                gsettings set org.gnome.desktop.notifications show-banners "${banners:-true}"
+                gsettings set org.gnome.desktop.sound event-sounds "${sounds:-true}"
+                gdbus call "${profiles[@]}" --method org.freedesktop.DBus.Properties.Set \
+                    org.freedesktop.UPower.PowerProfiles ActiveProfile "<'${profile:-balanced}'>" > /dev/null 2>&1 || true
+                rm -f "$state"
+                notify-send -a MK -i preferences-system-notifications-symbolic "Exam mode off" "Everything is back as it was." 2> /dev/null || true
+                echo "✔ Exam mode off: notifications, sounds and power mode back as they were" ;;
+            *) echo "Usage: mk exam [on | off]" >&2; exit 2 ;;
+        esac
+        ;;
+
     watchdog)
         # mk watchdog [status | on | off | kill PID]: leftover VS Code helpers, runaway Node/Python
         conf="$HOME/.config/mk-workstation/watchdog.conf"
@@ -847,6 +889,7 @@ KEYRING
         echo "  security   Security check with a score: firewall, updates, rootkits, viruses, Lynis (fix NAME applies a fix)"
         echo "  speedtest  Ping, download and upload speed"
         echo "  nap        Which unused apps App Nap paused under memory or CPU pressure"
+        echo "  exam       Distraction-free toggle (Super+F10): no notifications or alert sounds, media paused, Quiet power"
         echo "  watchdog   Leftover VS Code helpers (stopped) and runaway Node/Python (a warning): status, on, off"
         echo "  optimize   Free cached memory (ram) or switch to full speed (cpu)"
         echo "  users      Another person's account: mk users add NAME (their own settings and face)"

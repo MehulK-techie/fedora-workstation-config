@@ -220,7 +220,9 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | **Screenshots** | `Print` (`Fn+PrtSc`) · `Super+Shift+3` | Whole screen, instantly |
 | | `Shift+Print` · `Super+Shift+S` · `Super+Shift+4` | **Select an area** (or a window) |
 | | `Alt+Print` | Current window |
-| | `Super+Shift+T` · `Super+Alt+T` | Copy text from the screen (OCR) |
+| | `Super+Shift+C` · `Super+Alt+T` | Copy text from the screen (OCR) |
+| | `Super+Return` | Scratchpad (the Companion) |
+| | `Super+F10` | Exam mode: no notifications, media paused, quiet power (`mk exam`) |
 | **macOS** | `Super+Q` · `Super+H` | Close · hide (minimize) |
 | | `Space` in Files | Quick Look preview |
 | **Linux / GNOME** | `Super` · `Super+A` | Overview · all apps |

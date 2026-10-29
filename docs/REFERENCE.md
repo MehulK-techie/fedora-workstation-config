@@ -69,7 +69,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `mk-power [status]` | service | Smart power profiles (laptops) |
 | `mk-voice [say\|render\|install\|remove\|status]` | login | Spoken greeting (cached WAV) |
 | `mk-sound [on\|off\|status]` | login | Speaker tuning profile |
-| `ocr-snip` | Super+Shift+T | Copy text from a screen area |
+| `ocr-snip` | Super+Shift+C | Copy text from a screen area |
 | `camera-controls` | Super+C | Photo Booth: live looks, stickers, captions, webcam controls |
 | `mk-lock` | | `mk lock` (apps, folders, `run -- COMMAND`, `close-all`, `reapply`) |
 | `mk-users` | | `mk users`, `mk guest` |

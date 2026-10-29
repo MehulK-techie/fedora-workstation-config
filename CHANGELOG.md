@@ -3,7 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
-- **MK Control Center** (`mk center`): quick actions, power modes, App Nap, MK Lock (apps, folders, vault, notebooks) and security in one window.
+- **MK Control Center** (`mk center`): quick actions, Actions (every command as a card), App Nap, MK Lock (apps, folders, vault, notebooks) and security in one window.
 - **Speed test window** (`mk speedtest --gui`): a gauge, ping, jitter, multi-stream download/upload; `--ookla` uses speedtest-cli.
 - **Files:** right-click Lock / Unlock, with a badge on locked folders (nautilus-python).
 - **Photo Booth:** a live 3 x 3 grid (G), Flash / Instant 600 / Film looks, stickers with resize, rotate and layer handles, date stamps.

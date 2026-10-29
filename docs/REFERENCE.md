@@ -38,7 +38,7 @@ Every command, file and format. How the parts fit together is in
 | `mk users add NAME [--admin]` · `mk users remove NAME` · `mk users list` | Another account (sudo); the MK desktop applies itself at their first login |
 | `mk guest on\|off` | A Guest login: no password, no admin rights, home emptied at every login (sudo) |
 | `mk speedtest [--ping] [--gui] [--ookla]` | Ping, jitter, download and upload (speed.cloudflare.com, several streams); `--gui` a gauge window; `--ookla` uses speedtest-cli |
-| `mk center [lock\|security]` | MK Control Center |
+| `mk center [actions\|lock\|security]` | MK Control Center |
 | `mk tasks badge on\|off` | The top-bar "N Tasks" pill |
 | `mk nap` | Apps App Nap has paused |
 | `mk keyring [open]` | Why apps ask for the keyring after fingerprint or face login, and the two fixes |

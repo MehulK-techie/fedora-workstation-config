@@ -643,7 +643,8 @@ class Center(Adw.ApplicationWindow):
             path = manager.call_sync("GetDefaultDevice", None, Gio.DBusCallFlags.NONE, 3000, None).unpack()[0]
             dev = proxy(path, "net.reactivated.Fprint.Device")
         except GLib.Error as e:
-            self.enroll_text.set_label(f"No fingerprint reader answered ({e.message.split(':')[-1].strip()})")
+            self.enroll_text.set_label("No fingerprint reader detected. Face ID with your webcam works without "
+                                       "one: Add a face.")
             return
         stages = dev.get_cached_property("num-enroll-stages")
         self.enroll_ring.stages = max(1, stages.unpack()) if stages and stages.unpack() > 0 else 5
@@ -721,8 +722,9 @@ class Center(Adw.ApplicationWindow):
         def listed(code, out):
             found = re.findall(r"#\d+:\s*([a-z-]+)", out)
             if not found:
-                row = Adw.ActionRow(title="No reader found" if "No devices" in out or code != 0 and not out
-                                    else "None yet", subtitle=account)
+                row = Adw.ActionRow(title="No fingerprint reader detected" if "No devices" in out or code != 0 and not out
+                                    else "None yet", subtitle="Face ID with your webcam works without one"
+                                    if "No devices" in out else account)
                 group.add(row)
                 self._finger_rows.append(row)
                 return

@@ -409,29 +409,40 @@ class Center(Adw.ApplicationWindow):
     def _toggle_app(self, row, _param, app_id):
         """Locking or unlocking an app asks who you are first (face,
         fingerprint or password, MK's unlock window); a confirmation lasts
-        two minutes. Not confirmed: the switch goes back."""
+        two minutes. Not confirmed: the switch goes back.
+        Nothing happens inside the switch's own notify handler: flipping the
+        switch back and presenting a dialog from there hung the window
+        ("not responding"). It's done one main-loop turn later."""
         if getattr(self, "_reverting", False):
             return
-        want = row.get_active()
+        GLib.idle_add(lambda: (self._confirm_toggle(row, row.get_active(), app_id), False)[1])
 
+    def _set_switch(self, row, value):
+        self._reverting = True
+        row.set_active(value)
+        self._reverting = False
+
+    def _confirm_toggle(self, row, want, app_id):
         def apply():
             self._lock_ok_until = time.monotonic() + 120
-            run_bg([tool("mk-lock"), "app", "add" if want else "remove", app_id],
-                   lambda c, o: self.say((o.strip().splitlines() or ["Done"])[-1].strip("✔[-] ")))
+            row.set_sensitive(False)  # until mk-lock is done (in a thread)
+
+            def finished(code, out):
+                row.set_sensitive(True)
+                if code != 0:
+                    self._set_switch(row, not want)
+                self.say((out.strip().splitlines() or ["Done"])[-1].strip("✔[-] "))
+            run_bg([tool("mk-lock"), "app", "add" if want else "remove", app_id], finished)
 
         if time.monotonic() < getattr(self, "_lock_ok_until", 0):
             apply()
             return
-        self._reverting = True
-        row.set_active(not want)   # until it's confirmed
-        self._reverting = False
+        self._set_switch(row, not want)   # until it's confirmed
         done = []
 
         def confirmed():
             done.append(True)
-            self._reverting = True
-            row.set_active(want)
-            self._reverting = False
+            self._set_switch(row, want)
             apply()
         dialog = auth.UnlockDialog("Confirm it's you", None, confirmed)
         dialog.connect("closed", lambda *_: done or self.say("Not confirmed; the lock didn't change"))

@@ -25,7 +25,7 @@
 
 | | |
 | :---: | :---: |
-| <img src="docs/assets/screens/shortcuts-window.jpg" width="420"><br><sub>Super+/ · every shortcut, live, editable</sub> | <img src="docs/assets/screens/notes-split.jpg" width="420"><br><sub>Super+N · MK Notes, edit with live preview</sub> |
+| <img src="docs/assets/screens/shortcuts-window.jpg" width="420"><br><sub>Super+/ · every shortcut, live, editable</sub> | <img src="docs/assets/screens/notes-split.jpg" width="420"><br><sub>Super+N · MK Notes: A4 pages, real tables, rich text</sub> |
 | <img src="docs/assets/screens/focus-timer.jpg" width="420"><br><sub>Focus timer</sub> | <img src="docs/assets/screens/timer-celebration.jpg" width="420"><br><sub>…and the celebration when time is up</sub> |
 | <img src="docs/assets/screens/alttab.jpg" width="420"><br><sub>Alt+Tab or three fingers · every window, live, in a compact card</sub> | <img src="docs/assets/screens/tiled.jpg" width="420"><br><sub>Halves and quarters, Windows-style</sub> |
 

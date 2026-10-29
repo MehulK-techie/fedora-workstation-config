@@ -26,7 +26,7 @@ its own, all reproducible from plain text in this repository.
 | Area | Standard | Measured (headless GNOME Shell, this machine) |
 | :--- | :--- | :--- |
 | Clipboard deck (Super+V) | opens instantly, smooth in and out | first open ~35 ms, then ~17 ms each; 120 ms in, 90 ms out |
-| Screensaver scenes | cached Cairo drawing, little CPU | Web Hang ~4.4 ms a frame at 1080p, ~3.3 ms at the half size of the lock screen and live wallpaper |
+| Screensaver scenes | cached Cairo drawing, little CPU | Web Hang ~4.7 ms a frame at 1080p, ~2.2 ms at the half size of the lock screen and live wallpaper |
 | System monitor menu | fits a 1366 x 768 screen | 480 px, fixed footer, no network use of its own |
 | Webcam | off whenever it isn't needed | Photo Booth stops the pipeline while you decorate |
 | Security scans | real numbers, never stuck | ClamAV file counts from its own output; scans stop with their caller |
@@ -77,6 +77,12 @@ its own, all reproducible from plain text in this repository.
     command as a card, MK Lock, biometrics, security) and a GNOME Tour-style
     six-slide tour (Super+Shift+/).
 12. **Release.** A clean lock screen, repository hygiene, this file.
+13. **Polish.** No freeze when changing a lock (the fingerprint check is
+    fully asynchronous), one-click table cells, text boxes on printouts,
+    highlighter colours, the padlock showing an open note, face models list
+    with delete and one sudo per enrollment, stricter Howdy settings, a
+    still skyline with twinkling offices, the colourful MK Workstation
+    Tour.
 
 ## Default keyboard shortcuts
 

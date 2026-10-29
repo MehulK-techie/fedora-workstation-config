@@ -3,6 +3,11 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Lock:** no more Not Responding when changing a lock (the fingerprint check no longer blocks the window).
+- **MK Notes:** one-click table cells, Text boxes, five highlighter colours, the padlock shows 🔓 while a locked note is open, pinch-to-zoom over the whole page.
+- **Face:** one sudo per enrollment, a face models list with delete, certainty 2.6 and dark_threshold 50.
+- **Web Hang:** a still skyline with twinkling offices.
+- **MK Workstation Tour:** colourful slides; Quick reference opens the cheat sheet.
 - **Lock screen:** no notifications or media player; no screenshots while locked.
 - **Tour:** a GNOME Tour-style six-slide carousel (Super+Shift+/); the cheat sheet is `mk-tour --reference`.
 - **Clipboard:** one persistent deck, cached cards, 120 ms in / 90 ms out, Super+V toggles.

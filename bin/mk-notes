@@ -1495,6 +1495,9 @@ class VisualMindMapWindow(Adw.Window):
                     self.edges.append((na, nb, "link"))
                     na["deg"] += 1
                     nb["deg"] += 1
+        # Settle before the window shows: the map opens still, not shaking.
+        for _ in range(160):
+            self._step()
 
     def _note_node(self, n, folder, color, x, y):
         node = {"id": n["id"], "label": n["label"], "folder": folder or "Notes", "color": color,
@@ -1514,10 +1517,23 @@ class VisualMindMapWindow(Adw.Window):
 
     MIN_GAP = 64.0  # px between bubble centres (plus their sizes): labels never collide
 
+    DAMPING = 0.62   # velocity kept per step: low, so it settles fast and calm
+
     def _tick(self):
-        if self._ticks > 220 and not self.drag_node:
+        """Live only while you drag a bubble (and a moment after)."""
+        if not self.drag_node and self._ticks > 40:
             return GLib.SOURCE_CONTINUE
         self._ticks += 1
+        moving = self._step()
+        if not getattr(self, "_user_view", False):
+            self._fit()
+        self.area.queue_draw()
+        if not moving and not self.drag_node:
+            self._ticks = 41
+        return GLib.SOURCE_CONTINUE
+
+    def _step(self):
+        """One step of the layout; False once nothing moves visibly."""
         nodes = self.nodes
         for a in nodes:
             a["vx"] -= a["x"] * 0.0015
@@ -1541,13 +1557,15 @@ class VisualMindMapWindow(Adw.Window):
             a["vy"] += dy / d * f
             b["vx"] -= dx / d * f
             b["vy"] -= dy / d * f
+        top = 0.0
         for n in nodes:
             if n is self.drag_node:
                 continue
-            n["vx"] *= 0.78
-            n["vy"] *= 0.78
+            n["vx"] *= self.DAMPING
+            n["vy"] *= self.DAMPING
             n["x"] += n["vx"]
             n["y"] += n["vy"]
+            top = max(top, abs(n["vx"]) + abs(n["vy"]))
         # hard rule: no two bubbles closer than their sizes plus MIN_GAP
         for _ in range(2):
             for i, a in enumerate(nodes):
@@ -1564,10 +1582,7 @@ class VisualMindMapWindow(Adw.Window):
                         if b is not self.drag_node:
                             b["x"] += ux * push
                             b["y"] += uy * push
-        if not getattr(self, "_user_view", False):
-            self._fit()
-        self.area.queue_draw()
-        return GLib.SOURCE_CONTINUE
+        return top > 0.05
 
     def _fit(self):
         """Zoom and centre so every bubble and label is in view (until you
@@ -1901,7 +1916,10 @@ class NotesWindow(Adw.ApplicationWindow):
         # Back where you left off: the note, its scroll position and the
         # notebooks sidebar. A locked note is never reopened at launch (no
         # unlock prompt before the window is even up): the newest unlocked one is.
-        self.nb_toggle.set_active(self.vault.state.get("sidebar", True))
+        # Always the three columns at launch (workspace, notes, page); ⤢ folds
+        # the first two away for the session.
+        self.nb_toggle.set_active(True)
+        self.list_toggle.set_active(True)
         self.refresh_lists()
         last = self.vault.state.get("last")
         if not (last and self.vault.path(last).exists()) or self._is_note_protected(last):
@@ -2173,7 +2191,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
         self.comments_toggle = Gtk.ToggleButton(icon_name="user-available-symbolic",
                                                 tooltip_text="Show / Hide Google Docs Style Margin Comments Sidebar")
-        self.comments_toggle.connect("toggled", lambda b: self.comments_sidebar.set_visible(b.get_active()))
+        self.comments_toggle.connect("toggled", self._on_comments_toggled)
         self.top_bar.pack_end(self.comments_toggle)
 
         theme_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
@@ -3279,10 +3297,19 @@ class NotesWindow(Adw.ApplicationWindow):
         cancel.connect("clicked", lambda *_: self._rebuild_comments_panel())
         GLib.idle_add(lambda: entry.grab_focus() and False)  # once: True would repeat it forever
 
+    def _on_comments_toggled(self, btn):
+        self.comments_sidebar.set_visible(btn.get_active())
+        # the side panels come back when the margin they made room for closes
+        if not btn.get_active() and getattr(self, "_panels_for_comments", False):
+            self._panels_for_comments = False
+            self.nb_toggle.set_active(True)
+            self.list_toggle.set_active(True)
+
     def _open_comment_margin(self):
         """Show the comments margin; on a small window the side panels step
         aside so the page keeps its width (⤢ brings them back)."""
         if not self.comments_sidebar.get_visible() and self.get_width() < 1400:
+            self._panels_for_comments = self.nb_toggle.get_active() or self.list_toggle.get_active()
             self.nb_toggle.set_active(False)
             self.list_toggle.set_active(False)
         self.comments_sidebar.set_visible(True)

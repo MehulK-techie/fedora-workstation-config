@@ -3,6 +3,13 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Lock screen:** no notifications or media player; no screenshots while locked.
+- **Tour:** a GNOME Tour-style six-slide carousel (Super+Shift+/); the cheat sheet is `mk-tour --reference`.
+- **Clipboard:** one persistent deck, cached cards, 120 ms in / 90 ms out, Super+V toggles.
+- **MK Notes:** deleted notes stay deleted; one draft comment and one sticky per click.
+- **Biometrics and MK Lock:** confirm before changing app locks; delete enrolled fingers; face certainty 2.8; a friendly word without a reader.
+- **Web Hang:** Stan Lee from his photo in lit windows, without boxes; Night Watch's clock top right.
+- `prompt.md`: vision, standards, phases, shortcuts and build steps.
 - **MK Notes tables** are real widgets in the text (resizable columns, ▼ row/column menu, ⠿ Move, Tab adds rows), saved with the note plus a Markdown copy.
 - **MK Notes pages:** a centred A4 sheet that grows a page at a time, page gaps, Page X of Y.
 - **Fingerprint enrollment** follows the reader's real number of touches (11 on Synaptics 06cb:00e7) over async D-Bus, and always releases the reader.

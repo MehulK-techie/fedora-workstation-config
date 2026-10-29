@@ -60,6 +60,9 @@ export class ClipboardHistory {
         if (this._ownerId)
             this._selection.disconnect(this._ownerId);
         this._ownerId = 0;
+        if (this._fillId)
+            GLib.source_remove(this._fillId);
+        this._fillId = 0;
         this._dialog?.close();
     }
 
@@ -217,8 +220,28 @@ export class ClipboardHistory {
                 style_class: 'mk-clip-empty'}));
             return;
         }
-        for (const item of shown)
-            this._list.add_child(this._card(item));
+        // The first cards at once (what fits on screen), the rest a batch at a
+        // time while idle: the deck opens without waiting for all of them.
+        if (this._fillId)
+            GLib.source_remove(this._fillId);
+        this._fillId = 0;
+        const FIRST = 12, BATCH = 16;
+        shown.slice(0, FIRST).forEach(item => this._list.add_child(this._card(item)));
+        let next = FIRST;
+        if (next < shown.length) {
+            this._fillId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
+                if (!this._dialog) {
+                    this._fillId = 0;
+                    return GLib.SOURCE_REMOVE;
+                }
+                shown.slice(next, next + BATCH).forEach(item => this._list.add_child(this._card(item)));
+                next += BATCH;
+                if (next < shown.length)
+                    return GLib.SOURCE_CONTINUE;
+                this._fillId = 0;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
     }
 
     _card(item) {

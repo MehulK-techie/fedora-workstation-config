@@ -94,6 +94,9 @@ its own, all reproducible from plain text in this repository.
 15. **Precision.** Tables drag in window coordinates (no shaking) with 8
     resize handles; Ctrl+A selects the whole page; the Stan Lee portrait
     on a 64 x 64 window grid; the clipboard deck built ahead of time.
+16. **Full portrait.** Insert Table drops a 3 x 3 table mid-view in one
+    click; Stan Lee is the whole photo (hair, glasses, smile, collar and
+    shoulders), one window per pixel, his shoulders fading into the facade.
 
 ## Default keyboard shortcuts
 

@@ -78,8 +78,8 @@ closes it without saving.
   connector), basic shapes (rectangle, rounded rectangle, oval, triangle,
   diamond) and graphs (X–Y axes with ticks, a 4-quadrant grid, 3D axes),
   picked from one menu, drawn by dragging.
-- **Tables** (grid button in the ribbon): hover to pick up to 8 x 8, click to
-  insert a lined-up Markdown table.
+- **Tables** (Insert Table in the ribbon): one click drops a 3 x 3 table in
+  the middle of the view; its arrow opens a grid to pick up to 8 x 8.
 
 - **Paste:** Ctrl+V pastes an image from the clipboard (screenshots, "Copy
   image" in a browser), read fresh with `wl-paste`, or files copied in Files. A copied file path or
@@ -135,8 +135,8 @@ closes it without saving.
 
 ## Tables, comments, stickies and pages
 
-- **Tables** (grid button: hover up to 8 x 8, click): exactly that many
-  columns and rows, placed under the line you're on and sized to the page.
+- **Tables** (Insert Table: 3 x 3 in the middle of the view; its arrow: a
+  grid up to 8 x 8, click a square): sized to the page and selected.
   Drag ⠿ Move table anywhere on the page (smoothly); a selected table has
   8 blue handles: corners resize both ways, edges one; drag the line between two columns (⟷) to trade width between
   them. One click in a cell types there; cells wrap and a row grows to its

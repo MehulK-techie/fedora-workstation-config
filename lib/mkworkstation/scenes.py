@@ -5,7 +5,7 @@
   web      a brick-built masked hero in red and blue hangs upside down from a
            web line beside a skyscraper whose lit windows spell SIGN_TEXT
            (screensaver.conf, MK by default, up to four letters), over the
-           city (two parallax layers); on the tower to the left, Stan Lee's
+           city (still, with offices twinkling); on the tower to the left, Stan Lee's
            portrait and his line lit in its windows; the clock top right
   knight   a brick-built caped knight stands on a stone gargoyle in the rain;
            the cape moves in the wind, a searchlight sweeps the clouds and
@@ -284,12 +284,10 @@ class WebHang(Scene):
         return self.layers[1]
 
     def _still(self, w, h, t, anchor_x, ledge):
-        """Sky, towers, both city layers and the cornice, composed once per
-        whole-pixel parallax offset. The city drifts about a pixel a second,
-        so this is redrawn about once a second, not every frame (the frame
-        then costs one blit plus the hero and his web)."""
-        offsets = tuple(round(-pad / 2 + math.sin(t * 0.05) * pad / 2 * depth)
-                        for (_surf, pad), depth in zip(self._city(w, h), (0.35, 1.0)))
+        """Sky, towers, both city layers and the cornice, composed once: the
+        skyline stands still (a drift of whole pixels looked jerky), so a
+        frame is one blit plus twinkling windows, the hero and his web."""
+        offsets = tuple(round(-pad / 2) for (_surf, pad) in self._city(w, h))
         key = (w, h, offsets)
         if getattr(self, "_still_key", None) != key:
             if getattr(self, "_still_surf", None) is None or self._still_key[:2] != (w, h):
@@ -310,6 +308,7 @@ class WebHang(Scene):
         ledge = h * 0.07
         cr.set_source_surface(self._still(w, h, t, anchor_x, ledge), 0, 0)
         cr.paint()
+        self._twinkle(cr, w, h, t)
         swing = 0.10 * math.sin(t * 0.7) + 0.02 * math.sin(t * 1.9)
         end_x = anchor_x + math.sin(swing) * length
         end_y = math.cos(swing) * length
@@ -333,6 +332,23 @@ class WebHang(Scene):
         self._hero(cr, min(w, h) / 1080 * 1.45, t)
         cr.restore()
         caption(cr, w, h, [(time.strftime("%H:%M"), 44, 0.85), (time.strftime("%A, %d %B"), 16, 0.5)], "top-right")
+
+    def _twinkle(self, cr, w, h, t):
+        """A few offices in the towers switching their lights slowly on and
+        off: the city looks lived in while the skyline itself stays still."""
+        if getattr(self, "_twinkles_for", None) != (w, h):
+            rand = random.Random(77)
+            self._twinkles_for = (w, h)
+            self._twinkles = [(rand.uniform(w * 0.565, w * 0.74), rand.uniform(h * 0.62, h * 0.95),
+                               rand.uniform(0.04, 0.12), rand.uniform(0, 6.3), rand.random() < 0.8)
+                              for _ in range(18)]
+        k = h / 1080
+        for x, y, speed, phase, warm in self._twinkles:
+            a = max(0.0, math.sin(t * speed * 2 * math.pi + phase))
+            if a > 0.05:
+                cr.set_source_rgba(*(GOLD if warm else CYAN), 0.85 * a)
+                cr.rectangle(round(x), round(y), round(7 * k) or 1, round(9 * k) or 1)
+                cr.fill()
 
     def _hero(self, cr, s, t):
         """A plastic brick-style minifigure, upside down: feet at the origin (on

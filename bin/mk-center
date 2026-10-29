@@ -150,7 +150,7 @@ ACTIONS = [
     ("restore", "System Maintenance", "edit-undo-symbolic", "Undo last sync", "Restore the settings snapshot", ("term", "mk restore")),
     ("device", "System Maintenance", "computer-symbolic", "This computer", "What it has, what MK tunes", ("show", mk("device"))),
     ("shortcuts", "System Maintenance", "preferences-desktop-keyboard-shortcuts-symbolic", "Keyboard shortcuts", "Every shortcut, live", ("bg", [tool("show-shortcuts")])),
-    ("tour", "System Maintenance", "help-browser-symbolic", "Quick reference", "Every shortcut and command, searchable", ("bg", [tool("mk-tour")])),
+    ("tour", "System Maintenance", "help-browser-symbolic", "Quick reference", "Every shortcut and command, searchable", ("bg", [tool("mk-tour"), "--reference"])),
 ]
 
 
@@ -245,7 +245,7 @@ class Center(Adw.ApplicationWindow):
         for title, sub, argv in (("Screensaver", "Pick a scene or shuffle; the lock screen too", [tool("mk-screensaver"), "settings"]),
                                  ("Keyboard shortcuts", "Every shortcut and gesture, live", [tool("show-shortcuts")]),
                                  ("Photo Booth", "Your webcam with live looks and stickers", [tool("camera-controls")]),
-                                 ("Tour", "The walkthrough again", [tool("mk-tour")]),
+                                 ("MK Workstation Tour", "Six slides: what this workstation does", [tool("mk-tour")]),
                                  ("Health check", "mk doctor, in a terminal", terminal(f"{shlex.quote(tool('mk'))} doctor")),
                                  ("Update everything", "mk update, in a terminal", terminal(f"{shlex.quote(tool('mk'))} update"))):
             r = Adw.ActionRow(title=title, subtitle=sub, activatable=True)

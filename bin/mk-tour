@@ -325,28 +325,34 @@ class CheatSheet(Adw.ApplicationWindow):
 # The six slides: (icon, title, text, (button label, action) or None).
 # action: a command to start, "face" (try Face ID here) or "done".
 SLIDES = [
-    ("org.fedoraproject.AnacondaInstaller-symbolic", "Let's Begin",
+    ("org.fedoraproject.AnacondaInstaller-symbolic", "Welcome to MK-Workstation",
      "An optimized, student-first workstation for Fedora Linux. Built with passion, open-source spirit "
      "and pure Infrastructure-as-Code.", None),
-    ("camera-web-symbolic", "Native Face Unlock",
+    ("camera-web-symbolic", "Webcam-First Biometrics",
      "Unlock apps, folders and system prompts with your standard webcam, with your password or "
      "fingerprint always there as the fallback.", ("Try Face ID", "face")),
-    ("accessories-text-editor-symbolic", "Zero-Bloat Note Taking",
+    ("accessories-text-editor-symbolic", "MK Notes Engine",
      "A4 pages that grow as you write, real tables, sketching, PDF printouts and Word or PDF export: "
      "completely offline, no accounts, no paywalls.", ("Open MK Notes", "mk-notes")),
-    ("input-keyboard-symbolic", "Speed at Your Fingertips",
+    ("input-keyboard-symbolic", "Fluid Compositor & Shortcuts",
      "macOS fluidity meets Windows window management: Super+1…9 opens dock apps, Super+V the clipboard "
      "deck, Super+. the emoji board at your cursor, Super+Tab switches apps.", None),
-    ("applications-graphics-symbolic", "Personality & Performance",
+    ("applications-graphics-symbolic", "Creative Visual Engines",
      "Cairo-drawn skylines: Spider-Man with Stan Lee's window-light tribute and Batman in Gotham, "
      "cached so a frame takes a few milliseconds.", ("Choose a scene", "mk-screensaver settings")),
-    ("utilities-terminal-symbolic", "One Command Setup",
+    ("utilities-terminal-symbolic", "Infrastructure-as-Code",
      "Reproduce the whole workspace with ./sync.sh. 100 % open source under the MIT License.",
      ("Start Using MK-Workstation", "done")),
 ]
 SHOW_CSS = b"""
-.mk-slide-art { min-width: 132px; min-height: 132px; border-radius: 66px;
-                background: alpha(@accent_bg_color, 0.18); color: @accent_color; }
+.mk-slide-art { min-width: 140px; min-height: 140px; border-radius: 70px; color: white;
+                box-shadow: 0 10px 30px alpha(black, 0.35); }
+.mk-art-0 { background: linear-gradient(135deg, #3c6eb4, #51a2da); }
+.mk-art-1 { background: linear-gradient(135deg, #0ea5e9, #22d3ee); }
+.mk-art-2 { background: linear-gradient(135deg, #f59e0b, #f97316); }
+.mk-art-3 { background: linear-gradient(135deg, #8b5cf6, #ec4899); }
+.mk-art-4 { background: linear-gradient(135deg, #ef4444, #1e3a8a); }
+.mk-art-5 { background: linear-gradient(135deg, #10b981, #0ea5e9); }
 .mk-slide-title { font-size: 26px; font-weight: 800; }
 .mk-slide-text { font-size: 15px; opacity: 0.8; }
 .mk-tour-arrow { min-width: 44px; min-height: 44px; border-radius: 22px; padding: 0;
@@ -360,7 +366,7 @@ class Showcase(Adw.ApplicationWindow):
     arrows at the sides. Left/Right, Space or Enter move; Esc closes."""
 
     def __init__(self, app):
-        super().__init__(application=app, title="MK Tour", default_width=740, default_height=530)
+        super().__init__(application=app, title="MK Workstation Tour", default_width=740, default_height=530)
         css = Gtk.CssProvider()
         css.load_from_data(SHOW_CSS)
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
@@ -371,10 +377,10 @@ class Showcase(Adw.ApplicationWindow):
         self.carousel = Adw.Carousel(hexpand=True, vexpand=True, allow_scroll_wheel=True)
         head.set_title_widget(Adw.CarouselIndicatorDots(carousel=self.carousel))
         view.add_top_bar(head)
-        for icon, title, text, action in SLIDES:
+        for n, (icon, title, text, action) in enumerate(SLIDES):
             page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, valign=Gtk.Align.CENTER,
                            halign=Gtk.Align.CENTER, margin_start=72, margin_end=72)
-            art = Gtk.Box(css_classes=["mk-slide-art"], halign=Gtk.Align.CENTER)
+            art = Gtk.Box(css_classes=["mk-slide-art", f"mk-art-{n}"], halign=Gtk.Align.CENTER)
             art.append(Gtk.Image(icon_name=icon, pixel_size=72, hexpand=True, vexpand=True))
             page.append(art)
             page.append(Gtk.Label(label=title, css_classes=["mk-slide-title"], wrap=True,

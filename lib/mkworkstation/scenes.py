@@ -513,7 +513,7 @@ def _photo_levels(cols):
         img = Image.open(_PHOTO).convert("L")
         img = ImageOps.autocontrast(ImageOps.fit(img, (cols * 6, cols * 6)), cutoff=2)
         img = img.point(lambda v: round(255 * (v / 255) ** 0.8))  # lift the mid tones
-        img = img.filter(ImageFilter.UnsharpMask(radius=4, percent=180, threshold=2))
+        img = img.filter(ImageFilter.UnsharpMask(radius=3, percent=200, threshold=1))
         img = img.resize((cols, cols), Image.Resampling.LANCZOS)
         px = img.load()
 
@@ -657,8 +657,8 @@ def tribute_tower(cr, w, h):
     # where the portrait and the frieze go, on the main tier
     # The portrait's windows are a finer grid (a glass curtain wall), so the
     # face has ~40 x 40 of them; it ends above the far city's rooftops.
-    ppitch = max(3.4, 5.2 * k)
-    pcols = 48
+    ppitch = max(3.0, 4.2 * k)
+    pcols = 64  # enough windows for the glasses' frames, the nose and the smile
     pside = pcols * ppitch
     py0 = tiers[0][1] + pitch * 1.2
     px0 = cx - pside / 2
@@ -668,10 +668,11 @@ def tribute_tower(cr, w, h):
     frieze_h = tp * 7 * 3 + tp * 10
     frieze_bottom = frieze_top + frieze_h
 
-    def lit(x, y, colour, alpha, size=pitch):
+    def lit(x, y, colour, alpha, size=pitch, fill=(0.62, 0.72)):
         cr.set_source_rgba(*colour, alpha)
-        cr.rectangle(x, y, size * 0.62, size * 0.72)
+        cr.rectangle(x, y, size * fill[0], size * fill[1])
         cr.fill()
+    dense = (0.86, 0.86)  # the portrait's glass wall: almost no mullion between panes
 
     # every office window on every tier
     for tx, tw, top, bottom in spans:
@@ -711,12 +712,12 @@ def tribute_tower(cr, w, h):
                     lit(x, y, cell[0], cell[1], ppitch)
                 continue
             v = levels[r][c]
-            if v > 0.86 + 0.1 * t:
-                lit(x, y, WARM_WHITE if v < 0.93 else (1.0, 1.0, 1.0), 0.95, ppitch)
+            if v > 0.90 + 0.08 * t:
+                lit(x, y, WARM_WHITE if v < 0.95 else (1.0, 1.0, 1.0), 0.95, ppitch, dense)
             elif v > 0.36 + 0.32 * t:
-                lit(x, y, GOLD, 0.45 + 0.5 * v, ppitch)
+                lit(x, y, GOLD, 0.45 + 0.5 * v, ppitch, dense)
             elif v > 0.08:
-                lit(x, y, UNLIT, 0.9, ppitch)
+                lit(x, y, UNLIT, 0.9, ppitch, dense)
     # the frieze: a lit band with the quote and the dates
     # the frieze: no box, two thin lit cornice lines framing the lit letters
     fx0, fx1 = x0 + pitch, x1 - pitch

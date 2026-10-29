@@ -41,3 +41,12 @@ __pycache__/
 # Built apps (scripts/build-apk.sh)
 dist/
 __pycache__/
+*.pyc
+
+# Agent and tool scratch (kept locally, never committed)
+.agents/
+.antigravityignore
+repomix-output.xml
+skills-lock.json
+PROMPT-TEMPLATE.md
+SESSION_FAILURES.md

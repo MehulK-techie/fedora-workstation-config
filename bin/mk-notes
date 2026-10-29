@@ -1464,10 +1464,14 @@ class VisualMindMapWindow(Adw.Window):
         self.nodes, self.by_id, self.edges = [], {}, []
         books = [g for g in groups if g]
         ring = 90.0 + 70.0 * max(1, len(books))
+        used = set()
         for gi, folder in enumerate(books):
             ang = 2 * math.pi * gi / max(1, len(books)) - math.pi / 2
             hx, hy = math.cos(ang) * ring, math.sin(ang) * ring
             color = self.nb_colors.get(folder, PASTELS[gi % len(PASTELS)])
+            if color in used:  # two notebooks of one colour: tell them apart here
+                color = next((c for c in PASTELS if c not in used), color)
+            used.add(color)
             hub = {"id": f"hub:{folder}", "label": folder.split("/")[-1], "folder": folder, "color": color,
                    "x": hx, "y": hy, "vx": 0.0, "vy": 0.0, "deg": 0, "hub": True}
             self.nodes.append(hub)
@@ -1651,6 +1655,7 @@ class VisualMindMapWindow(Adw.Window):
             r = self._radius(n) * math.sqrt(self.scale)
             is_cur, is_hov = n["id"] == self.current_rel, n is self.hover
             red, grn, blu = hex_rgb(n["color"])
+            cr.new_path()  # the last label left a current point: no line from it
             if is_cur or is_hov:
                 cr.arc(x, y, r + 6, 0, 2 * math.pi)
                 cr.set_source_rgba(0.98, 0.75, 0.18, 0.3) if is_cur else cr.set_source_rgba(red, grn, blu, 0.3)

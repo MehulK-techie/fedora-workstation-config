@@ -660,7 +660,7 @@ case "${1:-help}" in
                 notify-send -a MK -i preferences-system-notifications-symbolic "Exam mode on" "Notifications, alert sounds and media off. Super+F10 again to end it." 2> /dev/null || true
                 gsettings set org.gnome.desktop.notifications show-banners false
                 gsettings set org.gnome.desktop.sound event-sounds false
-                command -v playerctl > /dev/null && playerctl -a pause 2> /dev/null || true
+                if command -v playerctl > /dev/null; then playerctl -a pause 2> /dev/null || true; fi
                 gdbus call "${profiles[@]}" --method org.freedesktop.DBus.Properties.Set \
                     org.freedesktop.UPower.PowerProfiles ActiveProfile "<'power-saver'>" > /dev/null 2>&1 || true
                 echo "✔ Exam mode on: no notifications or alert sounds, media paused, Quiet power mode" ;;

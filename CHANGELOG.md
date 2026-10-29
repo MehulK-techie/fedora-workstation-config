@@ -3,6 +3,10 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Notes tables** are real widgets in the text (resizable columns, ▼ row/column menu, ⠿ Move, Tab adds rows), saved with the note plus a Markdown copy.
+- **MK Notes pages:** a centred A4 sheet that grows a page at a time, page gaps, Page X of Y.
+- **Fingerprint enrollment** follows the reader's real number of touches (11 on Synaptics 06cb:00e7) over async D-Bus, and always releases the reader.
+- **Clipboard** opens in ~38 ms (first cards first, the rest while idle).
 - **Window glide** stays on in lite effects mode (only blur, wobbly windows and genie go).
 - **Add a face** runs Howdy directly (`mk-face-add`, `sudo howdy add`) in its own terminal window; replaces a same-named model only if you say so.
 - **Web Hang:** Stan Lee drawn in lit windows (silver hair, aviator glasses, moustache, smile).

@@ -5,8 +5,12 @@ resize, and a few Photo Booth style looks.
   vignette, hue (shift), noir, retro (sepia), comic, neon, mirror, glow (dreamy)
   popart    four posterised copies in bright duotones, 2 x 2
   distort   a fisheye bulge from the middle
-  polaroid  a warm, faded vintage print on a white instant-photo frame
-            with a wider bottom edge and a little paper grain
+  polaroid  a warm, faded vintage print (lifted blacks, grain in the
+            shadows, a slightly soft plastic lens) on an instant-photo card:
+            3:4, a square photo recessed in the card, a thick bottom edge;
+            white, cream or noir card stock (FRAME_COLOURS)
+  light_leak(img, kind)  warm streak, corner flare, red burn, or dust and
+            scratches (LEAKS)
 
 Every function takes a PIL image and returns a new one; nothing is written
 to disk here.
@@ -138,45 +142,174 @@ def _vignette_mask(w, h, start=0.45, strength=0.55):
     return _CACHE[key]
 
 
-def _paper(w, h, seed=7):
-    """Off-white paper with a little grain; cached per size."""
-    key = ("paper", w, h, seed)
+# Card stock: (paper, its grain) colours.
+FRAME_COLOURS = {"white": ("Classic white", (244, 241, 233), (222, 217, 205)),
+                 "cream": ("Vintage cream", (238, 227, 202), (215, 200, 170)),
+                 "noir": ("Matte noir", (30, 29, 32), (46, 44, 48))}
+
+
+def _paper(w, h, seed=7, colour="white"):
+    """Card stock with a little grain; cached per size and colour."""
+    key = ("paper", w, h, seed, colour)
     if key not in _CACHE:
-        frame = Image.new("RGB", (w, h), (244, 241, 233))
+        _label, base, fleck = FRAME_COLOURS.get(colour, FRAME_COLOURS["white"])
+        frame = Image.new("RGB", (w, h), base)
         rand = random.Random(seed)
         grain = Image.new("L", (w // 3 + 1, h // 3 + 1))
         grain.putdata([rand.randint(0, 255) for _ in range(grain.width * grain.height)])
         grain = grain.resize((w, h)).filter(ImageFilter.GaussianBlur(0.6))
-        _CACHE[key] = Image.composite(Image.new("RGB", (w, h), (222, 217, 205)), frame, grain.point(lambda v: v // 6))
+        _CACHE[key] = Image.composite(Image.new("RGB", (w, h), fleck), frame, grain.point(lambda v: v // 6))
     return _CACHE[key]
 
 
-def polaroid_frame(photo):
-    """The instant-photo frame: wider at the bottom (room for a caption).
-    Returns (framed image, (x, y, w, h) of the caption area)."""
+def square(photo):
+    """The middle square of PHOTO."""
     w, h = photo.size
-    side, top, bottom = round(w * 0.06), round(w * 0.06), round(w * 0.24)
-    frame = _paper(w + 2 * side, h + top + bottom).copy()
-    frame.paste(photo, (side, top))
-    return frame, (side, top + h, w, bottom)
+    side = min(w, h)
+    return photo.crop(((w - side) // 2, (h - side) // 2, (w - side) // 2 + side, (h - side) // 2 + side))
+
+
+def _recess(w, h):
+    """An L mask darkest along the cutout's top and left edges: the photo sits
+    a little below the card, so the card's edge casts a shadow on it."""
+    key = ("recess", w, h)
+    if key not in _CACHE:
+        depth = max(2, round(w * 0.022))
+        small = Image.new("L", (w // 4 + 1, h // 4 + 1), 0)
+        d = max(1, depth // 4)
+        for i in range(d):
+            v = round(150 * (1 - i / d) ** 2)
+            for x in range(small.width):
+                small.putpixel((x, i), max(small.getpixel((x, i)), v))
+            for y in range(small.height):
+                small.putpixel((i, y), max(small.getpixel((i, y)), v))
+        _CACHE[key] = small.resize((w, h), Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(depth / 3))
+    return _CACHE[key]
+
+
+def polaroid_frame(photo, colour="white"):
+    """The instant-photo card, 3:4: the photo cut square and set into the
+    card (a soft shadow inside the cutout, a light edge on the card), with a
+    thick bottom edge for a caption. Returns (card, (x, y, w, h) of the
+    photo, (x, y, w, h) of the caption area)."""
+    photo = square(photo)
+    s = photo.width
+    side = top = round(s * 0.06)
+    card_w = s + 2 * side
+    card_h = round(card_w * 4 / 3)
+    bottom = card_h - top - s
+    card = _paper(card_w, card_h, colour=colour).copy()
+    shaded = Image.composite(Image.new("RGB", photo.size, (0, 0, 0)), photo, _recess(s, s))
+    card.paste(shaded, (side, top))
+    # the cut edge of the card catches the light along the bottom and right
+    edge = (255, 255, 255) if colour != "noir" else (90, 88, 94)
+    lip = max(1, round(s * 0.003))
+    card.paste(Image.new("RGB", (s + lip, lip), edge), (side, top + s))
+    card.paste(Image.new("RGB", (lip, s), edge), (side + s, top))
+    return card, (side, top, s, s), (side, top + s, s, bottom)
+
+
+def _grain(size, seed=5):
+    """Mid-grey film grain (128 = no change) for an overlay; cached."""
+    key = ("film-grain", size, seed)
+    if key not in _CACHE:
+        rand = random.Random(seed)
+        w, h = size
+        noise = Image.new("L", (w // 2 + 1, h // 2 + 1))
+        noise.putdata([rand.randint(96, 160) for _ in range(noise.width * noise.height)])
+        _CACHE[key] = noise.resize(size, Image.Resampling.BILINEAR)
+    return _CACHE[key]
 
 
 def polaroid_photo(img):
-    """The Polaroid look on the photo itself, without the frame."""
+    """The Polaroid look on the photo itself, without the frame: instant
+    film chemistry. Charcoal (lifted) blacks, muted warm highlights, skin
+    kept rich, grain mostly in the shadows, and a plastic lens's softness."""
     photo = rgb(img)
     photo.thumbnail((1400, 1400))
-    # The vintage look: less saturated, warm, lifted blacks, soft corners.
-    photo = ImageEnhance.Color(photo).enhance(0.75)
-    warm = Image.new("RGB", photo.size, (255, 170, 90))
-    photo = Image.blend(photo, ImageChops.multiply(photo, warm), 0.35)
-    photo = photo.point(lambda v: 28 + v * (235 - 28) / 255)  # faded: no pure black or white
-    photo = ImageEnhance.Contrast(photo).enhance(1.08)
+    photo = ImageEnhance.Color(photo).enhance(0.8)
+    r, g, b = photo.split()
+    # warm mids (skin), highlights held back from pure white, cool-ish shadows
+    r = r.point(lambda v: min(255, round(v * 1.04 + 10 * math.sin(math.pi * v / 255))))
+    g = g.point(lambda v: round(v * 0.99 + 4 * math.sin(math.pi * v / 255)))
+    b = b.point(lambda v: round(v * 0.86 + 14 * (1 - v / 255)))
+    photo = Image.merge("RGB", (r, g, b))
+    photo = photo.point(lambda v: 30 + v * (232 - 30) / 255)  # charcoal blacks, creamy whites
+    photo = ImageEnhance.Contrast(photo).enhance(1.06)
+    # grain where it's dark: an overlay of noise, masked by the shadows
+    shadows = ImageOps.invert(photo.convert("L")).point(lambda v: max(0, v - 60))
+    grainy = ImageChops.overlay(photo, Image.merge("RGB", [_grain(photo.size)] * 3))
+    photo = Image.composite(grainy, photo, shadows)
+    # the plastic lens: about 1.5 % softer
+    soft = photo.filter(ImageFilter.GaussianBlur(max(0.6, photo.width * 0.0015)))
+    photo = Image.blend(photo, soft, 0.5)
     return Image.composite(Image.new("RGB", photo.size, (40, 25, 15)), photo, _vignette_mask(*photo.size))
 
 
 @look("polaroid", "Polaroid")
 def polaroid(img):
     return polaroid_frame(polaroid_photo(img))[0]
+
+
+# ---------------------------------------------------------------- light leaks
+
+LEAKS = {"warm": "Warm streak", "flare": "Corner flare", "burn": "Red burn", "dust": "Dust & scratches"}
+
+
+def _leak_mask(kind, w, h):
+    key = ("leak", kind, w, h)
+    if key in _CACHE:
+        return _CACHE[key]
+    if kind == "warm":  # a soft band down the left third, leaning
+        band = Image.linear_gradient("L").rotate(90).resize((64, 64))
+        band = band.point(lambda v: round(255 * max(0, 1 - abs(v - 200) / 70) ** 1.5))
+        mask = band.rotate(-14, resample=Image.Resampling.BICUBIC, expand=False).resize((w, h), Image.Resampling.BICUBIC)
+    elif kind == "flare":  # a glow from the top-right corner
+        glow = ImageOps.invert(Image.radial_gradient("L")).resize((128, 128))
+        mask = Image.new("L", (128, 128))
+        mask.paste(glow.point(lambda v: min(255, round(v * 1.25))), (40, -40))
+        mask = mask.resize((w, h), Image.Resampling.BICUBIC)
+    else:  # burn: the bottom edge and a corner, burned red
+        ramp = Image.linear_gradient("L").resize((64, 64))
+        mask = ramp.point(lambda v: round(255 * max(0, (v - 150) / 105) ** 1.6)).resize((w, h), Image.Resampling.BICUBIC)
+    mask = mask.filter(ImageFilter.GaussianBlur(max(1, w / 60)))
+    _CACHE[key] = mask
+    return mask
+
+
+def _dust(w, h, seed=11):
+    """Specks of dust and a few fine scratches: (light, dark) L masks."""
+    key = ("dust", w, h, seed)
+    if key not in _CACHE:
+        from PIL import ImageDraw
+        rand = random.Random(seed)
+        light, dark = Image.new("L", (w, h)), Image.new("L", (w, h))
+        dl, dd = ImageDraw.Draw(light), ImageDraw.Draw(dark)
+        for _ in range(int(w * h / 9000) + 20):
+            x, y, r = rand.uniform(0, w), rand.uniform(0, h), rand.uniform(0.4, 1.6) * w / 900
+            (dl if rand.random() < 0.6 else dd).ellipse((x - r, y - r, x + r, y + r), fill=rand.randint(90, 200))
+        for _ in range(5):
+            x = rand.uniform(0.05, 0.95) * w
+            y0, y1 = rand.uniform(0, 0.4) * h, rand.uniform(0.6, 1) * h
+            dl.line((x, y0, x + rand.uniform(-0.03, 0.03) * w, y1), fill=rand.randint(70, 130),
+                    width=max(1, round(w / 1200)))
+        _CACHE[key] = (light.filter(ImageFilter.GaussianBlur(0.5)), dark.filter(ImageFilter.GaussianBlur(0.5)))
+    return _CACHE[key]
+
+
+def light_leak(img, kind):
+    """IMG with a light leak (warm, flare, burn) or dust and scratches."""
+    photo = rgb(img)
+    w, h = photo.size
+    if kind == "dust":
+        light, dark = _dust(w, h)
+        photo = Image.composite(Image.new("RGB", (w, h), (250, 246, 236)), photo, light)
+        return Image.composite(Image.new("RGB", (w, h), (20, 16, 14)), photo, dark)
+    colour = {"warm": (255, 150, 60), "flare": (255, 214, 140), "burn": (235, 40, 25)}.get(kind)
+    if not colour:
+        return photo
+    lit = ImageChops.screen(photo, Image.new("RGB", (w, h), colour))
+    return Image.composite(lit, photo, _leak_mask(kind, w, h).point(lambda v: round(v * 0.85)))
 
 
 @look("flash", "Flash")

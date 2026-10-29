@@ -23,6 +23,7 @@ handwritten). Save: the photo goes to ~/Pictures/MK Booth/.
 The looks come from lib/mkworkstation/photo.py; text and stickers are drawn
 with Pango and cairo (colour emoji). Hardware controls use v4l2-ctl.
 """
+import datetime
 import glob
 import io
 import math
@@ -63,7 +64,7 @@ from mkworkstation import photo  # noqa: E402
 APP_ID = "io.github.mehulk.MkCamera"
 OUT_DIR = Path(GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES) or Path.home() / "Pictures") / "MK Booth"
 PREVIEW_W = 640
-GRID_W = 320
+GRID_W = 240  # each of the nine looks: small enough for all nine at 24 fps
 # The looks tray's kinds (photo.py's names); a look missing here shows under All only.
 LOOK_CATEGORIES = {
     "Vintage": ("polaroid", "instant", "film", "retro", "noir"),
@@ -73,7 +74,15 @@ LOOK_CATEGORIES = {
 GRID_LOOKS = [None, "polaroid", "flash", "instant", "film", "noir", "thermal", "popart", "comic"]
 STICKERS = "😀😂😍🥳😎🤩😜🥰🤪😇👻🤖👑🎉🎈🎂🌈⭐✨🔥💖💯👍✌️🙌🍕🍿🌸🦄🐶🐱"
 COLORS = [("White", (1, 1, 1)), ("Black", (0.08, 0.08, 0.1)), ("Pink", (1, 0.35, 0.65)),
-          ("Yellow", (1, 0.85, 0.15)), ("Blue", (0.25, 0.6, 1)), ("Green", (0.3, 0.9, 0.45))]
+          ("Yellow", (1, 0.85, 0.15)), ("Blue", (0.25, 0.6, 1)), ("Green", (0.3, 0.9, 0.45)),
+          ("Red", (0.92, 0.22, 0.22)), ("Orange", (1.0, 0.55, 0.1))]
+# Lettering for text and captions: Pango picks the first installed family.
+FONTS = {"marker": ("Sharpie marker", "Permanent Marker, Patrick Hand, Comic Neue, Sans Bold"),
+         "typewriter": ("Retro typewriter", "Courier Prime, Nimbus Mono PS, Liberation Mono, Monospace Bold"),
+         "serif": ("Editorial serif", "Playfair Display, Noto Serif, DejaVu Serif, Serif Bold Italic"),
+         "lcd": ("Digital LCD", "DSEG7 Classic, DejaVu Sans Mono, Monospace Bold"),
+         "sans": ("Clean sans", "Sans Bold")}
+DEVELOP_SECONDS = 3.0
 CSS = b"""
 .mk-booth-countdown { font-size: 120px; font-weight: 900; color: white; text-shadow: 0 4px 24px rgba(0,0,0,0.6); }
 .mk-booth-flash { background: white; }
@@ -85,7 +94,11 @@ CSS = b"""
                        font-weight: 700; font-size: 0.9em; }
 .mk-booth-angle { background: alpha(black, 0.65); color: white; border-radius: 8px; padding: 2px 8px;
                   font-weight: 700; }
-"""
+.mk-booth-chip { min-width: 26px; min-height: 26px; padding: 0; border-radius: 99px;
+                 border: 2px solid alpha(currentColor, 0.25); }
+.mk-booth-chip:checked { border: 3px solid @accent_color; }
+""" + "".join(f".mk-chip-{name.lower()} {{ background: rgb({round(r * 255)}, {round(g * 255)}, {round(b * 255)}); }}\n"
+              for name, (r, g, b) in COLORS).encode()
 
 # ---------------------------------------------------------------- webcam hardware controls (v4l2)
 CTRL_RE = re.compile(r"^\s*(\w+)\s+0x[0-9a-f]+\s+\((int|bool)\)\s*:\s*(?:min=(-?\d+)\s+max=(-?\d+)\s+step=(\d+)\s+)?"
@@ -138,11 +151,13 @@ DATE_STYLES = {"digital": ("Digital (90s)", "DSEG7 Classic, Monospace Bold", (1.
                "handwritten": ("Handwritten", "Patrick Hand, Comic Neue, Sans Italic", (1.0, 1.0, 1.0))}
 
 
-def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=None):
+def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=None, caption_font="marker",
+               caption_colour=(0.18, 0.16, 0.2)):
     """Text and emoji stickers drawn with Pango/cairo (which renders colour
     emoji), each turned by its angle; a Polaroid caption; a date stamp in the
     photo's corner. ITEMS: dicts with kind, text, x, y (0-1 of the image),
-    size (fraction of its width), angle (degrees) and colour. Returns the
+    size (fraction of its width), angle (degrees), colour, and for text a
+    font (a FONTS key) and shadow (True for a soft drop shadow). Returns the
     image and each item's box (cx, cy, w, h, angle) in image pixels."""
     rgba = img.convert("RGBA")
     w, h = rgba.size
@@ -153,7 +168,7 @@ def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=
     cr = cairo.Context(surface)
     boxes = []
 
-    def text_at(text, cx, cy, px, colour, font, outline=True, angle=0.0, glow=False):
+    def text_at(text, cx, cy, px, colour, font, outline=True, angle=0.0, glow=False, shadow=False):
         layout = PangoCairo.create_layout(cr)
         layout.set_font_description(Pango.FontDescription.from_string(f"{font} {max(6, px)}px"))
         layout.set_text(text, -1)
@@ -161,6 +176,15 @@ def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=
         cr.save()
         cr.translate(cx, cy)
         cr.rotate(math.radians(angle))
+        if shadow:  # a soft drop shadow: a few offset, fading copies
+            off = max(1.5, px / 16)
+            for spread, alpha in ((3, 0.12), (2, 0.18), (1, 0.28)):
+                cr.move_to(-tw / 2 + off, -th / 2 + off)
+                PangoCairo.layout_path(cr, layout)
+                cr.set_source_rgba(0, 0, 0, alpha)
+                cr.set_line_width(spread * off * 0.6)
+                cr.stroke_preserve()
+                cr.fill()
         if glow:  # the orange digits of a 90s camera, slightly bleeding
             cr.move_to(-tw / 2, -th / 2)
             PangoCairo.layout_path(cr, layout)
@@ -186,13 +210,19 @@ def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=
             tw, th = text_at(item["text"], item["x"] * w, item["y"] * h, px, (1, 1, 1), "Noto Color Emoji",
                              outline=False, angle=angle)
         else:
-            tw, th = text_at(item["text"], item["x"] * w, item["y"] * h, px, item["colour"], "Sans Bold",
-                             angle=angle)
+            font = FONTS.get(item.get("font", "sans"), FONTS["sans"])[1]
+            tw, th = text_at(item["text"], item["x"] * w, item["y"] * h, px, item["colour"], font,
+                             outline=not item.get("shadow"), angle=angle, shadow=item.get("shadow", False))
         boxes.append((item["x"] * w, item["y"] * h, tw, th, angle))
     if caption and caption_box:
         x, y, bw, bh = caption_box
-        text_at(caption, x + bw / 2, y + bh / 2, round(bh * 0.32), (0.18, 0.16, 0.2),
-                "Patrick Hand, Comic Neue, Sans", outline=False)
+        font = FONTS.get(caption_font, FONTS["marker"])[1]
+        px = round(bh * 0.22)
+        layout = PangoCairo.create_layout(cr)  # shrink a long caption to fit the card
+        layout.set_font_description(Pango.FontDescription.from_string(f"{font} {px}px"))
+        layout.set_text(caption, -1)
+        px = max(8, min(px, round(px * bw * 0.9 / max(1, layout.get_pixel_size()[0]))))
+        text_at(caption, x + bw / 2, y + bh / 2, px, caption_colour, font, outline=False)
     if date and photo_box:
         style, stamp = date
         _label, font, colour = DATE_STYLES[style]
@@ -265,7 +295,7 @@ class Booth(Adw.ApplicationWindow):
         self.flash = Gtk.Box(css_classes=["mk-booth-flash"], opacity=0, can_target=False)
         # 3 x 3: nine looks live at once, click one to use it.
         self.grid_mode = False
-        self.grid = Gtk.Grid(row_spacing=6, column_spacing=6, hexpand=True, vexpand=True,
+        self.grid = Gtk.Grid(row_spacing=12, column_spacing=12, hexpand=True, vexpand=True,
                              row_homogeneous=True, column_homogeneous=True)
         self.grid_cells = []
         for n, key in enumerate(GRID_LOOKS):
@@ -469,7 +499,7 @@ class Booth(Adw.ApplicationWindow):
         if img is None:
             return GLib.SOURCE_REMOVE
         if self.grid_mode:
-            if now - getattr(self, "last_grid", 0) < 1 / 12:  # nine looks: 12 fps is smooth enough
+            if now - getattr(self, "last_grid", 0) < 1 / 24:  # nine looks at 24 fps: ~10 ms a frame
                 return GLib.SOURCE_REMOVE
             self.last_grid = now
             tiny = img.resize((GRID_W, round(GRID_W * img.height / img.width)), Image.Resampling.BILINEAR)
@@ -538,11 +568,24 @@ class Booth(Adw.ApplicationWindow):
         self.caption.set_text("")
         self._compose()
         self.stack.set_visible_child_name("decorate")
+        self._develop()
         # The photo is taken: the camera goes off (its light too) while you
         # decorate, and comes back on with Retake or after saving.
         self._stop_camera()
         with self.frame_lock:
             self.frame = None
+
+    def _develop(self):
+        """The print develops: the slate over it clears over 3 s, slowly at
+        first, like instant film."""
+        def step(v):
+            self.slate = 1 - v
+            self.handles.queue_draw()
+        anim = Adw.TimedAnimation.new(self.handles, 0, 1, int(DEVELOP_SECONDS * 1000),
+                                      Adw.CallbackAnimationTarget.new(step))
+        anim.set_easing(Adw.Easing.EASE_IN_CUBIC)
+        anim.play()
+        self._developing = anim
 
     # ----- decorate page
     def _decorate_page(self):
@@ -559,29 +602,54 @@ class Booth(Adw.ApplicationWindow):
         self.handles.add_controller(drag)
         self.angle_label = Gtk.Label(css_classes=["mk-booth-angle"], visible=False, halign=Gtk.Align.START,
                                      valign=Gtk.Align.START, can_target=False)
-        canvas = Gtk.Overlay(child=self.result, margin_start=12, margin_top=8, margin_bottom=12)
+        canvas = Gtk.Overlay(child=self.result, margin_start=12, margin_top=12, margin_bottom=12)
         canvas.add_overlay(self.handles)
         canvas.add_overlay(self.angle_label)
+        self.slate = 0.0  # the developing print's chemical slate over the photo, 1 = opaque
+        self.view_img = None
+        self.view_photo_box = (0, 0, 0, 0)
         self.selected = None
         self.boxes = []
 
-        tools = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, width_request=310,
-                        margin_start=12, margin_end=12, margin_top=8, margin_bottom=12)
+        tools = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, width_request=320,
+                        margin_start=16, margin_end=16, margin_top=12, margin_bottom=16)
         tools.append(Gtk.Label(label="Add text or a sticker, then click the photo", css_classes=["heading"],
                                xalign=0, wrap=True))
         self.text_entry = Gtk.Entry(placeholder_text="Your text")
         tools.append(self.text_entry)
-        colours = Gtk.Box(spacing=4)
+        colours = Gtk.Box(spacing=6)
         self.colour = COLORS[0][1]
         group = None
         for name, rgb in COLORS:
-            b = Gtk.ToggleButton(label=name[0], tooltip_text=name, css_classes=["circular"], active=group is None)
+            b = Gtk.ToggleButton(tooltip_text=name, css_classes=["mk-booth-chip", f"mk-chip-{name.lower()}"],
+                                 active=group is None, valign=Gtk.Align.CENTER)
             if group:
                 b.set_group(group)
             group = group or b
             b.connect("toggled", lambda btn, c=rgb: btn.get_active() and self._set_colour(c))
             colours.append(b)
         tools.append(colours)
+        # Lettering: font, size and a drop shadow; they apply to the selected
+        # text and to the next text you place (and the font to the caption).
+        font_row = Gtk.Box(spacing=8)
+        font_row.append(Gtk.Label(label="Font", xalign=0, hexpand=True))
+        self.font = Gtk.DropDown.new_from_strings([v[0] for v in FONTS.values()])
+        self.font.connect("notify::selected", lambda *_: self._style_selected("font", self._font_key()))
+        font_row.append(self.font)
+        tools.append(font_row)
+        size_row = Gtk.Box(spacing=8)
+        size_row.append(Gtk.Label(label="Size", xalign=0))
+        self.size = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 3, 24, 1)
+        self.size.set_value(8)
+        self.size.set_hexpand(True)
+        self.size.set_draw_value(False)
+        self.size.connect("value-changed", lambda sc: self._style_selected("size", sc.get_value() / 100))
+        size_row.append(self.size)
+        size_row.append(Gtk.Label(label="Shadow"))
+        self.shadow = Gtk.Switch(valign=Gtk.Align.CENTER)
+        self.shadow.connect("notify::active", lambda sw, _p: self._style_selected("shadow", sw.get_active()))
+        size_row.append(self.shadow)
+        tools.append(size_row)
         flow = Gtk.FlowBox(max_children_per_line=8, selection_mode=Gtk.SelectionMode.NONE)
         self.sticker = None
         for ch in self._split_emoji(STICKERS):
@@ -607,6 +675,18 @@ class Booth(Adw.ApplicationWindow):
                                                                     self._compose()))
         frame_row.append(self.frame_switch)
         tools.append(frame_row)
+        self.frame_colour = Gtk.DropDown.new_from_strings([v[0] for v in photo.FRAME_COLOURS.values()])
+        self.frame_colour.connect("notify::selected", lambda *_: self._compose())
+        stock = Gtk.Box(spacing=8)
+        stock.append(Gtk.Label(label="Card", xalign=0, hexpand=True))
+        stock.append(self.frame_colour)
+        tools.append(stock)
+        leak_row = Gtk.Box(spacing=8)
+        leak_row.append(Gtk.Label(label="Light leak", xalign=0, hexpand=True))
+        self.leak = Gtk.DropDown.new_from_strings(["None"] + list(photo.LEAKS.values()))
+        self.leak.connect("notify::selected", lambda *_: self._compose())
+        leak_row.append(self.leak)
+        tools.append(leak_row)
         self.caption = Gtk.Entry(placeholder_text="Caption on the frame")
         self.caption.connect("changed", lambda *_: self._compose())
         tools.append(self.caption)
@@ -619,8 +699,15 @@ class Booth(Adw.ApplicationWindow):
         self.date_switch.connect("notify::active", lambda *_: self._compose())
         date_row.append(self.date_switch)
         tools.append(date_row)
+        year_row = Gtk.Box(spacing=8)
+        year_row.append(Gtk.Label(label="Year on the stamp", xalign=0, hexpand=True))
+        self.year = Gtk.SpinButton.new_with_range(1970, 2099, 1)
+        self.year.set_value(time.localtime().tm_year)
+        self.year.connect("value-changed", lambda *_: self.date_switch.get_active() and self._compose())
+        year_row.append(self.year)
+        tools.append(year_row)
 
-        row = Gtk.Box(spacing=6, margin_top=6)
+        row = Gtk.Box(spacing=12, margin_top=12)
         retake = Gtk.Button(label="Retake", css_classes=["pill"])
         retake.connect("clicked", lambda *_: self._back_to_camera())
         save = Gtk.Button(label="Save", css_classes=["pill", "suggested-action"], hexpand=True)
@@ -651,6 +738,19 @@ class Booth(Adw.ApplicationWindow):
         self.text_entry.set_text("")
         self.toast.add_toast(Adw.Toast(title=f"{ch} picked: click the photo to place it", timeout=2))
 
+    def _font_key(self):
+        return list(FONTS)[self.font.get_selected()]
+
+    def _style_selected(self, key, value):
+        """A lettering control changed: restyle the selected text, if any
+        (fonts also restyle the caption)."""
+        i = self.selected
+        if i is not None and self.items[i]["kind"] == "text":
+            self.items[i][key] = value
+        elif key == "size" and i is not None:
+            self.items[i][key] = value
+        self._compose()
+
     def _set_colour(self, colour):
         self.colour = colour
         if self.selected is not None and self.items[self.selected]["kind"] == "text":
@@ -660,14 +760,18 @@ class Booth(Adw.ApplicationWindow):
     def _composed_parts(self, base_photo=None):
         """The photo with its frame (if on), and where the photo and caption sit."""
         shot = base_photo or self.shot
+        leak = self.leak.get_selected()
+        if leak:
+            shot = photo.light_leak(shot, list(photo.LEAKS)[leak - 1])
         if self.frame_on:
-            framed, caption_box = photo.polaroid_frame(shot)
-            side = caption_box[0]
-            return framed, (side, side, shot.width, shot.height), caption_box
+            colour = list(photo.FRAME_COLOURS)[self.frame_colour.get_selected()]
+            framed, photo_box, caption_box = photo.polaroid_frame(shot, colour)
+            return framed, photo_box, caption_box
         return shot, (0, 0, shot.width, shot.height), None
 
     def _render(self, base_photo):
         base, (px, py, pw, ph), caption_box = self._composed_parts(base_photo)
+        self.view_photo_box = (px, py, pw, ph)
         # Items are kept relative to the photo, so the frame can come and go.
         placed = [dict(it, x=(px + it["x"] * pw) / base.width, y=(py + it["y"] * ph) / base.height,
                        size=it["size"] * pw / base.width) for it in self.items]
@@ -675,9 +779,16 @@ class Booth(Adw.ApplicationWindow):
         if self.date_switch.get_active():
             style = list(DATE_STYLES)[self.date_style.get_selected()]
             fmt = "'%y %m %d" if style == "digital" else "%d %b %Y" if style == "typewriter" else "%d/%m/%y"
-            date = (style, time.strftime(fmt, self.taken_at))
+            taken = datetime.datetime(*self.taken_at[:6])
+            try:  # the year you picked (a '98 print), the day it was taken
+                taken = taken.replace(year=int(self.year.get_value()))
+            except ValueError:  # 29 February in a year without one
+                taken = taken.replace(year=int(self.year.get_value()), day=28)
+            date = (style, taken.strftime(fmt))
+        noir = self.frame_on and list(photo.FRAME_COLOURS)[self.frame_colour.get_selected()] == "noir"
         return draw_items(base, placed, self.caption.get_text().strip() if self.frame_on else None,
-                          caption_box, date, (px, py, pw, ph))
+                          caption_box, date, (px, py, pw, ph), caption_font=self._font_key(),
+                          caption_colour=(0.93, 0.92, 0.88) if noir else (0.18, 0.16, 0.2))
 
     def _compose(self):
         """Redraw the editing view (on a smaller copy, so dragging is smooth)."""
@@ -711,6 +822,12 @@ class Booth(Adw.ApplicationWindow):
         return corners, knob, (ox + cx * k, oy + cy * k)
 
     def _draw_handles(self, _area, cr, _w, _h):
+        if self.slate > 0 and self.view_img is not None:  # the print is still developing
+            k, ox, oy = self._to_view()
+            px, py, pw, ph = self.view_photo_box
+            cr.set_source_rgba(0.17, 0.16, 0.14, self.slate)
+            cr.rectangle(ox + px * k, oy + py * k, pw * k, ph * k)
+            cr.fill()
         if self.selected is None or self.selected >= len(self.boxes):
             return
         corners, knob, centre = self._box_points(self.selected)
@@ -814,7 +931,8 @@ class Booth(Adw.ApplicationWindow):
         rel = {"x": (bx - px) / pw, "y": (by - py) / ph, "angle": 0.0}
         text = self.text_entry.get_text().strip()
         if text:
-            self.items.append({"kind": "text", "text": text, "colour": self.colour, "size": 0.08, **rel})
+            self.items.append({"kind": "text", "text": text, "colour": self.colour, "size": self.size.get_value() / 100,
+                               "font": self._font_key(), "shadow": self.shadow.get_active(), **rel})
             self.text_entry.set_text("")
         elif self.sticker:
             self.items.append({"kind": "sticker", "text": self.sticker, "size": 0.12, **rel})

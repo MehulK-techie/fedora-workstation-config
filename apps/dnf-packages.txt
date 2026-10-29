@@ -19,6 +19,8 @@ python3-pygments
 python3-pynacl
 # MK Notes image editor (crop, rotate, filters)
 python3-pillow
+# Photo Booth: handwritten captions (the marker lettering falls back to it)
+comic-neue-fonts
 # Files' right-click Lock / Unlock with MK Lock (config/nautilus/mk-lock.py)
 nautilus-python
 # mk speedtest --ookla: Ookla's nearest server

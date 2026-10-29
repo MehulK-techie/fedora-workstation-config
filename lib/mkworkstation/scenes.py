@@ -5,8 +5,9 @@
   web      a brick-built masked hero in red and blue hangs upside down from a
            web line beside a skyscraper whose lit windows spell SIGN_TEXT
            (screensaver.conf, MK by default, up to four letters), over the
-           city (two parallax layers), with a tribute to Stan Lee on a
-           rooftop billboard (a halftone photo; TRIBUTE_IMAGE swaps it); lightning
+           city (two parallax layers); on the tower to the left, Stan Lee's
+           portrait and his line lit in its windows (TRIBUTE_IMAGE swaps the
+           photo); the clock top right
   knight   a brick-built caped knight stands on a stone gargoyle in the rain;
            the cape moves in the wind, a searchlight sweeps the clouds and
            lights him from behind, lightning
@@ -164,16 +165,18 @@ def draw_skyline(cr, rand, buildings, base, color, window=None, offset=0.0):
 SHOW_CAPTION = True  # off on the lock screen, which shows its own clock
 
 
-def caption(cr, w, h, lines):
-    """The time (or a countdown) in the corner, quiet."""
+def caption(cr, w, h, lines, corner="bottom-left"):
+    """The time (or a countdown) in a corner, quiet: bottom-left, or
+    top-right (right-aligned)."""
     if not SHOW_CAPTION:
         return
     cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-    y = h - 70
+    y = h - 70 if corner == "bottom-left" else 72
     for i, (text, size, alpha) in enumerate(lines):
         cr.set_font_size(size)
         cr.set_source_rgba(1, 1, 1, alpha)
-        cr.move_to(56, y)
+        x = 56 if corner == "bottom-left" else w - 56 - cr.text_extents(text).x_advance
+        cr.move_to(x, y)
         cr.show_text(text)
         y += size + 8
         cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
@@ -242,7 +245,7 @@ def sign_text():
         text = conf().get("SIGN_TEXT", "MK")
     except (ImportError, ValueError):
         text = "MK"
-    text = "".join(ch for ch in text.strip().strip('"').upper() if ch in GLYPHS)[:SIGN_MAX]
+    text = "".join(ch for ch in text.strip().strip('"').upper() if ch.isalnum() and ch in GLYPHS)[:SIGN_MAX]
     return text or "MK"
 
 
@@ -264,8 +267,8 @@ class WebHang(Scene):
             cr.fill()
         city_far(cr, w, h, h * 0.62, random.Random(9))
         tower(cr, w, h, self.sign)
+        tribute_tower(cr, w, h)
         self.layers = None
-        self.portrait = None
 
     def _city(self, w, h):
         if self.layers is None or self.layers[0] != (w, h):
@@ -308,42 +311,13 @@ class WebHang(Scene):
         cr.fill()
         cornice(cr, w, ledge, anchor_x)
 
-        # the tribute sits on a near rooftop: it drifts with the near city
-        near = -80 + math.sin(t * 0.05) * 80
-        if self.portrait is None:
-            self.portrait = tribute_portrait(int(h * 0.15))
-        billboard(cr, w * 0.06 + near, h * 0.40, h * 0.20, h * 0.25, t, h, self.portrait)
-        self._lightning(cr, w, h, t)
 
         cr.save()
         cr.translate(end_x, end_y)
         cr.rotate(-swing)
         self._hero(cr, min(w, h) / 1080 * 1.45, t)
         cr.restore()
-        caption(cr, w, h, [(time.strftime("%H:%M"), 44, 0.85), (time.strftime("%A, %d %B"), 16, 0.5)])
-
-    LIGHTNING_EVERY = 75  # seconds; the first 20 s in
-
-    def _lightning(self, cr, w, h, t):
-        """Now and then a double flash and a bolt over the city."""
-        if t < 20:
-            return
-        cycle, p = divmod(t - 20, self.LIGHTNING_EVERY)
-        flash = max(0.0, 1 - abs(p - 0.08) / 0.08) + 0.7 * max(0.0, 1 - abs(p - 0.32) / 0.1)
-        if flash <= 0:
-            return
-        rand = random.Random(int(cycle))
-        x, y = w * rand.uniform(0.08, 0.3), 0.0
-        cr.move_to(x, y)
-        while y < h * 0.45:
-            x += rand.uniform(-40, 40)
-            y += rand.uniform(30, 60)
-            cr.line_to(x, y)
-        cr.set_source_rgba(0.85, 0.9, 1, 0.9 * min(1, flash))
-        cr.set_line_width(2.5)
-        cr.stroke()
-        cr.set_source_rgba(0.8, 0.85, 1, 0.3 * min(1, flash))
-        cr.paint()
+        caption(cr, w, h, [(time.strftime("%H:%M"), 44, 0.85), (time.strftime("%A, %d %B"), 16, 0.5)], "top-right")
 
     def _hero(self, cr, s, t):
         """A plastic brick-style minifigure, upside down: feet at the origin (on
@@ -463,6 +437,8 @@ GLYPHS = {
     "4": "00010 00110 01010 10010 11111 00010 00010", "5": "11111 10000 11110 00001 00001 10001 01110",
     "6": "00110 01000 10000 11110 10001 10001 01110", "7": "11111 00001 00010 00100 01000 01000 01000",
     "8": "01110 10001 10001 01110 10001 10001 01110", "9": "01110 10001 10001 01111 00001 00010 01100",
+    ".": "00000 00000 00000 00000 00000 01100 01100", "-": "00000 00000 00000 11111 00000 00000 00000",
+    "•": "00000 00000 01110 01110 01110 00000 00000", " ": "00000 00000 00000 00000 00000 00000 00000",
 }
 GOLD, CYAN = (0xf5 / 255, 0xc5 / 255, 0x42 / 255), (0x42 / 255, 0xb6 / 255, 0xf5 / 255)
 
@@ -482,35 +458,6 @@ _PORTRAIT = Path.home() / ".config/mk-workstation/tribute.jpg"
 _BUNDLED = Path(__file__).resolve().parents[2] / "assets/screensaver/stan-lee.jpg"
 
 
-def tribute_portrait(size):
-    """A square halftone portrait, SIZE pixels: TRIBUTE_IMAGE, else
-    ~/.config/mk-workstation/tribute.jpg, else the bundled photo of Stan Lee.
-    False when none can be read (the frame stays dark)."""
-    path = next((p for p in (Path(conf_value("TRIBUTE_IMAGE", "") or "/nonexistent").expanduser(),
-                             _PORTRAIT, _BUNDLED) if p.is_file()), None)
-    if size < 16 or path is None:
-        return False
-    try:
-        from PIL import Image, ImageOps
-        img = ImageOps.autocontrast(ImageOps.fit(Image.open(path).convert("L"), (size, size)), cutoff=2)
-    except Exception:  # noqa: BLE001 - any bad file: the frame stays dark
-        return False
-    surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
-    cr = cairo.Context(surf)
-    cr.set_source_rgb(0.95, 0.94, 0.9)  # newsprint
-    cr.paint()
-    cr.set_source_rgb(0.05, 0.05, 0.08)
-    cell = max(2, size // 64)
-    px = img.load()
-    for y in range(0, size, cell):
-        for x in range(0, size, cell):
-            dark = 1 - px[x, y] / 255
-            if dark > 0.04:
-                cr.arc(x + cell / 2, y + cell / 2, cell * 0.72 * math.sqrt(dark), 0, 2 * math.pi)
-                cr.fill()
-    return surf
-
-
 def conf_value(key, default):
     try:
         from .saver_conf import conf
@@ -519,91 +466,88 @@ def conf_value(key, default):
         return default
 
 
-def billboard(cr, x, y, bw, bh, t, ground, portrait=None):
-    """Stan Lee's tribute on its own building: a lit frame with his portrait
-    (a halftone photo), his line beneath it and 1922-2018, two lamps
-    shining up at it, on steel legs on the roof (down to GROUND)."""
-    cr.save()
-    roof = y + bh * 1.12
-    cr.set_source_rgb(0.03, 0.025, 0.07)  # the building it stands on
-    cr.rectangle(x - bw * 0.25, roof, bw * 1.5, ground - roof)
+QUOTE = ("WITH GREAT POWER COMES", "GREAT RESPONSIBILITY.")
+TRIBUTE_LINE = "STAN LEE • 1922-2018"
+
+
+def _portrait_levels(cols, rows):
+    """The tribute photo as COLS x ROWS brightness levels (0-1), or None."""
+    path = next((p for p in (Path(conf_value("TRIBUTE_IMAGE", "") or "/nonexistent").expanduser(),
+                             _PORTRAIT, _BUNDLED) if p.is_file()), None)
+    if path is None:
+        return None
+    try:
+        from PIL import Image, ImageOps
+        img = ImageOps.autocontrast(ImageOps.fit(Image.open(path).convert("L"), (cols, rows)), cutoff=2)
+    except Exception:  # noqa: BLE001 - any bad file: the windows stay dark
+        return None
+    px = img.load()
+    return [[px[c, r] / 255 for c in range(cols)] for r in range(rows)]
+
+
+def _lit_text(cr, text, cx, top, pitch, colour, alpha=0.95):
+    """TEXT in the 5 x 7 window font, centred on CX: one lit window per dot."""
+    cells, cols = sign_cells(text)
+    x0 = cx - cols * pitch / 2
+    cr.set_source_rgba(*colour, alpha)
+    for c, r in cells:
+        cr.rectangle(x0 + c * pitch, top + r * pitch, pitch * 0.72, pitch * 0.72)
     cr.fill()
-    rand = random.Random(41)
-    for wy in range(int(roof) + 16, int(ground) - 8, 20):  # its lit windows
-        for wx in range(int(x - bw * 0.25) + 10, int(x + bw * 1.25) - 10, 16):
+    return top + 7 * pitch
+
+
+def tribute_tower(cr, w, h):
+    """Stan Lee's tribute, lit in a skyscraper's windows: his portrait (from
+    the photo, bright offices gold, mid tones cyan) and his line beneath it
+    in the window font, with 1922-2018. Part of the still background, so
+    the drift never shakes it."""
+    rand = random.Random(57)
+    bx, top = w * 0.035, h * 0.20
+    bw = w * 0.28
+    body = cairo.LinearGradient(bx, 0, bx + bw, 0)
+    body.add_color_stop_rgb(0, 0.09, 0.08, 0.18)
+    body.add_color_stop_rgb(1, 0.04, 0.035, 0.09)
+    cr.set_source(body)
+    cr.rectangle(bx, top, bw, h - top)
+    cr.fill()
+    cr.set_source_rgba(0.55, 0.65, 0.95, 0.3)  # rim light
+    cr.rectangle(bx + bw - 2, top, 2, h - top)
+    cr.fill()
+    cr.set_source_rgb(0.06, 0.05, 0.12)  # a crown on the roof
+    cr.rectangle(bx + bw * 0.3, top - h * 0.025, bw * 0.4, h * 0.025)
+    cr.fill()
+    # the portrait: a square of office windows
+    side = min(bw * 0.62, h * 0.22)
+    cols = 34
+    pitch = side / cols
+    px0, py0 = bx + (bw - side) / 2, top + h * 0.03
+    levels = _portrait_levels(cols, cols)
+    for r in range(cols):
+        for c in range(cols):
+            x, y = px0 + c * pitch, py0 + r * pitch
+            v = levels[r][c] if levels else 0.0
+            if v > 0.62:
+                cr.set_source_rgba(*GOLD, 0.45 + 0.55 * (v - 0.62) / 0.38)
+            elif v > 0.36:
+                cr.set_source_rgba(*CYAN, 0.18 + 0.5 * (v - 0.36) / 0.26)
+            else:
+                cr.set_source_rgba(0.02, 0.02, 0.05, 0.9)
+            cr.rectangle(x, y, pitch * 0.8, pitch * 0.8)
+            cr.fill()
+    # the quote and the dates, in lit windows
+    widest = max(sign_cells(line)[1] for line in QUOTE)
+    tp = min(3.2, (bw - 24) / widest)
+    y = py0 + side + tp * 4
+    for line in QUOTE:
+        y = _lit_text(cr, line, bx + bw / 2, y, tp, GOLD) + tp * 2.5
+    _lit_text(cr, TRIBUTE_LINE, bx + bw / 2, y + tp, tp * 0.8, CYAN, 0.85)
+    # ordinary offices further down
+    for wy in range(int(y + tp * 14), int(h) - 8, 18):
+        for wx in range(int(bx) + 10, int(bx + bw) - 10, 14):
             if rand.random() < 0.3:
-                cr.set_source_rgba(*GOLD, rand.uniform(0.3, 0.75))
+                cr.set_source_rgba(*(GOLD if rand.random() < 0.8 else CYAN), rand.uniform(0.3, 0.7))
                 cr.rectangle(wx, wy, 7, 9)
                 cr.fill()
-    cr.set_source_rgb(0.05, 0.05, 0.08)  # legs and catwalk
-    for lx in (x + bw * 0.2, x + bw * 0.8):
-        cr.rectangle(lx - 3, y + bh, 6, roof - y - bh)
-    cr.rectangle(x - 6, y + bh, bw + 12, 5)
-    cr.fill()
-    panel = cairo.LinearGradient(x, y, x, y + bh)  # lit from below
-    panel.add_color_stop_rgb(0, 0.06, 0.07, 0.12)
-    panel.add_color_stop_rgb(1, 0.17, 0.16, 0.21)
-    cr.set_source(panel)
-    cr.rectangle(x, y, bw, bh)
-    cr.fill()
-    cr.set_source_rgba(1, 0.9, 0.7, 0.35)
-    cr.set_line_width(2)
-    cr.rectangle(x, y, bw, bh)
-    cr.stroke()
-    flick = 0.85 + 0.15 * math.sin(t * 7.3) * math.sin(t * 2.1)  # old lamps
-    for lx in (x + bw * 0.25, x + bw * 0.75):
-        beam = cairo.LinearGradient(0, y + bh, 0, y)
-        beam.add_color_stop_rgba(0, 1, 0.92, 0.7, 0.22 * flick)
-        beam.add_color_stop_rgba(1, 1, 0.92, 0.7, 0.0)
-        cr.set_source(beam)
-        cr.move_to(lx - 4, y + bh + 2)
-        cr.line_to(lx - bw * 0.3, y)
-        cr.line_to(lx + bw * 0.3, y)
-        cr.line_to(lx + 4, y + bh + 2)
-        cr.close_path()
-        cr.fill()
-        cr.set_source_rgb(0.1, 0.1, 0.12)
-        cr.rectangle(lx - 5, y + bh + 2, 10, 5)
-        cr.fill()
-    # the portrait, centred in the top of the frame
-    side = bh * 0.6
-    px, py = x + (bw - side) / 2, y + bh * 0.07
-    if portrait:
-        cr.save()
-        cr.translate(px, py)
-        cr.scale(side / portrait.get_width(), side / portrait.get_height())
-        cr.set_source_surface(portrait, 0, 0)
-        cr.paint_with_alpha(0.92)
-        cr.restore()
-    else:
-        cr.set_source_rgb(0.12, 0.13, 0.2)
-        cr.rectangle(px, py, side, side)
-        cr.fill()
-    cr.set_source_rgba(1, 0.95, 0.85, 0.5)
-    cr.set_line_width(1.5)
-    cr.rectangle(px, py, side, side)
-    cr.stroke()
-    # the quote underneath, centred, sized to the frame
-    lines = ("“With great power comes", "great responsibility.”")
-    cr.select_font_face("Serif", cairo.FONT_SLANT_ITALIC, cairo.FONT_WEIGHT_NORMAL)
-    cr.set_font_size(100)
-    widest = max(cr.text_extents(line).x_advance for line in lines)
-    size = min(bh * 0.075, (bw * 0.9) / widest * 100)
-    cr.set_font_size(size)
-    cr.set_source_rgba(1, 0.97, 0.9, 0.95)
-    top = py + side + size * 1.5
-    for i, line in enumerate(lines):
-        ext = cr.text_extents(line)
-        cr.move_to(x + (bw - ext.x_advance) / 2, top + i * size * 1.25)
-        cr.show_text(line)
-    cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
-    cr.set_font_size(size * 0.7)
-    cr.set_source_rgba(*GOLD, 0.9)
-    sub = "Stan Lee • 1922–2018"
-    ext = cr.text_extents(sub)
-    cr.move_to(x + (bw - ext.x_advance) / 2, top + 2 * size * 1.25 + size * 0.2)
-    cr.show_text(sub)
-    cr.restore()
 
 
 def plastic(cr, x, y, w, h, color, radius=4):

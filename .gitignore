@@ -50,3 +50,13 @@ repomix-output.xml
 skills-lock.json
 PROMPT-TEMPLATE.md
 SESSION_FAILURES.md
+.agents/
+.antigravityignore
+repomix-output.xml
+skills-lock.json
+PROMPT-TEMPLATE.md
+SESSION_FAILURES.md
+*.tmp
+*.bak
+__pycache__/
+*.pyc

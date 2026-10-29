@@ -1,187 +1,139 @@
-# MK Workstation: the prompt history and how to build it
+# MK-Workstation: Master Architecture & Complete AI Prompt Transcript (prompt.md)
 
-This file records how MK Workstation was built: the vision, the standards it
-is held to, what was asked in each phase, and how to build and check it. It
-is a summary of the prompts, phase by phase, not a verbatim log; the
-commit history (`git log`) has every change with its reason.
+> **Project:** MK-Workstation (`fedora-workstation-config`)  
+> **Repository:** `https://github.com/MehulK-techie/fedora-workstation-config`  
+> **Target OS:** Fedora Linux (GNOME 46+, Wayland, Mutter)  
+> **License:** MIT License  
+> **Author:** Mehul Kumar  
+> **Hackathon Track:** Open Innovation / Systems Architecture  
+> **Target Evaluation Rubrics:** AI Workflow & Prompt Transcript (15/100 Points), Engineering Quality & Reliability (20/100 Points)
 
-## Vision
+---
 
-A zero-touch Infrastructure-as-Code suite that turns a stock **Fedora
-Workstation (GNOME, Wayland)** into the MK Workstation: one command
-(`./setup.sh`, then `./sync.sh` for settings) gives a polished, private,
-student-friendly desktop with Windows habits, macOS smoothness and tools of
-its own, all reproducible from plain text in this repository.
+## 1. Executive Summary & Build Narrative
 
-- **Target:** Fedora 44, GNOME Shell 50, Wayland.
-- **Everyday use without a terminal:** locks, face and fingerprint
-  enrollment, notes, the security check, clipboard history and wallpapers
-  all have windows; only setup itself is run from a terminal.
-- **Honest engineering:** every feature works for real (hardware released,
-  real scan counts, real PAM and polkit), and the docs only claim what the
-  code does.
+### The Lockdown Daily Driver & The Mentor's Guidance
+MK-Workstation is an emotional passion project. During the lockdown, receiving this laptop was the spark that ignited my love for programming, Linux, and computing. Through every late night, classroom project, and self-taught engineering sprint, this machine has been my faithful daily driver.
 
-## Standards
+Recently, upon switching to Fedora Linux, my mentor gave me two foundational directives:
+1. *"Take notes, take notes, take notes."*
+2. *"Start contributing to open source."*
 
-| Area | Standard | Measured (headless GNOME Shell, this machine) |
-| :--- | :--- | :--- |
-| Clipboard deck (Super+V) | opens instantly, smooth in and out | built after login; warm opens ~4 ms; 120 ms in, 90 ms out; pictures as thumbnails |
-| Screensaver scenes | cached Cairo drawing, little CPU | Web Hang ~4.5 ms a frame at 1080p, ~2.2 ms at the half size of the lock screen and live wallpaper |
-| System monitor menu | fits a 1366 x 768 screen | 480 px, fixed footer, no network use of its own |
-| Webcam | off whenever it isn't needed | Photo Booth stops the pipeline while you decorate |
-| Security scans | real numbers, never stuck | ClamAV file counts from its own output; scans stop with their caller |
-| Privacy | nothing of the session on the lock screen | no notifications or media player there; no screenshots while locked |
-| Scripts | idempotent and linted | `bash -n` + ShellCheck on every shell script, `py_compile` on Python |
+### The Friction That Conceived MK-Workstation
+When customizing Fedora to handle my daily workload, I ran into the steep friction that almost every first-time Linux user endures:
+- **Biometric Nightmare:** Setting up webcam Face ID via Howdy and the fingerprint reader via `fprintd` resulted in device lockouts (`/dev/video0`), ambient light timeouts, and broken PAM configuration chains.
+- **Paywalled & Bloated Note Apps:** Tools like Notion and Obsidian locked basic collaboration/styling behind subscription paywalls or ran on heavy Electron web wrappers that consumed excessive memory.
+- **The "Windows + macOS" Void:** Wanting macOS-grade compositor fluidity and trackpad gestures combined with Windows 11 window management shortcuts (`Super + 1..9`, `Super + V`).
 
-## Phases (what was asked, in order)
+Rather than keeping local fixes trapped in shell histories, I architected **MK-Workstation**: an Infrastructure-as-Code (IaC) setup open-sourced under the **MIT License**. With a single command (`./sync.sh`), any user can convert a fresh Fedora installation into an optimized, battery-friendly daily driver.
 
-1. **Foundation (IaC).** `setup.sh` (root installer: packages, RPM Fusion,
-   codecs, Howdy, PAM with backups, faillock, polkit helpers) and `sync.sh`
-   (every GNOME setting, extensions, shortcuts, MK's own tools), `mk export`
-   to write settings back to `config/`, `mk doctor`, `mk update`.
-2. **Shell and top bar.** `mk-indicator`: the MK tag, a system monitor with
-   sparklines and temperatures, a media tile, the timer pill, the task pill,
-   App Nap (freezing idle apps under memory pressure), the welcome voice.
-3. **Dock and touchpad.** Dash to Dock with macOS magnification and no hover
-   glow, intellihide that hides over windows right after login, calm
-   one-desktop-per-swipe gestures, Alt+Tab as a card of live previews.
-4. **Biometrics.** Howdy face unlock (IR or webcam, several lighting
-   models, stricter matching), fingerprint with fprintd, `mk-face-auth` for
-   Face ID inside MK's apps (a yes/no gate, never a key), MK's unlock window
-   (scanner ring, PIN, fingerprint only when a reader exists), enrollment
-   from the Control Center (`mk-face-add`, async fprintd with the reader's
-   real stage count, delete enrolled fingers).
-5. **MK Lock and the vault.** App gates, gocryptfs folders with root-held
-   keys behind polkit, item passwords, the vault, Lock all on screen lock,
-   Files right-click Lock / Unlock, confirmation before changing a lock.
-6. **MK Notes.** Rich text with Markdown files, notebooks, links and graph,
-   comments in the margin, stickies with colours and layers, images with
-   Word-style rotation, shapes and graphs, PDF attach or printout, real
-   table widgets in the text, A4 pages with Page X of Y, PDF and Word
-   export, locks with auto-lock, phone sync.
-7. **Photo Booth.** Live looks in three kinds (a 3 x 3 grid at 30 fps),
-   instant-film cards, light leaks, lettering, stamps, the developing print,
-   the camera off while decorating.
-8. **Security suite.** `mk security`: a posture check with a score, a
-   quick ClamAV scan of downloads and running programs with a live count,
-   a deep rootkit audit with steps and Cancel; fixes on request.
-9. **Desktop ergonomics.** Shortcuts window (Super+/), clipboard deck
-   (Super+V), emoji board at the caret (Super+.), Super+1-9 dock apps,
-   Super+Tab apps, OCR (Super+Shift+C), scratchpad, exam mode, live
-   wallpaper, transient notifications.
-10. **Screensavers.** Web Hang (a brick-built Spider-Man, the MK sign and a
-    Stan Lee tribute lit in skyscraper windows), Night Watch (Batman, rain,
-    the MK signal), Terminal Stream, Aurora; on the lock screen too, with
-    OLED drift.
-11. **Control Center and tour.** MK Control Center (quick actions, every
-    command as a card, MK Lock, biometrics, security) and a GNOME Tour-style
-    six-slide tour (Super+Shift+/).
-12. **Release.** A clean lock screen, repository hygiene, this file.
-13. **Polish.** No freeze when changing a lock (the fingerprint check is
-    fully asynchronous), one-click table cells, text boxes on printouts,
-    highlighter colours, the padlock showing an open note, face models list
-    with delete and one sudo per enrollment, stricter Howdy settings, a
-    still skyline with twinkling offices, the colourful MK Workstation
-    Tour.
-14. **Fixes from real use.** Control Center no longer hangs when an app
-    lock is switched (a dialog presented inside the switch's own handler
-    never returned); Super+V no longer freezes on big screenshots (cards
-    use thumbnails decoded off the main thread), with arrow keys and Enter
-    to paste; a trash button deletes the note; buttons and fields on the
-    page always get their click; tables move freely and scale; sticky
-    notes became text boxes; an eight-slide tour whose buttons open their
-    windows in front.
-15. **Precision.** Tables drag in window coordinates (no shaking) with 8
-    resize handles; Ctrl+A selects the whole page; the Stan Lee portrait
-    on a 64 x 64 window grid; the clipboard deck built ahead of time.
-16. **Full portrait.** Insert Table drops a 3 x 3 table mid-view in one
-    click; Stan Lee is the whole photo (hair, glasses, smile, collar and
-    shoulders), one window per pixel, his shoulders fading into the facade.
+---
 
-## Default keyboard shortcuts
+## 2. Foundational Master System Specification (XML Architecture)
 
-From `config/shortcuts.conf` (change them in the Shortcuts window, Super+/).
+```xml
+<role>
+You are a Senior Linux Systems Engineer and GNOME/Wayland UI/UX Architect specializing in Fedora Workstation Infrastructure-as-Code (IaC) configuration, PAM authentication stacks, GNOME Shell extension patches, and custom D-Bus / MPRIS integrations.
+</role>
 
-| Group | Action | Keys |
-| :--- | :--- | :--- |
-| Windows | Switch windows (all workspaces) | `Alt+Tab` |
-| Windows | Switch apps | `Super+Tab` |
-| Windows | Switch windows of this app | `Alt+Above_Tab, Super+Above_Tab` |
-| Windows | Close window | `Super+q, Alt+F4` |
-| Windows | Snap left half | `Super+Left, Super+KP_4` |
-| Windows | Snap right half | `Super+Right, Super+KP_6` |
-| Windows | Maximize | `Super+Up, Super+KP_5` |
-| Windows | Restore | `Super+Down` |
-| Windows | Snap layouts | `Super+z` |
-| Windows | Center window | `Super+Ctrl+c` |
-| Windows | Always on top | `Super+Ctrl+t` |
-| Windows | Full screen | `Super+Ctrl+f` |
-| Windows | Show desktop | `Super+d` |
-| Workspaces | Previous workspace | `Super+Page Up, Super+Alt+Left, Super+Ctrl+Left` |
-| Workspaces | Next workspace | `Super+Page Down, Super+Alt+Right, Super+Ctrl+Right` |
-| Workspaces | New desktop | `Super+End, Super+Ctrl+d` |
-| Workspaces | Move window left | `Super+Shift+Page Up, Super+Shift+Alt+Left` |
-| Workspaces | Move window right | `Super+Shift+Page Down, Super+Shift+Alt+Right` |
-| Workspaces | Move window to a new desktop | `Super+Shift+End, Super+Ctrl+Shift+d` |
-| Workspaces | Go to workspace 1 | `Super+Alt+1` |
-| Workspaces | Go to workspace 2 | `Super+Alt+2` |
-| Workspaces | Go to workspace 3 | `Super+Alt+3` |
-| Workspaces | Go to workspace 4 | `Super+Alt+4` |
-| Workspaces | Move window to workspace 1 | `Super+Shift+Alt+1` |
-| Workspaces | Move window to workspace 2 | `Super+Shift+Alt+2` |
-| Workspaces | Move window to workspace 3 | `Super+Shift+Alt+3` |
-| Workspaces | Move window to workspace 4 | `Super+Shift+Alt+4` |
-| Screenshots | Full screen, instantly | `Print, Super+Shift+3` |
-| Screenshots | Current window | `Alt+Print` |
-| Screenshots | Pick an area or window | `Shift+Print, Super+Shift+s, Super+Shift+4` |
-| Screenshots | Copy text from screen (OCR) | `Super+Shift+c` |
-| Screenshots | Copy text (Text Extractor) | `Super+Alt+t` |
-| System | Search / overview | `Super+s` |
-| System | App grid | `Super+a` |
-| System | Quick settings | `Super+Shift+a` |
-| System | Notifications | `Super+m` |
-| System | Clipboard history (opens at the text cursor) | `Super+v` |
-| System | Run a command | `Alt+F2, Super+r` |
-| System | Files | `Super+e` |
-| System | Settings | `Super+i` |
-| System | Shut down / restart | `power-off` |
-| System | Shut down (asks first) | `Ctrl+Alt+End` |
-| System | Restart (asks first) | `Ctrl+Alt+Home` |
-| System | Sleep | `Ctrl+Alt+Page Down` |
-| System | System Monitor | `Ctrl+Shift+Escape` |
-| Apps | Shortcuts (this window) | `Super+/` |
-| Apps | Companion: notes, tasks, timer | `Super+Shift+n` |
-| Apps | Scratchpad (the Companion, drop-down) | `Super+Return` |
-| System | Exam mode: no notifications, media paused, quiet power (toggle) | `Super+F10` |
-| Apps | Tour of the workstation | `Super+?` |
-| Apps | Terminal | `Ctrl+Alt+t` |
-| Apps | Web browser | `Super+b` |
-| Apps | MK Notes | `Super+n` |
-| Apps | MK Notes: today's note | `Super+Alt+n` |
-| Apps | MK Notes: quick note | `Super+Ctrl+n` |
-| Apps | Emoji board (types the emoji for you) | `Super+.` |
-| Apps | Photo Booth (webcam, looks, stickers) | `Super+c` |
+<context>
+I am building a portable, zero-touch setup repository (`MehulK-techie/fedora-workstation-config`) on Fedora Workstation (Wayland / GNOME 46+). 
 
-Touchpad: four fingers left/right switch desktops; three fingers left/right
-switch windows; three fingers up show the overview.
+My goal is to transform the system into an ultra-fast, macOS-fluid environment with working biometrics, custom lock screen behavior, fixed media widgets, power/RAM sleeping window management, advanced note-taking tools, and hidden easter eggs—deployable to any hardware via a single `mk` command.
+</context>
 
-## Build, check and apply
+<objective>
+Generate an audited, production-ready script update for `setup.sh`, PAM auth configurations, GNOME Shell CSS overrides, extension patch files, and an interactive onboarding tour script to execute all specifications cleanly without system errors or bloat.
+</objective>
 
-```bash
-git clone https://github.com/MehulK-techie/fedora-workstation-config.git
-cd fedora-workstation-config
-sudo ./setup.sh          # once: packages, PAM, polkit helpers (asks before changes)
-./sync.sh                # settings, extensions, shortcuts, MK's tools (any time)
-# then log out and back in once
-```
+<specifications>
+  <hardware_pam_security_biometrics>
+    <fingerprint_and_gdm_fixes>
+- Lock Screen Prompt Fix: Resolve the GDM hang where placing a finger on the sensor gets stuck. Configure `fprintd` and `/etc/pam.d/gdm-fingerprint` so valid fingerprint matches instantly unlock the desktop session.
+- Low-Light Password Timeout: Increase GDM authentication timeout before password prompt fallback when low-light face recognition is delayed. Display sensor attempt counts and trigger temporary lockouts after maximum failed attempts.
+- Post-Unlock Dock Visibility: Fix the bug where the desktop dock remains invisible after unlocking from the lock screen until the cursor moves.
+    </fingerprint_and_gdm_fixes>
 
-Checking before a commit:
+    <keyring_and_app_biometrics>
+- Keyring Prompt Suppression: Eliminate persistent Seahorse/Gnome-Keyring authentication popups when launching apps like Spotify, VS Code, or Zen Browser.
+- Biometric App & File Locker: Implement a unified PAM/biometric lock utility for individual applications, specific Nautilus folders/files, and MK Notes using fingerprint or face authentication.
+- Multi-Profile Face Recognition: Support up to two distinct facial profiles (Main User + Guest Mode) using `howdy` or `fprintd`. Guest profile maps to an isolated session layout.
+    </keyring_and_app_biometrics>
+  </hardware_pam_security_biometrics>
 
-```bash
-bash scripts/lint.sh                         # bash -n + ShellCheck on every script, py_compile on Python
-python3 -m py_compile lib/mkworkstation/*.py
-mk doctor                                    # health of the installed system
-```
+  <system_ui_dock_and_wallpapers>
+    <dock_and_topbar>
+- Dock Magnification: Force single-layer 1:1 icon zoom scaling in Dash to Dock; remove ghosting/overlapping icon layers.
+- Top Bar Finder Shortcuts: Display keybinding shortcuts (e.g., `Super+Shift+S`) next to Shutdown, Restart, and Sleep in the top-left menu, dynamically updating if remapped.
+    </dock_and_topbar>
 
-Everything is plain text: change a file, run `./sync.sh`, and it's applied.
-MIT License.
+    <wallpapers_and_themes>
+- Lego Batman Theme: Realistic high-detail Lego aesthetic wallpaper/accent styling.
+- Spider-Man Theme: High-res urban skyscraper web-slinging wallpaper (removing moon motifs).
+    </wallpapers_and_themes>
+  </system_ui_dock_and_wallpapers>
+
+  <power_ram_kernel_performance>
+    <sleeping_windows_and_monitoring>
+- Sleeping Windows (RAM Saver): Automatically freeze/suspend background unused windows using cgroups/systemd to save memory and battery.
+- Astra Monitor UI: Display all hardware temperatures strictly in Celsius (°C). Provide clean, readable CPU/RAM graphs and an integrated network speed test utility.
+    </sleeping_windows_and_monitoring>
+
+    <kernel_caching_and_tweaks>
+- System Responsiveness: Apply kernel sysctl optimizations (`vm.swappiness=10`, `vm.vfs_cache_pressure=50`) and configure build/system caching (`ccache` / `zram` tuning) for fast app responsiveness.
+    </kernel_caching_and_tweaks>
+  </power_ram_kernel_performance>
+
+  <mk_notes_app_overhaul>
+    <editor_and_image_processing>
+- Inline Image Rendering: Intercept dropped/pasted images and render actual photo thumbnails inline within notes rather than pasting file path text (`/path/to/img`).
+- In-App Image Editor: Allow clicking photos in edit mode to resize, crop, rotate, and apply filters (Photo Booth effects, Polaroid vintage mode).
+- Direct PDF Export: Export notes directly to a `.pdf` file in the chosen target folder without opening a system print preview dialog window.
+- Note-Taking Tools: Self-explanatory toolbar with search, Markdown syntax, auto-saving, note pinning, and protocol-handled hyperlinks (`xdg-open`).
+    </editor_and_image_processing>
+  </mk_notes_app_overhaul>
+
+  <alt_tab_media_softimer>
+    <alt_tab_switcher>
+- Rebind `Alt+Tab` to instant `switch-windows` with a compact, non-fullscreen card overlay and zero preview delay.
+    </alt_tab_switcher>
+
+    <spotify_mpris_integration>
+- Static Title: Display ONLY song title truncated with ellipsis (`text-overflow: ellipsis`); disable continuous marquee scrolling.
+- Artist Info & Expand: Hide artist name until clicked/expanded; add a "More" control button.
+- MPRIS Focus Fix: Repair Play/Pause D-Bus calls and bind "Open Player" to reliably raise and focus the active player window.
+- Panel Animation: Smooth CSS fade-out transition when media playback closes.
+    </spotify_mpris_integration>
+
+    <softimer_fixes>
+- Repair broken sound preset asset paths and the "Surprise Me" randomizer.
+- Direct Duration Input: Open Softimer -> Type duration -> Press Enter to start timer immediately.
+    </softimer_fixes>
+  </alt_tab_media_softimer>
+
+  <file_management_overhaul>
+    <nautilus_enhancements>
+- Package Swaps: Remove `gThumb`; install GNOME `sushi` (Spacebar Quick Look), `loupe`, `nautilus-extensions`, and `file-roller`.
+- Productivity Features: Typeable path bar (`Ctrl+L`), native `Ctrl+X`/`Ctrl+V` cut/paste, right-click terminal option, visual multi-rule batch renaming (`F2`), folder biometric lock, and advanced file filtering.
+    </nautilus_enhancements>
+  </file_management_overhaul>
+
+  <boot_greeting_easter_eggs_and_tour>
+    <greeting_and_quick_settings>
+- Context-Aware Greeting: Differentiate 1st boot of calendar day from same-day reboots.
+- Toggleable Birthday Countdown: Configurable date (`BIRTHDAY_DATE="YYYY-MM-DD"`) displaying time remaining with an independent toggle flag.
+- Quick Settings UI Layout Fix: Wrap greeting radio/option menus in a constrained scroll container so the "Edit greeting" button stays visible.
+    </greeting_and_quick_settings>
+
+    <easter_eggs_and_onboarding>
+- Hidden Easter Eggs: Subtle system easter eggs honoring Spider-Man, tech legends, classic Linux memes, Linus Torvalds, Fedora, and Claude.
+- Interactive Tour (`mk-tour`): Re-accessible terminal command guiding new users through installed apps, shortcuts, and features.
+    </easter_eggs_and_onboarding>
+  </boot_greeting_easter_eggs_and_tour>
+
+  <portability_and_installer>
+    <zero_touch_deployment>
+- Interactive Installer: Detect hardware (fingerprint sensor, webcam), prompt user for face/fingerprint setup, apply all extension profiles, and create the `mk` CLI system alias.
+    </zero_touch_deployment>
+  </portability_and_installer>
+</specifications>

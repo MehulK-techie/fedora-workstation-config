@@ -1,4 +1,5 @@
-"""Confirm it's you: one unlock dialog for MK's own apps (MK Notes, MK Lock).
+"""Confirm it's you: one unlock dialog for MK's own apps (MK Notes, MK Lock,
+the vault, locked apps and folders).
 
 UnlockDialog, Windows Hello style: a glowing scanner ring over a PIN field
 that's always there.
@@ -12,6 +13,9 @@ that's always there.
 
 PINs are stored salted (scrypt); older unsalted SHA-256 hashes still match
 and should be upgraded by the caller (pin_needs_upgrade).
+
+Programs without a window of their own (mk-lock, started from a launcher or
+Files) call ask(): the same dialog as a small window of its own.
 """
 import base64
 import getpass
@@ -84,19 +88,24 @@ def face_available():
     return os.path.exists(FACE_SOCKET)
 
 
-def check_face(callback):
+def check_face(callback, request="CHECK"):
     """Ask mk-face-auth whether the face at the camera is ours; callback(ok,
-    message) on the main loop. Never blocks the window."""
+    message) on the main loop. Never blocks the window. With request
+    "KEY <folder>", message is the folder's key when ok."""
     def work():
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
                 conn.settimeout(25)
                 conn.connect(FACE_SOCKET)
+                conn.sendall(request.encode() + b"\n")
                 reply = conn.makefile().readline().strip()
         except OSError as err:
             reply = f"NO {err.strerror or 'Face ID unavailable'}"
-        ok = reply == "OK"
-        message = "Face ID is busy; try again in a moment" if reply == "BUSY" else reply[3:]
+        ok = reply == "OK" or reply.startswith("OK ")
+        if ok:
+            message = base64.b64decode(reply[3:]).decode() if request.startswith("KEY ") else ""
+        else:
+            message = "Face ID is busy; try again in a moment" if reply == "BUSY" else reply[3:]
         GLib.idle_add(callback, ok, message)
     threading.Thread(target=work, daemon=True).start()
 
@@ -263,14 +272,25 @@ class ScannerRing(Gtk.DrawingArea):
 # ---------------------------------------------------------------- the dialog
 class UnlockDialog(Adw.Dialog):
     """check(secret) returns True, False (wrong) or a message to show (e.g. a
-    too-short new PIN). on_success() runs once, after the dialog closes.
+    too-short new PIN); None for check means there's nothing to type (the
+    field is hidden). on_success() runs once, after the dialog closes.
     creating=True asks for a new PIN instead (no fingerprint: there's no PIN
-    to fall back on yet)."""
+    to fall back on yet).
+    face_request: what Face ID asks mk-face-auth ("KEY <folder>" hands back
+    a folder key, kept in self.payload). fingerprint=False skips the reader
+    (when only a root-checked answer will do). system: a function(callback)
+    replacing the polkit check behind "Use the system prompt…", for callers
+    that need what the prompt unlocks (callback(ok, payload))."""
 
-    def __init__(self, heading, check, on_success, creating=False, placeholder=None):
+    def __init__(self, heading, check, on_success, creating=False, placeholder=None,
+                 face_request="CHECK", fingerprint=True, system=None):
         super().__init__(title=heading, content_width=360, follows_content_size=True)
         self.check = check
         self.on_success = on_success
+        self.face_request = face_request
+        self.system = system
+        self.payload = None
+        self.secret_word = "password" if placeholder else "PIN"
         self.done = False
         self.finger = None
         self.finger_on = False   # a reader with an enrolled finger is listening
@@ -293,13 +313,17 @@ class UnlockDialog(Adw.Dialog):
         box.append(self.entry)
         box.append(self.error)
         box.append(unlock)
+        self.typed = check is not None
+        self.entry.set_visible(self.typed)
+        unlock.set_visible(self.typed)
         self.retry_face = Gtk.Button(label="Try Face ID again", css_classes=["flat"], visible=False)
         self.retry_face.connect("clicked", lambda *_: self._start_face())
         box.append(self.retry_face)
-        if not creating and system_check_available():
-            system = Gtk.Button(label="Use the system prompt…", css_classes=["flat"])
-            system.connect("clicked", self._system_check)
-            box.append(system)
+        if not creating and (system or system_check_available()):
+            prompt = Gtk.Button(label="Use your password…" if not self.typed else "Use the system prompt…",
+                                css_classes=["flat"] if self.typed else ["pill"])
+            prompt.connect("clicked", self._system_check)
+            box.append(prompt)
 
         view = Adw.ToolbarView(content=box)
         view.add_top_bar(Adw.HeaderBar())
@@ -313,13 +337,19 @@ class UnlockDialog(Adw.Dialog):
             self._say()
             if face_available():
                 GLib.idle_add(self._start_face)
-            self.finger = FingerprintListener(self._on_finger)
-            GLib.idle_add(self._start_finger)
+            if fingerprint:
+                self.finger = FingerprintListener(self._on_finger)
+                GLib.idle_add(self._start_finger)
 
     def _say(self):
         """The line under the ring, from what's listening right now."""
         looking = self.face_state == "looking"
-        rest = "Touch the reader or type your PIN." if self.finger_on else "Type your PIN."
+        if not self.typed:
+            rest = "Or use your password." if looking else "Use your password below."
+        else:
+            word = self.secret_word
+            rest = f"Touch the reader or type the {word}." if self.finger_on else (
+                f"Or type the {word}." if looking else f"Type the {word}.")
         self.status.set_label(f"Looking for your face…\n{rest}" if looking else rest)
         self.ring.face = self.face_state == "looking"
         self.ring.set_state("listening" if self.face_state == "looking" or self.finger_on else "idle")
@@ -330,7 +360,7 @@ class UnlockDialog(Adw.Dialog):
         self.face_state = "looking"
         self.retry_face.set_visible(False)
         self._say()
-        check_face(self._on_face)
+        check_face(self._on_face, self.face_request)
         return False
 
     def _on_face(self, ok, message):
@@ -338,6 +368,7 @@ class UnlockDialog(Adw.Dialog):
             return False
         if ok:
             self.ring.face = True
+            self.payload = message or None
             self._succeed()
             return False
         self.face_state = "missed"
@@ -350,7 +381,8 @@ class UnlockDialog(Adw.Dialog):
 
     def _start_finger(self):
         self.finger.start()
-        self.entry.grab_focus()
+        if self.typed:
+            self.entry.grab_focus()
         return False
 
     def _on_finger(self, state):
@@ -374,7 +406,13 @@ class UnlockDialog(Adw.Dialog):
         self.status.set_label("Confirm in the system prompt…")
         if self.finger:
             self.finger.stop()  # the system prompt may want the reader too
-        confirm_with_system(lambda ok: self._succeed() if ok else self._fail("Not confirmed."))
+        def done(ok, payload=None):
+            if ok:
+                self.payload = payload
+                self._succeed()
+            else:
+                self._fail("Not confirmed.")
+        (self.system or confirm_with_system)(done)
 
     def _submit(self, *_):
         secret = self.entry.get_text()
@@ -419,4 +457,23 @@ def present_unlock(parent, heading, check, on_success, creating=False):
     dialog = UnlockDialog(heading, check, on_success, creating=creating)
     dialog.present(parent)
     return dialog
+
+
+def ask(heading, check=None, **options):
+    """The dialog in a window of its own, for programs without one; blocks
+    until it closes. Returns (True, payload) or (False, None)."""
+    result = [False, None]
+    app = Adw.Application(application_id=None, flags=Gio.ApplicationFlags.NON_UNIQUE)
+
+    def activate(_app):
+        app.hold()
+
+        def success():
+            result[:] = [True, dialog.payload]
+        dialog = UnlockDialog(heading, check, success, **options)
+        dialog.connect("closed", lambda *_: GLib.timeout_add(50, lambda: (app.release(), False)[1]))
+        dialog.present(None)
+    app.connect("activate", activate)
+    app.run([])
+    return tuple(result)
 

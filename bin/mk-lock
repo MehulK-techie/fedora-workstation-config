@@ -68,6 +68,23 @@ ITEMS = DATA_HOME / "mk-workstation/lock-items"   # item passwords (sealed keys 
 VAULT = HOME / ".vault"
 
 
+def hello():
+    """MK's unlock dialog (lib/mkworkstation/auth.py: Face ID, fingerprint,
+    password) when there's a screen and no terminal to ask in; else None."""
+    if sys.stdin.isatty() or not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
+        return None
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for candidate in (Path(__file__).resolve().parent.parent / "lib", Path(data_home) / "mk-workstation/lib"):
+        if (candidate / "mkworkstation").is_dir():
+            sys.path.insert(0, str(candidate))
+            break
+    try:
+        from mkworkstation import auth
+    except (ImportError, ValueError):
+        return None
+    return auth
+
+
 def die(message, code=1):
     print(f"[-] {message}", file=sys.stderr)
     sys.exit(code)
@@ -167,6 +184,14 @@ def new_password(what):
 
 def unlock_app(app_id):
     """True when it's you: the app's own password, or fingerprint/password via polkit."""
+    auth = hello()
+    if auth:
+        name = app_id.removesuffix(".desktop")
+        check = None
+        if item_file("app", app_id).exists():
+            def check(pw):
+                return item_open("app", app_id, pw) == "mk-lock"
+        return auth.ask(f"Open {name}", check, placeholder="The app's password")[0]
     if item_file("app", app_id).exists():
         for _attempt in range(3):
             how, pw = ask_password("MK Lock", f"Password for {app_id}")
@@ -184,6 +209,9 @@ def unlock_app(app_id):
 
 def folder_key(path):
     """The folder's key: its own password, or from the root key store after polkit."""
+    auth = hello()
+    if auth:
+        return folder_key_gui(auth, path)
     if item_file("folder", str(path)).exists():
         for _attempt in range(3):
             how, pw = ask_password("MK Lock", f"Password for {path.name}")
@@ -199,6 +227,36 @@ def folder_key(path):
         else:
             die("Wrong password three times; the folder stays closed.")
     return key_lookup(path)
+
+
+def folder_key_gui(auth, path):
+    """The unlock dialog: Face ID fetches the key from the root store
+    (mk-face-auth), the folder's own password opens it here, and "Use your
+    password…" goes through polkit (fingerprint or password) to the store.
+    The in-app fingerprint reader is off: a key needs a root-checked answer."""
+    found = {}
+    check = None
+    if item_file("folder", str(path)).exists():
+        def check(pw):
+            key = item_open("folder", str(path), pw)
+            if key:
+                found["key"] = key
+            return bool(key)
+
+    def system(callback):
+        import threading
+
+        def work():
+            result = subprocess.run(["pkexec", KEY_HELPER, "get", str(path)], capture_output=True, text=True)
+            ok = result.returncode == 0 and bool(result.stdout)
+            auth.GLib.idle_add(callback, ok, result.stdout if ok else None)
+        threading.Thread(target=work, daemon=True).start()
+    ok, payload = auth.ask(f"Open {path.name}", check, placeholder="The folder's password",
+                           face_request=f"KEY {path}", fingerprint=False, system=system)
+    key = found.get("key") or payload
+    if not ok or not key:
+        die("Not confirmed; the folder stays closed.")
+    return key
 
 
 def cmd_password(args):

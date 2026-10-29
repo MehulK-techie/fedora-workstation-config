@@ -69,6 +69,23 @@ Each person can only unlock **their own** account. Another person's face never o
 
 The wizard picks an IR camera automatically when your computer has one. On laptops with only a regular webcam (for example the HP Wide Vision HD), it warns you and keeps `sudo` password-only unless you choose otherwise.
 
+### In MK's own apps
+
+MK Notes' lock, locked apps, locked folders and the vault all use one unlock
+window: a cyan ring looks for your face the moment it opens, a password field
+sits underneath, and the fingerprint hint only appears when a reader with an
+enrolled finger is connected. The check runs as root in `mk-face-auth`
+(socket-activated, `/run/mk-face-auth.sock`), for the user who asked only.
+
+- **Locked apps:** your face, your fingerprint, the app's own password, or
+  your account password in the system prompt.
+- **Locked folders and the vault:** your face hands over the folder's key
+  only when face unlock also guards `sudo` (an IR camera, or a webcam you
+  trusted in step 4). Otherwise use the folder's own password or **Use your
+  password…** (fingerprint or account password, through polkit).
+- Passwords are never checked by `mk-face-auth`: a root service that tried
+  passwords for any caller would be a guessing oracle.
+
 ---
 
 ## Everyday commands

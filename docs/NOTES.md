@@ -30,6 +30,8 @@ The defaults are in [`config/notes.conf`](../config/notes.conf).
 
 ## Make it yours
 
+The default theme is Deep Obsidian (OLED): a #121417 page and #1c1f24 sidebars; five more in the palette menu.
+
 Menu › **Preferences** (Ctrl+,):
 
 - style: light, dark, or follow the system
@@ -44,7 +46,7 @@ Menu › **Preferences** (Ctrl+,):
 - **Edit** (Ctrl+E switches with Read): the Markdown, with formatting buttons.
 - **Edit with preview** (Ctrl+\\): writing on the left, the finished note on the right, updating as you type.
 - **Read**: the finished note; tick checkboxes and follow links.
-- **Focus mode** (F11): full screen, nothing but the text.
+- **Focus canvas** (⤢ in the header, Ctrl+Shift+F): the notebooks and the note list slide away together for a wide page; again brings them back. F11: full screen.
 
 ## Quick capture
 
@@ -71,6 +73,13 @@ closes it without saving.
 | Edit or read | Ctrl+E. In the reading view you can tick checkboxes and click links and tags |
 
 ## Screenshots, pictures and drawings
+
+- **Shapes** (Shapes in the ribbon): lines (line, arrow, double arrow, elbow
+  connector), basic shapes (rectangle, rounded rectangle, oval, triangle,
+  diamond) and graphs (X–Y axes with ticks, a 4-quadrant grid, 3D axes),
+  picked from one menu, drawn by dragging.
+- **Tables** (grid button in the ribbon): hover to pick up to 8 x 8, click to
+  insert a lined-up Markdown table.
 
 - **Paste:** Ctrl+V pastes an image from the clipboard (screenshots, "Copy
   image" in a browser), read fresh with `wl-paste`, or files copied in Files. A copied file path or
@@ -206,17 +215,13 @@ same key.
 
 | Keys | Action |
 | :--- | :--- |
-| Ctrl+N · Ctrl+Shift+N | New note · new folder |
-| Ctrl+O · Ctrl+P | Jump to a note · commands |
-| Ctrl+E · Ctrl+\\ · F11 | Edit / read · edit with preview · focus mode |
-| Ctrl+, | Preferences |
-| Ctrl+F | Search |
-| Ctrl+Shift+D | Today's note (also Super+Alt+N anywhere) |
-| Ctrl+B · Ctrl+I · Ctrl+H · Ctrl+L · Ctrl+K | Bold · italic · heading · checklist · link |
-| Ctrl+Shift+S · Ctrl+Shift+P · Ctrl+Shift+I | Screenshot · draw · edit the picture on this line |
-| Ctrl+Shift+E | Export to PDF |
-| Ctrl+G · Ctrl+T | Graph · insert template |
-| F2 · F9 | Rename · show or hide the sidebar |
+| Ctrl+N · Ctrl+Shift+N | New note · new notebook |
+| Ctrl+B · Ctrl+I · Ctrl+U · Ctrl+L · Ctrl+K | Bold · italic · underline · checklist · link to a note |
+| Ctrl+Shift+P · Ctrl+Alt+M | Draw · comment on the selection |
+| Ctrl+Shift+E · Ctrl+G · Ctrl+T | Export to PDF · graph · insert template |
+| F8 · F9 · Ctrl+Shift+F · F11 | Notes list · notebooks · both away (focus canvas) · full screen |
+| Ctrl+plus · Ctrl+minus · Ctrl+0 | Zoom in · out · 100 % |
+| Alt+Left · Ctrl+? | Back · this list |
 
 ## What it doesn't do (yet)
 

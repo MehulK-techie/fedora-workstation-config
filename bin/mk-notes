@@ -80,6 +80,17 @@ STICKY_PALETTES = [
 ]
 
 THEMES = {
+    "obsidian": {
+        "label": "Deep Obsidian (OLED)",
+        "dark": True,
+        "win_bg": "#0d0f12",
+        "side_bg": "#1c1f24",
+        "list_bg": "#16191d",
+        "page_bg": "#121417",
+        "ribbon_bg": "#171a1e",
+        "accent": "#7c9cff",
+        "fg": "#e8eaed",
+    },
     "indigo": {
         "label": "Midnight Indigo",
         "dark": True,
@@ -877,6 +888,145 @@ def stroke_outline(points, width):
             + cap(xs, ys, width * (0.35 + 0.8 * ps) / 2, as_))
 
 
+
+# Shapes for the drawing layer, OneNote-style: (tool, label) by category.
+SHAPES = {
+    "Lines": (("line", "Line"), ("arrow", "Arrow"), ("double-arrow", "Double arrow"), ("elbow", "Elbow connector")),
+    "Basic shapes": (("rect", "Rectangle"), ("rounded", "Rounded rectangle"), ("circle", "Oval / circle"),
+                     ("triangle", "Triangle"), ("diamond", "Diamond")),
+    "Graphs": (("xy", "X–Y axes"), ("quadrant", "4-quadrant grid"), ("triad", "3D axes")),
+}
+SHAPE_TOOLS = {tool for group in SHAPES.values() for tool, _label in group}
+LINE_TOOLS = {"line", "arrow", "double-arrow", "elbow"}
+
+
+def _arrow_head(cr, x0, y0, x1, y1, w):
+    """An open arrowhead at (x1, y1), pointing away from (x0, y0)."""
+    ang = math.atan2(y1 - y0, x1 - x0)
+    head = max(12.0, w * 3.5)
+    for side in (-0.5, 0.5):
+        cr.move_to(x1, y1)
+        cr.line_to(x1 - head * math.cos(ang + side), y1 - head * math.sin(ang + side))
+    cr.stroke()
+
+
+def draw_shape(cr, tool, x0, y0, x1, y1, w):
+    """The shapes beyond rectangle, oval, line and arrow, dragged from
+    (x0, y0) to (x1, y1), in the current colour and line width."""
+    left, top = min(x0, x1), min(y0, y1)
+    bw, bh = abs(x1 - x0), abs(y1 - y0)
+    cx, cy = left + bw / 2, top + bh / 2
+    if tool == "double-arrow":
+        cr.move_to(x0, y0)
+        cr.line_to(x1, y1)
+        cr.stroke()
+        _arrow_head(cr, x0, y0, x1, y1, w)
+        _arrow_head(cr, x1, y1, x0, y0, w)
+    elif tool == "elbow":  # across, then down, with an arrowhead
+        cr.move_to(x0, y0)
+        cr.line_to(x1, y0)
+        cr.line_to(x1, y1)
+        cr.stroke()
+        if abs(y1 - y0) > 1:
+            _arrow_head(cr, x1, y0, x1, y1, w)
+    elif tool == "rounded":
+        r = min(bw, bh) * 0.2
+        cr.new_sub_path()
+        cr.arc(left + bw - r, top + r, r, -math.pi / 2, 0)
+        cr.arc(left + bw - r, top + bh - r, r, 0, math.pi / 2)
+        cr.arc(left + r, top + bh - r, r, math.pi / 2, math.pi)
+        cr.arc(left + r, top + r, r, math.pi, 3 * math.pi / 2)
+        cr.close_path()
+        cr.stroke()
+    elif tool == "triangle":
+        cr.move_to(cx, top)
+        cr.line_to(left + bw, top + bh)
+        cr.line_to(left, top + bh)
+        cr.close_path()
+        cr.stroke()
+    elif tool == "diamond":
+        cr.move_to(cx, top)
+        cr.line_to(left + bw, cy)
+        cr.line_to(cx, top + bh)
+        cr.line_to(left, cy)
+        cr.close_path()
+        cr.stroke()
+    elif tool in ("xy", "quadrant"):
+        if tool == "quadrant":  # a light grid in all four quadrants
+            step = max(12.0, min(bw, bh) / 10)
+            cr.save()
+            cr.set_line_width(max(0.6, w / 4))
+            cr.push_group()
+            gx = cx - step * math.floor((cx - left) / step)
+            while gx <= left + bw:
+                cr.move_to(gx, top)
+                cr.line_to(gx, top + bh)
+                gx += step
+            gy = cy - step * math.floor((cy - top) / step)
+            while gy <= top + bh:
+                cr.move_to(left, gy)
+                cr.line_to(left + bw, gy)
+                gy += step
+            cr.stroke()
+            cr.pop_group_to_source()
+            cr.paint_with_alpha(0.45)
+            cr.restore()
+            ox, oy = cx, cy
+            cr.move_to(left, oy)
+            cr.line_to(left + bw, oy)
+            cr.move_to(ox, top + bh)
+            cr.line_to(ox, top)
+            cr.stroke()
+            _arrow_head(cr, left, oy, left + bw, oy, w)
+            _arrow_head(cr, left + bw, oy, left, oy, w)
+            _arrow_head(cr, ox, top + bh, ox, top, w)
+            _arrow_head(cr, ox, top, ox, top + bh, w)
+        else:  # first quadrant: origin bottom left, ticks along both axes
+            ox, oy = left, top + bh
+            cr.move_to(ox, oy)
+            cr.line_to(left + bw, oy)
+            cr.move_to(ox, oy)
+            cr.line_to(ox, top)
+            cr.stroke()
+            _arrow_head(cr, ox, oy, left + bw, oy, w)
+            _arrow_head(cr, ox, oy, ox, top, w)
+            step = max(14.0, min(bw, bh) / 8)
+            tick = max(4.0, w * 1.5)
+            t = step
+            while t < bw - step / 2:
+                cr.move_to(ox + t, oy - tick)
+                cr.line_to(ox + t, oy + tick)
+                t += step
+            t = step
+            while t < bh - step / 2:
+                cr.move_to(ox - tick, oy - t)
+                cr.line_to(ox + tick, oy - t)
+                t += step
+            cr.stroke()
+        labels = (("x", left + bw + 6, (cy if tool == "quadrant" else top + bh) + 4),
+                  ("y", (cx if tool == "quadrant" else left) - 4, top - 8))
+        _axis_labels(cr, labels, w)
+    elif tool == "triad":  # x right, y up, z towards you (down-left)
+        ox, oy = left + bw * 0.4, top + bh * 0.6
+        ends = (("x", left + bw, oy), ("y", ox, top), ("z", left, top + bh))
+        for _name, ex, ey in ends:
+            cr.move_to(ox, oy)
+            cr.line_to(ex, ey)
+            cr.stroke()
+            _arrow_head(cr, ox, oy, ex, ey, w)
+        _axis_labels(cr, [(n, ex + (6 if n == "x" else -14 if n == "z" else -4), ey + (4 if n == "x" else 14 if n == "z" else -8))
+                          for n, ex, ey in ends], w)
+
+
+def _axis_labels(cr, labels, w):
+    cr.save()
+    cr.select_font_face("Sans", cairo.FONT_SLANT_ITALIC, cairo.FONT_WEIGHT_NORMAL)
+    cr.set_font_size(max(13.0, w * 3.5))
+    for text, x, y in labels:
+        cr.move_to(x, y)
+        cr.show_text(text)
+    cr.restore()
+
 class StudioInkCanvas(Gtk.DrawingArea):
     def __init__(self, note_win):
         super().__init__(hexpand=True, vexpand=True)
@@ -935,7 +1085,7 @@ class StudioInkCanvas(Gtk.DrawingArea):
             self._ensure_laser_timer()
             self.queue_draw()
             return
-        if self.tool in ("rect", "circle", "line", "arrow"):
+        if self.tool in SHAPE_TOOLS:
             self.current = {"tool": self.tool, "color": self.ink, "width": self.width,
                             "points": [[px, py, 0.5], [px, py, 0.5]]}
             self.queue_draw()
@@ -956,7 +1106,7 @@ class StudioInkCanvas(Gtk.DrawingArea):
             self.current["laser"]["points"].append((px, py, time.time()))
             self.queue_draw()
             return
-        if self.current.get("tool") in ("rect", "circle", "line", "arrow"):
+        if self.current.get("tool") in SHAPE_TOOLS:
             self.current["points"][1] = [px, py, 0.5]
             self.queue_draw()
             return
@@ -1007,14 +1157,14 @@ class StudioInkCanvas(Gtk.DrawingArea):
         if not pts:
             return False
         thresh = max(14.0, s.get("width", 4.0) * 2.5)
-        if s.get("tool") in ("rect", "circle", "line", "arrow") and len(pts) >= 2:
+        if s.get("tool") in SHAPE_TOOLS and len(pts) >= 2:
             x0, y0 = pts[0][0], pts[0][1]
             x1, y1 = pts[-1][0], pts[-1][1]
             for t in [i / 20.0 for i in range(21)]:
                 ix, iy = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
                 if math.hypot(ix - x, iy - y) < thresh:
                     return True
-                if s["tool"] in ("rect", "circle"):
+                if s["tool"] not in LINE_TOOLS:  # boxed shapes: hit along the box
                     if math.hypot(x0 - x, iy - y) < thresh or math.hypot(x1 - x, iy - y) < thresh:
                         return True
                     if math.hypot(ix - x, y0 - y) < thresh or math.hypot(ix - x, y1 - y) < thresh:
@@ -1066,14 +1216,16 @@ class StudioInkCanvas(Gtk.DrawingArea):
             cr.stroke()
             return
 
-        if tool in ("rect", "circle", "line", "arrow") and len(pts) >= 2:
+        if tool in SHAPE_TOOLS and len(pts) >= 2:
             x0, y0 = pts[0][0], pts[0][1]
             x1, y1 = pts[-1][0], pts[-1][1]
             cr.set_source_rgb(r, g, b)
             cr.set_line_width(w)
             cr.set_line_cap(1)
             cr.set_line_join(1)
-            if tool == "rect":
+            if tool not in ("rect", "circle", "line", "arrow"):
+                draw_shape(cr, tool, x0, y0, x1, y1, w)
+            elif tool == "rect":
                 cr.rectangle(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
                 cr.stroke()
             elif tool == "circle":
@@ -1173,7 +1325,7 @@ class PaperPatternBackground(Gtk.DrawingArea):
         pattern = look_conf().get("PAPER_PATTERN", "dots")
         if pattern == "plain":
             return
-        preset = THEMES.get(look_conf().get("THEME_PRESET", "indigo"), THEMES["indigo"])
+        preset = THEMES.get(look_conf().get("THEME_PRESET", "obsidian"), THEMES["obsidian"])
         is_dark = preset["dark"]
         cr.set_source_rgba(1, 1, 1, 0.06) if is_dark else cr.set_source_rgba(0, 0, 0, 0.07)
         step = max(18, round(28 * self.win.zoom))
@@ -1841,6 +1993,9 @@ class NotesWindow(Adw.ApplicationWindow):
                                           tooltip_text="Show / Hide Notebooks Sidebar (F9)")
         self.nb_toggle.connect("toggled", self._on_nb_toggle)
         self.top_bar.pack_start(self.nb_toggle)
+        focus_btn = Gtk.Button(label="⤢", tooltip_text="Focus: hide the notebooks and the list (Ctrl+Shift+F)",
+                               action_name="win.focus-canvas", css_classes=["flat"])
+        self.top_bar.pack_start(focus_btn)
 
         self.list_toggle = Gtk.ToggleButton(icon_name="view-dual-symbolic", active=True,
                                             tooltip_text="Show / Hide Notes List (F8)")
@@ -2071,6 +2226,9 @@ class NotesWindow(Adw.ApplicationWindow):
         div_btn = Gtk.Button(label="─── Divider", icon_name="list-remove-symbolic", tooltip_text="Insert Section Divider Line", css_classes=["flat"])
         div_btn.connect("clicked", lambda *_: self.insert_divider_line())
         ribbon.append(div_btn)
+        table_btn = Gtk.MenuButton(icon_name="view-grid-symbolic", tooltip_text="Insert a table",
+                                   css_classes=["flat"], popover=self._table_picker())
+        ribbon.append(table_btn)
 
         ribbon.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=2, margin_end=2))
 
@@ -2287,6 +2445,17 @@ class NotesWindow(Adw.ApplicationWindow):
         self.side_col.set_visible(vis)
         self.sep_side.set_visible(vis)
 
+    def toggle_focus_canvas(self):
+        """One click: both side panels away for a wide page; again: back."""
+        if self.nb_toggle.get_active() or self.list_toggle.get_active():
+            self._before_focus = (self.nb_toggle.get_active(), self.list_toggle.get_active())
+            self.nb_toggle.set_active(False)
+            self.list_toggle.set_active(False)
+        else:
+            nb, lst = getattr(self, "_before_focus", (True, True))
+            self.nb_toggle.set_active(nb)
+            self.list_toggle.set_active(lst)
+
     def _on_list_toggle(self, btn):
         vis = btn.get_active()
         self.list_col.set_visible(vis)
@@ -2349,17 +2518,29 @@ class NotesWindow(Adw.ApplicationWindow):
         bar.append(Gtk.Label(label="📐 Shapes:", css_classes=["mk-row-title"]))
         self.shape_tool_btns = {}
         grp = None
-        for shape, label, tip in (
-            ("rect", "Rectangle", "Draw Box / Rectangle"),
-            ("circle", "Circle", "Draw Circle / Oval"),
-            ("line", "Line", "Draw Straight Line"),
-            ("arrow", "Arrow", "Draw Pointer Arrow"),
-        ):
-            b = Gtk.ToggleButton(label=label, tooltip_text=tip, group=grp, active=shape == "rect")
-            grp = grp or b
-            b.connect("toggled", lambda btn, s=shape: btn.get_active() and self._set_ink_tool(s))
-            self.shape_tool_btns[shape] = b
-            bar.append(b)
+        pop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=8, margin_bottom=8,
+                          margin_start=8, margin_end=8)
+        self.shape_pick = Gtk.MenuButton(label="Rectangle", tooltip_text="Insert shapes")
+        pop = Gtk.Popover(child=pop_box)
+        self.shape_pick.set_popover(pop)
+        for category, shapes in SHAPES.items():
+            pop_box.append(Gtk.Label(label=category, xalign=0, css_classes=["heading"]))
+            flow = Gtk.FlowBox(max_children_per_line=3, min_children_per_line=3,
+                               selection_mode=Gtk.SelectionMode.NONE, column_spacing=4, row_spacing=4)
+            for shape, label in shapes:
+                b = Gtk.ToggleButton(label=label, group=grp, active=shape == "rect", css_classes=["flat"])
+                grp = grp or b
+
+                def chosen(btn, s=shape, name=label):
+                    if btn.get_active():
+                        self._set_ink_tool(s)
+                        self.shape_pick.set_label(name)
+                        pop.popdown()
+                b.connect("toggled", chosen)
+                self.shape_tool_btns[shape] = b
+                flow.append(b)
+            pop_box.append(flow)
+        bar.append(self.shape_pick)
 
         bar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
         bar.append(Gtk.Label(label="Color:"))
@@ -2416,6 +2597,75 @@ class NotesWindow(Adw.ApplicationWindow):
             self.toast.add_toast(Adw.Toast(title="🔴 Presentation Laser Active · Drag on note to point!", timeout=2))
         self.ink_canvas.set_ink_mode(active)
 
+    def _table_picker(self):
+        """A Word/OneNote-style grid: hover to size the table (up to 8 x 8),
+        click to insert it."""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=8, margin_bottom=8,
+                      margin_start=8, margin_end=8)
+        label = Gtk.Label(label="Insert a table", css_classes=["heading"])
+        area = Gtk.DrawingArea(content_width=8 * 22, content_height=8 * 22)
+        hover = [0, 0]  # columns, rows
+
+        def draw(_a, cr, _w, _h):
+            fg = area.get_color()
+            for r in range(8):
+                for c in range(8):
+                    lit = c < hover[0] and r < hover[1]
+                    cr.rectangle(c * 22 + 2, r * 22 + 2, 18, 18)
+                    if lit:
+                        cr.set_source_rgba(0.21, 0.52, 0.89, 0.55)
+                        cr.fill_preserve()
+                    cr.set_source_rgba(fg.red, fg.green, fg.blue, 0.85 if lit else 0.3)
+                    cr.set_line_width(1)
+                    cr.stroke()
+        area.set_draw_func(draw)
+
+        def moved(_c, x, y):
+            cell = (min(8, int(x // 22) + 1), min(8, int(y // 22) + 1))
+            if list(cell) != hover:
+                hover[:] = cell
+                label.set_label(f"{cell[0]} x {cell[1]} table")
+                area.queue_draw()
+        motion = Gtk.EventControllerMotion()
+        motion.connect("motion", moved)
+        area.add_controller(motion)
+        click = Gtk.GestureClick()
+
+        def pressed(*_):
+            if hover[0] and hover[1]:
+                pop.popdown()
+                self.insert_table(*hover)
+        click.connect("released", pressed)
+        area.add_controller(click)
+        box.append(label)
+        box.append(area)
+        pop = Gtk.Popover(child=box)
+        pop.connect("closed", lambda *_: (hover.__setitem__(slice(None), [0, 0]), label.set_label("Insert a table"),
+                                          area.queue_draw()))
+        return pop
+
+    def insert_table(self, cols, rows):
+        """A Markdown table, columns padded so it lines up in the mono font:
+        a header row, the separator, then ROWS - 1 empty rows."""
+        width = 10
+        header = "| " + " | ".join(f"Column {i + 1}".ljust(width) for i in range(cols)) + " |"
+        rule = "| " + " | ".join("-" * width for _ in range(cols)) + " |"
+        empty = "| " + " | ".join(" " * width for _ in range(cols)) + " |"
+        text = "\n".join([header, rule] + [empty] * max(1, rows - 1))
+        buf = self.buffer
+        cursor = buf.get_iter_at_mark(buf.get_insert())
+        if not cursor.starts_line():
+            buf.insert_at_cursor("\n")
+        start = buf.get_iter_at_mark(buf.get_insert()).get_offset()
+        buf.insert_at_cursor(text + "\n")
+        buf.apply_tag_by_name("mono", buf.get_iter_at_offset(start), buf.get_iter_at_offset(start + len(text)))
+        # the cursor goes into the first empty cell
+        cell = buf.get_iter_at_offset(start + len(header) + 1 + len(rule) + 1 + 2)
+        buf.place_cursor(cell)
+        self.dirty = True
+        self._queue_save()
+        self.view.grab_focus()
+
     def insert_divider_line(self):
         divider_text = "\n────────────────────────────────────────\n"
         self.buffer.insert_at_cursor(divider_text)
@@ -2436,6 +2686,7 @@ class NotesWindow(Adw.ApplicationWindow):
         add_tag("italic", style=Pango.Style.ITALIC)
         add_tag("underline", underline=Pango.Underline.SINGLE)
         add_tag("strike", strikethrough=True)
+        add_tag("mono", family="Monospace")
         add_tag("h1", weight=Pango.Weight.BOLD, scale=1.60, pixels_above_lines=10, pixels_below_lines=6)
         add_tag("h2", weight=Pango.Weight.BOLD, scale=1.35, pixels_above_lines=8, pixels_below_lines=4)
         add_tag("h3", weight=Pango.Weight.semibold if hasattr(Pango.Weight, "semibold") else Pango.Weight.BOLD,
@@ -2802,8 +3053,8 @@ class NotesWindow(Adw.ApplicationWindow):
 
     def apply_theme_and_zoom(self):
         conf = look_conf()
-        preset_key = conf.get("THEME_PRESET", "indigo")
-        preset = THEMES.get(preset_key, THEMES["indigo"])
+        preset_key = conf.get("THEME_PRESET", "obsidian")
+        preset = THEMES.get(preset_key, THEMES["obsidian"])
         Adw.StyleManager.get_default().set_color_scheme(
             Adw.ColorScheme.FORCE_DARK if preset["dark"] else Adw.ColorScheme.FORCE_LIGHT
         )
@@ -2856,7 +3107,8 @@ class NotesWindow(Adw.ApplicationWindow):
             return
         spans = []
         table = self.buffer.get_tag_table()
-        tag_names = ["bold", "italic", "underline", "strike", "h1", "h2", "h3", "title", "hl-yellow", "comment-mark"]
+        tag_names = ["bold", "italic", "underline", "strike", "mono", "h1", "h2", "h3", "title", "hl-yellow",
+                     "comment-mark"]
         table.foreach(lambda t: t.get_property("name") and t.get_property("name").startswith("fg-") and tag_names.append(t.get_property("name")))
 
         for tname in tag_names:
@@ -4121,6 +4373,7 @@ class NotesWindow(Adw.ApplicationWindow):
             ("toggle-list", lambda: self.list_toggle.set_active(not self.list_toggle.get_active()), ["F8"]),
             ("toggle-nb", lambda: self.nb_toggle.set_active(not self.nb_toggle.get_active()), ["F9"]),
             ("fullscreen", self.toggle_fullscreen, ["F11"]),
+            ("focus-canvas", self.toggle_focus_canvas, ["<Control><Shift>f"]),
             ("zoom-in", lambda: self.set_zoom(self.zoom + 0.1), ["<Control>plus", "<Control>equal"]),
             ("zoom-out", lambda: self.set_zoom(self.zoom - 0.1), ["<Control>minus"]),
             ("zoom-reset", lambda: self.set_zoom(1.0), ["<Control>0"]),

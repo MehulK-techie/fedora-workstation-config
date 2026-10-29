@@ -133,6 +133,27 @@ closes it without saving.
 - **Rename:** edit the title (F2). Every `[[link]]` to the note is updated.
 - **Delete:** the note moves to `.trash/`, and **Undo** brings it back.
 
+## Tables, comments, stickies and pages
+
+- **Tables** show as tables: a shaded header row, faint column lines, the
+  `|---|` rule shrunk to a hairline (the note is still Markdown). Tab moves
+  to the next cell and adds a row at the end; right-click for rows, columns
+  and alignment.
+- **Comments** open as a slim card in the right margin; click highlighted
+  text to find its comment. On a small window the side panels step aside
+  while the margin is open (⤢ brings them back).
+- **Sticky notes**: rename the title, pick a colour from the palette
+  (Yellow, Mint, Sky, Rose, Lavender, Coral, Dark); they're printed as
+  coloured callouts at the end of a PDF.
+- **Pages**: dashed lines mark where each A4 page ends.
+- **Locks**: right-click a locked note for Lock Now or Remove Lock
+  Permanently; a note you unlocked locks again after a minute without input.
+- **PDFs**: insert one as a 📎 chip (click to open) or as printout pages to
+  draw on.
+- **Mind map** (Ctrl+G): notebooks as hubs with their notes around them,
+  curved links, no overlapping bubbles; it fits itself to the window until
+  you zoom or pan.
+
 ## PDF, website and history
 
 - **Export to PDF** (Ctrl+Shift+E): straight to a PDF file, no print dialog.

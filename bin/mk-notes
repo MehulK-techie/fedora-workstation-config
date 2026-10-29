@@ -1693,9 +1693,10 @@ PDF_FONTS = {"title": "Sans Heavy 22", "h1": "Sans Bold 18", "h2": "Sans Bold 15
              "h3": "Sans Semi-Bold 13", "body": "Sans 11"}
 
 
-def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_img_fn):
+def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_img_fn, stickies=()):
     """Render a note to PDF with Cairo (no print dialog). LINES: (Pango markup,
-    kind) pairs from NotesWindow._export_lines; kind picks the font."""
+    kind) pairs from NotesWindow._export_lines; kind picks the font. STICKIES
+    (the note's sticky notes) come after the text as coloured callout cards."""
     PAGE_W, PAGE_H = 595.0, 842.0
     MARGIN = 48.0
     CONTENT_W = PAGE_W - 2 * MARGIN
@@ -1769,6 +1770,36 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
             cr.paint()
             cr.restore()
             y += th + 14.0
+
+    for sticky in stickies:
+        text = (sticky.get("text") or "").strip()
+        if not text:
+            continue
+        _name, bg, fg = STICKY_PALETTES[int(sticky.get("color_idx", 0)) % len(STICKY_PALETTES)]
+        layout = PangoCairo.create_layout(cr)
+        layout.set_width(int((CONTENT_W - 28) * Pango.SCALE))
+        layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+        layout.set_font_description(Pango.FontDescription("Sans 10"))
+        head = GLib.markup_escape_text(sticky.get("title") or "Sticky Note")
+        layout.set_markup(f"<b>📌 {head}</b>\n{GLib.markup_escape_text(text)}", -1)
+        _ink, logical = layout.get_pixel_extents()
+        box_h = logical.height + 20.0
+        ensure_space(box_h + 12.0)
+        cr.new_path()
+        r = 8.0
+        cr.arc(MARGIN + CONTENT_W - r, y + r, r, -math.pi / 2, 0)
+        cr.arc(MARGIN + CONTENT_W - r, y + box_h - r, r, 0, math.pi / 2)
+        cr.arc(MARGIN + r, y + box_h - r, r, math.pi / 2, math.pi)
+        cr.arc(MARGIN + r, y + r, r, math.pi, 3 * math.pi / 2)
+        cr.close_path()
+        cr.set_source_rgb(*hex_rgb(bg))
+        cr.fill()
+        cr.set_source_rgb(*hex_rgb(fg))
+        cr.rectangle(MARGIN, y + 4, 4, box_h - 8)  # the callout's edge
+        cr.fill()
+        cr.move_to(MARGIN + 16, y + 10)
+        PangoCairo.show_layout(cr, layout)
+        y += box_h + 12.0
 
     surface.finish()
 
@@ -4610,7 +4641,8 @@ class NotesWindow(Adw.ApplicationWindow):
         if tags:
             meta += " · " + " ".join(f"#{t}" for t in tags)
         lines = self._export_lines()
-        return lambda: export_pdf_direct(title, meta, lines, imgs, out_path, resolve)
+        stickies = [dict(st.data) for st in self.sticky_notes]
+        return lambda: export_pdf_direct(title, meta, lines, imgs, out_path, resolve, stickies)
 
     def _do_export(self, out_path, fmt):
         self._export_job(out_path, fmt)()

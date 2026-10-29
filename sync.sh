@@ -554,7 +554,7 @@ if [[ "$EFFECTS" == lite ]]; then
     done
     ACTIVE_EXTENSIONS=("${kept[@]}")
     gsettings_remove org.gnome.shell enabled-extensions "${HEAVY_EXTENSIONS[@]}"
-    echo "    [*] Effects: lite (blur, window effects and genie off; 'mk effects full' turns them on)"
+    echo "    [*] Effects: lite (blur, wobbly windows and genie off; the open/close glide stays; 'mk effects full' turns them on)"
 fi
 # Write the list directly: `gnome-extensions enable` fails on Wayland for
 # extensions the running shell hasn't loaded yet.

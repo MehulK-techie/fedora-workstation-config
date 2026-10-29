@@ -119,7 +119,7 @@ CATEGORIES = ("Performance", "Security & Vault", "Biometrics & Lock", "Screensav
               "Notes & Focus", "System Maintenance")
 ACTIONS = [
     ("free-ram", "Performance", "media-flash-symbolic", "Free memory", "Drop file caches (no password)", ("bg", mk("optimize", "ram"))),
-    ("effects-lite", "Performance", "applications-graphics-symbolic", "Lite effects", "Blur and window effects off", ("bg", mk("effects", "lite"))),
+    ("effects-lite", "Performance", "applications-graphics-symbolic", "Lite effects", "Blur, wobbly and genie off (the glide stays)", ("bg", mk("effects", "lite"))),
     ("effects-full", "Performance", "applications-graphics-symbolic", "Full effects", "Every visual effect on", ("bg", mk("effects", "full"))),
     ("nap", "Performance", "weather-clear-night-symbolic", "App Nap", "Which unused apps are paused", ("show", mk("nap"))),
     ("speedtest", "Performance", "network-wireless-signal-excellent-symbolic", "Speed test", "Ping, download and upload", ("bg", [tool("mk-speedtest"), "--gui", "--start"])),

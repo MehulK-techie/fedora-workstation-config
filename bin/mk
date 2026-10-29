@@ -428,7 +428,7 @@ case "${1:-help}" in
         ;;
 
     effects)
-        # full: every effect · lite: blur, window effects and genie off · auto: lite on weak hardware
+        # full: every effect · lite: blur, wobbly windows and genie off (the glide stays) · auto: lite on weak hardware
         shift
         EFFECTS_FILE="$HOME/.config/mk-workstation/effects"
         case "${1:-}" in

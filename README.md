@@ -324,7 +324,7 @@ Fork, change, run `just check`, open a pull request. See [CONTRIBUTING.md](CONTR
 
 ## Credits
 
-Ideas adopted from [fedorable](https://github.com/chetripley/fedorable), [PYFO](https://github.com/d4rklynk/PYFO), [Linutil](https://github.com/ChrisTitusTech/linutil), [Universal Blue Bluefin](https://projectbluefin.io/) and the [RPM Fusion](https://rpmfusion.org/) howtos. Face unlock is powered by [Howdy](https://github.com/boltgolt/howdy). Extensions belong to their authors on [extensions.gnome.org](https://extensions.gnome.org/). The Stan Lee photo in the Web Hang screensaver is by Gage Skidmore, [CC BY-SA 3.0](assets/screensaver/CREDITS.md).
+Ideas adopted from [fedorable](https://github.com/chetripley/fedorable), [PYFO](https://github.com/d4rklynk/PYFO), [Linutil](https://github.com/ChrisTitusTech/linutil), [Universal Blue Bluefin](https://projectbluefin.io/) and the [RPM Fusion](https://rpmfusion.org/) howtos. Face unlock is powered by [Howdy](https://github.com/boltgolt/howdy). Extensions belong to their authors on [extensions.gnome.org](https://extensions.gnome.org/).
 
 ## License
 

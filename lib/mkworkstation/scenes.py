@@ -6,8 +6,7 @@
            web line beside a skyscraper whose lit windows spell SIGN_TEXT
            (screensaver.conf, MK by default, up to four letters), over the
            city (two parallax layers); on the tower to the left, Stan Lee's
-           portrait and his line lit in its windows (TRIBUTE_IMAGE swaps the
-           photo); the clock top right
+           portrait and his line lit in its windows; the clock top right
   knight   a brick-built caped knight stands on a stone gargoyle in the rain;
            the cape moves in the wind, a searchlight sweeps the clouds and
            lights him from behind, lightning
@@ -469,11 +468,6 @@ def sign_cells(text):
     return set(cells), max(1, len(text) * 6 - 1)
 
 
-_PORTRAIT = Path.home() / ".config/mk-workstation/tribute.jpg"
-# Stan Lee by Gage Skidmore, CC BY-SA 3.0 (assets/screensaver/CREDITS.md)
-_BUNDLED = Path(__file__).resolve().parents[2] / "assets/screensaver/stan-lee.jpg"
-
-
 def conf_value(key, default):
     try:
         from .saver_conf import conf
@@ -486,29 +480,57 @@ QUOTE = ("WITH GREAT POWER COMES", "GREAT RESPONSIBILITY.")
 TRIBUTE_LINE = "STAN LEE • 1922-2018"
 
 
-def _portrait_levels(cols, rows):
-    """The tribute photo as COLS x ROWS brightness levels (0-1), or None."""
-    path = next((p for p in (Path(conf_value("TRIBUTE_IMAGE", "") or "/nonexistent").expanduser(),
-                             _PORTRAIT, _BUNDLED) if p.is_file()), None)
-    if path is None:
-        return None
-    try:
-        from PIL import Image, ImageOps
-        # equalized: the face's mid tones spread out, so features (eyes,
-        # glasses, smile) survive at a few dozen windows across
-        img = ImageOps.equalize(ImageOps.fit(Image.open(path).convert("L"), (cols * 4, rows * 4)))
-        img = img.resize((cols, rows), Image.Resampling.LANCZOS)
-    except Exception:  # noqa: BLE001 - any bad file: the windows stay dark
-        return None
-    px = img.load()
-
-    def oval(c, r):
-        """1 on the head and shoulders, fading to 0 outside: the photo's
-        background (a curtain) shouldn't light up as noise around him."""
-        dx, dy = (c + 0.5) / cols - 0.5, (r + 0.5) / rows - 0.46
-        d = math.hypot(dx / 0.40, dy / 0.52)
-        return 1.0 if d < 0.85 else max(0.0, 1 - (d - 0.85) / 0.2)
-    return [[px[c, r] / 255 * oval(c, r) for c in range(cols)] for r in range(rows)]
+def _stan_lee_cell(u, v, t):
+    """The portrait as office windows: what the window at (u, v) (0-1 across
+    the portrait square) shows, or None for dark. T is its ordered-dither
+    threshold (0-1), for soft shading. Drawn, not sampled from a photo, so
+    his signature features read from across the room: combed-back silver
+    hair, dark aviator lenses in amber rims with the bridge and temples, a
+    silver chevron moustache, a clear smile, the shirt collar."""
+    dx, dy = u - 0.5, v - 0.5
+    # aviator glasses: two lenses (dark inside, amber rim), bridge, temples
+    for lx in (0.355, 0.645):
+        ex, ey = (u - lx) / 0.125, (v - 0.47) / (0.085 + 0.02 * (v > 0.47))
+        e = ex * ex + ey * ey
+        if e < 1.0:
+            return None if e < 0.55 else (GOLD, 1.0)  # a thick, bright rim
+    if 0.48 < u < 0.52 and 0.445 < v < 0.475:
+        return GOLD, 1.0
+    if (0.16 < u < 0.23 or 0.77 < u < 0.84) and 0.445 < v < 0.475:
+        return GOLD, 0.9
+    # combed-back hair: a silver cap over the forehead, combed in streaks
+    hair = (dx / 0.33) ** 2 + ((v - 0.28) / 0.19) ** 2 < 1.0 and v < 0.34
+    if hair:
+        streak = 1.0 if int(u * 40) % 3 else 0.7
+        return WARM_WHITE if v > 0.16 else (1.0, 1.0, 1.0), streak
+    # moustache: a silver chevron; the smile below it
+    if abs(dx) < 0.15 and 0.645 + abs(dx) * 0.25 < v < 0.685 + abs(dx) * 0.25:
+        return (1.0, 1.0, 1.0), 0.95
+    if abs(dx) < 0.11 and 0.735 - dx * dx * 2.5 < v < 0.765 - dx * dx * 2.5:
+        return WARM_WHITE, 1.0
+    if abs(dx) < 0.12 and 0.765 - dx * dx * 2.5 <= v < 0.785 - dx * dx * 2.5:
+        return None  # the line under the teeth
+    # ears
+    for ex in (0.185, 0.815):
+        if ((u - ex) / 0.045) ** 2 + ((v - 0.52) / 0.075) ** 2 < 1.0:
+            return GOLD, 0.45
+    # the face: warm, lit from the right, with a shaded nose and jaw
+    face = (dx / 0.29) ** 2 + ((v - 0.52) / 0.36) ** 2 < 1.0
+    if face:
+        light = 0.35 + 0.35 * (u - 0.2) / 0.6 - 0.25 * max(0.0, v - 0.75) / 0.13
+        if 0.49 < u < 0.53 and 0.53 < v < 0.62:   # the nose's shadow side
+            light -= 0.25
+        # dimmer than the rims, so the glasses stand out against the face
+        if light > 0.2 + 0.5 * t:
+            return GOLD, min(0.5, 0.15 + light * 0.5)
+        return (CYAN, 0.22) if light > 0.1 + 0.2 * t else None
+    # the collar: a white V over a cyan shirt
+    if v > 0.86:
+        if abs(dx) < 0.20 and v < 0.86 + (0.2 - abs(dx)) * 0.7:
+            return (1.0, 1.0, 1.0), 0.9
+        if abs(dx) < 0.42:
+            return CYAN, 0.35 if t < 0.6 else 0.2
+    return None
 
 
 def _lit_text(cr, text, cx, top, pitch, colour, alpha=0.95):
@@ -528,8 +550,8 @@ BAYER = ((0, 8, 2, 10), (12, 4, 14, 6), (3, 11, 1, 9), (15, 7, 13, 5))  # ordere
 
 def tribute_tower(cr, w, h):
     """Stan Lee's tribute: an Art Deco tower (stepped setbacks, a finned
-    crown) whose office windows carry his portrait, dithered from the photo
-    onto the same window grid, over a frieze with his line and dates. The
+    crown) whose office windows carry his portrait (_stan_lee_cell), over a
+    frieze with his line and dates. The
     other offices are lit the way a real tower is: whole floors dark, the
     rest a mix of gold, cyan and warm white at varying brightness. Part of
     the still background, so the drift never shakes it."""
@@ -589,7 +611,6 @@ def tribute_tower(cr, w, h):
     pside = pcols * ppitch
     py0 = tiers[0][1] + pitch * 1.2
     px0 = cx - pside / 2
-    levels = _portrait_levels(pcols, pcols)
     widest = max(sign_cells(line)[1] for line in QUOTE)
     tp = min(2.6 * k + 0.5, (width - 4 * pitch) / widest)
     frieze_top = py0 + pside + pitch * 0.8
@@ -629,18 +650,11 @@ def tribute_tower(cr, w, h):
     cr.set_source_rgba(0.015, 0.015, 0.04, 0.85)
     cr.rectangle(px0 - pitch * 0.4, py0 - pitch * 0.4, pside + pitch * 0.4, pside + pitch * 0.4)
     cr.fill()
-    if levels:
-        for r in range(pcols):
-            for c in range(pcols):
-                v = levels[r][c]
-                t = (BAYER[r % 4][c % 4] + 0.5) / 16
-                x, y = px0 + c * ppitch, py0 + r * ppitch
-                if v > 0.80 + 0.15 * t:
-                    lit(x, y, WARM_WHITE, 0.95, ppitch)
-                elif v > 0.35 + 0.4 * t:
-                    lit(x, y, GOLD, 0.45 + 0.5 * v, ppitch)
-                elif v > 0.12 + 0.25 * t:
-                    lit(x, y, CYAN, 0.2 + 0.35 * v, ppitch)
+    for r in range(pcols):
+        for c in range(pcols):
+            cell = _stan_lee_cell((c + 0.5) / pcols, (r + 0.5) / pcols, (BAYER[r % 4][c % 4] + 0.5) / 16)
+            if cell:
+                lit(px0 + c * ppitch, py0 + r * ppitch, cell[0], cell[1], ppitch)
     # the frieze: a lit band with the quote and the dates
     band = cairo.LinearGradient(0, frieze_top, 0, frieze_bottom)
     band.add_color_stop_rgba(0, 0.12, 0.10, 0.06, 0.95)

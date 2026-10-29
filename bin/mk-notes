@@ -3510,6 +3510,12 @@ class NotesWindow(Adw.ApplicationWindow):
         self._queue_save()
 
     def add_sticky_note(self, item_data=None):
+        # one sticky per click, however fast the clicks come
+        if item_data is None:
+            now = time.monotonic()
+            if now - getattr(self, "_last_sticky", 0) < 0.6:
+                return
+            self._last_sticky = now
         scroll_y = self.page_scroll.get_vadjustment().get_value() / max(0.5, self.zoom)
         data = item_data or {
             "text": "",
@@ -3581,6 +3587,11 @@ class NotesWindow(Adw.ApplicationWindow):
                 le.forward_to_line_end()
             quote = self.buffer.get_text(ls, le, False).strip()[:60]
 
+        # One draft at a time: a second click goes back to the open card.
+        if getattr(self, "_comment_draft", None) is not None:
+            self._open_comment_margin()
+            self._comment_draft.grab_focus()
+            return
         # A slim card at the top of the comments margin, not a dialog.
         self._open_comment_margin()
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, css_classes=["mk-comment-card"])
@@ -3588,6 +3599,7 @@ class NotesWindow(Adw.ApplicationWindow):
                               css_classes=["mk-row-meta"]))
         entry = Gtk.Entry(placeholder_text="Add a comment…")
         card.append(entry)
+        self._comment_draft = entry
         row = Gtk.Box(spacing=6, halign=Gtk.Align.END)
         cancel = Gtk.Button(label="Cancel", css_classes=["flat"])
         add = Gtk.Button(label="Comment", css_classes=["suggested-action"])
@@ -3660,6 +3672,7 @@ class NotesWindow(Adw.ApplicationWindow):
         return True
 
     def _rebuild_comments_panel(self):
+        self._comment_draft = None
         while (c := self.comments_list.get_first_child()) is not None:
             self.comments_list.remove(c)
         if not self.comments:
@@ -4970,11 +4983,32 @@ class NotesWindow(Adw.ApplicationWindow):
         dlg.present(self)
 
     def _execute_delete(self, rel):
-        self._save_now()
-        self.vault.delete(rel)
+        """Delete REL for good: nothing pending may write it back. Pending
+        saves are cancelled and, for the open note, the page and its tables,
+        pictures and stickies are cleared before the file goes."""
         if rel == self.rel:
+            for attr in ("save_id", "_meta_id", "_pages_id"):
+                if getattr(self, attr, 0):
+                    GLib.source_remove(getattr(self, attr))
+                    setattr(self, attr, 0)
+            self.loading = True
             self.rel = None
+            self.dirty = False
+            self.buffer.set_text("")
+            self.table_items = []
+            self._rebuild_canvas_objects([], [])
+            self.ink_canvas.strokes = []
+            self.comments = []
+            self.loading = False
+        else:
+            self._save_now()
+        self.vault.delete(rel)
+        meta = self._meta_file(rel)
+        if meta and meta.is_file():
+            meta.unlink()
+        if self.rel is None:
             self.open_note(self._first_note(), record_history=False)
+        self.nav_history = [r for r in getattr(self, "nav_history", []) if r != rel]
         self.refresh_lists()
         self.toast.add_toast(Adw.Toast(title=f"Deleted “{Path(rel).stem}”", timeout=3))
 

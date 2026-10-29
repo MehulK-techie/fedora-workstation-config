@@ -10,6 +10,7 @@ import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -254,6 +255,9 @@ class Row {
         const box = new St.BoxLayout({vertical: true, x_expand: true});
         const line = new St.BoxLayout({x_expand: true, style: 'spacing: 14px;'});
         this.label = new St.Label({text: label, style_class: 'mk-monitor-name', x_expand: true});
+        this.label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        // Fixed width, right-aligned: a value going from 9% to 100% or a long
+        // process name never resizes the menu.
         this.value = new St.Label({text: '…', style_class: 'mk-monitor-value'});
         line.add_child(this.label);
         // spark: the scale of the history line (100 for percentages), or

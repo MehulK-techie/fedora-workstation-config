@@ -9,6 +9,7 @@
 import Cairo from 'cairo';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Pango from 'gi://Pango';
 import Soup from 'gi://Soup?version=3.0';
 import St from 'gi://St';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -70,11 +71,15 @@ export class InternetSection {
         this._graph.connect('repaint', area => this._paintGraph(area));
         box.add_child(this._graph);
 
-        this._gauge = new St.DrawingArea({height: 150, x_expand: true, visible: false});
+        // Always there (an empty dial until a test runs): showing it only
+        // during a test made the whole menu jump.
+        this._gauge = new St.DrawingArea({height: 150, x_expand: true});
         this._gauge.connect('repaint', area => this._paintGauge(area));
         box.add_child(this._gauge);
 
         this._summary = new St.Label({text: 'Speed test: download, upload and ping', style_class: 'mk-monitor-name'});
+        this._summary.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        this._conn.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         box.add_child(this._summary);
         item.add_child(box);
         menu.addMenuItem(item);
@@ -200,7 +205,6 @@ export class InternetSection {
             return;
         this._running = true;
         this._cancel = new Gio.Cancellable();
-        this._gauge.show();
         this._button.label.text = 'Testing…';
         this._summary.text = 'Measuring ping…';
         try {
@@ -231,7 +235,7 @@ export class InternetSection {
         return msg;
     }
 
-    _sendAndRead(msg) {
+    _sendOnce(msg) {
         return new Promise((resolve, reject) => {
             this._session.send_and_read_async(msg, GLib.PRIORITY_DEFAULT, this._cancel, (s, res) => {
                 try {
@@ -241,6 +245,27 @@ export class InternetSection {
                 }
             });
         });
+    }
+
+    // A TLS handshake or a connection reset now and then (captive portals,
+    // flaky Wi-Fi) shouldn't fail the whole test: ping and download requests
+    // get up to two retries, a fresh request each time, half a second apart.
+    // Cancelling never retries.
+    async _sendAndRead(msg) {
+        for (let attempt = 0; ; attempt++) {
+            try {
+                return await this._sendOnce(attempt ? this._request(msg.get_method(), msg.get_uri().to_string()) : msg);
+            } catch (e) {
+                const transient = /TLS|handshake|certificate|reset|closed|timed out|Connection/i.test(e.message ?? '');
+                // Only GETs: a retried upload would go out without its body.
+                if (attempt >= 2 || !transient || msg.get_method() !== 'GET' || this._cancel?.is_cancelled())
+                    throw e;
+                await new Promise(r => GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                    r();
+                    return GLib.SOURCE_REMOVE;
+                }));
+            }
+        }
     }
 
     async _ping() {

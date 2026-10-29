@@ -2213,7 +2213,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.page_overlay.add_controller(drag)
 
     def _on_overlay_drag_begin(self, gesture, x, y):
-        if self.ink_canvas.active:
+        if self.ink_canvas.active or self._is_control_at(x, y):
             gesture.set_state(Gtk.EventSequenceState.DENIED)
             return
         z = max(0.5, self.zoom)
@@ -2233,10 +2233,7 @@ class NotesWindow(Adw.ApplicationWindow):
             ix, iy = img.data["x"] * z - getattr(img, "ex", 0), img.data["y"] * z - getattr(img, "ey", 0)
             iw, ih = img.get_width(), img.get_height()
             if ix <= x <= ix + iw and iy <= y <= iy + ih:
-                tb_h = 38 if img.selected else 0
-                if img.selected and iy <= y <= iy + tb_h:
-                    gesture.set_state(Gtk.EventSequenceState.DENIED)
-                    return
+                tb_h = 38 if img.selected else 0  # its toolbar sits above it (buttons are skipped above)
                 self.select_canvas_image(img)
                 local_x = x - ix
                 local_y = y - (iy + tb_h)
@@ -2254,6 +2251,18 @@ class NotesWindow(Adw.ApplicationWindow):
                 return
 
         gesture.set_state(Gtk.EventSequenceState.DENIED)
+
+    def _is_control_at(self, x, y):
+        """Is there a button, entry or text field under (x, y)? Those take
+        the click themselves (a picture's trash button, a table cell, a text
+        box): dragging must not swallow it."""
+        w = self.page_overlay.pick(x, y, Gtk.PickFlags.DEFAULT)
+        while w is not None and w is not self.page_overlay:
+            if isinstance(w, (Gtk.Button, Gtk.MenuButton, Gtk.Entry, Gtk.Text, Gtk.Scale, Gtk.Switch)) or \
+                    (isinstance(w, Gtk.TextView) and w is not self.view):
+                return True
+            w = w.get_parent()
+        return False
 
     def _on_overlay_drag_update(self, _gesture, dx, dy):
         if not self._ov_drag_target:
@@ -2491,6 +2500,9 @@ class NotesWindow(Adw.ApplicationWindow):
         self.pin_btn = Gtk.ToggleButton(icon_name="view-pin-symbolic", tooltip_text="Pin Note to Top")
         self.pin_btn.connect("toggled", self._on_pin_toggled)
         self.top_bar.pack_end(self.pin_btn)
+        trash = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Delete this note (it goes to the trash)",
+                           action_name="win.delete")
+        self.top_bar.pack_end(trash)
 
         cal_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                           margin_top=10, margin_bottom=10, margin_start=10, margin_end=10, width_request=270)

@@ -6,7 +6,7 @@
            web line beside a skyscraper whose lit windows spell SIGN_TEXT
            (screensaver.conf, MK by default, up to four letters), over the
            city (two parallax layers), with a tribute to Stan Lee on a
-           rooftop billboard (TRIBUTE_IMAGE, halftoned); lightning
+           rooftop billboard (a halftone photo; TRIBUTE_IMAGE swaps it); lightning
   knight   a brick-built caped knight stands on a stone gargoyle in the rain;
            the cape moves in the wind, a searchlight sweeps the clouds and
            lights him from behind, lightning
@@ -478,26 +478,29 @@ def sign_cells(text):
 
 
 _PORTRAIT = Path.home() / ".config/mk-workstation/tribute.jpg"
+# Stan Lee by Gage Skidmore, CC BY-SA 3.0 (assets/screensaver/CREDITS.md)
+_BUNDLED = Path(__file__).resolve().parents[2] / "assets/screensaver/stan-lee.jpg"
 
 
 def tribute_portrait(size):
-    """A square halftone of ~/.config/mk-workstation/tribute.jpg (a photo
-    you choose), SIZE pixels; None without one, and the billboard draws a
-    silhouette instead."""
-    path = Path(conf_value("TRIBUTE_IMAGE", "") or _PORTRAIT).expanduser()
-    if size < 16 or not path.is_file():
+    """A square halftone portrait, SIZE pixels: TRIBUTE_IMAGE, else
+    ~/.config/mk-workstation/tribute.jpg, else the bundled photo of Stan Lee.
+    False when none can be read (the frame stays dark)."""
+    path = next((p for p in (Path(conf_value("TRIBUTE_IMAGE", "") or "/nonexistent").expanduser(),
+                             _PORTRAIT, _BUNDLED) if p.is_file()), None)
+    if size < 16 or path is None:
         return False
     try:
         from PIL import Image, ImageOps
         img = ImageOps.autocontrast(ImageOps.fit(Image.open(path).convert("L"), (size, size)), cutoff=2)
-    except Exception:  # noqa: BLE001 - any bad file: fall back to the silhouette
+    except Exception:  # noqa: BLE001 - any bad file: the frame stays dark
         return False
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
     cr = cairo.Context(surf)
     cr.set_source_rgb(0.95, 0.94, 0.9)  # newsprint
     cr.paint()
     cr.set_source_rgb(0.05, 0.05, 0.08)
-    cell = max(3, size // 48)
+    cell = max(2, size // 64)
     px = img.load()
     for y in range(0, size, cell):
         for x in range(0, size, cell):
@@ -518,7 +521,7 @@ def conf_value(key, default):
 
 def billboard(cr, x, y, bw, bh, t, ground, portrait=None):
     """Stan Lee's tribute on its own building: a lit frame with his portrait
-    (halftone, or a silhouette), his line beneath it and 1922-2018, two lamps
+    (a halftone photo), his line beneath it and 1922-2018, two lamps
     shining up at it, on steel legs on the roof (down to GROUND)."""
     cr.save()
     roof = y + bh * 1.12
@@ -576,11 +579,6 @@ def billboard(cr, x, y, bw, bh, t, ground, portrait=None):
         cr.set_source_rgb(0.12, 0.13, 0.2)
         cr.rectangle(px, py, side, side)
         cr.fill()
-        cr.save()
-        cr.rectangle(px, py, side, side)
-        cr.clip()
-        stan_lee(cr, px + side * 0.45, py + side * 0.45, side * 0.26, 1.0)
-        cr.restore()
     cr.set_source_rgba(1, 0.95, 0.85, 0.5)
     cr.set_line_width(1.5)
     cr.rectangle(px, py, side, side)
@@ -605,58 +603,6 @@ def billboard(cr, x, y, bw, bh, t, ground, portrait=None):
     ext = cr.text_extents(sub)
     cr.move_to(x + (bw - ext.x_advance) / 2, top + 2 * size * 1.25 + size * 0.2)
     cr.show_text(sub)
-    cr.restore()
-
-
-def stan_lee(cr, x, y, r, alpha):
-    """A stylized silhouette facing right, lit by the lightning: swept-back
-    hair, the big tinted glasses, the moustache. R is the head's radius."""
-    cr.save()
-    cr.translate(x, y)
-    pale = (0.80, 0.84, 0.95)
-    cr.set_source_rgba(*pale, 0.38 * alpha)
-    cr.save()  # head
-    cr.scale(0.82, 1.0)
-    cr.arc(0, 0, r, 0, 2 * math.pi)
-    cr.restore()
-    cr.fill()
-    cr.move_to(-r * 0.85, -r * 0.15)  # hair, swept back in a wave
-    cr.curve_to(-r * 0.95, -r * 1.25, r * 0.35, -r * 1.45, r * 0.85, -r * 0.62)
-    cr.curve_to(r * 0.55, -r * 0.82, r * 0.05, -r * 0.78, -r * 0.2, -r * 0.55)
-    cr.close_path()
-    cr.set_source_rgba(*pale, 0.55 * alpha)
-    cr.fill()
-    cr.move_to(r * 0.72, -r * 0.12)  # nose
-    cr.line_to(r * 1.0, r * 0.18)
-    cr.line_to(r * 0.74, r * 0.24)
-    cr.close_path()
-    cr.set_source_rgba(*pale, 0.38 * alpha)
-    cr.fill()
-    cr.move_to(-r * 0.1, r * 0.75)  # neck and shoulders
-    cr.line_to(r * 0.35, r * 0.75)
-    cr.curve_to(r * 0.5, r * 1.2, r * 1.3, r * 1.25, r * 1.5, r * 1.6)
-    cr.line_to(-r * 1.4, r * 1.6)
-    cr.curve_to(-r * 1.1, r * 1.2, -r * 0.4, r * 1.2, -r * 0.1, r * 0.75)
-    cr.close_path()
-    cr.fill()
-    for gx in (r * 0.05, r * 0.5):  # the glasses: two big dark lenses and a bridge
-        cr.rectangle(gx - r * 0.2, -r * 0.18, r * 0.36, r * 0.3)
-    cr.set_source_rgba(0.05, 0.06, 0.12, 0.8 * alpha)
-    cr.fill()
-    cr.move_to(r * 0.16, -r * 0.08)
-    cr.line_to(r * 0.3, -r * 0.08)
-    cr.move_to(-r * 0.15, -r * 0.1)
-    cr.line_to(-r * 0.6, -r * 0.02)  # the arm to the ear
-    cr.set_line_width(max(1.0, r * 0.04))
-    cr.stroke()
-    cr.set_source_rgba(1, 1, 1, 0.5 * alpha)  # a glint of lightning on a lens
-    cr.rectangle(r * 0.38, -r * 0.15, r * 0.06, r * 0.1)
-    cr.fill()
-    cr.move_to(r * 0.38, r * 0.32)  # moustache
-    cr.curve_to(r * 0.55, r * 0.24, r * 0.82, r * 0.28, r * 0.88, r * 0.38)
-    cr.curve_to(r * 0.7, r * 0.42, r * 0.5, r * 0.42, r * 0.38, r * 0.32)
-    cr.set_source_rgba(0.08, 0.09, 0.16, 0.75 * alpha)
-    cr.fill()
     cr.restore()
 
 

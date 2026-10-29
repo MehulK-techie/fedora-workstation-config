@@ -3,9 +3,9 @@
 
   aurora   soft light drifting over a dark sky, rising sparks
   web      a brick-built masked hero in red and blue hangs upside down from a
-           web line beside a skyscraper with a neon MK sign, over the city
-           (two parallax layers); now and then lightning, and Stan Lee's
-           silhouette in the clouds with his line
+           web line beside a skyscraper with a neon sign (SIGN_TEXT in
+           screensaver.conf, MK by default), over the city (two parallax
+           layers), with Stan Lee's line on a rooftop billboard; lightning
   knight   a brick-built caped knight stands on a stone gargoyle in the rain;
            the cape moves in the wind, a searchlight sweeps the clouds and
            lights him from behind, lightning
@@ -228,6 +228,18 @@ class Aurora(Scene):
 
 # ---------------------------------------------------------------- web
 
+def sign_text():
+    """The skyscraper's neon sign: SIGN_TEXT in screensaver.conf, up to six
+    letters or digits, upper case; MK when unset."""
+    try:
+        from .saver_conf import conf
+        text = conf().get("SIGN_TEXT", "MK")
+    except (ImportError, ValueError):
+        text = "MK"
+    text = "".join(ch for ch in text.strip().strip('"').upper() if ch.isalnum())[:6]
+    return text or "MK"
+
+
 @scene("web", "Web Hang")
 class WebHang(Scene):
     """A masked hero hanging upside down from a web line over the city."""
@@ -235,6 +247,7 @@ class WebHang(Scene):
     def __init__(self):
         super().__init__()
         self.layers = None
+        self.sign = sign_text()
 
     def paint_background(self, cr, w, h):
         sky(cr, w, h, (0.03, 0.04, 0.12), (0.16, 0.08, 0.24))
@@ -288,8 +301,11 @@ class WebHang(Scene):
         cr.fill()
         cornice(cr, w, ledge, anchor_x)
 
-        neon_sign(cr, w * 0.65, h * 0.37, h * 0.075, t)
-        self._tribute(cr, w, h, t)
+        neon_sign(cr, w * 0.65, h * 0.37, min(h * 0.075, w * 0.17 / max(2, len(self.sign)) * 1.4), t, self.sign)
+        # the billboard sits on a near rooftop: it drifts with the near city
+        near = -80 + math.sin(t * 0.05) * 80
+        billboard(cr, w * 0.04 + near, h * 0.62, w * 0.25, h * 0.15, t, h)
+        self._lightning(cr, w, h, t)
 
         cr.save()
         cr.translate(end_x, end_y)
@@ -298,46 +314,28 @@ class WebHang(Scene):
         cr.restore()
         caption(cr, w, h, [(time.strftime("%H:%M"), 44, 0.85), (time.strftime("%A, %d %B"), 16, 0.5)])
 
-    TRIBUTE_EVERY = 75  # seconds; the first one 20 s in
+    LIGHTNING_EVERY = 75  # seconds; the first 20 s in
 
-    def _tribute(self, cr, w, h, t):
-        """Now and then lightning: a double flash, a bolt, and in the clouds a
-        silhouette of Stan Lee (1922-2018) with his line, fading out."""
+    def _lightning(self, cr, w, h, t):
+        """Now and then a double flash and a bolt over the city."""
         if t < 20:
             return
-        cycle, p = divmod(t - 20, self.TRIBUTE_EVERY)
-        if p > 10:
-            return
+        cycle, p = divmod(t - 20, self.LIGHTNING_EVERY)
         flash = max(0.0, 1 - abs(p - 0.08) / 0.08) + 0.7 * max(0.0, 1 - abs(p - 0.32) / 0.1)
-        if flash > 0:
-            rand = random.Random(int(cycle))
-            x, y = w * rand.uniform(0.08, 0.3), 0.0
-            cr.move_to(x, y)
-            while y < h * 0.45:
-                x += rand.uniform(-40, 40)
-                y += rand.uniform(30, 60)
-                cr.line_to(x, y)
-            cr.set_source_rgba(0.85, 0.9, 1, 0.9 * min(1, flash))
-            cr.set_line_width(2.5)
-            cr.stroke()
-            cr.set_source_rgba(0.8, 0.85, 1, 0.3 * min(1, flash))
-            cr.paint()
-        # the face in the clouds: in over 1.5 s, held, out by 10 s
-        a = min(1.0, max(0.0, (p - 0.3) / 1.5)) * min(1.0, max(0.0, (10 - p) / 2.5))
-        if a <= 0:
+        if flash <= 0:
             return
-        r = h * 0.085
-        stan_lee(cr, w * 0.17, h * 0.2, r, a)
-        cr.select_font_face("Serif", cairo.FONT_SLANT_ITALIC, cairo.FONT_WEIGHT_NORMAL)
-        cr.set_font_size(max(14, h * 0.022))
-        cr.set_source_rgba(0.92, 0.94, 1, 0.85 * a)
-        cr.move_to(w * 0.17 - r * 1.6, h * 0.2 + r * 1.75)
-        cr.show_text("With great power comes great responsibility.")
-        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
-        cr.set_font_size(max(11, h * 0.014))
-        cr.set_source_rgba(0.85, 0.88, 0.95, 0.6 * a)
-        cr.move_to(w * 0.17 - r * 1.6, h * 0.2 + r * 1.75 + max(22, h * 0.03))
-        cr.show_text("Excelsior!  — Stan Lee, 1922–2018")
+        rand = random.Random(int(cycle))
+        x, y = w * rand.uniform(0.08, 0.3), 0.0
+        cr.move_to(x, y)
+        while y < h * 0.45:
+            x += rand.uniform(-40, 40)
+            y += rand.uniform(30, 60)
+            cr.line_to(x, y)
+        cr.set_source_rgba(0.85, 0.9, 1, 0.9 * min(1, flash))
+        cr.set_line_width(2.5)
+        cr.stroke()
+        cr.set_source_rgba(0.8, 0.85, 1, 0.3 * min(1, flash))
+        cr.paint()
 
     def _hero(self, cr, s, t):
         """A plastic brick-style minifigure, upside down: feet at the origin (on
@@ -437,26 +435,26 @@ class WebHang(Scene):
         cr.restore()
 
 
-def neon_sign(cr, cx, cy, size, t):
-    """"MK" in neon tubes on a dark board, with a glow; it flickers now and then."""
+def neon_sign(cr, cx, cy, size, t, text="MK"):
+    """TEXT in neon tubes mounted straight on the facade, among its lit
+    windows: a soft dark halo keeps it readable, then glow, tube and hot core.
+    It flickers now and then."""
     tick = int(t * 12)
     flicker = 0.35 if (tick * 2654435761) % 97 < 3 else 1.0
     cr.save()
     cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
     cr.set_font_size(size)
-    ext = cr.text_extents("MK")
-    bx, by = cx - ext.width / 2 - size * 0.3, cy - ext.height / 2 - size * 0.25
-    bw, bh = ext.width + size * 0.6, ext.height + size * 0.5
-    cr.set_source_rgba(0.03, 0.02, 0.06, 0.92)  # the board, and its two mounts
-    cr.rectangle(bx, by, bw, bh)
-    cr.fill()
-    cr.rectangle(bx + bw * 0.2, by + bh, 3, size * 0.25)
-    cr.rectangle(bx + bw * 0.8, by + bh, 3, size * 0.25)
-    cr.fill()
+    ext = cr.text_extents(text)
     cr.move_to(cx - ext.width / 2 - ext.x_bearing, cy + ext.height / 2)
-    cr.text_path("MK")
+    cr.text_path(text)
     path = cr.copy_path()
     cr.new_path()
+    # the windows right behind the tubes dim a little, so the letters read
+    for width, alpha in ((size * 0.55, 0.18), (size * 0.32, 0.25)):
+        cr.append_path(path)
+        cr.set_source_rgba(0.02, 0.02, 0.06, alpha)
+        cr.set_line_width(width)
+        cr.stroke()
     for width, alpha in ((size * 0.42, 0.06), (size * 0.24, 0.12), (size * 0.12, 0.25)):  # glow
         cr.append_path(path)
         cr.set_source_rgba(1.0, 0.18, 0.42, alpha * flicker)
@@ -469,6 +467,73 @@ def neon_sign(cr, cx, cy, size, t):
     cr.set_line_width(max(0.8, size * 0.015))
     cr.set_source_rgba(1.0, 0.92, 0.96, flicker)  # its hot core
     cr.stroke()
+    cr.restore()
+
+
+def billboard(cr, x, y, bw, bh, t, ground):
+    """A lit rooftop billboard: Stan Lee's silhouette (1922-2018) and his
+    line, two lamps shining up at it, on steel legs, on top of its own
+    building (down to GROUND)."""
+    cr.save()
+    roof = y + bh * 1.5
+    cr.set_source_rgb(0.03, 0.025, 0.07)  # the building it stands on
+    cr.rectangle(x - bw * 0.08, roof, bw * 1.16, ground - roof)
+    cr.fill()
+    rand = random.Random(41)
+    for wy in range(int(roof) + 16, int(ground) - 8, 20):  # its lit windows
+        for wx in range(int(x - bw * 0.08) + 10, int(x + bw * 1.08) - 10, 16):
+            if rand.random() < 0.3:
+                cr.set_source_rgba(1.0, 0.85, 0.55, rand.uniform(0.3, 0.75))
+                cr.rectangle(wx, wy, 7, 9)
+                cr.fill()
+    cr.set_source_rgb(0.05, 0.05, 0.08)  # legs and catwalk
+    for lx in (x + bw * 0.2, x + bw * 0.8):
+        cr.rectangle(lx - 3, y + bh, 6, bh * 0.5)
+    cr.rectangle(x - 6, y + bh, bw + 12, 5)
+    cr.fill()
+    panel = cairo.LinearGradient(x, y, x, y + bh)  # lit from below
+    panel.add_color_stop_rgb(0, 0.07, 0.08, 0.14)
+    panel.add_color_stop_rgb(1, 0.20, 0.19, 0.24)
+    cr.set_source(panel)
+    cr.rectangle(x, y, bw, bh)
+    cr.fill()
+    cr.set_source_rgba(1, 0.9, 0.7, 0.35)
+    cr.set_line_width(2)
+    cr.rectangle(x, y, bw, bh)
+    cr.stroke()
+    flick = 0.85 + 0.15 * math.sin(t * 7.3) * math.sin(t * 2.1)  # old lamps
+    for lx in (x + bw * 0.25, x + bw * 0.75):
+        beam = cairo.LinearGradient(0, y + bh, 0, y)
+        beam.add_color_stop_rgba(0, 1, 0.92, 0.7, 0.28 * flick)
+        beam.add_color_stop_rgba(1, 1, 0.92, 0.7, 0.0)
+        cr.set_source(beam)
+        cr.move_to(lx - 4, y + bh + 2)
+        cr.line_to(lx - bw * 0.22, y)
+        cr.line_to(lx + bw * 0.22, y)
+        cr.line_to(lx + 4, y + bh + 2)
+        cr.close_path()
+        cr.fill()
+        cr.set_source_rgb(0.1, 0.1, 0.12)
+        cr.rectangle(lx - 5, y + bh + 2, 10, 5)
+        cr.fill()
+    r = bh * 0.3
+    cr.rectangle(x, y, bw, bh)
+    cr.clip()
+    stan_lee(cr, x + bh * 0.42, y + bh * 0.45, r, 1.0)
+    cr.reset_clip()
+    tx = x + bh * 0.95
+    cr.select_font_face("Serif", cairo.FONT_SLANT_ITALIC, cairo.FONT_WEIGHT_BOLD)
+    size = min(bh * 0.15, (bw - (tx - x) - 8) / 13)
+    cr.set_font_size(size)
+    cr.set_source_rgba(1, 0.97, 0.9, 0.95)
+    for i, line in enumerate(("With great power", "comes great", "responsibility.")):
+        cr.move_to(tx, y + bh * 0.3 + i * size * 1.2)
+        cr.show_text(line)
+    cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+    cr.set_font_size(size * 0.6)
+    cr.set_source_rgba(1, 0.85, 0.6, 0.85)
+    cr.move_to(tx, y + bh * 0.3 + 3 * size * 1.2 + size * 0.3)
+    cr.show_text("Excelsior! — Stan Lee, 1922–2018")
     cr.restore()
 
 

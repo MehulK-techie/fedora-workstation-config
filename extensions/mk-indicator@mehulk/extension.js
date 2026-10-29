@@ -19,6 +19,7 @@ import { AppNap } from './appNap.js';
 import { LockScene } from './lockScene.js';
 import { EmojiBoard, bindEmojiBoard, unbindEmojiBoard } from './emojiBoard.js';
 import { ClipboardHistory, bindClipboardHistory, unbindClipboardHistory } from './clipboardHistory.js';
+import { LiveWallpaper } from './liveWallpaper.js';
 
 const SCREENSHOT_KEYS = ['show-screenshot-ui', 'screenshot'];
 
@@ -150,6 +151,8 @@ export default class MKIndicatorExtension extends Extension {
             ~(Shell.ActionMode.LOGIN_SCREEN | Shell.ActionMode.LOCK_SCREEN | Shell.ActionMode.UNLOCK_SCREEN);
         for (const name of SCREENSHOT_KEYS)
             Main.wm.allowKeybinding(name, unlocked);
+        this._liveWallpaper = new LiveWallpaper();
+        this._liveWallpaper.enable();
         this._clipboardHistory = new ClipboardHistory();
         try {
             bindClipboardHistory(this, this._clipboardHistory);
@@ -309,6 +312,8 @@ export default class MKIndicatorExtension extends Extension {
         this._lockScene = null;
         for (const name of SCREENSHOT_KEYS)  // GNOME's own modes again
             Main.wm.allowKeybinding(name, Shell.ActionMode.ALL & ~Shell.ActionMode.LOGIN_SCREEN);
+        this._liveWallpaper?.disable();
+        this._liveWallpaper = null;
         if (this._clipboardHistory) {
             unbindClipboardHistory();
             this._clipboardHistory.destroy();

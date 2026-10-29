@@ -6,8 +6,9 @@
 
 Actions: every mk command as a card, by category, with a search box; star
 the ones you use most and they stay on top (~/.config/mk-workstation/hub-pins).
-Home: quick actions (free memory, vault, text from screen, speed test), power
-modes, App Nap, and the desktop tools. MK Lock: lock apps with a switch, lock
+Home: quick actions (vault, speed test, live wallpaper, scratchpad,
+distraction-free mode, system health), App Nap, the live wallpaper and the
+desktop tools. MK Lock: lock apps with a switch, lock
 and open folders and the vault, lock notebooks of MK Notes. Security: run the
 security check and apply its fixes.
 
@@ -30,6 +31,13 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+
+for _lib in (Path(__file__).resolve().parent.parent / "lib",
+             Path(GLib.get_user_data_dir()) / "mk-workstation/lib"):
+    if (_lib / "mkworkstation").is_dir():
+        sys.path.insert(0, str(_lib))
+        break
+from mkworkstation import saver_conf  # noqa: E402
 
 APP_ID = "io.github.mehulk.MkCenter"
 HOME = Path.home()
@@ -183,12 +191,18 @@ class Center(Adw.ApplicationWindow):
         page = Adw.PreferencesPage()
         quick = Adw.PreferencesGroup(title="Quick actions")
         grid = Gtk.Grid(column_spacing=12, row_spacing=12, column_homogeneous=True)
-        actions = [("media-flash-symbolic", "Free memory", lambda: self._optimize_ram()),
-                   ("changes-prevent-symbolic", "Vault", lambda: run_bg([tool("mk-lock"), "vault"],
+        # Free memory lives in the top bar's monitor menu, text from the
+        # screen on Super+Shift+C: not repeated here.
+        actions = [("changes-prevent-symbolic", "Vault", lambda: run_bg([tool("mk-lock"), "vault"],
                                                                         lambda c, o: self.say("Vault: " + (o.strip().splitlines() or ["done"])[-1].strip("✔ ")))),
-                   ("insert-text-symbolic", "Text from screen", lambda: run_bg([tool("ocr-snip")])),
                    ("network-wireless-signal-excellent-symbolic", "Speed test",
-                    lambda: run_bg([tool("mk-speedtest"), "--gui", "--start"]))]
+                    lambda: run_bg([tool("mk-speedtest"), "--gui", "--start"])),
+                   ("preferences-desktop-wallpaper-symbolic", "Live wallpaper", lambda: self._toggle_live_wallpaper()),
+                   ("accessories-text-editor-symbolic", "Quick scratchpad", lambda: run_bg([tool("mk-scratchpad")])),
+                   ("weather-clear-night-symbolic", "Distraction-free",
+                    lambda: run_bg(mk("exam"), lambda c, o: self.say((o.strip().splitlines() or ["Done"])[-1]))),
+                   ("utilities-system-monitor-symbolic", "System health",
+                    lambda: run_bg(terminal(f"{shlex.quote(tool('mk'))} doctor")))]
         for i, (icon, label, cb) in enumerate(actions):
             b = Gtk.Button(css_classes=["card", "mk-action"])
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -196,7 +210,7 @@ class Center(Adw.ApplicationWindow):
             box.append(Gtk.Label(label=label))
             b.set_child(box)
             b.connect("clicked", lambda _b, c=cb: c())
-            grid.attach(b, i, 0, 1, 1)
+            grid.attach(b, i % 3, i // 3, 1, 1)
         quick.add(grid)
         page.add(quick)
 
@@ -207,6 +221,19 @@ class Center(Adw.ApplicationWindow):
         page.add(power)
 
         desk = Adw.PreferencesGroup(title="Desktop")
+        conf = saver_conf.conf()
+        self.live_row = Adw.SwitchRow(title="Live wallpaper",
+                                      subtitle="A screensaver scene behind your windows; pauses when a window fills the screen",
+                                      active=conf.get("LIVE_WALLPAPER", "off") == "on")
+        self.live_row.connect("notify::active", lambda r, _p: saver_conf.set_conf("LIVE_WALLPAPER", "on" if r.get_active() else "off"))
+        desk.add(self.live_row)
+        scenes = ["aurora", "web", "knight", "matrix"]
+        names = ["Aurora", "Web Hang", "Night Watch", "Terminal Stream"]
+        scene_row = Adw.ComboRow(title="Live wallpaper scene", model=Gtk.StringList.new(names))
+        current = conf.get("LIVE_SCENE", "aurora")
+        scene_row.set_selected(scenes.index(current) if current in scenes else 0)
+        scene_row.connect("notify::selected", lambda r, _p: saver_conf.set_conf("LIVE_SCENE", scenes[r.get_selected()]))
+        desk.add(scene_row)
         for title, sub, argv in (("Screensaver", "Pick a scene or shuffle; the lock screen too", [tool("mk-screensaver"), "settings"]),
                                  ("Keyboard shortcuts", "Every shortcut and gesture, live", [tool("show-shortcuts")]),
                                  ("Photo Booth", "Your webcam with live looks and stickers", [tool("camera-controls")]),
@@ -219,6 +246,10 @@ class Center(Adw.ApplicationWindow):
             desk.add(r)
         page.add(desk)
         return page
+
+    def _toggle_live_wallpaper(self):
+        self.live_row.set_active(not self.live_row.get_active())
+        self.say("Live wallpaper " + ("on" if self.live_row.get_active() else "off"))
 
     # ---------------------------------------------------------------- actions
     def _actions(self):
@@ -317,10 +348,6 @@ class Center(Adw.ApplicationWindow):
         if napping:
             return "Paused now: " + ", ".join(k.removesuffix(".desktop") for k in napping)
         return "Pauses apps you left minimized when memory runs short; nothing is paused now"
-
-    def _optimize_ram(self):
-        self.say("Freeing cached memory (asks for your password)…")
-        run_bg([tool("mk"), "optimize", "ram"], lambda c, o: self.say(o.strip().splitlines()[-1] if o.strip() else "Done"))
 
     # ---------------------------------------------------------------- MK Lock
     def _lock(self):

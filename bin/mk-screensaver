@@ -88,7 +88,7 @@ def watch():
 
 
 def frames(name, w, h, out):
-    """For the lock screen (mk-indicator): render SCENE at WxH into OUT, 15
+    """For the lock screen and the live wallpaper (mk-indicator): render SCENE at WxH into OUT, 15
     times a second, as raw premultiplied BGRA (cairo ARGB32). Each frame is
     written next to OUT and renamed over it, so the shell never reads half a
     frame. Runs until the shell stops it (it does on unlock)."""
@@ -98,8 +98,8 @@ def frames(name, w, h, out):
 
     from mkworkstation import scenes
     scenes.SHOW_CAPTION = False
-    if out.parent != Path(GLib.get_user_runtime_dir()) or not out.name.startswith("mk-lockscene"):
-        print("frames: OUT must be $XDG_RUNTIME_DIR/mk-lockscene*", file=sys.stderr)
+    if out.parent != Path(GLib.get_user_runtime_dir()) or not out.name.startswith(("mk-lockscene", "mk-livewall")):
+        print("frames: OUT must be $XDG_RUNTIME_DIR/mk-lockscene* or mk-livewall*", file=sys.stderr)
         return 2
     scene = scenes.pick(name)
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)

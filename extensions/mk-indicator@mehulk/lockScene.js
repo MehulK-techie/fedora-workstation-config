@@ -21,7 +21,7 @@ const SAVER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-sc
 const CONF = [GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'screensaver.conf']),
     GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'screensaver.conf'])];
 
-function saverConf() {
+export function saverConf() {
     const out = {SCREENSAVER: 'on', LOCKSCREEN: 'on', SCENE: 'random'};
     for (const path of CONF) {
         try {

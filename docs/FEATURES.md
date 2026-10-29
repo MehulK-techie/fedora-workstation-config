@@ -94,7 +94,7 @@ Outside the shell: **Files** gets matching hover and selection in the accent col
 
 MK changes these GNOME settings; the features themselves are GNOME's.
 
-- **Windows:** Alt+Tab across all workspaces, Super+Tab apps, Alt+` windows of one app, W/F4 in Alt+Tab closes a window, Q in Super+Tab quits an app, minimize and maximize buttons, centred new windows, always on top, full screen, 20 s before "not responding".
+- **Windows:** Alt+Tab across all workspaces, Super+Tab the overview (every window spread out), Alt+` windows of one app, W/F4 in Alt+Tab closes a window, minimize and maximize buttons, centred new windows, always on top, full screen, 20 s before "not responding".
 - **Workspaces:** dynamic workspaces (Spaces style), new desktop on Super+Ctrl+D, Super+Alt/Ctrl arrows.
 - **Screenshots:** full screen, window and area keys (Print, Super+Shift+3/4/S), saved and copied.
 - **Files:** expandable folders, folders first, item counts, Create Link, Delete Permanently, Quick Look (Space, via Sushi).
@@ -221,7 +221,7 @@ them live and lets you change any of them.
 | Action | Keys | Built by |
 | :--- | :--- | :--- |
 | Switch windows (all workspaces) | Alt+Tab | GNOME |
-| Switch apps | Super+Tab | GNOME |
+| Overview: every window spread out | Super+Tab (also Super+S) | GNOME |
 | Switch windows of this app | Alt+` · Super+` | GNOME |
 | Close window | Super+Q · Alt+F4 | GNOME |
 | Snap left half | Super+Left | Extension |

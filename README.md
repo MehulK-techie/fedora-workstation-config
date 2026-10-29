@@ -206,7 +206,7 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 
 | | Shortcut | Action |
 | :--- | :--- | :--- |
-| **Windows** | `Alt+Tab` · `Super+Tab` | Every window from every workspace as a live thumbnail, themed to match · switch apps |
+| **Windows** | `Alt+Tab` · `Super+Tab` | Every window from every workspace as a live thumbnail, themed to match · the overview, every window spread out |
 | | `Super+←/→` | Snap to the left / right half |
 | | `Super+←` then `Super+↑/↓` | Snap to a quarter |
 | | `Super+Z` | Snap layouts (pick a layout, then a window for each part) |

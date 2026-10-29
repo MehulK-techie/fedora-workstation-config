@@ -214,7 +214,7 @@ done
 echo "==> Step 2/4: Tuning face recognition for this camera..."
 [[ -f "${HOWDY_CONF}.bak" ]] || cp -a "$HOWDY_CONF" "${HOWDY_CONF}.bak"
 set_howdy device_path "$HOWDY_DEVICE"
-set_howdy certainty 3.5
+set_howdy certainty 2.8  # stricter than Howdy's 3.5: fewer look-alikes or photos get in
 if [[ "$CAM_TYPE" == "ir" ]]; then
     set_howdy dark_threshold 60
     set_howdy timeout 3

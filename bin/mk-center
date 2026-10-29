@@ -140,11 +140,9 @@ ACTIONS = [
     ("saver", "Screensavers & Wallpapers", "preferences-desktop-screensaver-symbolic", "Screensaver", "Scenes, delay, lock screen", ("bg", [tool("mk-screensaver"), "settings"])),
     ("saver-show", "Screensavers & Wallpapers", "media-playback-start-symbolic", "Show a scene now", "Shuffle", ("bg", mk("screensaver", "show"))),
     ("accent", "Screensavers & Wallpapers", "preferences-color-symbolic", "Accent from wallpaper", "Desktop colour follows the wallpaper", ("bg", mk("accent", "auto"))),
-    ("notes", "Notes & Focus", "accessories-text-editor-symbolic", "MK Notes", "Your notes", ("bg", mk("notes"))),
     ("today", "Notes & Focus", "x-office-calendar-symbolic", "Today's note", "The daily note", ("bg", mk("notes", "today"))),
     ("focus", "Notes & Focus", "alarm-symbolic", "Focus 25 min", "The focus timer", ("bg", mk("focus", "25"))),
     ("list", "Notes & Focus", "view-list-symbolic", "Notes and tasks", "Companion notes, tasks, reminders", ("show", mk("list"))),
-    ("ocr", "Notes & Focus", "insert-text-symbolic", "Text from screen", "Select an area, copy its text", ("bg", [tool("ocr-snip")])),
     ("update", "System Maintenance", "software-update-available-symbolic", "Update everything", "Repo, apps, settings, system", ("term", "mk update")),
     ("update-check", "System Maintenance", "software-update-available-symbolic", "Check for updates", "Preview only", ("term", "mk update --check")),
     ("doctor", "System Maintenance", "object-select-symbolic", "Health check", "Updates, codecs, extensions, face unlock", ("term", "mk doctor")),
@@ -409,9 +407,35 @@ class Center(Adw.ApplicationWindow):
         return page
 
     def _toggle_app(self, row, _param, app_id):
-        action = "add" if row.get_active() else "remove"
-        run_bg([tool("mk-lock"), "app", action, app_id],
-               lambda c, o: self.say((o.strip().splitlines() or ["Done"])[-1].strip("✔[-] ")))
+        """Locking or unlocking an app asks who you are first (face,
+        fingerprint or password, MK's unlock window); a confirmation lasts
+        two minutes. Not confirmed: the switch goes back."""
+        if getattr(self, "_reverting", False):
+            return
+        want = row.get_active()
+
+        def apply():
+            self._lock_ok_until = time.monotonic() + 120
+            run_bg([tool("mk-lock"), "app", "add" if want else "remove", app_id],
+                   lambda c, o: self.say((o.strip().splitlines() or ["Done"])[-1].strip("✔[-] ")))
+
+        if time.monotonic() < getattr(self, "_lock_ok_until", 0):
+            apply()
+            return
+        self._reverting = True
+        row.set_active(not want)   # until it's confirmed
+        self._reverting = False
+        done = []
+
+        def confirmed():
+            done.append(True)
+            self._reverting = True
+            row.set_active(want)
+            self._reverting = False
+            apply()
+        dialog = auth.UnlockDialog("Confirm it's you", None, confirmed)
+        dialog.connect("closed", lambda *_: done or self.say("Not confirmed; the lock didn't change"))
+        dialog.present(self)
 
     def _lock_folders(self):
         page = Adw.PreferencesPage()
@@ -555,6 +579,7 @@ class Center(Adw.ApplicationWindow):
         finger = Adw.ComboRow(title="Finger", model=Gtk.StringList.new([f[0] for f in FINGERS]))
         for row in (who, user, finger):
             box.add(row)
+        self.enrolled = Adw.PreferencesGroup(title="Enrolled fingers")
         self.enroll_ring = FingerRing()
         self.enroll_pill = Gtk.Label(visible=False, css_classes=["mk-warn-pill"], halign=Gtk.Align.CENTER)
         self.enroll_text = Gtk.Label(wrap=True, xalign=0, css_classes=["dim-label"])
@@ -562,6 +587,7 @@ class Center(Adw.ApplicationWindow):
         holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=18,
                          margin_start=18, margin_end=18)
         holder.append(box)
+        holder.append(self.enrolled)
         holder.append(self.enroll_ring)
         holder.append(self.enroll_pill)
         holder.append(self.enroll_text)
@@ -587,6 +613,11 @@ class Center(Adw.ApplicationWindow):
                 return
             self._run_enroll(account, fname, False)
         start.connect("clicked", enroll)
+        account_of = lambda: user.get_text().strip() if who.get_selected() == 1 else GLib.get_user_name()  # noqa: E731
+        who.connect("notify::selected", lambda *_: self._list_fingers(account_of()))
+        user.connect("apply", lambda *_: self._list_fingers(account_of()))
+        user.set_show_apply_button(True)
+        self._list_fingers(GLib.get_user_name())
         self._finger_dlg = dlg
         # closing the dialog always gives the reader back
         dlg.connect("closed", lambda *_: (self._fp_release(), setattr(self, "_finger_dlg", None)))
@@ -675,6 +706,36 @@ class Center(Adw.ApplicationWindow):
             else:
                 start()
         call("Claim", GLib.Variant("(s)", ("" if account == GLib.get_user_name() else account,)), claimed)
+
+    def _list_fingers(self, account):
+        """The fingers ACCOUNT has enrolled (fprintd-list), each with a
+        Delete button (fprintd-delete -f; someone else's needs an admin)."""
+        group = self.enrolled
+        for row in getattr(self, "_finger_rows", []):
+            group.remove(row)
+        self._finger_rows = []
+        if not re.fullmatch(r"[a-z_][a-z0-9_.-]{0,31}", account or ""):
+            return
+        names = dict((f, label) for label, f in FINGERS)
+
+        def listed(code, out):
+            found = re.findall(r"#\d+:\s*([a-z-]+)", out)
+            if not found:
+                row = Adw.ActionRow(title="No reader found" if "No devices" in out or code != 0 and not out
+                                    else "None yet", subtitle=account)
+                group.add(row)
+                self._finger_rows.append(row)
+                return
+            for f in found:
+                row = Adw.ActionRow(title=names.get(f, f.replace("-", " ").capitalize()), subtitle=account)
+                delete = Gtk.Button(icon_name="user-trash-symbolic", css_classes=["flat"], valign=Gtk.Align.CENTER,
+                                    tooltip_text="Delete this finger")
+                delete.connect("clicked", lambda _b, ff=f: run_bg(["fprintd-delete", account, "-f", ff],
+                                                                  lambda c, o: self._list_fingers(account)))
+                row.add_suffix(delete)
+                group.add(row)
+                self._finger_rows.append(row)
+        run_bg(["fprintd-list", account], listed)
 
     def _fp_retry_pill(self, text):
         self.enroll_pill.set_label(text or "")

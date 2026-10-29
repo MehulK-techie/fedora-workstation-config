@@ -37,7 +37,7 @@ The wizard also adapts to your camera and room:
 - **Checks the light** before each recording on a regular webcam, and tells you if it's too dark or backlit (brightness 0–255; 70–190 is ideal).
 - **Turns on the camera's automatic exposure**, so the picture brightens or darkens with the room.
 - **Tunes Howdy for your camera type.** Howdy throws away frames that are too dark. A regular webcam in a dim room sees mostly dark frames, so it gets a higher darkness limit (`dark_threshold = 80`) and a bit more time (`timeout = 4`). IR cameras light your face themselves and keep the defaults (`60`, `3`).
-- **Never loosens matching.** `certainty` stays at Howdy's strict default of 3.5 on every camera. Reliability comes from the extra models, not from accepting weaker matches.
+- **Stricter than Howdy's default.** `certainty` is 2.8 on every camera (Howdy's default is 3.5; lower is stricter), so look-alikes are refused more often. Reliability comes from the extra models, not from accepting weaker matches. Howdy has no liveness check: a regular webcam can still be fooled by a good photo; an IR camera can't easily.
 
 Howdy itself can't change its settings on the fly while unlocking. Multiple lighting models plus auto-exposure is how this setup copes with changing light.
 

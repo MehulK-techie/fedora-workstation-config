@@ -1,24 +1,56 @@
 #!/bin/bash
-# mk-face-add LABEL [--remove]: record one Howdy face model named LABEL for
-# you, straight through `sudo howdy` in this terminal (MK Control Center ›
-# Add a face opens it in a terminal window). It asks before replacing a
-# model with the same name (the new one is recorded first), and before
-# closing apps that hold the camera. Existing models are never cleared.
+# mk-face-add LABEL            record one Howdy face model named LABEL for you
+# mk-face-add LABEL --remove   delete the model named LABEL
+# mk-face-add --list           list your face models; delete one by number
+# MK Control Center opens it in a terminal window. It asks for sudo ONCE and
+# runs as root from then on: several separate sudo calls each made Howdy
+# (which guards sudo too) look at the camera again. It asks before
+# replacing a model with the same name (the new one is recorded first) and
+# before closing apps that hold the camera. Existing models are never
+# cleared.
 set -uo pipefail
-label=${1:-}
-user=$(id -un)
-if [[ ! "$label" =~ ^[A-Za-z0-9_][A-Za-z0-9_\ -]{0,23}$ ]]; then
-    echo "Usage: mk-face-add LABEL [--remove]   (1-24 letters, digits, spaces, - or _)" >&2
+if [[ $EUID -ne 0 ]]; then
+    command -v howdy > /dev/null || { echo "[-] Howdy isn't installed: run ./setup.sh" >&2; exit 4; }
+    echo "Face models for $(id -un): sudo asks for your password once."
+    exec sudo -- "$0" --user "$(id -un)" "$@"
+fi
+user=""
+if [[ "${1:-}" == --user ]]; then
+    user=${2:-}
+    shift 2
+fi
+if [[ -z "$user" ]] || ! id "$user" &> /dev/null; then
+    echo "Run it as yourself, without sudo." >&2
     exit 2
 fi
-command -v howdy > /dev/null || { echo "[-] Howdy isn't installed: run ./setup.sh" >&2; exit 4; }
-model_id() { sudo howdy -U "$user" --plain list 2> /dev/null | awk -F, -v want="$label" '$3 == want { print $1; exit }'; }
+models() { howdy -U "$user" --plain list 2> /dev/null | grep -E '^[0-9]+,' || true; }
 
-echo "Face model \"$label\" for $user (sudo asks for your password once)"
-old=$(model_id)
+if [[ "${1:-}" == --list ]]; then
+    list=$(models)
+    if [[ -z "$list" ]]; then
+        echo "No face models yet for $user."
+        exit 0
+    fi
+    echo "Face models for $user:"
+    awk -F, '{ printf "  %s) %s   (%s)\n", NR, $3, $2 }' <<< "$list"
+    read -rp "Number to delete (Enter: keep them all): " pick
+    [[ "$pick" =~ ^[0-9]+$ ]] || exit 0
+    id=$(awk -F, -v n="$pick" 'NR == n { print $1 }' <<< "$list")
+    name=$(awk -F, -v n="$pick" 'NR == n { print $3 }' <<< "$list")
+    [[ -n "$id" ]] || { echo "No model $pick."; exit 1; }
+    howdy -y -U "$user" remove "$id" > /dev/null && echo "✔ Deleted \"$name\"."
+    exit
+fi
+
+label=${1:-}
+if [[ ! "$label" =~ ^[A-Za-z0-9_][A-Za-z0-9_\ -]{0,23}$ ]]; then
+    echo "Usage: mk-face-add LABEL [--remove] | --list   (1-24 letters, digits, spaces, - or _)" >&2
+    exit 2
+fi
+old=$(models | awk -F, -v want="$label" '$3 == want { print $1; exit }')
 if [[ "${2:-}" == --remove ]]; then
     [[ -n "$old" ]] || { echo "No face model named \"$label\"."; exit 0; }
-    sudo howdy -y -U "$user" remove "$old" && echo "✔ Removed \"$label\"."
+    howdy -y -U "$user" remove "$old" > /dev/null && echo "✔ Removed \"$label\"."
     exit
 fi
 if [[ -n "$old" ]]; then
@@ -34,8 +66,8 @@ if [[ -n "$holders" ]]; then
     [[ "$close" =~ ^[yY] ]] && kill $holders 2> /dev/null && sleep 1
 fi
 echo "Look at the camera (up to 30 s)…"
-if timeout --foreground 30 sudo howdy -y -U "$user" add "$label"; then
-    [[ -n "$old" ]] && sudo howdy -y -U "$user" remove "$old" > /dev/null
+if timeout --foreground 30 howdy -y -U "$user" add "$label"; then
+    [[ -n "$old" ]] && howdy -y -U "$user" remove "$old" > /dev/null
     echo "✔ Recorded \"$label\". Try it: lock the screen, or MK Control Center › Try Face ID."
 else
     echo "[-] Not recorded (no face found, or the camera didn't answer). Face the light and try again." >&2

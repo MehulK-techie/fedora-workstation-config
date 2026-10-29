@@ -204,22 +204,21 @@ done
 # ------------------------------------------------------------------------------
 # Step 2: Tune Howdy for this camera. Howdy skips frames darker than
 # dark_threshold and accepts a match below certainty/10 (lower = stricter).
-# Matching stays at Howdy's strict default for every camera: accuracy comes
-# from the extra lighting models, never from accepting weaker matches.
-# Regular webcams see mostly-dark frames in a dim room, so they get a higher
-# dark_threshold and a little more time to find a usable frame. (Howdy skips a
-# frame when its share of dark pixels is ABOVE dark_threshold: lowering it
-# rejects more night frames, never fewer.)
+# Matching is stricter than Howdy's default (certainty 2.6 vs 3.5): accuracy
+# comes from the extra lighting models, never from accepting weaker matches.
+# dark_threshold is 50 on every camera (the owner's choice). Howdy skips a
+# frame when its share of dark pixels is ABOVE dark_threshold, so 50 skips
+# more dim frames than Howdy's default: in a dark room face unlock may say
+# "no face found" until there's more light; it never matches a weaker face.
 # ------------------------------------------------------------------------------
 echo "==> Step 2/4: Tuning face recognition for this camera..."
 [[ -f "${HOWDY_CONF}.bak" ]] || cp -a "$HOWDY_CONF" "${HOWDY_CONF}.bak"
 set_howdy device_path "$HOWDY_DEVICE"
-set_howdy certainty 2.8  # stricter than Howdy's 3.5: fewer look-alikes or photos get in
+set_howdy certainty 2.6  # stricter than Howdy's 3.5: fewer look-alikes or photos get in
+set_howdy dark_threshold 50
 if [[ "$CAM_TYPE" == "ir" ]]; then
-    set_howdy dark_threshold 60
     set_howdy timeout 3
 else
-    set_howdy dark_threshold 80
     set_howdy timeout 4
 fi
 set_howdy abort_if_ssh true

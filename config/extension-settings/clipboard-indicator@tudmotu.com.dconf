@@ -23,4 +23,4 @@ show-pin-button=true
 show-preview-button=true
 show-search-bar=true
 show-tag-button=false
-toggle-menu=['<Super>v']
+toggle-menu=@as []

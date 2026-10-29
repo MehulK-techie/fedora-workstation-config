@@ -3,6 +3,9 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Clipboard history (Super+V)** of MK's own: beside the text cursor, click copies (no auto-paste), image previews with size, edit, pin, search, Clear; replaces Clipboard Indicator.
+- **Dock** hides over windows right after login (intellihide on, re-checked after startup).
+- **Stan Lee tribute** uses a real photo (Gage Skidmore, CC BY-SA 3.0), halftoned.
 - **Web Hang:** `SIGN_TEXT` (up to four letters) lit in the tower's own windows; a Stan Lee tribute billboard (halftone of `TRIBUTE_IMAGE`, or a silhouette) with the quote beneath.
 - **One unlock window everywhere:** locked apps, locked folders and the vault use MK's unlock dialog (Face ID and fingerprint for app gates; folders open with their own password or polkit's prompt).
 - **Photo Booth studio:** 3:4 instant-film card (white, cream, noir) with a recessed photo, Polaroid chemistry, light leaks, lettering styles with size and shadow, any year on the date stamp, a developing print; 24 fps 3 x 3 grid.

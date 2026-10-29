@@ -13,11 +13,11 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
-import Mtk from 'gi://Mtk';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
+import { anchorDialog, caretRect } from './caret.js';
 
 const RECENT = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'emoji-recent.json']);
 const COLUMNS = 10, MAX_SHOWN = 240;
@@ -58,38 +58,11 @@ export class EmojiBoard {
         this._all = [...readJson(GLib.build_filenamev([dir, 'emoji.json']), []), ...KAOMOJI];
     }
 
-    // Where the text cursor is, if the focused app told the input method.
-    _caret() {
-        const im = Main.inputMethod;
-        const r = im?.currentFocus ? im._cursorRect : null;
-        return r && (r.x || r.y) ? r : null;
-    }
-
-    // Move the board next to the caret: below it, or above when there's no
-    // room; kept inside the caret's monitor.
-    _anchor(dialog, caret) {
-        const stack = dialog.backgroundStack;
-        const monitor = Main.layoutManager.monitors[global.display.get_monitor_index_for_rect(
-            new Mtk.Rectangle({x: caret.x, y: caret.y, width: Math.max(1, caret.width), height: Math.max(1, caret.height)}))]
-            ?? Main.layoutManager.primaryMonitor;
-        stack.x_align = Clutter.ActorAlign.START;
-        stack.y_align = Clutter.ActorAlign.START;
-        const [, w] = stack.get_preferred_width(-1);
-        const [, h] = stack.get_preferred_height(w);
-        const gap = 8;
-        let x = caret.x - monitor.x;
-        let y = caret.y + caret.height + gap - monitor.y;
-        if (y + h > monitor.height)
-            y = caret.y - h - gap - monitor.y;
-        stack.translation_x = Math.max(gap, Math.min(x, monitor.width - w - gap));
-        stack.translation_y = Math.max(gap, Math.min(y, monitor.height - h - gap));
-    }
-
     open() {
         if (this._dialog)
             return;
         this._target = global.display.focus_window;
-        const caret = this._caret();  // read before the board takes the focus
+        const caret = caretRect();  // read before the board takes the focus
         const dialog = new ModalDialog.ModalDialog({styleClass: 'mk-emoji-dialog', destroyOnClose: true});
         this._dialog = dialog;
         const box = dialog.contentLayout;
@@ -128,8 +101,7 @@ export class EmojiBoard {
         });
         const recent = readJson(RECENT, []);
         this._show(recent.length ? 'recent' : 'smileys');
-        if (caret)
-            this._anchor(dialog, caret);
+        anchorDialog(dialog, caret);
         dialog.open();
         global.stage.set_key_focus(this._entry.clutter_text);
     }

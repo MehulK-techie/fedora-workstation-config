@@ -123,7 +123,7 @@ restore-state=false
 [extensions/clipboard-indicator]
 enable-keybindings=true
 next-history-clear=-1
-toggle-menu=['<Super>v']
+toggle-menu=@as []
 
 [extensions/com/github/hermes83/compiz-windows-effect]
 last-version=33

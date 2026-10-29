@@ -6,5 +6,10 @@
       <summary>Open the emoji board</summary>
       <description>Pick an emoji and it's typed where the cursor is.</description>
     </key>
+    <key name="clipboard-history" type="as">
+      <default><![CDATA[['<Super>v']]]></default>
+      <summary>Open the clipboard history</summary>
+      <description>Beside the text cursor; a click copies an entry back.</description>
+    </key>
   </schema>
 </schemalist>

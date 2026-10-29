@@ -17,6 +17,7 @@ import { FocusHelper } from './focus.js';
 import { AppNap } from './appNap.js';
 import { LockScene } from './lockScene.js';
 import { EmojiBoard, bindEmojiBoard, unbindEmojiBoard } from './emojiBoard.js';
+import { ClipboardHistory, bindClipboardHistory, unbindClipboardHistory } from './clipboardHistory.js';
 
 const USER_BRAND = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'brand.conf']);
 const DEFAULT_BRAND = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'brand.conf']);
@@ -138,6 +139,12 @@ export default class MKIndicatorExtension extends Extension {
             bindEmojiBoard(this, this._emoji);
         } catch (e) {
             console.warn(`mk-indicator: emoji board key: ${e.message}`);  // schema not compiled yet
+        }
+        this._clipboardHistory = new ClipboardHistory();
+        try {
+            bindClipboardHistory(this, this._clipboardHistory);
+        } catch (e) {
+            console.warn(`mk-indicator: clipboard key: ${e.message}`);
         }
         this._sessionId = Main.sessionMode.connect('updated', () => this._onSessionMode());
         this._onSessionMode();
@@ -290,6 +297,11 @@ export default class MKIndicatorExtension extends Extension {
         this._appNap = null;
         this._lockScene?.stop();
         this._lockScene = null;
+        if (this._clipboardHistory) {
+            unbindClipboardHistory();
+            this._clipboardHistory.destroy();
+            this._clipboardHistory = null;
+        }
         if (this._emoji) {
             unbindEmojiBoard();
             this._emoji.destroy();

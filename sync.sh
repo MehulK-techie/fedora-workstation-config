@@ -564,6 +564,8 @@ gsettings_append org.gnome.shell enabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$
 gsettings_remove org.gnome.shell disabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR"
 # Extensions an earlier MK version enabled and later dropped: switch them off.
 # Space Bar duplicated GNOME's own workspace dots in the top bar.
+# MK's own clipboard history (Super+V, in mk-indicator) replaced Clipboard Indicator.
+gsettings_remove org.gnome.shell enabled-extensions clipboard-indicator@tudmotu.com
 gsettings_remove org.gnome.shell enabled-extensions space-bar@luchrioh
 # Astra Monitor: replaced by mk-indicator's own lighter system monitor.
 gsettings_remove org.gnome.shell enabled-extensions monitor@astraext.github.io

@@ -48,6 +48,10 @@ function pngSize(bytes) {
 export class ClipboardHistory {
     constructor() {
         this._items = this._load();
+        this._cards = new Map();     // entry id -> its card, kept between openings
+        this._version = 0;           // bumped on every change to the entries
+        this._filled = null;         // what the list shows now: [version, tab, query]
+        this._orphans = new Set();   // cards to throw away at the next fill
         this._clipboard = St.Clipboard.get_default();
         this._selection = global.display.get_selection();
         this._ownerId = this._selection.connect('owner-changed', (_s, type) => {
@@ -63,7 +67,9 @@ export class ClipboardHistory {
         if (this._fillId)
             GLib.source_remove(this._fillId);
         this._fillId = 0;
-        this._dialog?.close();
+        this._dialog?.destroy();
+        this._dialog = null;
+        this._cards.clear();
     }
 
     // ---------------------------------------------------------------- storage
@@ -86,6 +92,7 @@ export class ClipboardHistory {
             for (const item of this._items.filter(i => drop.has(i.id) && i.image))
                 removeFile(item.image);
             this._items = this._items.filter(i => !drop.has(i.id));
+            this._version++;
             GLib.file_set_contents(STORE, JSON.stringify(this._items));
         } catch (e) {
             console.warn(`mk-indicator: clipboard history: ${e.message}`);
@@ -137,17 +144,77 @@ export class ClipboardHistory {
     }
 
     // ---------------------------------------------------------------- the window
+    // Super+V: open, or close when it's open. The deck is built once and
+    // kept: opening again only shows it (and builds cards for new entries),
+    // so it opens at once however often you press the key.
     open() {
-        if (this._dialog)
+        const d = this._dialog;
+        if (d && this._shown) {
+            this._hide();
             return;
-        const dialog = new ModalDialog.ModalDialog({styleClass: 'mk-clip-dialog', destroyOnClose: true});
+        }
+        if (!d)
+            this._build();
+        this._show();
+    }
+
+    _show() {
+        const d = this._dialog;
+        this._shown = true;
+        this._entry.set_text('');
+        // Nothing changed since last time: the list is already right.
+        const f = this._filled;
+        if (!f || f[0] !== this._version || f[1] !== this._tab || f[2] !== '')
+            this._fill();
+        this._scroll.vadjustment.value = 0;
+        if (d.state !== ModalDialog.State.OPENED && d.state !== ModalDialog.State.OPENING)
+            d.open();
+        // The card: a quick scale and fade in (ease-out cubic), picked up
+        // from wherever a closing one was, so pressing again never jumps.
+        const card = d.dialogLayout;
+        card.remove_all_transitions();
+        card.set_pivot_point(0.5, 0.5);
+        if (card.opacity === 255 && !this._closing) {
+            card.opacity = 0;
+            card.scale_x = card.scale_y = 0.96;
+        }
+        this._closing = false;
+        card.ease({opacity: 255, scale_x: 1, scale_y: 1, duration: 120,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        global.stage.set_key_focus(this._entry.clutter_text);
+    }
+
+    _hide() {
+        const d = this._dialog;
+        if (!d || !this._shown)
+            return;
+        this._shown = false;
+        this._closing = true;
+        const card = d.dialogLayout;
+        card.remove_all_transitions();
+        card.ease({opacity: 0, scale_x: 0.97, scale_y: 0.97, duration: 90,
+            mode: Clutter.AnimationMode.EASE_IN_QUAD,
+            onComplete: () => {
+                if (!this._shown) {  // not reopened meanwhile
+                    this._closing = false;
+                    d.close();
+                    card.opacity = 255;
+                    card.scale_x = card.scale_y = 1;
+                }
+            }});
+    }
+
+    _build() {
+        // GNOME's own 100 ms fades off: the card animates itself (above).
+        const dialog = new ModalDialog.ModalDialog({styleClass: 'mk-clip-dialog', destroyOnClose: false,
+            shouldFadeIn: false, shouldFadeOut: false});
         this._dialog = dialog;
         // The backdrop: dimmed and blurred; a click on it closes the deck.
         if (dialog._lightbox) {
             dialog._lightbox.add_effect(new Shell.BlurEffect({radius: 24, brightness: 0.55,
                 mode: Shell.BlurMode.BACKGROUND}));
             dialog._lightbox.connect('button-press-event', () => {
-                dialog.close();
+                this._hide();
                 return Clutter.EVENT_STOP;
             });
         }
@@ -177,10 +244,10 @@ export class ClipboardHistory {
         });
         box.add_child(tabs);
         this._list = new St.BoxLayout({vertical: true, style_class: 'mk-clip-list'});
-        const scroll = new St.ScrollView({style_class: 'mk-clip-scroll', child: this._list,
+        this._scroll = new St.ScrollView({style_class: 'mk-clip-scroll', child: this._list,
             hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC});
-        box.add_child(scroll);
-        this._entry.clutter_text.connect('text-changed', () => this._fill());
+        box.add_child(this._scroll);
+        this._entry.clutter_text.connect('text-changed', () => this._shown && this._fill());
         this._entry.clutter_text.connect('activate', () => this._first && this._copy(this._first));
         this._entry.clutter_text.connect('key-press-event', (_a, event) => {
             if (event.get_key_symbol() !== Clutter.KEY_Down || !this._firstButton)
@@ -188,17 +255,33 @@ export class ClipboardHistory {
             this._firstButton.grab_key_focus();
             return Clutter.EVENT_STOP;
         });
-        dialog.addButton({label: 'Close', action: () => dialog.close(), key: Clutter.KEY_Escape});
-        dialog.connect('destroy', () => {
-            this._dialog = null;
-        });
-        this._fill();
-        dialog.open();
-        global.stage.set_key_focus(this._entry.clutter_text);
+        dialog.addButton({label: 'Close', action: () => this._hide(), key: Clutter.KEY_Escape});
+    }
+
+    // A card changed (pin, edit, tags, delete): build it again next time.
+    _forget(item) {
+        const card = this._cards.get(item.id);
+        if (card) {
+            this._cards.delete(item.id);
+            this._orphans.add(card);
+        }
+        this._version++;
     }
 
     _fill() {
-        this._list.destroy_all_children();
+        this._list.remove_all_children();  // the cards stay alive, cached
+        for (const card of this._orphans)
+            card.destroy();
+        this._orphans.clear();
+        this._empty?.destroy();
+        this._empty = null;
+        const ids = new Set(this._items.map(i => i.id));
+        for (const [id, card] of this._cards) {  // entries that are gone
+            if (!ids.has(id)) {
+                card.destroy();
+                this._cards.delete(id);
+            }
+        }
         const q = this._entry.get_text().toLowerCase().trim();
         const inTab = i => this._tab === 'all' || (this._tab === 'images' && i.image) ||
             (this._tab === 'text' && i.text) || (this._tab === 'pinned' && i.pinned);
@@ -213,28 +296,42 @@ export class ClipboardHistory {
         };
         const shown = [...this._items.filter(i => i.pinned), ...this._items.filter(i => !i.pinned)]
             .filter(i => inTab(i) && matches(i));
+        this._filled = [this._version, this._tab, q];
         this._first = shown[0] ?? null;
         this._firstButton = null;
         if (!shown.length) {
-            this._list.add_child(new St.Label({text: q ? 'Nothing matches.' : 'Copy something and it shows up here.',
-                style_class: 'mk-clip-empty'}));
+            this._empty = new St.Label({text: q ? 'Nothing matches.' : 'Copy something and it shows up here.',
+                style_class: 'mk-clip-empty'});
+            this._list.add_child(this._empty);
             return;
         }
-        // The first cards at once (what fits on screen), the rest a batch at a
-        // time while idle: the deck opens without waiting for all of them.
+        // Cached cards go straight back in; new entries get theirs built, the
+        // first few at once and the rest while idle, so no opening waits.
         if (this._fillId)
             GLib.source_remove(this._fillId);
         this._fillId = 0;
+        const card = item => {
+            let c = this._cards.get(item.id);
+            if (!c) {
+                c = this._card(item);
+                this._cards.set(item.id, c);
+            }
+            return c;
+        };
+        this._firstButton = card(shown[0])._mkMain;
         const FIRST = 12, BATCH = 16;
-        shown.slice(0, FIRST).forEach(item => this._list.add_child(this._card(item)));
-        let next = FIRST;
+        const ready = shown.findIndex((item, i) => i >= FIRST && !this._cards.has(item.id));
+        const now = ready === -1 ? shown.length : ready;
+        shown.slice(0, now).forEach(item => this._list.add_child(card(item)));
+        let next = now;
         if (next < shown.length) {
             this._fillId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
-                if (!this._dialog) {
+                if (!this._shown) {  // closed before the last cards went in
                     this._fillId = 0;
+                    this._filled = null;
                     return GLib.SOURCE_REMOVE;
                 }
-                shown.slice(next, next + BATCH).forEach(item => this._list.add_child(this._card(item)));
+                shown.slice(next, next + BATCH).forEach(item => this._list.add_child(card(item)));
                 next += BATCH;
                 if (next < shown.length)
                     return GLib.SOURCE_CONTINUE;
@@ -270,7 +367,7 @@ export class ClipboardHistory {
             column.add_child(new St.Label({text: item.tags.map(t => `#${t}`).join('  '), style_class: 'mk-clip-tags'}));
         }
         main.connect('clicked', () => this._copy(item));
-        this._firstButton ??= main;
+        card._mkMain = main;
         card.add_child(main);
         const tools = new St.BoxLayout({vertical: true, style_class: 'mk-clip-tools'});
         const tool = (icon, tip, fn) => {
@@ -281,6 +378,7 @@ export class ClipboardHistory {
         };
         tool(item.pinned ? 'starred-symbolic' : 'non-starred-symbolic', item.pinned ? 'Unpin' : 'Pin', () => {
             item.pinned = !item.pinned;
+            this._forget(item);
             this._save();
             this._fill();
         });
@@ -290,6 +388,7 @@ export class ClipboardHistory {
             tool('document-edit-symbolic', 'Edit', () => this._edit(card, item));
         tool('bookmark-new-symbolic', 'Tags', () => this._tagEdit(card, item));
         tool('edit-delete-symbolic', 'Delete', () => {
+            this._forget(item);
             this._items = this._items.filter(i => i !== item);
             if (item.image)
                 removeFile(item.image);
@@ -302,7 +401,10 @@ export class ClipboardHistory {
 
     // The picture full size, inside the deck; Back (or Esc) returns.
     _preview(item) {
-        this._list.destroy_all_children();
+        this._filled = null;
+        this._list.remove_all_children();
+        if (this._preview_box)
+            this._preview_box.destroy();
         const scale = Math.min(1, 500 / Math.max(1, item.w || 500), 360 / Math.max(1, item.h || 360));  // fits the deck
         const big = new St.Widget({style_class: 'mk-clip-preview', x_align: Clutter.ActorAlign.CENTER,
             width: Math.round((item.w || 500) * scale), height: Math.round((item.h || 360) * scale),
@@ -314,13 +416,16 @@ export class ClipboardHistory {
         copy.connect('clicked', () => this._copy(item));
         row.add_child(back);
         row.add_child(copy);
-        this._list.add_child(big);
-        this._list.add_child(row);
+        this._preview_box = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
+        this._preview_box.add_child(big);
+        this._preview_box.add_child(row);
+        this._list.add_child(this._preview_box);
         global.stage.set_key_focus(copy);
     }
 
     // Tags: words to find an entry by (#code, #receipt), space-separated.
     _tagEdit(card, item) {
+        this._forget(item);
         card.destroy_all_children();
         const entry = new St.Entry({text: (item.tags ?? []).join(' '), hint_text: 'Tags, e.g. code receipt',
             can_focus: true, x_expand: true, style_class: 'mk-clip-search'});
@@ -339,6 +444,7 @@ export class ClipboardHistory {
 
     // Change the text in place: Save keeps it in the history (and copies it).
     _edit(card, item) {
+        this._forget(item);
         card.destroy_all_children();
         const column = new St.BoxLayout({vertical: true, x_expand: true, style: 'spacing: 6px;'});
         const entry = new St.Entry({text: item.text, can_focus: true, x_expand: true, style_class: 'mk-clip-edit'});
@@ -375,7 +481,7 @@ export class ClipboardHistory {
             this._clipboard.set_text(St.ClipboardType.CLIPBOARD, item.text);
         }
         this._toTop(i => i === item, () => item);
-        this._dialog?.close();
+        this._hide();
         Main.osdWindowManager.showAll(Gio.ThemedIcon.new('edit-copy-symbolic'), 'Copied: paste with Ctrl+V', null, null);
     }
 

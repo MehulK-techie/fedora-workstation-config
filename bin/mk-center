@@ -504,9 +504,9 @@ class Center(Adw.ApplicationWindow):
         dlg = Adw.AlertDialog(heading="Add a face",
                               body="Sit about an arm's length from the camera, facing the light.")
         box = Adw.PreferencesGroup()
-        who = Adw.ComboRow(title="Enroll for", model=Gtk.StringList.new(["You (primary)", "Guest / Judge"]))
+        who = Adw.ComboRow(title="Enroll for", model=Gtk.StringList.new(["You (primary)", "Guest"]))
         name = Adw.EntryRow(title="Name of this face model", text="primary_model")
-        who.connect("notify::selected", lambda r, _p: name.set_text(["primary_model", "guest_judge"][r.get_selected()]))
+        who.connect("notify::selected", lambda r, _p: name.set_text(["primary_model", "guest"][r.get_selected()]))
         box.add(who)
         box.add(name)
         note = Gtk.Label(wrap=True, xalign=0, css_classes=["dim-label", "caption"],
@@ -527,30 +527,61 @@ class Center(Adw.ApplicationWindow):
             label = name.get_text().strip()
             if response not in ("record", "remove") or not label:
                 return
+            if not shutil.which("howdy"):
+                self.say("Face unlock needs Howdy: run ./setup.sh (it installs it)")
+                return
             if not Path(FACE_HELPER).exists():
-                self.say("Face setup isn't installed yet: run ./setup.sh")
+                # One-click enrollment comes with ./setup.sh; until then the
+                # guided wizard does the same in a terminal.
+                self.say("Opening the face setup wizard…")
+                run_bg(terminal(f"{shlex.quote(tool('mk'))} face"))
                 return
             if response == "remove":
                 run_bg(["pkexec", FACE_HELPER, "remove", label],
                        lambda c, o: self.say(f"Removed face model “{label}”" if c == 0 else o.strip() or "Not removed"))
                 return
-            self.say("Look at the camera… (up to 30 s)")
-
-            def recorded(code, out):
-                if code == 0:
-                    self.say(f"Recorded “{label}”: try it now")
-                    self._try_face()
-                elif code == 3:
-                    self.say(f"“{label}” already exists: pick another name, or remove it first")
-                elif code in (126, 127):
-                    self.say("Not confirmed; nothing changed")
-                elif code == 124:
-                    self.say("The camera didn't answer in 30 s: close apps that use it and try again")
-                else:
-                    self.say((out.strip().splitlines() or ["No face found: face the light and try again"])[-1])
-            run_bg(["pkexec", FACE_HELPER, "add", label], recorded)
+            self._record_face(label, "add")
         dlg.connect("response", answered)
         dlg.present(self)
+
+    def _record_face(self, label, how):
+        """Record (or re-record) LABEL with a scanning ring on screen while
+        the camera works; a name that exists asks before replacing it."""
+        ring = auth.ScannerRing(size=120)
+        ring.face = True
+        ring.set_state("listening")
+        text = Gtk.Label(label="Looking at you… keep still, up to 30 s", css_classes=["dim-label"])
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=18, margin_bottom=24,
+                      margin_start=24, margin_end=24)
+        box.append(ring)
+        box.append(text)
+        view = Adw.ToolbarView(content=box)
+        view.add_top_bar(Adw.HeaderBar())
+        busy = Adw.Dialog(title=f"Recording “{label}”", content_width=340)
+        busy.set_child(view)
+        busy.present(self)
+
+        def recorded(code, out):
+            ring.set_state("match" if code == 0 else "fail")
+            GLib.timeout_add(700, lambda: (busy.close(), False)[1])
+            if code == 0:
+                self.say(f"Recorded “{label}”: try it now")
+                self._try_face()
+            elif code == 3:
+                again = Adw.AlertDialog(heading=f"“{label}” is already recorded",
+                                        body="Record it again and replace the old one?")
+                again.add_response("no", "Keep it")
+                again.add_response("yes", "Replace")
+                again.set_response_appearance("yes", Adw.ResponseAppearance.SUGGESTED)
+                again.connect("response", lambda _a, r: r == "yes" and self._record_face(label, "replace"))
+                GLib.timeout_add(750, lambda: (again.present(self), False)[1])
+            elif code in (126, 127):
+                self.say("Not confirmed; nothing changed")
+            elif code == 124:
+                self.say("The camera didn't answer in 30 s: close apps that use it and try again")
+            else:
+                self.say((out.strip().splitlines() or ["No face found: face the light and try again"])[-1])
+        run_bg(["pkexec", FACE_HELPER, how, label], recorded)
 
     def _finger_dialog(self):
         """Enroll a finger with fprintd, in this window: who and which finger;
@@ -567,11 +598,13 @@ class Center(Adw.ApplicationWindow):
         for row in (who, user, finger):
             box.add(row)
         self.enroll_bar = Gtk.ProgressBar(visible=False, pulse_step=0.12)
+        self.enroll_ring = FingerRing()
         self.enroll_text = Gtk.Label(wrap=True, xalign=0, css_classes=["dim-label"])
         start = Gtk.Button(label="Enroll", css_classes=["pill", "suggested-action"], halign=Gtk.Align.CENTER)
         holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=18,
                          margin_start=18, margin_end=18)
         holder.append(box)
+        holder.append(self.enroll_ring)
         holder.append(self.enroll_bar)
         holder.append(self.enroll_text)
         holder.append(start)
@@ -587,10 +620,10 @@ class Center(Adw.ApplicationWindow):
             label, fname = FINGERS[finger.get_selected()]
             listed = subprocess.run(["fprintd-list", account], capture_output=True, text=True).stdout
             if re.search(rf"\b{re.escape(fname)}\b", listed):
-                again = Adw.AlertDialog(heading=f"{label} is already enrolled",
-                                        body=f"{account} already signs in with this finger. Scan it again?")
-                again.add_response("no", "Keep it")
-                again.add_response("yes", "Scan again")
+                again = Adw.AlertDialog(heading="This finger is already registered",
+                                        body=f"{label} already signs in {account}. Choose another finger or re-enroll it.")
+                again.add_response("no", "Choose another")
+                again.add_response("yes", "Re-enroll")
                 again.connect("response", lambda _a, r: r == "yes" and self._run_enroll(account, fname, True))
                 again.present(self)
                 return
@@ -604,9 +637,9 @@ class Center(Adw.ApplicationWindow):
         if rescan:
             argv = ["sh", "-c", 'fprintd-delete "$1" -f "$2" >/dev/null 2>&1; exec fprintd-enroll -f "$2" "$1"',
                     "sh", account, fname]
-        self.enroll_bar.set_visible(True)
-        self.enroll_bar.set_fraction(0)
-        self.enroll_text.set_label("Touch the reader…")
+        self.enroll_bar.set_visible(False)
+        self.enroll_ring.reset()
+        self.enroll_text.set_label("Touch the reader (1 of 5)…")
         proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE)
         stream = Gio.DataInputStream.new(proc.get_stdout_pipe())
         messages = {"enroll-stage-passed": "Good: lift and touch again", "enroll-retry-scan": "Try again",
@@ -626,9 +659,10 @@ class Center(Adw.ApplicationWindow):
                 if key in text:
                     self.enroll_text.set_label(say)
                     if key == "enroll-stage-passed":
-                        self.enroll_bar.set_fraction(min(0.95, self.enroll_bar.get_fraction() + 0.1))
+                        self.enroll_ring.step()
+                        self.enroll_text.set_label(f"Good: lift and touch again ({min(5, self.enroll_ring.done + 1)} of 5)")
                     elif key == "enroll-completed":
-                        self.enroll_bar.set_fraction(1)
+                        self.enroll_ring.complete()
             if "Not Authorized" in text or "PermissionDenied" in text:
                 self.enroll_text.set_label("Not allowed: enrolling someone else needs an administrator")
             stream.read_line_async(GLib.PRIORITY_DEFAULT, None, line)
@@ -893,6 +927,64 @@ class Center(Adw.ApplicationWindow):
         self._fill_security(notes)
         if mode == "virus" and not any(lv == "high" and i == "malware" for i, (lv, *_r) in self.sec_results.items()):
             self.say("✓ No threats detected")
+
+
+class FingerRing(Gtk.DrawingArea):
+    """A ring that fills a fifth per accepted touch, easing into place, and
+    turns green with a tick when the finger is enrolled."""
+
+    STAGES = 5
+
+    def __init__(self):
+        super().__init__(content_width=120, content_height=120, halign=Gtk.Align.CENTER)
+        self.done, self.shown, self.finished = 0, 0.0, False
+        self.set_draw_func(self._draw)
+
+    def reset(self):
+        self.done, self.shown, self.finished = 0, 0.0, False
+        self.queue_draw()
+
+    def step(self):
+        self.done = min(self.STAGES, self.done + 1)
+        self._animate()
+
+    def complete(self):
+        self.done, self.finished = self.STAGES, True
+        self._animate()
+
+    def _animate(self):
+        start, end = self.shown, self.done / self.STAGES
+
+        def frame(v):
+            self.shown = start + (end - start) * v
+            self.queue_draw()
+        anim = Adw.TimedAnimation.new(self, 0, 1, 400, Adw.CallbackAnimationTarget.new(frame))
+        anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+        anim.play()
+
+    def _draw(self, _a, cr, w, h):
+        cx, cy, r = w / 2, h / 2, min(w, h) / 2 - 8
+        green = (0.30, 0.80, 0.45)
+        accent = green if self.finished else (0.21, 0.52, 0.89)
+        cr.set_line_width(6)
+        cr.set_source_rgba(1, 1, 1, 0.1)
+        cr.arc(cx, cy, r, 0, 2 * math.pi)
+        cr.stroke()
+        if self.shown > 0:
+            cr.set_source_rgb(*accent)
+            cr.arc(cx, cy, r, -math.pi / 2, -math.pi / 2 + 2 * math.pi * self.shown)
+            cr.stroke()
+        cr.set_source_rgb(*accent)
+        cr.set_line_width(2.2)
+        if self.finished:
+            cr.move_to(cx - 16, cy + 1)
+            cr.line_to(cx - 5, cy + 12)
+            cr.line_to(cx + 17, cy - 12)
+            cr.stroke()
+            return
+        for k in range(4):  # a fingerprint's arcs
+            cr.arc(cx, cy + 8, 7 + k * 7, math.pi * 1.1, math.pi * 1.9)
+            cr.stroke()
 
 
 class CenterApp(Adw.Application):

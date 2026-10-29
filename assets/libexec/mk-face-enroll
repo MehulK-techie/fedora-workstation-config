@@ -6,6 +6,7 @@
 #   pkexec /usr/local/libexec/mk-face-enroll list
 #   pkexec /usr/local/libexec/mk-face-enroll add LABEL      (exit 3: LABEL exists)
 #   pkexec /usr/local/libexec/mk-face-enroll remove LABEL
+#   pkexec /usr/local/libexec/mk-face-enroll replace LABEL  (record it again)
 # Only the caller's own account (PKEXEC_UID). Existing models are never
 # cleared; labels are unique per account.
 set -euo pipefail
@@ -36,10 +37,16 @@ case "$action" in
         # Never wait for ever on a busy camera; nothing else is touched.
         timeout 30 howdy -y -U "$user" add "$label"
         ;;
+    replace)
+        id=$(find_id "$label")
+        timeout 30 howdy -y -U "$user" add "$label" || exit $?
+        # the old one goes only once the new one is in
+        [[ -n "$id" ]] && howdy -y -U "$user" remove "$id"
+        ;;
     remove)
         id=$(find_id "$label")
         [[ -n "$id" ]] || { echo "No face model named \"$label\"" >&2; exit 3; }
         howdy -y -U "$user" remove "$id"
         ;;
-    *) echo "Usage: mk-face-enroll list | add LABEL | remove LABEL" >&2; exit 2 ;;
+    *) echo "Usage: mk-face-enroll list | add LABEL | replace LABEL | remove LABEL" >&2; exit 2 ;;
 esac

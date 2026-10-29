@@ -291,6 +291,9 @@ for (( i = 0; i < MODEL_COUNT; i++ )); do
     echo ""
     echo "  Face model $((i + 1)) of ${MODEL_COUNT}: ${label}"
     echo "  ${tip}"
+    # Free the camera first: a browser or call holding it is why the light
+    # "couldn't measure" and why Howdy would wait for ever.
+    camera_free "$SELECTED_CAM"
     if [[ "$CAM_TYPE" == "rgb" ]]; then
         echo "  Light at the camera: $(describe_light "$(measure_light "$SELECTED_CAM")")"
     fi

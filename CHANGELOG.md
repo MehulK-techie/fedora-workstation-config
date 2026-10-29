@@ -3,6 +3,12 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **System monitor:** a compact 480 px menu with a fixed footer; the in-menu speed test is gone (no network use of its own).
+- **Security:** live ClamAV file counts (clamdscan when clamd runs), deep-scan steps, Cancel, `~/.local/share/mk-security/latest-scan.log`; scans stop with their caller, so none is left holding the lock.
+- **Biometrics:** You / Guest faces with replace-instead-of-duplicate and a scanning ring; a fingerprint ring that fills per touch; the face wizard frees the camera before measuring light.
+- **Web Hang:** an Art Deco tribute tower with a dithered window portrait and a lit frieze; the frame costs half as much.
+- **Clipboard:** a deck over a blurred backdrop with tabs, tags and full-size previews; the emoji board has no backdrop.
+- **Shortcuts:** Super+1–9 open dock apps again; workspaces on Super+Alt+1–4.
 - **Live wallpaper:** any screensaver scene behind your windows (Control Center › Home), paused under maximized windows.
 - **Control Center:** Home actions (Vault, Speed test, Live wallpaper, Scratchpad, Distraction-free, System health); MK Lock › Face & Fingerprint: add a face for you or a guest/judge (named, never duplicated, then try it), enroll a chosen finger (never twice), all in windows.
 - **Web Hang:** Stan Lee's portrait and quote lit in a tower's windows; no lightning; clock top right.

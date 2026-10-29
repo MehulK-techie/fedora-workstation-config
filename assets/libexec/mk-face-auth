@@ -11,6 +11,8 @@ answers one line:
   OK                     the face matched
   NO <reason>            it didn't, or there was nothing to compare with
   BUSY                   another check is running, or one ran under 3 s ago
+Only the user whose session is active on the seat is checked: anyone else
+gets NO, so another account can't keep the camera busy for the owner.
 No password is ever checked here: a root service trying passwords for any
 local caller would be a guessing oracle (and could trip pam_faillock).
 """
@@ -22,6 +24,7 @@ import pwd
 import signal
 import socket
 import struct
+import subprocess
 import sys
 import time
 
@@ -96,6 +99,15 @@ def peer_uid(conn):
     return uid
 
 
+def active_user(user):
+    try:
+        state = subprocess.run(["loginctl", "show-user", user, "--property=State", "--value"],
+                               capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return state == "active"
+
+
 def answer(conn, text):
     try:
         conn.sendall((text + "\n").encode())
@@ -113,6 +125,12 @@ def main():
         user = pwd.getpwuid(peer_uid(conn)).pw_name
     except (OSError, KeyError):
         answer(conn, "NO unknown caller")
+        return 0
+    # Only the person at the computer (the user whose session is active on
+    # the seat) can be in front of the camera; anyone else could only keep
+    # the camera busy for them.
+    if not active_user(user):
+        answer(conn, "NO not the active session")
         return 0
     if not os.path.exists(os.path.join(MODELS, f"{user}.dat")):
         answer(conn, "NO no face enrolled (mk face)")

@@ -3570,9 +3570,13 @@ class NotesWindow(Adw.ApplicationWindow):
         line = self.buffer.get_text(line_s, line_e, False)
         chip = self.buffer.get_tag_table().lookup("pdf-chip")
         if chip and it.has_tag(chip) and line.startswith("📎 "):
-            rel = self.vault.resolve(line[2:].strip())
-            if rel:
-                Gio.AppInfo.launch_default_for_uri(self.vault.path(rel).as_uri(), None)
+            # Only a PDF that MK Notes attached: attachments/<name>.pdf, a
+            # regular file inside the vault, by its exact name (no search).
+            name = line[2:].strip()
+            raw = self.vault.root / "attachments" / name
+            if ("/" not in name and name.lower().endswith(".pdf") and not raw.is_symlink()
+                    and raw.is_file() and raw.resolve().parent == (self.vault.root / "attachments").resolve()):
+                Gio.AppInfo.launch_default_for_uri(raw.as_uri(), None)
             return
         if it.get_line_offset() <= 3 and line.lstrip().startswith(("☐ ", "☑ ")):
             swapped = line.replace("☐ ", "☑ ", 1) if "☐ " in line[:4] else line.replace("☑ ", "☐ ", 1)

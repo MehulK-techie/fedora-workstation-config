@@ -200,6 +200,28 @@ export default class MKIndicatorExtension extends Extension {
         }
     }
 
+    // The lock screen shows nothing of the session: no notifications and no
+    // media player (GNOME shows players whatever the notification setting).
+    // Its notification box is built a moment after locking: find it, hide
+    // it, and keep it hidden for as long as it exists.
+    _quietLockScreen() {
+        if (this._quietId)
+            GLib.source_remove(this._quietId);
+        let tries = 0;
+        this._quietId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+            const box = Main.screenShield?._dialog?._notificationsBox;
+            if (box) {
+                box.hide();
+                box.connectObject('notify::visible', () => box.visible && box.hide(), this);
+            }
+            if (box || ++tries > 50) {
+                this._quietId = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
     _onSessionMode() {
         const locked = Main.sessionMode.isLocked;
         this._indicator.visible = !locked;
@@ -216,6 +238,8 @@ export default class MKIndicatorExtension extends Extension {
         }
         if (!locked && this._wasLocked)
             this._hideDocksSoon();
+        if (locked && !this._wasLocked)
+            this._quietLockScreen();
         // The screensaver scene behind the lock screen's clock.
         if (locked && !this._wasLocked) {
             this._lockScene = new LockScene();
@@ -310,6 +334,9 @@ export default class MKIndicatorExtension extends Extension {
         this._appNap = null;
         this._lockScene?.stop();
         this._lockScene = null;
+        if (this._quietId)
+            GLib.source_remove(this._quietId);
+        this._quietId = 0;
         for (const name of SCREENSHOT_KEYS)  // GNOME's own modes again
             Main.wm.allowKeybinding(name, Shell.ActionMode.ALL & ~Shell.ActionMode.LOGIN_SCREEN);
         this._liveWallpaper?.disable();

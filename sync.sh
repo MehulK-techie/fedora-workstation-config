@@ -646,6 +646,11 @@ gsettings set org.gnome.desktop.interface enable-hot-corners true
 # Housekeeping: Trash and temporary files older than 30 days are removed
 # automatically (GNOME's own privacy setting), so the disk doesn't silt up.
 gsettings set org.gnome.desktop.privacy remove-old-trash-files true
+# The lock screen shows nothing of the session: no notifications there
+# (mk-indicator also hides the media player GNOME shows regardless), and
+# window animations stay on.
+gsettings set org.gnome.desktop.notifications show-in-lock-screen false
+gsettings set org.gnome.desktop.interface enable-animations true
 gsettings set org.gnome.desktop.privacy remove-old-temp-files true
 gsettings set org.gnome.desktop.privacy old-files-age 30
 # Faster overview search: skip search providers for apps that are rarely

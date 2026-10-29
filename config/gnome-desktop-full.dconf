@@ -82,6 +82,7 @@ toolkit-accessibility=false
 disable-lock-screen=false
 
 [notifications]
+show-in-lock-screen=false
 application-children=['org-gnome-software', 'org-gnome-nautilus', 'org-gnome-decibels', 'app-zen-browser-zen', 'org-gnome-ptyxis', 'com-spotify-client', 'gnome-about-panel', 'org-gnome-settings', 'org-gnome-showtime', 'com-visualstudio-code', 'org-mozilla-firefox', 'gnome-power-panel', 'com-github-hluk-copyq', 'org-gnome-extensions', 'org-gnome-baobab', 'com-rtosta-zapzap', 'com-microsoft-vscode', 'org-flameshot-flameshot', 'org-gnome-characters']
 show-banners=true
 

@@ -3,6 +3,10 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Window glide** stays on in lite effects mode (only blur, wobbly windows and genie go).
+- **Add a face** runs Howdy directly (`mk-face-add`, `sudo howdy add`) in its own terminal window; replaces a same-named model only if you say so.
+- **Web Hang:** Stan Lee drawn in lit windows (silver hair, aviator glasses, moustache, smile).
+- **MK Notes:** layer order (Bring Forward / Send Backward / to Front / to Back) for pictures and stickies.
 - **System monitor:** a compact 480 px menu with a fixed footer; the in-menu speed test is gone (no network use of its own).
 - **Security:** live ClamAV file counts (clamdscan when clamd runs), deep-scan steps, Cancel, `~/.local/share/mk-security/latest-scan.log`; scans stop with their caller, so none is left holding the lock.
 - **Biometrics:** You / Guest faces with replace-instead-of-duplicate and a scanning ring; a fingerprint ring that fills per touch; the face wizard frees the camera before measuring light.

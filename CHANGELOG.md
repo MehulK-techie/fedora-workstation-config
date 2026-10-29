@@ -3,6 +3,12 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Web Hang:** `SIGN_TEXT` (up to four letters) lit in the tower's own windows; a Stan Lee tribute billboard (halftone of `TRIBUTE_IMAGE`, or a silhouette) with the quote beneath.
+- **One unlock window everywhere:** locked apps, locked folders and the vault use MK's unlock dialog (Face ID and fingerprint for app gates; folders open with their own password or polkit's prompt).
+- **Photo Booth studio:** 3:4 instant-film card (white, cream, noir) with a recessed photo, Polaroid chemistry, light leaks, lettering styles with size and shadow, any year on the date stamp, a developing print; 24 fps 3 x 3 grid.
+- **MK Notes:** shapes menu (lines, basic shapes, graphs), an 8 x 8 table picker, Ctrl+Shift+F focus canvas, Deep Obsidian (OLED) theme.
+- **Emoji board** opens beside the text cursor and has a Kaomoji tab; Clipboard history copies on click (no auto-paste), with edit and Clear History.
+- **Super+Tab** opens the overview.
 - **MK Control Center** (`mk center`): quick actions, Actions (every command as a card), App Nap, MK Lock (apps, folders, vault, notebooks) and security in one window.
 - **Speed test window** (`mk speedtest --gui`): a gauge, ping, jitter, multi-stream download/upload; `--ookla` uses speedtest-cli.
 - **Files:** right-click Lock / Unlock, with a badge on locked folders (nautilus-python).

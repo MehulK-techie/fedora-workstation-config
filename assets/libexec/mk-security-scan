@@ -9,9 +9,17 @@
 # days in Downloads, Desktop and /tmp) and a fresh Lynis audit, each with a
 # time limit and at the lowest CPU and disk priority. One scan at a time.
 #
+# Run as mk-security-scan it only scans: its polkit action lets the person at
+# the computer run it without a password (it only reads). Run as
+# mk-security-fix (a second copy) it only applies fixes, and polkit asks for
+# an administrator as for any pkexec.
+#
+# scan virus: ClamAV alone, quickly: files changed in the last 14 days in
+# Downloads, 25 MB at most each (~10 s, most of it loading the signatures).
+#
 # Output, one line each (read by mk-security):
 #   FINDING|high|medium|low|ID|title|detail|fix command
-#   PASS|title
+#   PASS|ID|title
 #   LYNIS|hardening index
 #   NOTE|text
 set -uo pipefail
@@ -28,7 +36,7 @@ home=$(getent passwd "$uid" | cut -d: -f6)
 # field separator) and no control characters may get through.
 clean() { printf '%s' "$1" | tr -d '|[:cntrl:]'; }
 finding() { printf 'FINDING|%s|%s|%s|%s|%s\n' "$1" "$2" "$(clean "$3")" "$(clean "$4")" "$(clean "$5")"; }
-pass() { printf 'PASS|%s\n' "$(clean "$1")"; }
+pass() { printf 'PASS|%s|%s\n' "$1" "$(clean "$2")"; }
 note() { printf 'NOTE|%s\n' "$(clean "$1")"; }
 
 # Run a slow tool for at most $1 seconds, at the lowest CPU and disk priority.
@@ -38,29 +46,56 @@ slow() {
     timeout --kill-after=5 "$limit" nice -n 19 ionice -c 3 "$@"
 }
 
+# ClamAV over FILES (a list), time-limited, at the lowest priority.
+clam() {
+    local list=$1 limit=$2 infected=0
+    if [[ -s "$list" ]]; then
+        infected=$(slow "$limit" clamscan -i --no-summary --max-filesize=200M --file-list="$list" 2> /dev/null | grep -c 'FOUND$' || true)
+    fi
+    echo "$infected"
+}
+
+virus() {
+    if ! command -v clamscan > /dev/null; then
+        note "ClamAV isn't installed (sudo dnf install clamav clamav-freshclam)"
+        return
+    fi
+    local list n infected
+    list=$(mktemp)
+    [[ -d "$home/Downloads" ]] && find "$home/Downloads" -xdev -type f -mtime -14 -size -25M 2> /dev/null | head -n 2000 > "$list"
+    n=$(wc -l < "$list")
+    infected=$(clam "$list" 60)
+    rm -f "$list"
+    if (( infected > 0 )); then
+        finding high malware "ClamAV: $infected infected file(s) in Downloads" "Details: clamscan -r -i ~/Downloads" ""
+    else
+        pass malware "ClamAV: nothing in $n recent file(s) in Downloads"
+    fi
+}
+
 scan() {
     local deep=${1:-}
     # --- the basics Fedora ships with
     if [[ "$(getenforce 2> /dev/null)" == "Enforcing" ]]; then
-        pass "SELinux is enforcing"
+        pass selinux "SELinux is enforcing"
     else
         finding high selinux "SELinux isn't enforcing" "It confines services so a hacked one can't take over the system" "mk security fix selinux"
     fi
     if systemctl is-active -q firewalld; then
         zone=$(firewall-cmd --get-default-zone 2> /dev/null)
-        pass "Firewall is on (zone: ${zone:-?})"
+        pass firewall "Firewall is on (zone: ${zone:-?})"
     else
         finding high firewall "The firewall is off" "Anything listening on the network can be reached" "mk security fix firewall"
     fi
     if ! command -v mokutil > /dev/null; then
         note "Secure Boot not checked: mokutil isn't installed (sudo dnf install mokutil)"
     elif mokutil --sb-state 2> /dev/null | grep -q enabled; then
-        pass "Secure Boot is on"
+        pass secureboot "Secure Boot is on"
     else
         finding low secureboot "Secure Boot is off" "Boot-level malware isn't blocked; turn it on in the firmware (BIOS) settings" ""
     fi
     if lsblk -rno FSTYPE 2> /dev/null | grep -q crypto_LUKS; then
-        pass "The disk is encrypted"
+        pass encryption "The disk is encrypted"
     else
         finding medium encryption "The disk isn't encrypted" "A lost or stolen laptop gives away every file; only a reinstall with encryption fixes this" ""
     fi
@@ -71,10 +106,10 @@ scan() {
     if (( sec > 0 )); then
         finding high updates "$sec security update(s) waiting" "Known holes stay open until they're installed" "mk security fix updates"
     else
-        pass "No security updates waiting"
+        pass updates "No security updates waiting"
     fi
     if systemctl is-enabled -q dnf5-automatic.timer 2> /dev/null || systemctl is-enabled -q dnf-automatic.timer 2> /dev/null; then
-        pass "Security updates install by themselves"
+        pass autoupdates "Security updates install by themselves"
     else
         finding medium autoupdates "Security updates wait for you to install them" "Fixes for known holes arrive later than they could" "mk security fix autoupdates"
     fi
@@ -83,13 +118,13 @@ scan() {
     if [[ -n "$roots" ]]; then
         finding high uid0 "Extra all-powerful accounts: $roots" "Only root should have user id 0" ""
     else
-        pass "Only root has administrator user id 0"
+        pass uid0 "Only root has administrator user id 0"
     fi
     empty=$(awk -F: '($2 == "" ) { print $1 }' /etc/shadow | grep -vx guest | paste -sd ' ')
     if [[ -n "$empty" ]]; then
         finding high emptypw "Accounts without a password: $empty" "Anyone at the keyboard can log in as them" ""
     else
-        pass "Every account has a password (except an MK guest account, if on)"
+        pass emptypw "Every account has a password (except an MK guest account, if on)"
     fi
     if systemctl is-active -q sshd; then
         if sshd -T 2> /dev/null | grep -qx 'permitrootlogin yes'; then
@@ -106,7 +141,7 @@ scan() {
     if [[ -n "$open" ]]; then
         finding low ports "Listening to the network: $open" "Each one is a door; the firewall decides who gets in" ""
     else
-        pass "Nothing listens to the network"
+        pass ports "Nothing listens to the network"
     fi
     # --- your home folder
     if [[ -n "$home" && -d "$home" ]]; then
@@ -117,7 +152,7 @@ scan() {
             [[ "$(stat -c %a "$home")" == 700 ]] && level=low
             finding "$level" worldwrite "$ww file(s) in your home anyone could change" "Usually copied from another system (e.g. a browser profile); safe to fix" "mk security fix permissions"
         else
-            pass "No files in your home that anyone can change"
+            pass worldwrite "No files in your home that anyone can change"
         fi
         if [[ "$(stat -c %a "$home")" =~ [1-7]$ ]]; then
             finding medium homeperm "Other accounts can look into your home folder" "Your files are visible to every user on this computer" "mk security fix permissions"
@@ -134,7 +169,7 @@ scan() {
     if [[ -n "$odd" ]]; then
         finding medium tmpexec "Programs running from a temporary folder: $odd" "Malware often hides there; installers and build tools sometimes do too" ""
     else
-        pass "No programs running from temporary folders"
+        pass tmpexec "No programs running from temporary folders"
     fi
     # --- Lynis: its last hardening index, quick; a fresh audit with deep
     if command -v lynis > /dev/null; then
@@ -160,7 +195,7 @@ scan() {
         if (( warn > 0 )); then
             finding medium rkhunter "rkhunter: $warn warning(s)" "Often harmless after updates; read: sudo rkhunter --check --sk --rwo" ""
         else
-            pass "rkhunter found nothing"
+            pass rkhunter "rkhunter found nothing"
         fi
     else
         note "rkhunter isn't installed (sudo dnf install rkhunter)"
@@ -170,7 +205,7 @@ scan() {
         if (( hits > 0 )); then
             finding high chkrootkit "chkrootkit: $hits suspicious result(s)" "Read: sudo chkrootkit -q" ""
         else
-            pass "chkrootkit found nothing"
+            pass chkrootkit "chkrootkit found nothing"
         fi
     else
         note "chkrootkit isn't installed (sudo dnf install chkrootkit)"
@@ -184,16 +219,12 @@ scan() {
             [[ -d "$d" ]] && find "$d" -xdev \( -name .git -o -name node_modules -o -name .venv -o -name build \
                 -o -name __pycache__ \) -prune -o -type f -mtime -14 -size -200M -print 2> /dev/null
         done | head -n 5000 > "$list"
-        if [[ -s "$list" ]]; then
-            infected=$(slow 240 clamscan -i --no-summary --max-filesize=200M --file-list="$list" 2> /dev/null | grep -c 'FOUND$' || true)
-        else
-            infected=0
-        fi
+        infected=$(clam "$list" 240)
         rm -f "$list"
         if (( infected > 0 )); then
             finding high malware "ClamAV: $infected infected file(s) in Downloads, Desktop or /tmp" "Details: clamscan -r -i ~/Downloads ~/Desktop" ""
         else
-            pass "ClamAV found nothing in recent files (Downloads, Desktop, /tmp)"
+            pass malware "ClamAV found nothing in recent files (Downloads, Desktop, /tmp)"
         fi
     else
         note "ClamAV isn't installed (sudo dnf install clamav clamav-freshclam)"
@@ -235,6 +266,14 @@ fix() {
     esac
 }
 
+# Which half this copy is: mk-security-scan scans, mk-security-fix fixes.
+role=scan
+[[ "$(basename "$0")" == mk-security-fix ]] && role=fix
+if [[ "${1:-scan}" != "$role" ]]; then
+    echo "$(basename "$0") only does: $role" >&2
+    exit 2
+fi
+
 case "${1:-scan}" in
     scan)
         # One scan at a time: a second one waits for nothing, it just stops.
@@ -243,7 +282,8 @@ case "${1:-scan}" in
             echo "NOTE|Another security scan is still running; wait for it to finish"
             exit 0
         fi
-        scan "${2:-}"; exit 0 ;;
+        if [[ "${2:-}" == virus ]]; then virus; else scan "${2:-}"; fi
+        exit 0 ;;
     fix) fix "${2:-}" ;;
     *) echo "Usage: mk-security-scan [scan | fix NAME]" >&2; exit 2 ;;
 esac

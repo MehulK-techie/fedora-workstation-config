@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- mk security: the scan runs without a password for the person at the
+     computer (active local session). /usr/local/libexec/mk-security-scan only
+     reads and refuses to fix; fixes go through its twin mk-security-fix,
+     which has no action here, so polkit asks for an administrator. -->
+<policyconfig>
+  <vendor>MK Workstation</vendor>
+  <action id="io.github.mehulk.mk-security.scan">
+    <description>Run the MK security check</description>
+    <message>Run the MK security check</message>
+    <icon_name>security-high-symbolic</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/libexec/mk-security-scan</annotate>
+  </action>
+</policyconfig>

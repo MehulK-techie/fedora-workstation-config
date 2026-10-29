@@ -477,49 +477,146 @@ class Center(Adw.ApplicationWindow):
         self._lock_folder(str(folder))
 
     # ---------------------------------------------------------------- security
+    # ---------------------------------------------------------------- security
+    # The dashboard's sections, Windows Security style, and the checks in each
+    # (ids from mk-security-scan and mk-security's own checks).
+    SECTIONS = [
+        ("Virus &amp; threat protection", "security-high-symbolic", ("malware", "rkhunter", "chkrootkit", "tmpexec")),
+        ("Firewall &amp; network protection", "network-wired-symbolic",
+         ("firewall", "ports", "sshroot", "sshpw", "sharing", "remote")),
+        ("Account &amp; sign-in protection", "system-users-symbolic", ("uid0", "emptypw", "lock", "selinux", "signin")),
+        ("Device security &amp; privacy", "drive-harddisk-symbolic",
+         ("encryption", "secureboot", "updates", "autoupdates", "homeperm", "worldwrite", "vault")),
+    ]
+
     def _security(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_start=24, margin_end=24,
-                      margin_top=18, margin_bottom=18)
+        page = Adw.PreferencesPage()
+        head = Adw.PreferencesGroup()
         top = Gtk.Box(spacing=12)
         title = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
-        title.append(Gtk.Label(label="Security check", css_classes=["title-2"], xalign=0))
-        title.append(Gtk.Label(label="Firewall, updates, sharing, accounts, rootkits, viruses and more. "
-                                     "It asks for your fingerprint or password, then only reads.",
-                               css_classes=["dim-label"], xalign=0, wrap=True))
+        self.score = Gtk.Label(label="Security at a glance", css_classes=["title-2"], xalign=0)
+        title.append(self.score)
+        self.score_sub = Gtk.Label(label="The check only reads, and takes a few seconds; no password at your desk.",
+                                   css_classes=["dim-label"], xalign=0, wrap=True)
+        title.append(self.score_sub)
         top.append(title)
-        self.scan_btn = Gtk.Button(label="Run check", css_classes=["pill", "suggested-action"], valign=Gtk.Align.CENTER)
-        self.scan_btn.connect("clicked", lambda *_: self._scan())
-        top.append(self.scan_btn)
-        box.append(top)
-        self.fix_box = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=4)
-        box.append(self.fix_box)
-        self.report = Gtk.TextView(editable=False, cursor_visible=False, css_classes=["mk-report", "card"],
-                                   left_margin=14, right_margin=14, top_margin=12, bottom_margin=12,
-                                   wrap_mode=Gtk.WrapMode.WORD_CHAR)
-        box.append(Gtk.ScrolledWindow(child=self.report, vexpand=True))
-        return box
+        buttons = Gtk.Box(spacing=8, valign=Gtk.Align.CENTER)
+        self.scan_btn = Gtk.Button(label="Run check", css_classes=["pill", "suggested-action"])
+        self.scan_btn.connect("clicked", lambda *_: self._scan(""))
+        self.virus_btn = Gtk.Button(label="Quick virus scan", css_classes=["pill"],
+                                    tooltip_text="ClamAV on files from the last 14 days in Downloads (~10 s)")
+        self.virus_btn.connect("clicked", lambda *_: self._scan("virus"))
+        self.deep_btn = Gtk.Button(label="Deep scan", css_classes=["pill"],
+                                   tooltip_text="Rootkits, viruses in recent files, a fresh Lynis audit: a few minutes")
+        self.deep_btn.connect("clicked", lambda *_: self._scan("deep"))
+        for btn in (self.scan_btn, self.virus_btn, self.deep_btn):
+            buttons.append(btn)
+        top.append(buttons)
+        head.add(top)
+        page.add(head)
+        self.sec_groups = {}
+        for name, icon, _ids in self.SECTIONS:
+            group = Adw.PreferencesGroup(title=name)
+            group.set_header_suffix(Gtk.Image(icon_name=icon, css_classes=["dim-label"]))
+            page.add(group)
+            self.sec_groups[name] = [group, []]
+        self.notes_group = Adw.PreferencesGroup(title="Notes")
+        page.add(self.notes_group)
+        self.sec_results = {}
+        self.note_rows = []
+        self._fill_security()
+        return page
 
-    def _scan(self):
-        self.scan_btn.set_sensitive(False)
-        self.scan_btn.set_label("Checking…")
-        self.report.get_buffer().set_text("Checking… (a minute or two)")
+    def _local_checks(self):
+        """What the app can see itself: sign-in methods and the vault."""
+        out = {}
+        face = os.path.exists("/run/mk-face-auth.sock")
+        finger = False
+        try:
+            finger = " - #" in subprocess.run(["fprintd-list", os.environ.get("USER", "")], capture_output=True,
+                                              text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            pass
+        ways = [w for w, on in (("Face ID", face), ("fingerprint", finger)) if on]
+        out["signin"] = ("pass", f"Sign-in with {' and '.join(ways)} works in MK's apps", "") if ways else \
+            ("low", "Only your password signs you in", "Set up face or fingerprint: Actions › Biometrics")
+        vault = HOME / ".vault"
+        if (HOME / ".vault.mklock").is_dir() or (HOME / "..vault.mklock").is_dir():
+            out["vault"] = ("pass", "Vault: open (encrypted on disk)" if is_open(vault) else
+                            "Vault: closed and encrypted", "")
+        else:
+            out["vault"] = ("low", "No vault yet", "Open it once (Actions › Vault) to create it")
+        return out
+
+    def _fill_security(self, notes=()):
+        results = {**self.sec_results, **self._local_checks()}
+        icons = {"pass": ("object-select-symbolic", "success"), "low": ("dialog-information-symbolic", "accent"),
+                 "medium": ("dialog-warning-symbolic", "warning"), "high": ("dialog-error-symbolic", "error")}
+        for name, _icon, ids in self.SECTIONS:
+            group, rows = self.sec_groups[name]
+            for row in rows:
+                group.remove(row)
+            rows.clear()
+            for ident in ids:
+                if ident not in results:
+                    continue
+                level, text, detail, *fix = results[ident]
+                row = Adw.ActionRow(title=GLib.markup_escape_text(text), subtitle=GLib.markup_escape_text(detail))
+                icon, css = icons.get(level, icons["low"])
+                row.add_prefix(Gtk.Image(icon_name=icon, css_classes=[css]))
+                if fix and fix[0]:
+                    name_ = fix[0].split()[-1]
+                    b = Gtk.Button(label="Fix", css_classes=["pill"], valign=Gtk.Align.CENTER)
+                    b.connect("clicked", lambda _b, n=name_: run_bg(
+                        [tool("mk-security"), "fix", n],
+                        lambda c, o: (self.say((ANSI.sub("", o).strip().splitlines() or ["Done"])[-1]), self._scan(""))))
+                    row.add_suffix(b)
+                group.add(row)
+                rows.append(row)
+            group.set_visible(bool(rows))
+        for row in self.note_rows:
+            self.notes_group.remove(row)
+        self.note_rows = [Adw.ActionRow(title=GLib.markup_escape_text(n)) for n in notes]
+        for row in self.note_rows:
+            self.notes_group.add(row)
+        self.notes_group.set_visible(bool(notes))
+
+    def _scan(self, mode):
+        for btn in (self.scan_btn, self.virus_btn, self.deep_btn):
+            btn.set_sensitive(False)
+        self.score_sub.set_label({"": "Checking… (a few seconds)", "virus": "Scanning recent downloads… (~10 s)",
+                                  "deep": "Deep scan… (a few minutes, at low priority)"}[mode])
 
         def done(code, out):
-            self.scan_btn.set_sensitive(True)
-            self.scan_btn.set_label("Run again")
-            self.report.get_buffer().set_text(out.strip() or "No result.")
-            while child := self.fix_box.get_first_child():
-                self.fix_box.remove(child)
+            for btn in (self.scan_btn, self.virus_btn, self.deep_btn):
+                btn.set_sensitive(True)
+            if code != 0:
+                self.score_sub.set_label("The check couldn't run: " +
+                                         ((out.strip().splitlines() or ["run sudo ./setup.sh"])[-1]))
+                return
+            score, lynis, notes = 100, None, []
             for line in out.splitlines():
-                line = line.strip()
-                if line.startswith("mk security fix "):
-                    name = line.split()[-1]
-                    b = Gtk.Button(label=f"Fix: {name}", css_classes=["pill"])
-                    b.connect("clicked", lambda _b, n=name: run_bg(
-                        [tool("mk-security"), "fix", n], lambda c, o: (self.say((o.strip().splitlines() or ["Done"])[-1]),
-                                                                        self._scan())))
-                    self.fix_box.append(b)
-        run_bg([tool("mk-security")], done)
+                f = line.split("|")
+                if f[0] == "PASS" and len(f) >= 3:
+                    self.sec_results[f[1]] = ("pass", f[2], "")
+                elif f[0] == "FINDING" and len(f) >= 6:
+                    level, ident = f[1], f[2]
+                    self.sec_results[ident] = (level, f[3], f[4], f[5])
+                elif f[0] == "NOTE" and len(f) >= 2:
+                    notes.append(f[1])
+                elif f[0] == "LYNIS" and len(f) >= 2 and f[1].isdigit():
+                    lynis = int(f[1])
+            for level, *_ in self.sec_results.values():
+                score -= {"high": 15, "medium": 7, "low": 2}.get(level, 0)
+            score = max(0, score)
+            if lynis is not None:
+                score = (score * 2 + lynis) // 3
+            verdict = "Good" if score >= 85 else "Fair" if score >= 65 else "Needs attention"
+            self.score.set_label(f"{score} / 100 · {verdict}")
+            self.score_sub.set_label("Checked just now" + (f"; includes the Lynis hardening index {lynis}"
+                                                           if lynis is not None else "") + ".")
+            self._fill_security(notes)
+        run_bg([tool("mk-security"), "--raw", mode] if mode else [tool("mk-security"), "--raw"], done)
 
 
 class CenterApp(Adw.Application):

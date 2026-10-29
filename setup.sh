@@ -144,6 +144,10 @@ install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-drop-caches" /usr/local/libexec
 install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-lock-key" /usr/local/libexec/mk-lock-key
 # mk security: its root half (read-only scan; fixes only when asked by name).
 install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-security-scan" /usr/local/libexec/mk-security-scan
+# Its twin for fixes (same script; it does only what its name says). The scan
+# needs no password at the computer (it only reads); fixes ask an admin.
+install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-security-scan" /usr/local/libexec/mk-security-fix
+install -m 644 "$SCRIPT_DIR/assets/polkit/io.github.mehulk.mk-security.policy" /usr/share/polkit-1/actions/
 # In-app Face ID (MK Notes' lock, the MK unlock dialog): a socket-activated
 # root helper that checks the calling user's own face through the face-only
 # PAM service mk-auth. Only when Howdy's PAM module is installed.

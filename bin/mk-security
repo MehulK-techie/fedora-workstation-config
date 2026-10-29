@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # mk security: a health check for this computer's security, with a score.
 #
-#   mk security            quick scan, a few seconds (asks for your fingerprint
-#                          or password first)
+#   mk security            quick scan, a few seconds (no password at the
+#                          computer: it only reads)
+#   mk security virus      ClamAV alone, on files from the last 14 days in
+#                          Downloads (25 MB at most each): about 10 seconds
 #   mk security deep       also rootkits (rkhunter, chkrootkit), viruses in files
 #                          that arrived lately (ClamAV) and a fresh Lynis audit:
 #                          a few minutes, at the lowest CPU priority
@@ -21,6 +23,7 @@
 set -uo pipefail
 
 HELPER=${MK_SECURITY_HELPER:-/usr/local/libexec/mk-security-scan}  # override: tests only
+FIXER=/usr/local/libexec/mk-security-fix
 if [[ -t 1 ]]; then
     red=$'\e[38;5;203m' amber=$'\e[38;5;214m' yellow=$'\e[38;5;228m' green=$'\e[38;5;114m'
     dim=$'\e[2m' bold=$'\e[1m' off=$'\e[0m'
@@ -32,6 +35,29 @@ if [[ ! -x "$HELPER" ]]; then
     echo "The scanner isn't installed yet. Run: ./setup.sh (from the MK repo)" >&2
     exit 1
 fi
+
+# Checks of your own account's settings (no administrator rights needed).
+user_checks() {
+    local webdav=org.gnome.settings-daemon.plugins.sharing.service:/org/gnome/settings-daemon/plugins/sharing/gnome-user-share-webdav/
+    if [[ "$(gsettings get "$webdav" enabled-connections 2> /dev/null)" =~ [0-9a-f]{8}- ]]; then
+        if [[ "$(gsettings get org.gnome.desktop.file-sharing require-password 2> /dev/null)" == "'never'" ]]; then
+            echo "FINDING|high|sharing|File sharing is on without a password|Anyone on that network can open your Public folder (Settings › Sharing)|mk security fix sharing"
+        else
+            echo "PASS|sharing|File sharing asks for a password"
+        fi
+    else
+        echo "PASS|sharing|File sharing is off"
+    fi
+    if [[ "$(gsettings get org.gnome.desktop.screensaver lock-enabled)" == true &&
+          "$(gsettings get org.gnome.desktop.session idle-delay | awk '{print $2}')" -gt 0 ]]; then
+        echo "PASS|lock|The screen locks when you step away"
+    else
+        echo "FINDING|high|lock|The screen doesn't lock when you step away|Anyone at the laptop gets your session|mk security fix lock"
+    fi
+    if grdctl status 2> /dev/null | grep -q 'Status: enabled'; then
+        echo "FINDING|medium|remote|Remote desktop is on|Others can connect to this screen (Settings › System › Remote Desktop)|"
+    fi
+}
 
 case "${1:-scan}" in
     fix)
@@ -51,41 +77,29 @@ case "${1:-scan}" in
                 exit 0 ;;
         esac
         [[ "$name" =~ ^(selinux|firewall|updates|autoupdates|ssh|permissions)$ ]] || { echo "Unknown fix: $name" >&2; exit 2; }
-        exec pkexec "$HELPER" fix "$name"
+        [[ -x "$FIXER" ]] || { echo "The fixer isn't installed yet. Run: sudo ./setup.sh (from the MK repo)" >&2; exit 1; }
+        exec pkexec "$FIXER" fix "$name"
         ;;
     scan) mode="" ;;
     deep) mode=deep ;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "Usage: mk security [scan | deep | fix NAME]" >&2; exit 2 ;;
+    virus) mode=virus ;;
+    --raw)
+        # The report lines as they are, for MK Control Center's dashboard:
+        # mk security --raw [deep | virus]
+        mode=${2:-}
+        out=$(pkexec "$HELPER" scan "$mode") || exit 1
+        printf '%s\n' "$out"
+        [[ -z "$mode" || "$mode" == deep ]] && user_checks
+        exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "Usage: mk security [scan | deep | virus | fix NAME]" >&2; exit 2 ;;
 esac
 
-# Checks of your own account's settings (no administrator rights needed).
-user_checks() {
-    local webdav=org.gnome.settings-daemon.plugins.sharing.service:/org/gnome/settings-daemon/plugins/sharing/gnome-user-share-webdav/
-    if [[ "$(gsettings get "$webdav" enabled-connections 2> /dev/null)" =~ [0-9a-f]{8}- ]]; then
-        if [[ "$(gsettings get org.gnome.desktop.file-sharing require-password 2> /dev/null)" == "'never'" ]]; then
-            echo "FINDING|high|sharing|File sharing is on without a password|Anyone on that network can open your Public folder (Settings › Sharing)|mk security fix sharing"
-        else
-            echo "PASS|File sharing asks for a password"
-        fi
-    else
-        echo "PASS|File sharing is off"
-    fi
-    if [[ "$(gsettings get org.gnome.desktop.screensaver lock-enabled)" == true &&
-          "$(gsettings get org.gnome.desktop.session idle-delay | awk '{print $2}')" -gt 0 ]]; then
-        echo "PASS|The screen locks when you step away"
-    else
-        echo "FINDING|high|lock|The screen doesn't lock when you step away|Anyone at the laptop gets your session|mk security fix lock"
-    fi
-    if grdctl status 2> /dev/null | grep -q 'Status: enabled'; then
-        echo "FINDING|medium|remote|Remote desktop is on|Others can connect to this screen (Settings › System › Remote Desktop)|"
-    fi
-}
 
 if [[ "$mode" == deep ]]; then
     echo "${bold}MK security check, deep${off}  ${dim}(confirm it's you; a few minutes at low priority)${off}"
 else
-    echo "${bold}MK security check${off}  ${dim}(confirm it's you; a few seconds)${off}"
+    echo "${bold}MK security check${off}  ${dim}(a few seconds)${off}"
 fi
 report=$(pkexec "$HELPER" scan "$mode")
 status=$?
@@ -97,9 +111,9 @@ report+=$'\n'"$(user_checks)"
 
 score=100 lynis="" fixes=()
 passes=() findings=() notes=()
-while IFS="|" read -r kind a _ c d e; do
+while IFS="|" read -r kind a b c d e; do
     case "$kind" in
-        PASS) passes+=("$a") ;;
+        PASS) passes+=("$b") ;;
         NOTE) notes+=("$a") ;;
         LYNIS) lynis=$a ;;
         FINDING)

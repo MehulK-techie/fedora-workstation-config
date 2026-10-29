@@ -58,6 +58,17 @@ export class ClipboardHistory {
         this._clipboard = St.Clipboard.get_default();
         this._thumbQueue = this._items.filter(i => i.image && !GLib.file_test(this._thumbPath(i), GLib.FileTest.EXISTS));
         this._nextThumb();
+        // Build the deck (and the first cards) a few seconds after login, so
+        // even the first Super+V only shows it.
+        this._prebuildId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 5, () => {
+            this._prebuildId = 0;
+            if (!this._dialog && !Main.sessionMode.isLocked) {
+                this._build();
+                this._entry.set_text('');
+                this._fill();
+            }
+            return GLib.SOURCE_REMOVE;
+        });
         this._selection = global.display.get_selection();
         this._ownerId = this._selection.connect('owner-changed', (_s, type) => {
             if (type === Meta.SelectionType.SELECTION_CLIPBOARD)
@@ -72,6 +83,9 @@ export class ClipboardHistory {
         if (this._fillId)
             GLib.source_remove(this._fillId);
         this._fillId = 0;
+        if (this._prebuildId)
+            GLib.source_remove(this._prebuildId);
+        this._prebuildId = 0;
         this._thumbCancel?.cancel();
         this._thumbQueue = [];
         this._dialog?.destroy();

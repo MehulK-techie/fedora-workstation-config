@@ -474,9 +474,7 @@ class StickyNoteWidget(Gtk.Box):
             sw.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 3)
             sw.connect("clicked", lambda _b, k=i: (self._set_color(k), pop.popdown()))
             palette.append(sw)
-        color_btn = Gtk.MenuButton(icon_name="color-select-symbolic", css_classes=["flat"],
-                                   tooltip_text="Sticky colour", popover=pop)
-        head.append(color_btn)
+        # (text boxes have no paper colour to pick)
         layers = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=4, margin_bottom=4)
         lpop = Gtk.Popover(child=layers)
         for icon, tip, how in LAYER_ACTIONS:
@@ -491,7 +489,7 @@ class StickyNoteWidget(Gtk.Box):
                                    popover=lpop))
 
         del_btn = Gtk.Button(icon_name="window-close-symbolic", css_classes=["flat"],
-                             tooltip_text="Delete Sticky Note")
+                             tooltip_text="Delete this text box")
         del_btn.connect("clicked", lambda *_: self.win.remove_sticky_note(self))
         head.append(del_btn)
         self.append(head)
@@ -553,7 +551,7 @@ class TableItem(Gtk.Box):
 
     def __init__(self, data, note_win):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4, css_classes=["mk-table"],
-                         halign=Gtk.Align.START)
+                         halign=Gtk.Align.START, valign=Gtk.Align.START)
         self.win = note_win
         self.data = data
         rows = data.setdefault("rows", [["", ""], ["", ""]])
@@ -571,8 +569,10 @@ class TableItem(Gtk.Box):
                          cursor=Gdk.Cursor.new_from_name("grab"),
                          tooltip_text="Drag to another place in the text")
         drag = Gtk.GestureDrag()
-        drag.connect("drag-begin", lambda *_: (self.set_opacity(0.55), move.set_cursor(Gdk.Cursor.new_from_name("grabbing"))))
-        drag.connect("drag-end", self._moved)
+        drag.connect("drag-begin", self._move_begin)
+        drag.connect("drag-update", self._move_update)
+        drag.connect("drag-end", lambda *_: (self.set_opacity(1.0), self.win._queue_save_meta(),
+                                             self.win.ensure_page_height_for_images()))
         move.add_controller(drag)
         bar.append(move)
         menu = Gio.Menu()
@@ -588,6 +588,15 @@ class TableItem(Gtk.Box):
         self.insert_action_group("table", group)
         bar.append(Gtk.MenuButton(label="▼", menu_model=menu, css_classes=["mk-table-pill"],
                                   tooltip_text="Rows and columns (for the cell you're in)"))
+        bar.append(Gtk.Box(hexpand=True))
+        grip = Gtk.Label(label="⇲", css_classes=["mk-table-pill"], cursor=Gdk.Cursor.new_from_name("se-resize"),
+                         tooltip_text="Drag to make the whole table wider or narrower")
+        scale = Gtk.GestureDrag()
+        scale.connect("drag-begin", lambda *_: setattr(self, "_scale0", list(self.data["col_w"])))
+        scale.connect("drag-update", self._scale_update)
+        scale.connect("drag-end", lambda *_: self.win._queue_save_meta())
+        grip.add_controller(scale)
+        bar.append(grip)
         self.append(bar)
         self.build()
 
@@ -633,6 +642,7 @@ class TableItem(Gtk.Box):
         if focus:
             r, c = focus
             GLib.idle_add(lambda: (self.cells[r][c].grab_focus(), False)[1])
+        self.fit()
 
     def _cell_pressed(self, _gesture, _n, x, y, view):
         if not view.has_focus():
@@ -644,9 +654,11 @@ class TableItem(Gtk.Box):
 
     def sync_zoom(self):
         z = max(0.5, self.win.zoom)
+        self.sync_position()
         for line in self.cells:
             for c, view in enumerate(line):
                 view.set_size_request(round(self.data["col_w"][c] * z), -1)
+        self.fit()
 
     def _resize(self, _g, dx, _dy):
         """The divider moves: the column on its left grows by as much as the
@@ -660,6 +672,7 @@ class TableItem(Gtk.Box):
 
     def _typed(self, buf, r, c):
         self.data["rows"][r][c] = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        self.fit()
         self.win._queue_save_meta()
 
     def _key(self, _ctl, keyval, _code, state, r, c):
@@ -706,15 +719,45 @@ class TableItem(Gtk.Box):
         self.build(focus)
         self.win._queue_save_meta()
 
-    def _moved(self, gesture, dx, dy):
-        """Dropped somewhere: the table moves to that place in the text."""
-        self.set_opacity(1.0)
-        if abs(dx) + abs(dy) < 8:
+    def _move_begin(self, *_a):
+        self._start = (self.data.get("x", 56.0), self.data.get("y", 80.0))
+        self.set_opacity(0.6)
+
+    def _move_update(self, _g, dx, dy):
+        """Anywhere on the page: follows the pointer, no snapping."""
+        z = max(0.5, self.win.zoom)
+        self.data["x"] = max(0.0, self._start[0] + dx / z)
+        self.data["y"] = max(0.0, self._start[1] + dy / z)
+        self.sync_position()
+
+    def _scale_update(self, _g, dx, _dy):
+        """The corner grip: every column grows or shrinks in proportion."""
+        start = self._scale0
+        total = sum(start)
+        k = max(self.MIN_COL * len(start) / total, (total + dx / max(0.5, self.win.zoom)) / total)
+        self.data["col_w"] = [max(self.MIN_COL, round(w * k)) for w in start]
+        self.sync_zoom()
+
+    def fit(self):
+        """A Gtk.Fixed gives children their minimum size, which squashes
+        wrapping cells to one line: ask for the natural size instead (after
+        building, typing and resizing)."""
+        if getattr(self, "_fit_id", 0):
             return
-        ok, sx, sy = gesture.get_start_point()
-        point = self.translate_coordinates(self.win.view, sx + dx, sy + dy)
-        if point:
-            self.win.move_table(self, *point)
+
+        def run():
+            self._fit_id = 0
+            self.set_size_request(-1, -1)
+            _mw, nat_w, _b1, _b2 = self.measure(Gtk.Orientation.HORIZONTAL, -1)
+            _mh, nat_h, _b3, _b4 = self.measure(Gtk.Orientation.VERTICAL, nat_w)
+            self.set_size_request(nat_w, nat_h)
+            return False
+        self._fit_id = GLib.idle_add(run)
+
+    def sync_position(self):
+        z = max(0.5, self.win.zoom)
+        if self.get_parent() is self.win.canvas_fixed:
+            self.win.canvas_fixed.move(self, round(self.data.get("x", 56.0) * z), round(self.data.get("y", 80.0) * z))
 
     def to_markdown(self):
         rows = self.data["rows"]
@@ -2047,12 +2090,12 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
         text = (sticky.get("text") or "").strip()
         if not text:
             continue
-        _name, bg, fg = STICKY_PALETTES[int(sticky.get("color_idx", 0)) % len(STICKY_PALETTES)]
+        _name, bg, fg = STICKY_PALETTES[0]  # printed as a light callout
         layout = PangoCairo.create_layout(cr)
         layout.set_width(int((CONTENT_W - 28) * Pango.SCALE))
         layout.set_wrap(Pango.WrapMode.WORD_CHAR)
         layout.set_font_description(Pango.FontDescription("Sans 10"))
-        head = GLib.markup_escape_text(sticky.get("title") or "Sticky Note")
+        head = GLib.markup_escape_text(sticky.get("title") or "Text")
         layout.set_markup(f"<b>📌 {head}</b>\n{GLib.markup_escape_text(text)}", -1)
         _ink, logical = layout.get_pixel_extents()
         box_h = logical.height + 20.0
@@ -2697,11 +2740,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
         ribbon.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=2, margin_end=2))
 
-        sticky_btn = Gtk.Button(label="Sticky", icon_name="insert-text-symbolic",
-                                tooltip_text="Add Draggable Sticky Note", css_classes=["flat"])
-        sticky_btn.connect("clicked", lambda *_: self.add_sticky_note())
-        ribbon.append(sticky_btn)
-        text_btn = Gtk.Button(label="Text", icon_name="format-text-plus-symbolic",
+        text_btn = Gtk.Button(label="Text Box", icon_name="format-text-plus-symbolic",
                               tooltip_text="Text box: type anywhere on the page, on a printout or picture",
                               css_classes=["flat"])
         text_btn.connect("clicked", lambda *_: self.add_sticky_note(text_box=True))
@@ -3254,52 +3293,39 @@ class NotesWindow(Adw.ApplicationWindow):
         return True
 
     def insert_table(self, cols, rows):
-        """A table (TableItem) on its own line where the cursor is: header
-        row, then ROWS - 1 empty rows. In the text flow, saved with the note."""
-        buf = self.buffer
-        if not buf.get_iter_at_mark(buf.get_insert()).starts_line():
-            buf.insert_at_cursor("\n")
+        """A COLS x ROWS table (TableItem) on the page under the cursor's
+        line: a header row, then ROWS - 1 empty rows. Drag it by ⠿ Move
+        anywhere; saved with the note."""
+        z = max(0.5, self.zoom)
+        loc = self.view.get_iter_location(self.buffer.get_iter_at_mark(self.buffer.get_insert()))
         data = {"rows": [[f"Column {i + 1}" for i in range(cols)]] + [[""] * cols for _ in range(max(1, rows - 1))],
-                "col_w": [140] * cols}
-        self._add_table(data, buf.get_iter_at_mark(buf.get_insert()))
-        buf.insert_at_cursor("\n")
+                "col_w": [max(TableItem.MIN_COL, min(140, round((self.page_width() / z - 112) / cols)))] * cols,
+                "x": 56.0, "y": round((loc.y + loc.height) / z + 16), "z": self._next_z()}
+        self._add_table(data)
         self.dirty = True
-        self._queue_save()
         self.save_note_meta()
+        self.ensure_page_height_for_images()
 
-    def _add_table(self, data, where):
-        anchor = self.buffer.create_child_anchor(where)
+    def _add_table(self, data):
         widget = TableItem(data, self)
-        widget.anchor = anchor
-        self.view.add_child_at_anchor(widget, anchor)
+        widget.anchor = None
+        z = max(0.5, self.zoom)
+        self.canvas_fixed.put(widget, round(data.get("x", 56.0) * z), round(data.get("y", 80.0) * z))
         self.table_items.append(widget)
         return widget
 
+    def _clear_tables(self):
+        for old in self.table_items:
+            if old.get_parent() is self.canvas_fixed:
+                self.canvas_fixed.remove(old)
+        self.table_items = []
+
     def remove_table(self, widget):
-        if widget.anchor and not widget.anchor.get_deleted():
-            it = self.buffer.get_iter_at_child_anchor(widget.anchor)
-            end = it.copy()
-            end.forward_char()
-            self.buffer.delete(it, end)
+        if widget.get_parent() is self.canvas_fixed:
+            self.canvas_fixed.remove(widget)
         if widget in self.table_items:
             self.table_items.remove(widget)
         self.dirty = True
-        self._queue_save()
-        self.save_note_meta()
-
-    def move_table(self, widget, x, y):
-        """Re-anchor WIDGET at the text position under (x, y) of the editor."""
-        bx, by = self.view.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(x), int(y))
-        ok, target = self.view.get_iter_at_location(bx, by)
-        if not ok or widget.anchor is None:
-            return
-        data = widget.data
-        target.set_line_offset(0)
-        mark = self.buffer.create_mark(None, target, True)
-        self.remove_table(widget)
-        where = self.buffer.get_iter_at_mark(mark)
-        self.buffer.delete_mark(mark)
-        self._add_table(data, where)
         self.save_note_meta()
 
     def _queue_save_meta(self):
@@ -3313,7 +3339,6 @@ class NotesWindow(Adw.ApplicationWindow):
         self._meta_id = GLib.timeout_add(400, run)
 
     def _live_tables(self):
-        self.table_items = [t for t in self.table_items if t.anchor and not t.anchor.get_deleted()]
         return self.table_items
 
     def insert_divider_line(self):
@@ -3603,10 +3628,10 @@ class NotesWindow(Adw.ApplicationWindow):
             "y": float(max(60, round(scroll_y + 70))),
             "w": 220.0,
             "h": 160.0,
-            "color_idx": TEXT_BOX if text_box else len(self.sticky_notes) % TEXT_BOX,
+            "color_idx": TEXT_BOX,
             "z": self._next_z(),
         }
-        if text_box and not item_data:
+        if not item_data:
             data["title"] = "Text"
         if not item_data:  # inside the sheet, however narrow it is
             data["x"] = float(max(16, min(data["x"], self.page_width() / max(0.5, self.zoom) - data["w"] - 16)))
@@ -3620,11 +3645,12 @@ class NotesWindow(Adw.ApplicationWindow):
 
     # ---------- layers: every picture and sticky has a z; higher is in front
     def _layers(self):
-        items = self.canvas_images + self.sticky_notes
+        items = self.canvas_images + self.sticky_notes + self.table_items
         return sorted(items, key=lambda w: (w.data.get("z", 0), items.index(w)))
 
     def _next_z(self):
-        return 1 + max((w.data.get("z", 0) for w in self.canvas_images + self.sticky_notes), default=0)
+        return 1 + max((w.data.get("z", 0) for w in self.canvas_images + self.sticky_notes + self.table_items),
+                       default=0)
 
     def _apply_z_order(self):
         """Re-add the items in z order: a Gtk.Fixed draws its last child on top."""
@@ -3915,8 +3941,7 @@ class NotesWindow(Adw.ApplicationWindow):
             "spans": spans,
             "images": [w.data for w in self.canvas_images],
             "stickies": [s.data for s in self.sticky_notes],
-            "tables": [dict(t.data, offset=self.buffer.get_iter_at_child_anchor(t.anchor).get_offset())
-                       for t in self._live_tables()],
+            "tables": [dict(t.data) for t in self._live_tables()],
             "comments": self.comments,
             "strokes": self.ink_canvas.strokes,
             "links": getattr(self, "note_links", []),
@@ -4041,7 +4066,7 @@ class NotesWindow(Adw.ApplicationWindow):
             self.note_links = ext_links
             self.note_tags = ext_tags
             self.comments = []
-            self.table_items = []
+            self._clear_tables()
             self._rebuild_canvas_objects(ext_imgs, [])
             self.ink_canvas.strokes = []
             self.loading = False
@@ -4049,11 +4074,16 @@ class NotesWindow(Adw.ApplicationWindow):
         else:
             clean_txt, _ls, _ei, _el, _et = self._import_markdown_to_clean_doc(raw_md)
             self.buffer.set_text(clean_txt)
-            self.table_items = []
-            for t in sorted(meta.get("tables", []), key=lambda t: t.get("offset", 0)):
-                end = self.buffer.get_end_iter().get_offset()
-                data = {k: v for k, v in t.items() if k != "offset"}
-                self._add_table(data, self.buffer.get_iter_at_offset(max(0, min(end, int(t.get("offset", end))))))
+            self._clear_tables()
+            # Tables saved inside the text (older MK Notes) each took one
+            # character there: shift the formatting back, put them on the page.
+            anchors = sorted(int(t["offset"]) for t in meta.get("tables", []) if "offset" in t)
+
+            def unshift(o):
+                return o - sum(1 for a in anchors if a < o)
+            if anchors:
+                meta["spans"] = [[n, unshift(a), unshift(b)] for n, a, b in meta.get("spans", [])]
+            pending_tables = meta.get("tables", [])
             table = self.buffer.get_tag_table()
             end_off = self.buffer.get_end_iter().get_offset()
             for tname, s_off, e_off in meta.get("spans", []):
@@ -4067,6 +4097,12 @@ class NotesWindow(Adw.ApplicationWindow):
             self.note_tags = list(meta.get("tags", []))
             self.comments = list(meta.get("comments", []))
             self._rebuild_canvas_objects(meta.get("images", []), meta.get("stickies", []))
+            for t in pending_tables:
+                data = {k: v for k, v in t.items() if k != "offset"}
+                if "y" not in data:  # an older in-text table: where its line was
+                    it = self.buffer.get_iter_at_offset(min(unshift(int(t.get("offset", 0))), end_off))
+                    data["x"], data["y"] = 56.0, round(self.view.get_iter_location(it).y / max(0.5, self.zoom))
+                self._add_table(data)
             self.ink_canvas.strokes = list(meta.get("strokes", []))
             self.loading = False
 
@@ -4106,8 +4142,8 @@ class NotesWindow(Adw.ApplicationWindow):
                 self.canvas_fixed.put(widget, round(widget.data["x"] * self.zoom), round(widget.data["y"] * self.zoom))
                 self.canvas_images.append(widget)
 
-        for s_item in stickies_list:
-            st = StickyNoteWidget(dict(s_item), self)
+        for s_item in stickies_list:  # sticky notes are text boxes now: same words, no paper
+            st = StickyNoteWidget(dict(s_item, color_idx=TEXT_BOX), self)
             self.canvas_fixed.put(st, round(st.data["x"] * self.zoom), round(st.data["y"] * self.zoom))
             self.sticky_notes.append(st)
 
@@ -4167,6 +4203,10 @@ class NotesWindow(Adw.ApplicationWindow):
                 max_bottom = b
         for s in self.sticky_notes:
             b = int((s.data.get("y", 0) + s.data.get("h", 160) + 120) * self.zoom)
+            if b > max_bottom:
+                max_bottom = b
+        for t in self.table_items:
+            b = int(t.data.get("y", 0) * self.zoom + t.get_height() + 120)
             if b > max_bottom:
                 max_bottom = b
         self.view.set_bottom_margin(max_bottom)
@@ -5095,7 +5135,7 @@ class NotesWindow(Adw.ApplicationWindow):
             self.rel = None
             self.dirty = False
             self.buffer.set_text("")
-            self.table_items = []
+            self._clear_tables()
             self._rebuild_canvas_objects([], [])
             self.ink_canvas.strokes = []
             self.comments = []

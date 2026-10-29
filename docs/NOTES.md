@@ -135,22 +135,22 @@ closes it without saving.
 
 ## Tables, comments, stickies and pages
 
-- **Tables** (grid button: hover up to 8 x 8, click): a real table in the
-  text, Google Docs style. Cells wrap their text and a row grows to its
-  tallest cell; drag the line between two columns (the pointer turns into
-  ⟷) to resize them; ▼ adds or deletes rows and columns around the cell
-  you're in, or deletes the table; ⠿ Move table drags it to another place in
-  the text; Tab goes to the next cell and adds a row from the last one.
-  Text above and below never overlaps it. MK Notes keeps the cells with the
-  note and also writes the tables as Markdown at the end of the file, so
-  other apps and the phone see them. Older notes' Markdown tables still
-  show as styled text tables.
+- **Tables** (grid button: hover up to 8 x 8, click): exactly that many
+  columns and rows, placed under the line you're on and sized to the page.
+  Drag ⠿ Move table anywhere on the page; ⇲ makes the whole table wider or
+  narrower; drag the line between two columns (⟷) to trade width between
+  them. One click in a cell types there; cells wrap and a row grows to its
+  tallest cell. ▼ adds or deletes rows and columns, or the table; Tab walks
+  the cells and adds a row from the last one. Tables are kept with the note,
+  plus a Markdown copy at the end of the file for other apps. Tables from
+  older MK Notes move onto the page where their line was.
 - **Comments** open as a slim card in the right margin; click highlighted
   text to find its comment. On a small window the side panels step aside
   while the margin is open (⤢ brings them back).
-- **Sticky notes**: rename the title, pick a colour from the palette
-  (Yellow, Mint, Sky, Rose, Lavender, Coral, Charcoal); they're printed as
-  coloured callouts at the end of a PDF.
+- **Text boxes** (Text Box in the ribbon): type anywhere on the page,
+  over a printout or a picture; drag by the 📌, rename, layer order, delete
+  with ×. They print as callouts at the end of a PDF. (Sticky notes from
+  older notes open as text boxes, words intact.)
 - **Layers**: pictures and sticky notes have an order; a new one goes on top. A picture's bar and a sticky's layers button (▤) have Bring Forward, Send Backward, Bring to Front and Send to Back. Drawings stay on their own layer above the page.
 - **Pages**: the note is an A4 sheet (800 px wide at 100 %, narrower in a narrow window) centred on a darker workspace with a soft shadow; a new page appears as soon as text, a table, a picture or a sticky passes the bottom of the last one, with a page gap between sheets; a *Page X of Y* badge sits by the scrollbar. Text flows on through a page gap (the editor is one continuous text view); the PDF export lays out its own A4 pages.
 - **Locks**: right-click a locked note for Lock Now or Remove Lock

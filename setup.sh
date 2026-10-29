@@ -144,6 +144,16 @@ install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-drop-caches" /usr/local/libexec
 install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-lock-key" /usr/local/libexec/mk-lock-key
 # mk security: its root half (read-only scan; fixes only when asked by name).
 install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-security-scan" /usr/local/libexec/mk-security-scan
+# In-app Face ID (MK Notes' lock, the MK unlock dialog): a socket-activated
+# root helper that checks the calling user's own face through the face-only
+# PAM service mk-auth. Only when Howdy's PAM module is installed.
+if [[ -e /usr/lib64/security/pam_howdy.so || -e /usr/lib/security/pam_howdy.so ]]; then
+    install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-face-auth" /usr/local/libexec/mk-face-auth
+    install -m 644 "$SCRIPT_DIR/assets/pam/mk-auth" /etc/pam.d/mk-auth
+    install -m 644 "$SCRIPT_DIR/assets/systemd/mk-face-auth.socket" "$SCRIPT_DIR/assets/systemd/mk-face-auth@.service" /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable --now mk-face-auth.socket &> /dev/null || WARNINGS+=("In-app Face ID socket didn't start")
+fi
 
 # Apps MK replaced: gThumb (Loupe, GNOME's image viewer, opens images now).
 REMOVE_PKGS=(gthumb)

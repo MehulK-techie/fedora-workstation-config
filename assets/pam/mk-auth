@@ -1,0 +1,8 @@
+#%PAM-1.0
+# MK in-app Face ID (mk-face-auth, installed by setup.sh): the face only.
+# Passwords are never checked through this service: its helper answers any
+# local caller, so a password stack here would be a root guessing oracle.
+# PINs stay in the apps, fingerprints go through fprintd, passwords through
+# polkit's own prompt.
+auth       required     pam_howdy.so
+account    required     pam_permit.so

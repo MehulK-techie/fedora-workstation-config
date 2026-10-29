@@ -68,7 +68,7 @@ if [[ -z "$HOWDY_CONF" ]]; then
     exit 1
 fi
 
-PAM_FILES=(/etc/pam.d/gdm-password /etc/pam.d/sudo)
+PAM_FILES=(/etc/pam.d/gdm-password /etc/pam.d/sudo /etc/pam.d/polkit-1)
 HOWDY_LINE="auth        sufficient    pam_howdy.so"
 
 # Set one key in Howdy's config (keys are unique across its sections).
@@ -83,6 +83,24 @@ measure_light() {
         -vf "signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-" \
         -frames:v 10 -f null - 2>/dev/null \
         | grep -oE 'YAVG=[0-9]+' | tail -n 1 | cut -d= -f2 || true
+}
+
+# Another program holding the camera makes Howdy wait forever: name it, and
+# offer to close it (it's asked first: it may be a call you're in).
+camera_free() {
+    local holders pids
+    command -v fuser &>/dev/null || return 0
+    pids=$(fuser "$1" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' || true)
+    [[ -z "$pids" ]] && return 0
+    holders=$(for p in $pids; do printf '%s (%s) ' "$(ps -o comm= -p "$p" 2>/dev/null)" "$p"; done)
+    echo "  ⚠ The camera is in use by: $holders"
+    local close=""
+    read -rp "  Close them now? [y/N]: " close || true
+    if [[ "$close" =~ ^[yY] ]]; then
+        # shellcheck disable=SC2086 # one pid per word
+        kill $pids 2>/dev/null || true
+        sleep 1
+    fi
 }
 
 describe_light() {
@@ -189,7 +207,9 @@ done
 # Matching stays at Howdy's strict default for every camera: accuracy comes
 # from the extra lighting models, never from accepting weaker matches.
 # Regular webcams see mostly-dark frames in a dim room, so they get a higher
-# dark_threshold and a little more time to find a usable frame.
+# dark_threshold and a little more time to find a usable frame. (Howdy skips a
+# frame when its share of dark pixels is ABOVE dark_threshold: lowering it
+# rejects more night frames, never fewer.)
 # ------------------------------------------------------------------------------
 echo "==> Step 2/4: Tuning face recognition for this camera..."
 [[ -f "${HOWDY_CONF}.bak" ]] || cp -a "$HOWDY_CONF" "${HOWDY_CONF}.bak"
@@ -222,14 +242,16 @@ sudo_has_howdy() {
 }
 if [[ "$CAM_TYPE" == "rgb" ]] && { (( !TUNE_ONLY )) || sudo_has_howdy; }; then
     answer=""
-    read -rp "  Use face unlock for sudo (admin commands)? A photo of you could pass. [y/N]: " answer || true
+    read -rp "  Use face unlock for sudo and system prompts (admin commands, Vault, MK Lock)? A photo of you could pass. [y/N]: " answer || true
     if [[ ! "$answer" =~ ^[yY] ]]; then
         SUDO_FACE=0
-        if sudo_has_howdy; then
-            [[ -f /etc/pam.d/sudo.bak ]] || cp -a /etc/pam.d/sudo /etc/pam.d/sudo.bak
-            sed -i -E '/^[[:space:]]*auth[[:space:]].*pam_howdy\.so/d' /etc/pam.d/sudo
-            echo "    [+] Removed face unlock from sudo; it now asks for your password."
-        fi
+        for pam in /etc/pam.d/sudo /etc/pam.d/polkit-1; do
+            if grep -qE '^[[:space:]]*auth[[:space:]].*pam_howdy\.so' "$pam" 2>/dev/null; then
+                [[ -f "$pam.bak" ]] || cp -a "$pam" "$pam.bak"
+                sed -i -E '/^[[:space:]]*auth[[:space:]].*pam_howdy\.so/d' "$pam"
+                echo "    [+] Removed face unlock from ${pam##*/}; it now asks for your password."
+            fi
+        done
     fi
 fi
 
@@ -272,10 +294,19 @@ for (( i = 0; i < MODEL_COUNT; i++ )); do
         s|S) continue ;;
         q|Q) break ;;
     esac
-    if howdy -y -U "$TARGET_USER" add "$label"; then
+    camera_free "$SELECTED_CAM"
+    # Howdy gives up after 60 frames, but a camera another program holds can
+    # block it for good: never wait more than 30 s. --foreground keeps it on
+    # this terminal, so nothing it prints or asks is swallowed.
+    echo "  Recording (up to 30 s): keep looking at the camera…"
+    status=0
+    timeout --foreground 30 howdy -y -U "$TARGET_USER" add "$label" || status=$?
+    if (( status == 0 )); then
         recorded=$((recorded + 1))
+    elif (( status == 124 )); then
+        echo "  ⚠ The camera didn't answer in 30 s. Close apps that may use it (browser, Photo Booth) and try again."
     else
-        echo "  ⚠ That one didn't work (no face found?). Check the light and try again later."
+        echo "  ⚠ That one didn't work (no face found?). Face the light, not a window behind you, and try again."
     fi
 done
 
@@ -286,10 +317,15 @@ fi
 echo "[+] Recorded ${recorded} new face model(s) for ${TARGET_USER}."
 
 # ------------------------------------------------------------------------------
-# Step 4: Turn on face unlock for the login screen and sudo.
+# Step 4: Turn on face unlock for the login screen, sudo and system prompts.
 # ------------------------------------------------------------------------------
 echo "==> Step 4/4: Enabling face unlock..."
 (( SUDO_FACE )) || PAM_FILES=(/etc/pam.d/gdm-password)
+# polkit's PAM stack (GNOME's "confirm it's you" prompt: Vault, MK Lock, admin
+# tasks) ships in /usr/lib/pam.d; a copy in /etc/pam.d takes its place.
+if (( SUDO_FACE )) && [[ ! -f /etc/pam.d/polkit-1 && -f /usr/lib/pam.d/polkit-1 ]]; then
+    cp -a /usr/lib/pam.d/polkit-1 /etc/pam.d/polkit-1
+fi
 if [[ ! -e /usr/lib64/security/pam_howdy.so ]] && [[ ! -e /usr/lib/security/pam_howdy.so ]]; then
     echo "⚠ pam_howdy.so not found — skipping PAM changes to prevent lockout."
 else

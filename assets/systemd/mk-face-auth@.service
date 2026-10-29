@@ -1,0 +1,13 @@
+[Unit]
+Description=MK in-app Face ID check
+
+[Service]
+ExecStart=/usr/local/libexec/mk-face-auth
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+RuntimeMaxSec=25
+# Howdy needs the camera and its models; nothing else.
+ProtectHome=yes
+PrivateNetwork=yes
+NoNewPrivileges=yes

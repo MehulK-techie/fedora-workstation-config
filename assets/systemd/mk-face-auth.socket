@@ -1,0 +1,13 @@
+# In-app Face ID for MK's apps: any local user may connect; the helper only
+# ever checks the face of the user who connected (SO_PEERCRED).
+[Unit]
+Description=MK in-app Face ID (Howdy) socket
+
+[Socket]
+ListenStream=/run/mk-face-auth.sock
+SocketMode=0666
+Accept=yes
+MaxConnections=4
+
+[Install]
+WantedBy=sockets.target

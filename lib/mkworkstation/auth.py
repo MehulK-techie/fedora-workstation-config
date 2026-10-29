@@ -1,13 +1,14 @@
-"""Confirm it's you: one unlock dialog for MK's own apps (MK Notes, MK Hub).
+"""Confirm it's you: one unlock dialog for MK's own apps (MK Notes, MK Lock).
 
-UnlockDialog shows a scanner ring and a password field side by side:
+UnlockDialog, Windows Hello style: a glowing scanner ring over a PIN field
+that's always there.
+  - Face ID starts the moment it opens (cyan ring, "Looking for your face"):
+    the root helper mk-face-auth (socket /run/mk-face-auth.sock, installed by
+    setup.sh) checks the calling user's own face with Howdy;
   - fingerprint, read in the app through fprintd (net.reactivated.Fprint),
-    starts by itself when a finger is enrolled; no root needed;
-  - the system check (the polkit action mk-lock installs): GNOME asks for a
-    fingerprint or your login password in its own prompt;
+    listens at the same time when a reader with an enrolled finger exists;
+  - the system check (polkit, the action mk-lock installs): GNOME's own prompt;
   - the PIN or password typed in the field, checked by the caller.
-Face unlock isn't offered here: Howdy's face models are readable by root
-only, so faces are checked at login and sudo (register-face.sh).
 
 PINs are stored salted (scrypt); older unsalted SHA-256 hashes still match
 and should be upgraded by the caller (pin_needs_upgrade).
@@ -20,6 +21,7 @@ import math
 import os
 import secrets
 import shutil
+import socket
 import subprocess
 import threading
 from pathlib import Path
@@ -33,6 +35,7 @@ from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 POLKIT_ACTION = "io.github.mehulk.mk-lock.unlock"
 POLKIT_POLICY = Path("/usr/share/polkit-1/actions/io.github.mehulk.mk-lock.policy")
 FPRINT = "net.reactivated.Fprint"
+FACE_SOCKET = "/run/mk-face-auth.sock"
 
 
 # ---------------------------------------------------------------- PINs
@@ -73,6 +76,28 @@ def confirm_with_system(callback):
                              "--allow-user-interaction"], stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL).returncode == 0
         GLib.idle_add(callback, ok)
+    threading.Thread(target=work, daemon=True).start()
+
+
+# ---------------------------------------------------------------- face
+def face_available():
+    return os.path.exists(FACE_SOCKET)
+
+
+def check_face(callback):
+    """Ask mk-face-auth whether the face at the camera is ours; callback(ok,
+    message) on the main loop. Never blocks the window."""
+    def work():
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+                conn.settimeout(25)
+                conn.connect(FACE_SOCKET)
+                reply = conn.makefile().readline().strip()
+        except OSError as err:
+            reply = f"NO {err.strerror or 'Face ID unavailable'}"
+        ok = reply == "OK"
+        message = "Face ID is busy; try again in a moment" if reply == "BUSY" else reply[3:]
+        GLib.idle_add(callback, ok, message)
     threading.Thread(target=work, daemon=True).start()
 
 
@@ -159,6 +184,7 @@ class ScannerRing(Gtk.DrawingArea):
     def __init__(self, size=112):
         super().__init__(content_width=size, content_height=size, halign=Gtk.Align.CENTER)
         self.state = "idle"
+        self.face = False  # True while Face ID looks: cyan, a face inside
         self.phase = 0.0
         self._tick = 0
         self.set_draw_func(self._draw)
@@ -182,6 +208,8 @@ class ScannerRing(Gtk.DrawingArea):
             return (0.30, 0.80, 0.45)
         if self.state == "fail":
             return (0.93, 0.33, 0.33)
+        if self.face:
+            return (0.20, 0.85, 0.95)
         try:
             c = Adw.StyleManager.get_default().get_accent_color_rgba()
             return (c.red, c.green, c.blue)
@@ -217,6 +245,15 @@ class ScannerRing(Gtk.DrawingArea):
             cr.line_to(cx + 16, cy - 11)
             cr.stroke()
             return
+        if self.face:  # a face: outline, eyes, smile
+            cr.arc(cx, cy, 20, 0, 2 * math.pi)
+            cr.stroke()
+            for ex in (-7, 7):
+                cr.arc(cx + ex, cy - 5, 1.8, 0, 2 * math.pi)
+                cr.fill()
+            cr.arc(cx, cy + 2, 9, math.pi * 0.2, math.pi * 0.8)
+            cr.stroke()
+            return
         for k in range(4):
             rr = 6 + k * 6
             cr.arc(cx, cy + 6, rr, math.pi * 1.1, math.pi * 1.9 + (0.25 if k % 2 else 0))
@@ -236,6 +273,8 @@ class UnlockDialog(Adw.Dialog):
         self.on_success = on_success
         self.done = False
         self.finger = None
+        self.finger_on = False   # a reader with an enrolled finger is listening
+        self.face_state = None   # None, "looking" or "missed"
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
                       margin_top=18, margin_bottom=24, margin_start=24, margin_end=24)
@@ -254,8 +293,11 @@ class UnlockDialog(Adw.Dialog):
         box.append(self.entry)
         box.append(self.error)
         box.append(unlock)
+        self.retry_face = Gtk.Button(label="Try Face ID again", css_classes=["flat"], visible=False)
+        self.retry_face.connect("clicked", lambda *_: self._start_face())
+        box.append(self.retry_face)
         if not creating and system_check_available():
-            system = Gtk.Button(label="Use fingerprint or login password…", css_classes=["flat"])
+            system = Gtk.Button(label="Use the system prompt…", css_classes=["flat"])
             system.connect("clicked", self._system_check)
             box.append(system)
 
@@ -268,9 +310,43 @@ class UnlockDialog(Adw.Dialog):
             self.status.set_label("Choose a PIN. You'll type it to unlock.")
             GLib.idle_add(self.entry.grab_focus)
         else:
-            self.status.set_label("Type your PIN.")
+            self._say()
+            if face_available():
+                GLib.idle_add(self._start_face)
             self.finger = FingerprintListener(self._on_finger)
             GLib.idle_add(self._start_finger)
+
+    def _say(self):
+        """The line under the ring, from what's listening right now."""
+        looking = self.face_state == "looking"
+        rest = "Touch the reader or type your PIN." if self.finger_on else "Type your PIN."
+        self.status.set_label(f"Looking for your face…\n{rest}" if looking else rest)
+        self.ring.face = self.face_state == "looking"
+        self.ring.set_state("listening" if self.face_state == "looking" or self.finger_on else "idle")
+
+    def _start_face(self):
+        if self.done or self.face_state == "looking":
+            return False
+        self.face_state = "looking"
+        self.retry_face.set_visible(False)
+        self._say()
+        check_face(self._on_face)
+        return False
+
+    def _on_face(self, ok, message):
+        if self.done:
+            return False
+        if ok:
+            self.ring.face = True
+            self._succeed()
+            return False
+        self.face_state = "missed"
+        self.retry_face.set_visible(True)
+        self._say()
+        if message and "no face enrolled" not in message:
+            self.error.set_label(f"Face ID: {message}")
+            self.error.set_visible(True)
+        return False
 
     def _start_finger(self):
         self.finger.start()
@@ -281,18 +357,18 @@ class UnlockDialog(Adw.Dialog):
         if self.done:
             return
         if state == "listening":
-            self.ring.set_state("listening")
-            self.status.set_label("Touch the fingerprint reader, or type your PIN.")
+            self.finger_on = True
+            self._say()
         elif state == "retry":
             self.status.set_label("Didn't catch that: touch the reader again.")
         elif state == "no-match":
             self._fail("That finger didn't match. Try again or type your PIN.")
-            GLib.timeout_add(900, lambda: (not self.done and self.ring.set_state("listening"), False)[1])
+            GLib.timeout_add(900, lambda: (not self.done and self._say(), False)[1])
         elif state == "match":
             self._succeed()
         else:
-            self.ring.set_state("idle")
-            self.status.set_label("Type your PIN.")
+            self.finger_on = False
+            self._say()
 
     def _system_check(self, _button):
         self.status.set_label("Confirm in the system prompt…")

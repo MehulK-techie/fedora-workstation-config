@@ -83,8 +83,9 @@ STICKY_PALETTES = [
 ]
 TEXT_BOX = len(STICKY_PALETTES) - 1  # a sticky without paper: text on a printout or picture
 # a text box's font colours: (name, hex)
-TEXT_COLOURS = (("White", "#ffffff"), ("Black", "#000000"), ("Red", "#ef4444"), ("Blue", "#3b82f6"),
-                ("Amber", "#f59e0b"), ("Emerald", "#10b981"), ("Violet", "#8b5cf6"))
+TEXT_COLOURS = (("White", "#ffffff"), ("Slate Gray", "#9a9996"), ("Crimson Red", "#ed333b"),
+                ("Amber Orange", "#ff7800"), ("Emerald Green", "#33d17a"), ("Sky Blue", "#3584e4"),
+                ("Purple", "#9141ac"), ("Dark Charcoal", "#241f31"))
 # Layer order for pictures and stickies: (icon, label, how)
 LAYER_ACTIONS = (("go-up-symbolic", "Bring Forward", "forward"), ("go-down-symbolic", "Send Backward", "backward"),
                  ("go-top-symbolic", "Bring to Front", "front"), ("go-bottom-symbolic", "Send to Back", "back"))
@@ -92,6 +93,14 @@ LAYER_ACTIONS = (("go-up-symbolic", "Bring Forward", "forward"), ("go-down-symbo
 TABLES_MARK = "\n<!-- MK Notes tables (shown as tables in MK Notes) -->"
 PAGE_W = 800  # the sheet's width at 100 %; A4 height is 1.414 times that
 PAGE_GAP = 24  # the workspace gap between two sheets at 100 %
+
+
+def _colour_a_label():
+    """The text-colour button's face: an A over a red bar (the icon isn't
+    in every theme)."""
+    label = Gtk.Label()
+    label.set_markup('<span underline="double" underline_color="#ed333b"><b>A</b></span>')
+    return label
 
 
 def _png_size(data):
@@ -231,9 +240,18 @@ BASE_CSS = """
 .mk-img-bar button { color: #ffffff; min-height: 24px; min-width: 24px; padding: 2px 5px; border-radius: 5px; }
 .mk-img-bar button:hover { background: rgba(255,255,255,0.18); }
 .mk-sticky { border-radius: 10px; box-shadow: 0 6px 16px rgba(0,0,0,0.28); padding: 6px; }
-.mk-textbox-frame { padding: 7px; border: 1px solid transparent; background: transparent; }
-.mk-textbox.selected .mk-textbox-frame { border-color: #3b82f6; }
-.mk-textbox-handle { background: #ffffff; border: 1.5px solid #3b82f6; border-radius: 2px; }
+.mk-textbox-frame { padding: 7px; border: 1px solid rgba(0,0,0,0); background: rgba(0,0,0,0);
+                    transition: border-color 160ms cubic-bezier(0.25, 1, 0.5, 1); }
+.mk-textbox.selected .mk-textbox-frame { border-color: #3584e4; }
+.mk-textbox-handle { background: #ffffff; border: 1.5px solid #3584e4; border-radius: 2px; opacity: 0;
+                     transition: opacity 160ms ease-out; }
+.mk-textbox.selected .mk-textbox-handle { opacity: 1; }
+.mk-format-bar { border-radius: 999px; padding: 2px 6px; opacity: 0; transform: translateY(4px);
+                 transition: opacity 140ms ease-in-out, transform 140ms cubic-bezier(0.2, 0.8, 0.4, 1); }
+.mk-format-bar button { min-height: 26px; min-width: 26px; padding: 0 6px; border-radius: 999px; }
+.mk-textbox.selected .mk-format-bar { opacity: 1; transform: none; }
+.mk-ribbon button, .mk-ribbon menubutton > button { transition: background-color 120ms ease-out; }
+.mk-sheet { transition: box-shadow 200ms ease; }
 .mk-comment-card { background: alpha(@window_fg_color, 0.05); border-radius: 10px; padding: 8px 10px;
                    border-left: 3px solid #f59e0b; margin: 4px 6px; }
 .mk-status { font-size: 0.84em; opacity: 0.65; }
@@ -459,19 +477,22 @@ class ImageStudioDialog(Adw.Window):
         self.close()
 
 
-class StickyNoteWidget(Gtk.Overlay):
-    """A text box, as in Word or Google Docs: words anywhere on the page,
+class StickyNoteWidget(Gtk.Box):
+    """A text box, as in OneNote or Google Docs: words anywhere on the page,
     with no paper behind them. Selected (being typed in, or its edge
-    clicked) it shows a thin blue border and four corner handles; otherwise
-    the border is gone and the text sits straight on the printout or
-    picture. Drag the border to move it, a corner to resize it; with the
-    border selected (Esc from the text) Delete or Backspace removes it."""
+    clicked) it shows a thin blue border, four corner handles and a format
+    bar above it (bold, italic, underline, colour, size); otherwise all of
+    that fades out and the text sits straight on the printout or picture.
+    Drag the border to move it, a corner to resize it; with the border
+    selected (Esc from the text) Delete or Backspace removes it.
+    The bar's row is always there (transparent while unselected, and clicks
+    pass through it), so the text never jumps when it appears."""
     HANDLE = 10   # a corner handle's size, px
-    EDGE = 7      # the grabbable border round the text, px
+    BAR_H = 38    # the format bar's row above the text, px
 
     def __init__(self, item_data, note_win):
-        super().__init__(halign=Gtk.Align.START, valign=Gtk.Align.START, focusable=True,
-                         css_classes=["mk-textbox"])
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, halign=Gtk.Align.START, valign=Gtk.Align.START,
+                         focusable=True, css_classes=["mk-textbox"])
         self.data = item_data
         self.win = note_win
         self.selected = False
@@ -480,66 +501,239 @@ class StickyNoteWidget(Gtk.Overlay):
         self.data.setdefault("w", 220.0)
         self.data.setdefault("h", 160.0)
         self.data.setdefault("text", "")
+        if self.data.get("v", 1) < 2:  # older boxes: the text stays where it was, the bar's row goes above
+            self.data["y"] = max(8.0, self.data["y"] - self.BAR_H)
+            self.data["v"] = 2
         self.data["color_idx"] = TEXT_BOX
+
+        self.bar = self._format_bar()
+        self.append(self.bar)
 
         self.text_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, hexpand=True, vexpand=True,
                                       left_margin=4, right_margin=4, top_margin=2, bottom_margin=2)
-        self.text_view.get_buffer().set_text(self.data.get("text", ""))
-        self.text_view.get_buffer().connect("changed", self._on_text_changed)
-        self.frame = Gtk.ScrolledWindow(child=self.text_view, hexpand=True, vexpand=True,
-                                        hscrollbar_policy=Gtk.PolicyType.NEVER, css_classes=["mk-textbox-frame"])
-        self.set_child(self.frame)
-        self.handles = []
+        buf = self.text_view.get_buffer()
+        for name, props in (("b", {"weight": Pango.Weight.BOLD}), ("i", {"style": Pango.Style.ITALIC}),
+                            ("u", {"underline": Pango.Underline.SINGLE})):
+            buf.create_tag(name, **props)
+        self._typing = None      # styles for the next typed letters: None = like the letter before
+        self._inserting = False
+        self._load_runs()
+        buf.connect("changed", lambda *_: self._save())
+        buf.connect("apply-tag", lambda *_: GLib.idle_add(self._save_once))
+        buf.connect("remove-tag", lambda *_: GLib.idle_add(self._save_once))
+        buf.connect("insert-text", self._before_insert)
+        buf.connect_after("insert-text", self._after_insert)
+        buf.connect("mark-set", self._on_mark_set)
+        frame = Gtk.ScrolledWindow(child=self.text_view, hexpand=True, vexpand=True,
+                                   hscrollbar_policy=Gtk.PolicyType.NEVER, css_classes=["mk-textbox-frame"])
+        self.body = Gtk.Overlay(child=frame, hexpand=True, vexpand=True)
         for halign, valign in ((Gtk.Align.START, Gtk.Align.START), (Gtk.Align.END, Gtk.Align.START),
                                (Gtk.Align.START, Gtk.Align.END), (Gtk.Align.END, Gtk.Align.END)):
-            h = Gtk.Box(halign=halign, valign=valign, width_request=self.HANDLE, height_request=self.HANDLE,
-                        css_classes=["mk-textbox-handle"], visible=False, can_target=False)
-            self.add_overlay(h)
-            self.handles.append(h)
+            self.body.add_overlay(Gtk.Box(halign=halign, valign=valign, width_request=self.HANDLE,
+                                          height_request=self.HANDLE, css_classes=["mk-textbox-handle"],
+                                          can_target=False))
+        self.append(self.body)
 
         focus = Gtk.EventControllerFocus()
         focus.connect("enter", lambda *_: self.select(True))
-        focus.connect("leave", lambda *_: self.select(False))
+        focus.connect("leave", lambda *_: GLib.idle_add(self._maybe_unselect))
         self.add_controller(focus)
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self._on_key)
         self.add_controller(keys)
         menu = Gtk.GestureClick(button=3)
         menu.connect("pressed", lambda g, _n, x, y: self._menu(x, y))
-        self.add_controller(menu)
+        self.body.add_controller(menu)
 
         self._css_prov = Gtk.CssProvider()
         self.text_view.get_style_context().add_provider(self._css_prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
         self._apply_palette()
         self.sync_zoom_geometry()
 
-    def _apply_palette(self):
-        fg = self.data.get("fg") or STICKY_PALETTES[TEXT_BOX][2]
-        self._css_prov.load_from_string(
-            f"textview, textview text {{ background: transparent; color: {fg}; font-size: 0.95em; }}")
+    # ---------- the format bar
+    def _format_bar(self):
+        bar = Gtk.Box(spacing=2, halign=Gtk.Align.START, valign=Gtk.Align.START, height_request=self.BAR_H - 6,
+                      margin_bottom=6, can_target=False, css_classes=["osd", "mk-format-bar"])
+
+        def button(label, tip, fn, markup=True):
+            b = Gtk.Button(css_classes=["flat"], tooltip_text=tip, focus_on_click=False)
+            lab = Gtk.Label()
+            lab.set_markup(label) if markup else lab.set_label(label)
+            b.set_child(lab)
+            b.connect("clicked", lambda *_: fn())
+            bar.append(b)
+        button("<b>B</b>", "Bold (Ctrl+B)", lambda: self.toggle_style("b"))
+        button("<i>I</i>", "Italic (Ctrl+I)", lambda: self.toggle_style("i"))
+        button("<u>U</u>", "Underline (Ctrl+U)", lambda: self.toggle_style("u"))
+        pop = Gtk.Popover()
+        pop.set_child(self.win.text_colour_swatches(lambda c: (pop.popdown(), self.set_text_color(c))))
+        colour = Gtk.MenuButton(child=_colour_a_label(), css_classes=["flat"], popover=pop,
+                                tooltip_text="Text colour (the selected words, or the whole box)")
+        colour.set_focus_on_click(False)
+        bar.append(colour)
+        button("A−", "Smaller text", lambda: self.step_size(-1), markup=False)
+        button("A+", "Larger text", lambda: self.step_size(1), markup=False)
+        self._colour_pop = pop
+        return bar
+
+    def toggle_style(self, name):
+        """Bold, italic or underline (b, i, u) on the selected words; with
+        nothing selected, for the next letters typed."""
+        buf = self.text_view.get_buffer()
+        tag = buf.get_tag_table().lookup(name)
+        bounds = buf.get_selection_bounds()
+        if bounds:
+            start, end = bounds
+            it, whole = start.copy(), True
+            while it.compare(end) < 0:
+                if not it.has_tag(tag):
+                    whole = False
+                    break
+                it.forward_char()
+            (buf.remove_tag if whole else buf.apply_tag)(tag, start, end)
+        else:
+            current = self._typing if self._typing is not None else self._tags_before_cursor()
+            self._typing = current ^ {name}
+        self.text_view.grab_focus()
+
+    def _tags_before_cursor(self):
+        buf = self.text_view.get_buffer()
+        it = buf.get_iter_at_mark(buf.get_insert())
+        if not it.backward_char():
+            return set()
+        return {t.props.name for t in it.get_tags() if t.props.name}
+
+    def _before_insert(self, _buf, location, *_):
+        self._inserting = True
+        self._insert_at = location.get_offset()  # (the iter handed to the after-handler can't be trusted)
+        if self._typing is None:
+            self._inherit = self._tags_before_cursor()
+
+    def _after_insert(self, buf, _location, text, _length):
+        self._inserting = False
+        tags = self._typing if self._typing is not None else self._inherit
+        start = buf.get_iter_at_offset(self._insert_at)
+        end = buf.get_iter_at_offset(self._insert_at + len(text))
+        for t in list(start.get_tags()):
+            buf.remove_tag(t, start, end)
+        table = buf.get_tag_table()
+        for name in tags:
+            tag = table.lookup(name)
+            if tag:
+                buf.apply_tag(tag, start, end)
+
+    def _on_mark_set(self, buf, _iter, mark):
+        if mark is buf.get_insert() and not self._inserting:
+            self._typing = None  # the cursor moved: type like the letters there
+
+    def _fg_tag(self, hex_colour):
+        table = self.text_view.get_buffer().get_tag_table()
+        name = f"fg{hex_colour}"
+        return table.lookup(name) or self.text_view.get_buffer().create_tag(name, foreground=hex_colour)
 
     def set_text_color(self, hex_colour):
-        self.data["fg"] = hex_colour
-        self._apply_palette()
+        """The selected words' colour; with nothing selected, the box's."""
+        buf = self.text_view.get_buffer()
+        bounds = buf.get_selection_bounds()
+        if bounds:
+            table = buf.get_tag_table()
+            names = []
+            table.foreach(lambda t: names.append(t.props.name) if (t.props.name or "").startswith("fg") else None)
+            for n in names:
+                buf.remove_tag_by_name(n, *bounds)
+            buf.apply_tag(self._fg_tag(hex_colour), *bounds)
+        else:
+            self.data["fg"] = hex_colour
+            self._apply_palette()
         self.win.dirty = True
         self.win.save_note_meta()
 
+    def step_size(self, step):
+        size = float(self.data.get("size", 1.0))
+        self.data["size"] = round(max(0.6, min(3.0, size * (1.15 if step > 0 else 1 / 1.15))), 3)
+        self._apply_palette()
+        self.win.save_note_meta()
+
+    def _apply_palette(self):
+        fg = self.data.get("fg") or STICKY_PALETTES[TEXT_BOX][2]
+        size = 0.95 * float(self.data.get("size", 1.0))
+        self._css_prov.load_from_string(
+            f"textview, textview text {{ background: transparent; color: {fg}; font-size: {size:.3f}em; }}")
+
+    # ---------- saved as runs: [text, "biu", "#colour" or ""]
+    def _runs(self):
+        buf = self.text_view.get_buffer()
+        runs, it = [], buf.get_start_iter()
+        while not it.is_end():
+            nxt = it.copy()
+            if not nxt.forward_to_tag_toggle(None):
+                nxt = buf.get_end_iter()
+            names = {t.props.name or "" for t in it.get_tags()}
+            style = "".join(k for k in "biu" if k in names)
+            fg = next((n[2:] for n in names if n.startswith("fg")), "")
+            text = buf.get_text(it, nxt, False)
+            if runs and runs[-1][1:] == [style, fg]:
+                runs[-1][0] += text
+            else:
+                runs.append([text, style, fg])
+            it = nxt
+        return runs
+
+    def _load_runs(self):
+        buf = self.text_view.get_buffer()
+        runs = self.data.get("runs")
+        if not runs:
+            buf.set_text(self.data.get("text", ""))
+            return
+        for text, style, fg in runs:
+            names = list(style) + ([self._fg_tag(fg).props.name] if fg else [])
+            buf.insert_with_tags_by_name(buf.get_end_iter(), text, *names)
+
+    def _save_once(self):
+        self._save()
+        return False
+
+    def _save(self):
+        buf = self.text_view.get_buffer()
+        self.data["text"] = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        runs = self._runs()
+        if any(style or fg for _t, style, fg in runs):
+            self.data["runs"] = runs
+        else:
+            self.data.pop("runs", None)
+        self.win.save_note_meta()
+
+    # ---------- selection
     def select(self, on):
         if on == self.selected:
             return
         self.selected = on
         (self.add_css_class if on else self.remove_css_class)("selected")
-        for h in self.handles:
-            h.set_visible(on)
+        self.bar.set_can_target(on)
         if on:
             self.win._active_text_box = self
 
+    def _maybe_unselect(self):
+        # the colour popover or a bar button doesn't count as leaving
+        root = self.get_root()
+        focus = root.get_focus() if root else None
+        if self._colour_pop.get_visible() or (focus is not None and focus.is_ancestor(self)) or focus is self:
+            return False
+        self.select(False)
+        return False
+
+    def do_contains(self, x, y):
+        # the bar's row only takes clicks while the bar shows
+        if not self.selected and y < self.BAR_H:
+            return False
+        return 0 <= x < self.get_width() and 0 <= y < self.get_height()
+
     def corner_at(self, x, y):
         """Which corner handle (hx, hy: 0 left/top, 1 right/bottom) is at
-        (x, y) in the box's own pixels, or None."""
+        (x, y) in the text area's own pixels, or None."""
         if not self.selected:
             return None
-        w, h, reach = self.get_width(), self.get_height(), self.HANDLE + 4
+        w, h, reach = self.body.get_width(), self.body.get_height(), self.HANDLE + 4
         hx = 0 if x <= reach else 1 if x >= w - reach else None
         hy = 0 if y <= reach else 1 if y >= h - reach else None
         return None if hx is None or hy is None else (hx, hy)
@@ -558,7 +752,7 @@ class StickyNoteWidget(Gtk.Overlay):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=6, margin_bottom=6,
                       margin_start=6, margin_end=6)
         pop = Gtk.Popover(child=box, has_arrow=True, pointing_to=Gdk.Rectangle(round(x), round(y), 1, 1))
-        pop.set_parent(self)
+        pop.set_parent(self.body)
         pop.connect("closed", lambda p: GLib.idle_add(p.unparent))
         box.append(self.win.text_colour_swatches(lambda c: (self.set_text_color(c), pop.popdown())))
         for icon, tip, how in LAYER_ACTIONS:
@@ -574,13 +768,9 @@ class StickyNoteWidget(Gtk.Overlay):
         box.append(rm)
         pop.popup()
 
-    def _on_text_changed(self, buf):
-        self.data["text"] = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
-        self.win.save_note_meta()
-
     def sync_zoom_geometry(self):
         z = self.win.zoom
-        self.set_size_request(round(self.data["w"] * z), round(self.data["h"] * z))
+        self.set_size_request(round(self.data["w"] * z), round(self.data["h"] * z) + self.BAR_H)
         px = max(8, round(self.data["x"] * z))
         py = max(8, round(self.data["y"] * z))
         if self.get_parent() is self.win.canvas_fixed:
@@ -2210,13 +2400,21 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
         if not text:
             continue
         _name, bg, fg = STICKY_PALETTES[0]  # printed as a light callout, in the box's colour if it shows on it
-        if sticky.get("fg") and sticky["fg"] not in ("#ffffff", "#f59e0b"):
+        if sticky.get("fg") and sticky["fg"] not in ("#ffffff", "#9a9996", "#ff7800"):
             fg = sticky["fg"]
         layout = PangoCairo.create_layout(cr)
         layout.set_width(int((CONTENT_W - 28) * Pango.SCALE))
         layout.set_wrap(Pango.WrapMode.WORD_CHAR)
         layout.set_font_description(Pango.FontDescription("Sans 10"))
-        layout.set_markup(GLib.markup_escape_text(text), -1)
+        markup = ""
+        for words, style, colour in sticky.get("runs") or [[text, "", ""]]:
+            words = GLib.markup_escape_text(words)
+            for k in style:
+                words = f"<{k}>{words}</{k}>"
+            if colour and colour not in ("#ffffff", "#9a9996"):  # (light colours don't show on paper)
+                words = f'<span foreground="{colour}">{words}</span>'
+            markup += words
+        layout.set_markup(markup.strip(), -1)
         _ink, logical = layout.get_pixel_extents()
         box_h = logical.height + 20.0
         ensure_space(box_h + 12.0)
@@ -2383,9 +2581,9 @@ class NotesWindow(Adw.ApplicationWindow):
         # a selected text box's corner handle resizes it (before the text
         # under the handle can take the click)
         for st in reversed(self.sticky_notes):
-            sx, sy = st.data["x"] * z, st.data["y"] * z
+            sx, sy = st.data["x"] * z, st.data["y"] * z + st.BAR_H  # the text area, under its bar's row
             corner = st.corner_at(x - sx, y - sy)
-            if corner and 0 <= x - sx <= st.get_width() and 0 <= y - sy <= st.get_height():
+            if corner and 0 <= x - sx <= st.body.get_width() and 0 <= y - sy <= st.body.get_height():
                 self._ov_drag_target = ("sticky-size", st)
                 self._ov_corner = corner
                 self._ov_start = tuple(float(st.data[k]) for k in ("x", "y", "w", "h"))
@@ -2397,8 +2595,8 @@ class NotesWindow(Adw.ApplicationWindow):
 
         # a text box's border (the text itself is a control, above) moves it
         for st in reversed(self.sticky_notes):
-            sx, sy = st.data["x"] * z, st.data["y"] * z
-            if sx <= x <= sx + st.get_width() and sy <= y <= sy + st.get_height():
+            sx, sy = st.data["x"] * z, st.data["y"] * z + st.BAR_H
+            if sx <= x <= sx + st.body.get_width() and sy <= y <= sy + st.body.get_height():
                 st.grab_focus()
                 self._ov_drag_target = ("sticky", st)
                 self._ov_start_x = float(st.data["x"])
@@ -2895,7 +3093,7 @@ class NotesWindow(Adw.ApplicationWindow):
         ribbon.append(text_btn)
         colour_pop = Gtk.Popover()
         colour_pop.set_child(self.text_colour_swatches(lambda c: (colour_pop.popdown(), self._colour_text_box(c))))
-        ribbon.append(Gtk.MenuButton(icon_name="format-text-color-symbolic", css_classes=["flat"],
+        ribbon.append(Gtk.MenuButton(child=_colour_a_label(), css_classes=["flat"],
                                      tooltip_text="Text colour (of the selected text box)", popover=colour_pop))
 
         comment_btn = Gtk.Button(label="Comment", icon_name="user-available-symbolic",
@@ -3609,6 +3807,12 @@ class NotesWindow(Adw.ApplicationWindow):
         self.view.grab_focus()
 
     def toggle_shortcut_format(self, tag_name):
+        # typing in a text box: Ctrl+B/I/U are for its words
+        focus = self.get_focus()
+        for box in self.sticky_notes:
+            if focus is box.text_view and tag_name in ("bold", "italic", "underline"):
+                box.toggle_style(tag_name[0])
+                return
         btn_map = {
             "bold": self.bold_btn,
             "italic": self.italic_btn,

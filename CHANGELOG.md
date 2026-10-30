@@ -3,6 +3,10 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Notes:** PDF printouts lay one page per A4 sheet, centred with a 24 px margin; text boxes lose the sticky look (thin border and corner handles only while selected) and gain a text colour.
+- **MK Lock:** unlocking an app asks who you are too, not only locking it.
+- **Biometrics:** `mk biometrics list-faces` and `list-fingers`.
+- **Web Hang:** Stan Lee kept clean: dark lenses and neck, a clear margin round him, a warm glow behind.
 - **MK Notes:** an Insert Table button (3 x 3 in the middle of the view; its arrow picks the size).
 - **Web Hang:** Stan Lee's whole photo, head to shoulders, one window per pixel, shading from white to amber to unlit glass.
 - **MK Notes:** tables move without shaking and have 8 resize handles; Ctrl+A selects the whole page and Delete clears it.

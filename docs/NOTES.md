@@ -148,9 +148,15 @@ closes it without saving.
   text to find its comment. On a small window the side panels step aside
   while the margin is open (⤢ brings them back).
 - **Text boxes** (Text Box in the ribbon): type anywhere on the page,
-  over a printout or a picture; drag by the 📌, rename, layer order, delete
-  with ×. They print as callouts at the end of a PDF. (Sticky notes from
-  older notes open as text boxes, words intact.)
+  over a printout or a picture. No paper or header: while you type in one
+  it has a thin blue border and four corner handles (drag a corner to
+  resize, the border to move it); click elsewhere and the border goes, so
+  the words sit straight on the page. Text colour (the **A** button next to
+  Text Box, or right-click the border): white, black, red, blue, amber,
+  emerald or violet. Esc then Delete or Backspace removes a box; the
+  right-click menu has layer order and Delete too. They print as callouts
+  at the end of a PDF. (Sticky notes from older notes open as text boxes,
+  words intact.)
 - **Ctrl+A** in the page selects all the text and outlines every table,
   picture and text box; Delete then removes everything.
 - **Layers**: pictures and sticky notes have an order; a new one goes on top. A picture's bar and a sticky's layers button (▤) have Bring Forward, Send Backward, Bring to Front and Send to Back. Drawings stay on their own layer above the page.
@@ -158,7 +164,10 @@ closes it without saving.
 - **Locks**: right-click a locked note for Lock Now or Remove Lock
   Permanently; a note you unlocked locks again after a minute without input.
 - **PDFs**: insert one as a 📎 chip (click to open) or as printout pages to
-  draw on.
+  draw on: one PDF page per A4 sheet, centred 24 px inside it, starting on
+  the first sheet below what's already there (a 3-page PDF adds 3 pages to
+  *Page X of Y*). The sheets follow the window's width when you insert;
+  resizing the window later can shift them against the page gaps.
 - **Mind map** (Ctrl+G): notebooks as hubs with their notes around them,
   curved links, no overlapping bubbles; it fits itself to the window until
   you zoom or pan.

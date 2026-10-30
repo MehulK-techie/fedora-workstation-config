@@ -196,6 +196,7 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | `mk screensaver` · `on\|off\|show\|scene\|delay` | The Screensaver settings window (live previews, Shuffle) · scenes from the terminal |
 | `mk welcome variety\|birthday\|lines` | A different greeting each time; your birthday; your own lines |
 | `mk fingerprint check` | Why the reader might not answer on the lock screen |
+| `mk biometrics list-faces` · `list-fingers` | Enrolled Face ID models (ID, date, label) · enrolled fingers |
 | `mk lock app NAME` · `mk lock ~/Folder` · `mk unlock` | Fingerprint before an app starts · an encrypted folder |
 | `mk users add NAME` · `mk guest on\|off` | Another person's account · a Guest login that starts empty |
 | `mk speedtest [--gui] [--ookla]` · `mk nap` · `mk keyring` | Speed test in the terminal, or a gauge window (6 download / 4 upload streams, ping, jitter, graph); `--ookla` uses speedtest-cli · what App Nap paused · why apps ask for the keyring |

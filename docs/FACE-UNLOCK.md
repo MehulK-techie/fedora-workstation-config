@@ -100,7 +100,13 @@ enrolled finger is connected. The check runs as root in `mk-face-auth`
 (socket-activated, `/run/mk-face-auth.sock`), for the user who asked only.
 
 - **Locked apps:** your face, your fingerprint, the app's own password, or
-  your account password in the system prompt.
+  your account password in the system prompt. Locking **and** unlocking an
+  app (`mk-lock app add|remove`, or the switch in Control Center) ask the
+  same first; cancelled, nothing changes and the switch goes back.
+- **What's enrolled:** `mk biometrics list-faces` (ID, date, label of each
+  Face ID model; sudo once, Howdy's models are root's) and
+  `mk biometrics list-fingers`; Control Center › Biometrics has List face
+  models and the Enrolled fingers list.
 - **Locked folders and the vault:** the folder's own password, or **Use the
   system prompt…** (fingerprint or account password, through polkit). Face ID
   never opens a folder: `mk-face-auth` answers yes or no to any program

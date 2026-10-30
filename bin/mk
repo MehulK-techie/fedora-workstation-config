@@ -241,6 +241,42 @@ case "${1:-help}" in
         esac
         ;;
 
+    biometrics)
+        # mk biometrics list-faces | list-fingers: what's enrolled, one kind at a time
+        case "${2:-}" in
+            list-faces)
+                command -v howdy &> /dev/null || { echo "[-] Howdy (Face ID) isn't installed. Run: mk face" >&2; exit 1; }
+                echo "Face models for $USER (Howdy keeps them where only root can read: sudo asks once)"
+                list=$(sudo howdy -U "$USER" --plain list 2> /dev/null | grep -E '^[0-9]+,' || true)
+                if [[ -z "$list" ]]; then
+                    echo "  none yet. Add one: mk face (or Control Center › Biometrics › Add a face)"
+                    exit 0
+                fi
+                printf '  %-4s %-20s %s\n' ID ENROLLED LABEL
+                awk -F, '{ printf "  %-4s %-20s %s\n", $1, $2, $3 }' <<< "$list"
+                ;;
+            list-fingers)
+                command -v fprintd-list &> /dev/null || { echo "[-] fprintd isn't installed. Run: sudo dnf install fprintd fprintd-pam" >&2; exit 1; }
+                out=$(fprintd-list "$USER" 2>&1 || true)
+                if grep -q "No devices" <<< "$out"; then
+                    echo "No fingerprint reader found."
+                    exit 0
+                fi
+                fingers=$(grep -oE '#[0-9]+: *[a-z-]+' <<< "$out" | sed 's/^#[0-9]*: *//')
+                echo "Fingerprints for $USER"
+                if [[ -z "$fingers" ]]; then
+                    echo "  none yet. Enroll one: mk fingerprint"
+                    exit 0
+                fi
+                while read -r finger; do echo "  $finger"; done <<< "$fingers"
+                ;;
+            *)
+                echo "Usage: mk biometrics list-faces | list-fingers" >&2
+                exit 2
+                ;;
+        esac
+        ;;
+
     welcome)
         # mk welcome [on | off | test | title sir|maam|name|none | greeting "TEXT"
         #             | voice on|off|install|remove | notify on|off | edit
@@ -881,6 +917,7 @@ KEYRING
         echo "  notes      MK Notes: mk notes, mk notes today, mk notes serve (phone sync)"
         echo "  accent     Desktop colour: auto (from your wallpaper), #rrggbb, status"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
+        echo "  biometrics What's enrolled: mk biometrics list-faces (Face ID models), list-fingers (fingerprints)"
         echo "  lock       Fingerprint before an app starts, or an encrypted folder: mk lock app NAME, mk lock ~/Folder"
         echo "  unlock     Open a locked folder (mk unlock ~/Folder) or stop locking an app (mk unlock app NAME)"
         echo "  vault      Open or close your hidden encrypted folder (~/.vault)"

@@ -251,10 +251,9 @@ entry.mk-pad-title { font-weight: 700; box-shadow: none; min-height: 24px; paddi
 .mk-textbox-handle { background: #ffffff; border: 1.5px solid #3584e4; border-radius: 2px; opacity: 0;
                      transition: opacity 160ms ease-out; }
 .mk-textbox.selected .mk-textbox-handle { opacity: 1; }
-.mk-format-bar { border-radius: 999px; padding: 2px 6px; opacity: 0; transform: translateY(4px);
-                 transition: opacity 140ms ease-in-out, transform 140ms cubic-bezier(0.2, 0.8, 0.4, 1); }
+.mk-format-bar { border-radius: 999px; padding: 2px 6px; }
+.mk-textbox-placeholder { font-style: italic; color: rgba(255, 255, 255, 0.35); }
 .mk-format-bar button { min-height: 26px; min-width: 26px; padding: 0 6px; border-radius: 999px; }
-.mk-textbox.selected .mk-format-bar { opacity: 1; transform: none; }
 .mk-ribbon button, .mk-ribbon menubutton > button { transition: background-color 120ms ease-out; }
 .mk-sheet { transition: box-shadow 200ms ease; }
 .mk-comment-card { background: alpha(@window_fg_color, 0.05); border-radius: 10px; padding: 8px 10px;
@@ -491,9 +490,14 @@ class StickyNoteWidget(Gtk.Box):
     Drag the border to move it, a corner to resize it; with the border
     selected (Esc from the text) Delete or Backspace removes it.
     The bar's row is always there (transparent while unselected, and clicks
-    pass through it), so the text never jumps when it appears."""
+    pass through it), so the text never jumps when it appears: 12 px above
+    the text, or below it when the box is near the top of the page. The box
+    is a wide single line at first and grows downwards as you type; one
+    left empty is removed when you click elsewhere."""
     HANDLE = 10   # a corner handle's size, px
-    BAR_H = 38    # the format bar's row above the text, px
+    BAR_GAP = 12  # between the format bar and the box's edge (its handles stay clear)
+    BAR_H = 32 + BAR_GAP   # the format bar's row
+    MIN_H = 46    # one line
 
     def __init__(self, item_data, note_win):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, halign=Gtk.Align.START, valign=Gtk.Align.START,
@@ -503,15 +507,19 @@ class StickyNoteWidget(Gtk.Box):
         self.selected = False
         self.data.setdefault("x", 480.0)
         self.data.setdefault("y", 80.0)
-        self.data.setdefault("w", 220.0)
-        self.data.setdefault("h", 160.0)
+        self.data.setdefault("w", 340.0)
+        self.data.setdefault("h", float(self.MIN_H))
         self.data.setdefault("text", "")
-        if self.data.get("v", 1) < 2:  # older boxes: the text stays where it was, the bar's row goes above
-            self.data["y"] = max(8.0, self.data["y"] - self.BAR_H)
-            self.data["v"] = 2
+        # y is where the text area starts (v3); v2 kept the bar's row's top, v1 the text's
+        if self.data.get("v", 1) == 2:
+            self.data["y"] = self.data["y"] + 38
+        self.data["v"] = 3
+        self.flipped = False
         self.data["color_idx"] = TEXT_BOX
 
-        self.bar = self._format_bar()
+        self.bar = Gtk.Revealer(child=self._format_bar(), transition_type=Gtk.RevealerTransitionType.CROSSFADE,
+                                transition_duration=150, reveal_child=False, can_target=False,
+                                height_request=self.BAR_H)
         self.append(self.bar)
 
         self.text_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, hexpand=True, vexpand=True,
@@ -530,8 +538,19 @@ class StickyNoteWidget(Gtk.Box):
         buf.connect_after("insert-text", self._after_insert)
         buf.connect("mark-set", self._on_mark_set)
         frame = Gtk.ScrolledWindow(child=self.text_view, hexpand=True, vexpand=True,
-                                   hscrollbar_policy=Gtk.PolicyType.NEVER, css_classes=["mk-textbox-frame"])
+                                   hscrollbar_policy=Gtk.PolicyType.NEVER, vscrollbar_policy=Gtk.PolicyType.NEVER,
+                                   css_classes=["mk-textbox-frame"])
+        self.frame = frame
         self.body = Gtk.Overlay(child=frame, hexpand=True, vexpand=True)
+        self.placeholder = Gtk.Label(label="Type note here…", css_classes=["mk-textbox-placeholder"],
+                                     halign=Gtk.Align.START, valign=Gtk.Align.START, margin_start=12,
+                                     margin_top=9, can_target=False, visible=False)
+        self.body.add_overlay(self.placeholder)
+        buf.connect("changed", lambda *_: (self._sync_placeholder(), self._queue_grow()))
+        # the pointer shows what a drag does: resize at a corner, move on the border
+        hover = Gtk.EventControllerMotion()
+        hover.connect("motion", self._hover)
+        self.body.add_controller(hover)
         for halign, valign in ((Gtk.Align.START, Gtk.Align.START), (Gtk.Align.END, Gtk.Align.START),
                                (Gtk.Align.START, Gtk.Align.END), (Gtk.Align.END, Gtk.Align.END)):
             self.body.add_overlay(Gtk.Box(halign=halign, valign=valign, width_request=self.HANDLE,
@@ -557,8 +576,8 @@ class StickyNoteWidget(Gtk.Box):
 
     # ---------- the format bar
     def _format_bar(self):
-        bar = Gtk.Box(spacing=2, halign=Gtk.Align.START, valign=Gtk.Align.START, height_request=self.BAR_H - 6,
-                      margin_bottom=6, can_target=False, css_classes=["osd", "mk-format-bar"])
+        bar = Gtk.Box(spacing=2, halign=Gtk.Align.START, valign=Gtk.Align.START, height_request=self.BAR_H - self.BAR_GAP,
+                      margin_bottom=self.BAR_GAP, css_classes=["osd", "mk-format-bar"])
 
         def button(label, tip, fn, markup=True):
             b = Gtk.Button(css_classes=["flat"], tooltip_text=tip, focus_on_click=False)
@@ -715,8 +734,47 @@ class StickyNoteWidget(Gtk.Box):
         self.selected = on
         (self.add_css_class if on else self.remove_css_class)("selected")
         self.bar.set_can_target(on)
+        self.bar.set_reveal_child(on)
+        self._sync_placeholder()
         if on:
             self.win._active_text_box = self
+        elif not self.data.get("text", "").strip() and self in self.win.sticky_notes:
+            # left empty: nothing to keep, and no invisible box left to catch clicks
+            GLib.idle_add(lambda: (self.win.remove_sticky_note(self), False)[1])
+
+    def _sync_placeholder(self):
+        buf = self.text_view.get_buffer()
+        self.placeholder.set_visible(self.selected and buf.get_char_count() == 0)
+
+    def _queue_grow(self):
+        if not getattr(self, "_grow_id", 0):
+            self._grow_id = GLib.idle_add(self._grow)
+
+    def _grow(self):
+        """Taller as the text needs (never narrower: the width is yours)."""
+        self._grow_id = 0
+        z = max(0.5, self.win.zoom)
+        width = round(self.data["w"] * z) - 2 * 8
+        _m, natural, _b1, _b2 = self.text_view.measure(Gtk.Orientation.VERTICAL, max(20, width))
+        need = (natural + 2 * 8) / z
+        if need > self.data["h"] + 0.5 or (self.data.get("auto", True) and need < self.data["h"] - 0.5):
+            self.data["h"] = round(max(self.MIN_H, need), 1)
+            self.sync_zoom_geometry()
+            self.win.ensure_page_height_for_images()
+        return False
+
+    def _hover(self, _ctrl, x, y):
+        corner = self.corner_at(x, y)
+        w, h = self.body.get_width(), self.body.get_height()
+        if corner:
+            name = "nwse-resize" if corner in ((0, 0), (1, 1)) else "nesw-resize"
+        elif min(x, y, w - x, h - y) <= 8:
+            name = "move"
+        else:
+            name = None
+        cursor = Gdk.Cursor.new_from_name(name) if name else None
+        self.frame.set_cursor(cursor if name else Gdk.Cursor.new_from_name("move"))
+        self.text_view.set_cursor(cursor if corner else None)
 
     def _maybe_unselect(self):
         # the colour popover or a bar button doesn't count as leaving
@@ -729,7 +787,8 @@ class StickyNoteWidget(Gtk.Box):
 
     def do_contains(self, x, y):
         # the bar's row only takes clicks while the bar shows
-        if not self.selected and y < self.BAR_H:
+        in_bar = y >= self.get_height() - self.BAR_H if self.flipped else y < self.BAR_H
+        if not self.selected and in_bar:
             return False
         return 0 <= x < self.get_width() and 0 <= y < self.get_height()
 
@@ -776,10 +835,25 @@ class StickyNoteWidget(Gtk.Box):
     def sync_zoom_geometry(self):
         z = self.win.zoom
         self.set_size_request(round(self.data["w"] * z), round(self.data["h"] * z) + self.BAR_H)
+        top = max(8, round(self.data["y"] * z))          # the text area's top
+        flip = top < 50 + self.BAR_H                      # no room above: the bar goes below
+        if flip != self.flipped:
+            self.flipped = flip
+            self.reorder_child_after(self.bar, self.body if flip else None)
+            self.bar.set_valign(Gtk.Align.START)
+            self.bar.get_child().set_margin_top(self.BAR_GAP if flip else 0)
+            self.bar.get_child().set_margin_bottom(0 if flip else self.BAR_GAP)
         px = max(8, round(self.data["x"] * z))
-        py = max(8, round(self.data["y"] * z))
+        py = top if flip else top - self.BAR_H
         if self.get_parent() is self.win.canvas_fixed:
             self.win.canvas_fixed.move(self, px, py)
+
+    def place(self):
+        """(x, y) for canvas_fixed.put: where the widget's top-left goes."""
+        self.sync_zoom_geometry()
+        z = self.win.zoom
+        top = max(8, round(self.data["y"] * z))
+        return max(8, round(self.data["x"] * z)), top if self.flipped else top - self.BAR_H
 
 
 class StickyPad(Gtk.Box):
@@ -1843,7 +1917,7 @@ class StudioInkCanvas(Gtk.DrawingArea):
         if isinstance(w, FreeCanvasImage):
             return d["x"] + w.PAD_SIDE / z, d["y"] + w.PAD_TOP / z, d.get("w", 0), d.get("h", 0)
         if isinstance(w, StickyNoteWidget):
-            return d["x"], d["y"] + w.BAR_H / z, d.get("w", 0), d.get("h", 0)
+            return d["x"], d["y"], d.get("w", 0), d.get("h", 0)
         return d["x"], d["y"], w.get_width() / z, w.get_height() / z
 
     def _items(self):
@@ -2898,7 +2972,7 @@ class NotesWindow(Adw.ApplicationWindow):
         # a selected text box's corner handle resizes it (before the text
         # under the handle can take the click)
         for st in reversed(self.sticky_notes):
-            sx, sy = st.data["x"] * z, st.data["y"] * z + st.BAR_H  # the text area, under its bar's row
+            sx, sy = st.data["x"] * z, st.data["y"] * z  # the text area
             corner = st.corner_at(x - sx, y - sy)
             if corner and 0 <= x - sx <= st.body.get_width() and 0 <= y - sy <= st.body.get_height():
                 self._ov_drag_target = ("sticky-size", st)
@@ -2929,7 +3003,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
         # a text box's border (the text itself is a control, above) moves it
         for st in reversed(self.sticky_notes):
-            sx, sy = st.data["x"] * z, st.data["y"] * z + st.BAR_H
+            sx, sy = st.data["x"] * z, st.data["y"] * z
             if sx <= x <= sx + st.body.get_width() and sy <= y <= sy + st.body.get_height():
                 st.grab_focus()
                 self._ov_drag_target = ("sticky", st)
@@ -2985,7 +3059,7 @@ class NotesWindow(Adw.ApplicationWindow):
             w = max(60.0, w0 + (dx if hx else -dx) / z)
             h = max(36.0, h0 + (dy if hy else -dy) / z)
             widget.data.update(w=round(w), h=round(h), x=round(x0 + (0 if hx else w0 - w)),
-                               y=round(y0 + (0 if hy else h0 - h)))
+                               y=round(y0 + (0 if hy else h0 - h)), auto=False)
             widget.sync_zoom_geometry()
             return
         if kind == "sticky":
@@ -4354,17 +4428,18 @@ class NotesWindow(Adw.ApplicationWindow):
         scroll_y = self.page_scroll.get_vadjustment().get_value() / max(0.5, self.zoom)
         data = item_data or {
             "text": "",
-            "x": float(380 + (len(self.sticky_notes) * 28) % 180),
-            "y": float(max(60, round(scroll_y + 70))),
-            "w": 220.0,
-            "h": 160.0,
+            "x": float(80 + (len(self.sticky_notes) * 28) % 180),
+            "y": float(max(110, round(scroll_y + 110))),
+            "w": 340.0,
+            "h": float(StickyNoteWidget.MIN_H),
+            "v": 3,
             "color_idx": TEXT_BOX,
             "z": self._next_z(),
         }
         if not item_data:  # inside the sheet, however narrow it is
             data["x"] = float(max(16, min(data["x"], self.page_width() / max(0.5, self.zoom) - data["w"] - 16)))
         st = StickyNoteWidget(data, self)
-        self.canvas_fixed.put(st, round(data["x"] * self.zoom), round(data["y"] * self.zoom))
+        self.canvas_fixed.put(st, *st.place())
         self.sticky_notes.append(st)
         if item_data is None:
             self.dirty = True
@@ -4386,7 +4461,8 @@ class NotesWindow(Adw.ApplicationWindow):
         for w in self._layers():
             if w.get_parent() is self.canvas_fixed:
                 self.canvas_fixed.remove(w)
-            self.canvas_fixed.put(w, round(w.data["x"] * self.zoom), round(w.data["y"] * self.zoom))
+            self.canvas_fixed.put(w, *(w.place() if hasattr(w, "place") else
+                                       (round(w.data["x"] * self.zoom), round(w.data["y"] * self.zoom))))
 
     def restack(self, widget, how):
         """Bring Forward / Send Backward one step, or to the front / back."""
@@ -4933,7 +5009,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
         for s_item in stickies_list:  # sticky notes are text boxes now: same words, no paper
             st = StickyNoteWidget(dict(s_item, color_idx=TEXT_BOX), self)
-            self.canvas_fixed.put(st, round(st.data["x"] * self.zoom), round(st.data["y"] * self.zoom))
+            self.canvas_fixed.put(st, *st.place())
             self.sticky_notes.append(st)
 
         self._apply_z_order()
@@ -5052,7 +5128,7 @@ class NotesWindow(Adw.ApplicationWindow):
         if isinstance(widget, FreeCanvasImage):
             lead, h = FreeCanvasImage.PAD_TOP / z, widget.data.get("h", 0)
         elif isinstance(widget, StickyNoteWidget):
-            lead, h = widget.BAR_H / z, widget.data.get("h", 0)
+            lead, h = 0.0, widget.data.get("h", 0)
         else:
             lead, h = 0.0, widget.get_height() / z
         top = widget.data.get("y", 0) + lead

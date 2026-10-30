@@ -1634,7 +1634,10 @@ class StudioInkCanvas(Gtk.DrawingArea):
         self.laser_trails = []
         self._laser_timer = 0
         self.active = False
-        self.tool = "pen"  # 'pen', 'highlighter', 'eraser', 'laser', 'rect', 'circle', 'line', 'arrow'
+        self.tool = "pen"  # 'pen', 'highlighter', 'eraser', 'lasso', 'laser', 'rect', 'circle', 'line', 'arrow'
+        self.selection = None   # lasso / Ctrl+A: {"strokes": [stroke dicts], "items": [widgets]}
+        self._lasso = None      # the loop being drawn: [(x, y), ...] in page units
+        self._grab = None       # moving or scaling the selection
         self.ink = "#3b82f6"
         self.width = 4.0
         self.set_draw_func(self._draw)
@@ -1671,6 +1674,9 @@ class StudioInkCanvas(Gtk.DrawingArea):
             return
         z = max(0.5, self.win.zoom)
         px, py = x / z, y / z
+        if self.tool == "lasso":
+            self._lasso_down(px, py)
+            return
         if self.tool == "eraser":
             self._erase_at(px, py)
             self.current = {"erasing": True}
@@ -1696,6 +1702,9 @@ class StudioInkCanvas(Gtk.DrawingArea):
             return
         z = max(0.5, self.win.zoom)
         px, py = x / z, y / z
+        if self.current.get("lasso"):
+            self._lasso_motion(px, py)
+            return
         if self.current.get("erasing"):
             self._erase_at(px, py)
             return
@@ -1717,6 +1726,9 @@ class StudioInkCanvas(Gtk.DrawingArea):
         if not self.active:
             return
         stroke, self.current = self.current, None
+        if stroke and stroke.get("lasso"):
+            self._lasso_up()
+            return
         if not stroke or stroke.get("erasing") or "laser" in stroke:
             self.queue_draw()
             return
@@ -1729,6 +1741,188 @@ class StudioInkCanvas(Gtk.DrawingArea):
         self.redo_stack.clear()
         self.win.save_note_meta()
         self.queue_draw()
+
+    # ---------- lasso: select ink, pictures, text boxes and tables by drawing round them
+    HANDLE = 9  # a selection corner handle, px on screen
+
+    def _item_box(self, w):
+        """(x, y, w, h) of a canvas item, page units, where it shows."""
+        z = max(0.5, self.win.zoom)
+        d = w.data
+        if isinstance(w, FreeCanvasImage):
+            return d["x"] + w.PAD_SIDE / z, d["y"] + w.PAD_TOP / z, d.get("w", 0), d.get("h", 0)
+        if isinstance(w, StickyNoteWidget):
+            return d["x"], d["y"] + w.BAR_H / z, d.get("w", 0), d.get("h", 0)
+        return d["x"], d["y"], w.get_width() / z, w.get_height() / z
+
+    def _items(self):
+        return self.win.canvas_images + self.win.sticky_notes + self.win.table_items + \
+            getattr(self.win, "pinned_stickies", [])
+
+    def selection_box(self):
+        """The selection's bounds (x0, y0, x1, y1), page units, or None."""
+        sel = self.selection
+        if not sel:
+            return None
+        xs, ys = [], []
+        for st in sel["strokes"]:
+            pad = st.get("width", 4) / 2
+            xs += [p[0] - pad for p in st["points"]] + [p[0] + pad for p in st["points"]]
+            ys += [p[1] - pad for p in st["points"]] + [p[1] + pad for p in st["points"]]
+        for w in sel["items"]:
+            x, y, bw, bh = self._item_box(w)
+            xs += [x, x + bw]
+            ys += [y, y + bh]
+        return (min(xs) - 6, min(ys) - 6, max(xs) + 6, max(ys) + 6) if xs else None
+
+    @staticmethod
+    def _inside(poly, x, y):
+        """Ray casting: is (x, y) inside the closed polygon POLY?"""
+        inside, j = False, len(poly) - 1
+        for i, (xi, yi) in enumerate(poly):
+            xj, yj = poly[j]
+            if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / ((yj - yi) or 1e-9) + xi:
+                inside = not inside
+            j = i
+        return inside
+
+    def select(self, strokes, items):
+        self.selection = {"strokes": strokes, "items": items} if strokes or items else None
+        self.queue_draw()
+
+    def select_all(self, on):
+        self.select(list(self.strokes), list(self._items())) if on else self.select([], [])
+
+    def _corner_at(self, px, py):
+        box = self.selection_box()
+        if not box:
+            return None
+        reach = (self.HANDLE + 4) / max(0.5, self.win.zoom)
+        for cx, cy, opposite in ((box[0], box[1], (box[2], box[3])), (box[2], box[1], (box[0], box[3])),
+                                 (box[0], box[3], (box[2], box[1])), (box[2], box[3], (box[0], box[1]))):
+            if abs(px - cx) <= reach and abs(py - cy) <= reach:
+                return opposite
+        return None
+
+    def _lasso_down(self, px, py):
+        box = self.selection_box()
+        anchor = self._corner_at(px, py)
+        if anchor or (box and box[0] <= px <= box[2] and box[1] <= py <= box[3]):
+            # move (inside the box) or scale (a corner) what's selected
+            self._grab = {"from": (px, py), "anchor": anchor, "box": box,
+                          "strokes": [[list(p) for p in st["points"]] for st in self.selection["strokes"]],
+                          "widths": [st.get("width", 4) for st in self.selection["strokes"]],
+                          "items": [dict(w.data) for w in self.selection["items"]]}
+        else:
+            self.select([], [])
+            self._lasso = [(px, py)]
+        self.current = {"lasso": True}
+        self.queue_draw()
+
+    def _lasso_motion(self, px, py):
+        if self._lasso is not None:
+            last = self._lasso[-1]
+            if math.hypot(px - last[0], py - last[1]) >= 2:
+                self._lasso.append((px, py))
+                self.queue_draw()
+            return
+        g = self._grab
+        if not g:
+            return
+        if g["anchor"]:   # scale about the opposite corner
+            ax, ay = g["anchor"]
+            fx, fy = g["from"]
+            sx = (px - ax) / ((fx - ax) or 1e-9)
+            sy = (py - ay) / ((fy - ay) or 1e-9)
+            k = max(0.1, min(sx, sy) if sx > 0 and sy > 0 else 0.1)
+
+            def move(x, y):
+                return ax + (x - ax) * k, ay + (y - ay) * k
+        else:
+            dx, dy = px - g["from"][0], py - g["from"][1]
+            k = 1.0
+
+            def move(x, y):
+                return x + dx, y + dy
+        for st, pts, width in zip(self.selection["strokes"], g["strokes"], g["widths"]):
+            st["points"] = [[*move(p[0], p[1]), p[2]] for p in pts]
+            st["width"] = round(width * k, 2)
+        for w, data in zip(self.selection["items"], g["items"]):
+            x, y = move(data["x"], data["y"])
+            w.data["x"], w.data["y"] = round(max(0.0, x), 1), round(max(0.0, y), 1)
+            if not isinstance(w, TableItem) and data.get("w"):
+                w.data["w"], w.data["h"] = round(data["w"] * k, 1), round(data.get("h", 0) * k, 1)
+            (w.sync_zoom_geometry if hasattr(w, "sync_zoom_geometry") else w.sync_zoom)()
+        self.queue_draw()
+
+    def _lasso_up(self):
+        if self._lasso is not None:
+            poly, self._lasso = self._lasso, None
+            if len(poly) >= 3:
+                # a stroke is in when most of its points are; an item when its centre is
+                strokes = [st for st in self.strokes
+                           if sum(self._inside(poly, p[0], p[1]) for p in st["points"]) * 2 >= len(st["points"])]
+                items = []
+                for w in self._items():
+                    x, y, bw, bh = self._item_box(w)
+                    if self._inside(poly, x + bw / 2, y + bh / 2):
+                        items.append(w)
+                self.select(strokes, items)
+        elif self._grab:
+            self._grab = None
+            self.win.dirty = True
+            self.win.save_note_meta()
+            self.win.ensure_page_height_for_images()
+        self.queue_draw()
+
+    def delete_selection(self):
+        """Remove what the lasso (or Ctrl+A) selected. True if anything was."""
+        sel, self.selection = self.selection, None
+        if not sel:
+            return False
+        gone = {id(st) for st in sel["strokes"]}
+        self.strokes = [st for st in self.strokes if id(st) not in gone]
+        for w in sel["items"]:
+            if w in self.win.canvas_images:
+                self.win.remove_canvas_image(w)
+            elif w in self.win.sticky_notes:
+                self.win.remove_sticky_note(w)
+            elif w in self.win.table_items:
+                self.win.remove_table(w)
+            elif w in getattr(self.win, "pinned_stickies", []):
+                self.win.remove_pinned_sticky(w)
+        self.win.dirty = True
+        self.win.save_note_meta()
+        self.queue_draw()
+        return True
+
+    def _draw_selection(self, cr, z):
+        if self._lasso and len(self._lasso) > 1:
+            cr.set_source_rgba(0.21, 0.52, 0.89, 0.9)
+            cr.set_line_width(1.5 / z)
+            cr.set_dash([5 / z, 4 / z])
+            cr.move_to(*self._lasso[0])
+            for p in self._lasso[1:]:
+                cr.line_to(*p)
+            cr.stroke()
+            cr.set_dash([])
+        box = self.selection_box()
+        if not box:
+            return
+        x0, y0, x1, y1 = box
+        cr.set_source_rgba(0.21, 0.52, 0.89, 0.95)
+        cr.set_line_width(1.2 / z)
+        cr.set_dash([6 / z, 4 / z])
+        cr.rectangle(x0, y0, x1 - x0, y1 - y0)
+        cr.stroke()
+        cr.set_dash([])
+        hs = self.HANDLE / z
+        for cx, cy in ((x0, y0), (x1, y0), (x0, y1), (x1, y1)):
+            cr.rectangle(cx - hs / 2, cy - hs / 2, hs, hs)
+            cr.set_source_rgb(1, 1, 1)
+            cr.fill_preserve()
+            cr.set_source_rgba(0.21, 0.52, 0.89, 1)
+            cr.stroke()
 
     def _ensure_laser_timer(self):
         if not self._laser_timer:
@@ -1870,6 +2064,11 @@ class StudioInkCanvas(Gtk.DrawingArea):
             cr.scale(z, z)
             for s in all_s:
                 self._draw_stroke_or_shape(cr, s)
+            cr.restore()
+        if self.selection or self._lasso:
+            cr.save()
+            cr.scale(z, z)
+            self._draw_selection(cr, z)
             cr.restore()
 
         if self.laser_trails:
@@ -3281,10 +3480,25 @@ class NotesWindow(Adw.ApplicationWindow):
         win_keys = Gtk.EventControllerKey()
         win_keys.connect("key-pressed", self._on_window_key_pressed)
         self.add_controller(win_keys)
+        # a lasso selection takes Delete before the text under it does
+        lasso_keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        lasso_keys.connect("key-pressed", self._on_lasso_key)
+        self.add_controller(lasso_keys)
 
         self.toast = Adw.ToastOverlay(child=main_hbox)
         root_view.set_content(self.toast)
         self.set_content(root_view)
+
+    def _on_lasso_key(self, _ctrl, keyval, _code, _state):
+        ink = self.ink_canvas
+        if not (ink.active and ink.tool == "lasso" and ink.selection):
+            return False
+        if keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
+            return ink.delete_selection()
+        if keyval == Gdk.KEY_Escape:
+            ink.select([], [])
+            return True
+        return False
 
     def _on_window_key_pressed(self, _ctrl, keyval, _code, _state):
         if self.selected_img and keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
@@ -3325,6 +3539,8 @@ class NotesWindow(Adw.ApplicationWindow):
             ("pen", "document-edit-symbolic", "Pen", "Freehand Pen"),
             ("highlighter", "marker-symbolic", "Highlighter", "Translucent Marker"),
             ("eraser", "edit-clear-symbolic", "Stroke Eraser", "Touch any stroke to erase it"),
+            ("lasso", "edit-select-symbolic", "Lasso",
+             "Draw round ink, pictures or text to select them: drag to move, a corner to scale, Delete to remove"),
         ):
             b = Gtk.ToggleButton(label=label, tooltip_text=tip, group=grp, active=tool == "pen")
             grp = grp or b
@@ -3414,6 +3630,8 @@ class NotesWindow(Adw.ApplicationWindow):
 
     def _set_ink_tool(self, tool_name):
         self.ink_canvas.tool = tool_name
+        if tool_name != "lasso":
+            self.ink_canvas.select([], [])
         self.ink_canvas.set_ink_mode(True)
 
     def _pick_ink_color(self, _b, color):
@@ -4895,6 +5113,7 @@ class NotesWindow(Adw.ApplicationWindow):
         """Outline every table, picture and text box (the text is selected by
         the editor itself); off again on the next other key or click."""
         self._all_selected = on
+        self.ink_canvas.select_all(on)   # the ink too, in one dashed box
         for w in self.canvas_images + self.sticky_notes:
             (w.add_css_class if on else w.remove_css_class)("mk-all-selected")
         for t in self.table_items:
@@ -4902,6 +5121,10 @@ class NotesWindow(Adw.ApplicationWindow):
             t.select(on)
 
     def _delete_everything(self):
+        if self.ink_canvas.strokes:
+            self.ink_canvas.strokes = []
+            self.ink_canvas.queue_draw()
+        self.ink_canvas.selection = None
         for w in list(self.canvas_images):
             self.remove_canvas_image(w)
         for st in list(self.sticky_notes):

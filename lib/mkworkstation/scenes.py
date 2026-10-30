@@ -528,13 +528,21 @@ def _photo_levels(cols, rows):
             # and his shoulders fade out at the bottom and the sides, so the
             # photo's straight edges don't show
             dim = 1.0 if r < rows * 0.66 else 0.45
+            # inside his outline everything is him: the dark lenses, the open
+            # mouth and the shadow at his neck (cut away with the dark
+            # backdrop) are dark glass, not the facade's office lights
+            inside = [c for c in range(cols) if alpha[c, r] > 128]
+            first, last = (inside[0], inside[-1]) if inside else (cols, -1)
             row = []
             for c in range(cols):
                 fade = min(1.0, (rows - r) / (rows * 0.16))
                 if r > rows * 0.55:
                     fade = min(fade, min(c + 1, cols - c) / (cols * 0.18))
-                if alpha[c, r] <= 128 or (fade < 1.0 and (c * 7 + r * 13) % 10 >= fade * 10):
+                feature = _unlit_feature((c + 0.5) / cols, (r + 0.5) / rows)
+                if not (first <= c <= last or feature) or (fade < 1.0 and (c * 7 + r * 13) % 10 >= fade * 10):
                     row.append(None)
+                elif alpha[c, r] <= 128 or feature:
+                    row.append(0.0)
                 else:
                     row.append(lum[c, r] / 255 * dim * fade)
             levels.append(row)
@@ -545,6 +553,19 @@ def _photo_levels(cols, rows):
 
 
 UNLIT = (0x16 / 255, 0x19 / 255, 0x24 / 255)   # unlit office glass
+
+
+def _unlit_feature(u, v):
+    """Is (u, v) (0-1 across and down the portrait photo) part of his
+    glasses: the two dark lenses (no eyes lit behind them) and the frame's
+    top bar. Kept unlit so he reads cleanly."""
+    if 0.297 <= v <= 0.318 and 0.35 <= u <= 0.79:                 # the frame's top bar
+        return True
+    for cu, cv, ru, rv in ((0.437, 0.364, 0.090, 0.060), (0.670, 0.364, 0.105, 0.060)):
+        du, dv = abs(u - cu) / ru, abs(v - cv) / rv
+        if du ** 4 + dv ** 4 <= 1:                                   # a rounded-square lens
+            return True
+    return False
 
 
 def _tone(v):
@@ -702,6 +723,18 @@ def tribute_tower(cr, w, h):
     dense = (0.86, 0.86)  # the portrait's glass wall: almost no mullion between panes
 
     levels = _photo_levels(pcols, prows)
+    # a clear margin round his silhouette: no office lights touching him
+    near = None
+    if levels is not None:
+        reach = int(pitch / ppitch) + 2
+        near = [[False] * pcols for _ in range(prows)]
+        for r in range(prows):
+            for c in range(pcols):
+                if levels[r][c] is not None:
+                    for rr in range(max(0, r - reach), min(prows, r + reach + 1)):
+                        row = near[rr]
+                        for cc in range(max(0, c - reach), min(pcols, c + reach + 1)):
+                            row[cc] = True
     # every office window on every tier (around Stan Lee's silhouette, not a box)
     for tx, tw, top, bottom in spans:
         cols = int((tw - pitch) / pitch)
@@ -714,8 +747,8 @@ def tribute_tower(cr, w, h):
             for c in range(cols):
                 x = left + c * pitch
                 inside_portrait = (px0 - pitch <= x <= px0 + pside and py0 - pitch <= floor_y <= py0 + pheight
-                                   and (levels is None or levels[min(prows - 1, max(0, int((floor_y - py0) / ppitch)))]
-                                        [min(pcols - 1, max(0, int((x - px0) / ppitch)))] is not None))
+                                   and (near is None or near[min(prows - 1, max(0, int((floor_y - py0) / ppitch)))]
+                                        [min(pcols - 1, max(0, int((x - px0) / ppitch)))]))
                 inside_frieze = frieze_top - pitch * 0.5 <= floor_y <= frieze_bottom
                 if inside_portrait or inside_frieze:
                     continue
@@ -730,6 +763,14 @@ def tribute_tower(cr, w, h):
     # the portrait: every window is one pixel of the photo, its glow the
     # pixel's brightness: highlights white, mid tones amber, the darkest
     # (the lenses, the shadows) unlit glass
+    # a faint warm glow behind him: the one tower lit for a legend
+    gx, gy = px0 + pside / 2, py0 + pheight * 0.38
+    glow = cairo.RadialGradient(gx, gy, 0, gx, gy, pheight * 0.62)
+    glow.add_color_stop_rgba(0, *GOLD, 0.16)
+    glow.add_color_stop_rgba(1, *GOLD, 0)
+    cr.set_source(glow)
+    cr.arc(gx, gy, pheight * 0.62, 0, 2 * math.pi)
+    cr.fill()
     for r in range(prows):
         for c in range(pcols):
             t = (BAYER[r % 4][c % 4] + 0.5) / 16

@@ -3,6 +3,8 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Control Center:** Wi-Fi off no longer shows GNOME's Airplane icon (a Bluetooth that was rfkill-blocked becomes powered off in BlueZ first); Bluetooth and Airplane mode switches; Airplane mode puts each radio back as it was.
+- **MK Notes:** text boxes start wide and one line high and grow as you type; the format bar keeps 12 px clear (below the box near the top of the page); a box left empty goes away when you click elsewhere; "Type note here…" while empty; resize and move cursors. Quick Highlight (swipe along a line: a clean bar behind the text), Lasso in the ribbon, grid paper, Clear page, a 🧮 scratchpad for sums, and Ctrl+scroll zoom that glides.
 - **MK Notes:** Lasso (Draw › Lasso): draw round ink, pictures, text boxes or tables to select them; drag to move, a corner to scale, Delete to remove. Ctrl+A puts the ink in the selection too. Sticky notes are back as their own tool (Sticky in the ribbon); Export options › Include sticky notes adds them to a PDF as a footnote box (greyed out when the note has none).
 - **Workspace purge:** Super+Shift+Q closes the ordinary windows on this workspace after 5 seconds, with Undo; pinned, always-on-top and dialog windows are left alone.
 - **Storage Sense:** `mk-storage-sense` (weekly timer, `mk storage`, Control Center card): old cache files, thumbnails of deleted files, your journal, unused Flatpak runtimes; `--deep` adds the system journal, system Flatpaks and dnf's packages.

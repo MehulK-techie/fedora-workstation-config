@@ -148,7 +148,10 @@ closes it without saving.
   text to find its comment. On a small window the side panels step aside
   while the margin is open (⤢ brings them back).
 - **Text boxes** (Text Box in the ribbon): type anywhere on the page,
-  over a printout or a picture. No paper or header: while you type in one
+  over a printout or a picture. A new one is wide and one line high
+  ("Type note here…") and grows downwards as you type; one you leave
+  empty is removed when you click elsewhere. The pointer shows a resize
+  arrow at the corners and a move cross on the border. No paper or header: while you type in one
   it has a thin blue border and four corner handles (drag a corner to
   resize, the border to move it) and a format bar above it: **B**, *I*,
   U (also Ctrl+B, Ctrl+I, Ctrl+U), text colour and A− / A+ for size. Bold,
@@ -164,7 +167,14 @@ closes it without saving.
 - **Ctrl+A** in the page selects all the text and outlines every table,
   picture and text box, with the ink in one dashed box; Delete then
   removes everything.
-- **Lasso** (Draw › Lasso): draw a loop round ink strokes, pictures, text
+- **Quick Highlight** (Highlight in the ribbon, ▾ for yellow, cyan or
+  pink): swipe roughly along a line of text and it becomes a straight bar
+  of colour behind that line; the letters stay on top.
+- **Scratchpad** (🧮, right of the ribbon): one sum per line (`2*(3+4)`,
+  `r = 2` then `pi*r^2`, `sqrt`, `sin`, `log`, `ln`, `^`); answers on the
+  right; kept with the note. Next to it: grid paper on/off and Clear page
+  (all ink; Ctrl+Z brings it back).
+- **Lasso** (Lasso in the ribbon, or Draw › Lasso): draw a loop round ink strokes, pictures, text
   boxes or tables (a stroke counts when most of it is inside, an item when
   its centre is). Drag inside the dashed box to move them, a corner to
   scale them, Delete or Backspace to remove them, Esc to let go.

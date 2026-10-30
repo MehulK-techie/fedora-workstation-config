@@ -82,12 +82,23 @@ STICKY_PALETTES = [
     ("Clear (text box)", "transparent", "#ffffff"),
 ]
 TEXT_BOX = len(STICKY_PALETTES) - 1  # a sticky without paper: text on a printout or picture
+# a text box's font colours: (name, hex)
+TEXT_COLOURS = (("White", "#ffffff"), ("Black", "#000000"), ("Red", "#ef4444"), ("Blue", "#3b82f6"),
+                ("Amber", "#f59e0b"), ("Emerald", "#10b981"), ("Violet", "#8b5cf6"))
 # Layer order for pictures and stickies: (icon, label, how)
 LAYER_ACTIONS = (("go-up-symbolic", "Bring Forward", "forward"), ("go-down-symbolic", "Send Backward", "backward"),
                  ("go-top-symbolic", "Bring to Front", "front"), ("go-bottom-symbolic", "Send to Back", "back"))
 
 TABLES_MARK = "\n<!-- MK Notes tables (shown as tables in MK Notes) -->"
 PAGE_W = 800  # the sheet's width at 100 %; A4 height is 1.414 times that
+PAGE_GAP = 24  # the workspace gap between two sheets at 100 %
+
+
+def _png_size(data):
+    """(width, height) from a PNG's header, or None."""
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or len(data) < 24:
+        return None
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
 # Highlighter colours: (tag, name, colour); hl-yellow is the default.
 HIGHLIGHTS = (("hl-yellow", "Yellow", "#fff59d"), ("hl-mint", "Mint", "#a7f3d0"), ("hl-cyan", "Cyan", "#a5f3fc"),
               ("hl-pink", "Pink", "#fbcfe8"), ("hl-orange", "Orange", "#fed7aa"))
@@ -220,6 +231,9 @@ BASE_CSS = """
 .mk-img-bar button { color: #ffffff; min-height: 24px; min-width: 24px; padding: 2px 5px; border-radius: 5px; }
 .mk-img-bar button:hover { background: rgba(255,255,255,0.18); }
 .mk-sticky { border-radius: 10px; box-shadow: 0 6px 16px rgba(0,0,0,0.28); padding: 6px; }
+.mk-textbox-frame { padding: 7px; border: 1px solid transparent; background: transparent; }
+.mk-textbox.selected .mk-textbox-frame { border-color: #3b82f6; }
+.mk-textbox-handle { background: #ffffff; border: 1.5px solid #3b82f6; border-radius: 2px; }
 .mk-comment-card { background: alpha(@window_fg_color, 0.05); border-radius: 10px; padding: 8px 10px;
                    border-left: 3px solid #f59e0b; margin: 4px 6px; }
 .mk-status { font-size: 0.84em; opacity: 0.65; }
@@ -445,87 +459,120 @@ class ImageStudioDialog(Adw.Window):
         self.close()
 
 
-class StickyNoteWidget(Gtk.Box):
+class StickyNoteWidget(Gtk.Overlay):
+    """A text box, as in Word or Google Docs: words anywhere on the page,
+    with no paper behind them. Selected (being typed in, or its edge
+    clicked) it shows a thin blue border and four corner handles; otherwise
+    the border is gone and the text sits straight on the printout or
+    picture. Drag the border to move it, a corner to resize it; with the
+    border selected (Esc from the text) Delete or Backspace removes it."""
+    HANDLE = 10   # a corner handle's size, px
+    EDGE = 7      # the grabbable border round the text, px
+
     def __init__(self, item_data, note_win):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4,
-                         halign=Gtk.Align.START, valign=Gtk.Align.START,
-                         css_classes=["mk-sticky"])
+        super().__init__(halign=Gtk.Align.START, valign=Gtk.Align.START, focusable=True,
+                         css_classes=["mk-textbox"])
         self.data = item_data
         self.win = note_win
+        self.selected = False
         self.data.setdefault("x", 480.0)
         self.data.setdefault("y", 80.0)
         self.data.setdefault("w", 220.0)
         self.data.setdefault("h", 160.0)
-        self.data.setdefault("color_idx", 0)
         self.data.setdefault("text", "")
+        self.data["color_idx"] = TEXT_BOX
 
-        head = Gtk.Box(spacing=4)
-        grip = Gtk.Label(label="📌", margin_start=4)
-        grip.set_cursor(Gdk.Cursor.new_from_name("move"))
-        head.append(grip)
-        # The title: click it to rename the sticky.
-        self.title = Gtk.Entry(text=self.data.get("title", "Sticky Note"), hexpand=True, has_frame=False,
-                               css_classes=["mk-row-title", "mk-sticky-title"], max_length=40)
-        self.title.connect("changed", lambda e: (self.data.__setitem__("title", e.get_text()), self.win.save_note_meta()))
-        head.append(self.title)
+        self.text_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, hexpand=True, vexpand=True,
+                                      left_margin=4, right_margin=4, top_margin=2, bottom_margin=2)
+        self.text_view.get_buffer().set_text(self.data.get("text", ""))
+        self.text_view.get_buffer().connect("changed", self._on_text_changed)
+        self.frame = Gtk.ScrolledWindow(child=self.text_view, hexpand=True, vexpand=True,
+                                        hscrollbar_policy=Gtk.PolicyType.NEVER, css_classes=["mk-textbox-frame"])
+        self.set_child(self.frame)
+        self.handles = []
+        for halign, valign in ((Gtk.Align.START, Gtk.Align.START), (Gtk.Align.END, Gtk.Align.START),
+                               (Gtk.Align.START, Gtk.Align.END), (Gtk.Align.END, Gtk.Align.END)):
+            h = Gtk.Box(halign=halign, valign=valign, width_request=self.HANDLE, height_request=self.HANDLE,
+                        css_classes=["mk-textbox-handle"], visible=False, can_target=False)
+            self.add_overlay(h)
+            self.handles.append(h)
 
-        palette = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
-        pop = Gtk.Popover(child=palette)
-        for i, (name, bg, _fg) in enumerate(STICKY_PALETTES):
-            sw = Gtk.Button(tooltip_text=name, css_classes=["mk-swatch"])
-            prov = Gtk.CssProvider()
-            prov.load_from_string(f"button {{ background: {bg}; border: 1px solid alpha(black, 0.25); }}")
-            sw.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 3)
-            sw.connect("clicked", lambda _b, k=i: (self._set_color(k), pop.popdown()))
-            palette.append(sw)
-        # (text boxes have no paper colour to pick)
-        layers = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=4, margin_bottom=4)
-        lpop = Gtk.Popover(child=layers)
+        focus = Gtk.EventControllerFocus()
+        focus.connect("enter", lambda *_: self.select(True))
+        focus.connect("leave", lambda *_: self.select(False))
+        self.add_controller(focus)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self._on_key)
+        self.add_controller(keys)
+        menu = Gtk.GestureClick(button=3)
+        menu.connect("pressed", lambda g, _n, x, y: self._menu(x, y))
+        self.add_controller(menu)
+
+        self._css_prov = Gtk.CssProvider()
+        self.text_view.get_style_context().add_provider(self._css_prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
+        self._apply_palette()
+        self.sync_zoom_geometry()
+
+    def _apply_palette(self):
+        fg = self.data.get("fg") or STICKY_PALETTES[TEXT_BOX][2]
+        self._css_prov.load_from_string(
+            f"textview, textview text {{ background: transparent; color: {fg}; font-size: 0.95em; }}")
+
+    def set_text_color(self, hex_colour):
+        self.data["fg"] = hex_colour
+        self._apply_palette()
+        self.win.dirty = True
+        self.win.save_note_meta()
+
+    def select(self, on):
+        if on == self.selected:
+            return
+        self.selected = on
+        (self.add_css_class if on else self.remove_css_class)("selected")
+        for h in self.handles:
+            h.set_visible(on)
+        if on:
+            self.win._active_text_box = self
+
+    def corner_at(self, x, y):
+        """Which corner handle (hx, hy: 0 left/top, 1 right/bottom) is at
+        (x, y) in the box's own pixels, or None."""
+        if not self.selected:
+            return None
+        w, h, reach = self.get_width(), self.get_height(), self.HANDLE + 4
+        hx = 0 if x <= reach else 1 if x >= w - reach else None
+        hy = 0 if y <= reach else 1 if y >= h - reach else None
+        return None if hx is None or hy is None else (hx, hy)
+
+    def _on_key(self, _ctrl, keyval, _code, _state):
+        focus = self.get_root().get_focus() if self.get_root() else None
+        if keyval == Gdk.KEY_Escape and focus is self.text_view:
+            self.grab_focus()  # the box itself, so Delete removes it
+            return True
+        if keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace) and focus is self:
+            self.win.remove_sticky_note(self)
+            return True
+        return False
+
+    def _menu(self, x, y):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=6, margin_bottom=6,
+                      margin_start=6, margin_end=6)
+        pop = Gtk.Popover(child=box, has_arrow=True, pointing_to=Gdk.Rectangle(round(x), round(y), 1, 1))
+        pop.set_parent(self)
+        pop.connect("closed", lambda p: GLib.idle_add(p.unparent))
+        box.append(self.win.text_colour_swatches(lambda c: (self.set_text_color(c), pop.popdown())))
         for icon, tip, how in LAYER_ACTIONS:
             row = Gtk.Button(css_classes=["flat"])
             line = Gtk.Box(spacing=8)
             line.append(Gtk.Image(icon_name=icon))
             line.append(Gtk.Label(label=tip))
             row.set_child(line)
-            row.connect("clicked", lambda _b, h=how: (lpop.popdown(), self.win.restack(self, h)))
-            layers.append(row)
-        head.append(Gtk.MenuButton(icon_name="view-stack-symbolic", css_classes=["flat"], tooltip_text="Layer order",
-                                   popover=lpop))
-
-        del_btn = Gtk.Button(icon_name="window-close-symbolic", css_classes=["flat"],
-                             tooltip_text="Delete this text box")
-        del_btn.connect("clicked", lambda *_: self.win.remove_sticky_note(self))
-        head.append(del_btn)
-        self.append(head)
-
-        self.text_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, hexpand=True, vexpand=True,
-                                      left_margin=6, right_margin=6, top_margin=4, bottom_margin=4)
-        self.text_view.get_buffer().set_text(self.data.get("text", ""))
-        self.text_view.get_buffer().connect("changed", self._on_text_changed)
-        self.append(Gtk.ScrolledWindow(child=self.text_view, hexpand=True, vexpand=True,
-                                       hscrollbar_policy=Gtk.PolicyType.NEVER))
-
-        self._css_prov = Gtk.CssProvider()
-        self.get_style_context().add_provider(self._css_prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
-        self.text_view.get_style_context().add_provider(self._css_prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
-        self._apply_palette()
-        self.sync_zoom_geometry()
-
-    def _apply_palette(self):
-        idx = int(self.data.get("color_idx", 0)) % len(STICKY_PALETTES)
-        _name, bg, fg = STICKY_PALETTES[idx]
-        border = "1px dashed alpha(white, 0.45)" if idx == TEXT_BOX else f"1px solid alpha({fg}, 0.22)"
-        self._css_prov.load_from_string(
-            f".mk-sticky {{ background: {bg}; color: {fg}; border: {border}; box-shadow: none; }}"
-            f"textview, textview text {{ background: transparent; color: {fg}; font-size: 0.95em; }}"
-            f"entry.mk-sticky-title, entry.mk-sticky-title text {{ background: transparent; color: {fg}; "
-            f"font-weight: 700; box-shadow: none; min-height: 24px; padding: 0 2px; }}"
-        )
-
-    def _set_color(self, idx):
-        self.data["color_idx"] = idx
-        self._apply_palette()
-        self.win.save_note_meta()
+            row.connect("clicked", lambda _b, h=how: (pop.popdown(), self.win.restack(self, h)))
+            box.append(row)
+        rm = Gtk.Button(label="Delete text box", css_classes=["flat", "destructive-action"])
+        rm.connect("clicked", lambda *_: (pop.popdown(), self.win.remove_sticky_note(self)))
+        box.append(rm)
+        pop.popup()
 
     def _on_text_changed(self, buf):
         self.data["text"] = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
@@ -538,7 +585,6 @@ class StickyNoteWidget(Gtk.Box):
         py = max(8, round(self.data["y"] * z))
         if self.get_parent() is self.win.canvas_fixed:
             self.win.canvas_fixed.move(self, px, py)
-
 
 
 class TableItem(Gtk.Box):
@@ -1688,7 +1734,7 @@ class PaperPatternBackground(Gtk.DrawingArea):
         # Between two A4 sheets: a gap of the workspace's colour with a soft
         # shadow under the page above, like Google Docs' page breaks.
         page_h = self.win.page_height()
-        gap = 24 * max(0.5, self.win.zoom)
+        gap = PAGE_GAP * max(0.5, self.win.zoom)
         r, g, b = hex_rgb(preset["win_bg"])
         y = page_h
         while y < h - 1:
@@ -2163,13 +2209,14 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
         text = (sticky.get("text") or "").strip()
         if not text:
             continue
-        _name, bg, fg = STICKY_PALETTES[0]  # printed as a light callout
+        _name, bg, fg = STICKY_PALETTES[0]  # printed as a light callout, in the box's colour if it shows on it
+        if sticky.get("fg") and sticky["fg"] not in ("#ffffff", "#f59e0b"):
+            fg = sticky["fg"]
         layout = PangoCairo.create_layout(cr)
         layout.set_width(int((CONTENT_W - 28) * Pango.SCALE))
         layout.set_wrap(Pango.WrapMode.WORD_CHAR)
         layout.set_font_description(Pango.FontDescription("Sans 10"))
-        head = GLib.markup_escape_text(sticky.get("title") or "Text")
-        layout.set_markup(f"<b>📌 {head}</b>\n{GLib.markup_escape_text(text)}", -1)
+        layout.set_markup(GLib.markup_escape_text(text), -1)
         _ink, logical = layout.get_pixel_extents()
         box_h = logical.height + 20.0
         ensure_space(box_h + 12.0)
@@ -2329,15 +2376,30 @@ class NotesWindow(Adw.ApplicationWindow):
         self.page_overlay.add_controller(drag)
 
     def _on_overlay_drag_begin(self, gesture, x, y):
-        if self.ink_canvas.active or self._is_control_at(x, y):
+        if self.ink_canvas.active:
             gesture.set_state(Gtk.EventSequenceState.DENIED)
             return
         z = max(0.5, self.zoom)
-
+        # a selected text box's corner handle resizes it (before the text
+        # under the handle can take the click)
         for st in reversed(self.sticky_notes):
             sx, sy = st.data["x"] * z, st.data["y"] * z
-            sw, sh = st.get_width(), st.get_height()
-            if sx <= x <= sx + sw and sy <= y <= sy + 34:
+            corner = st.corner_at(x - sx, y - sy)
+            if corner and 0 <= x - sx <= st.get_width() and 0 <= y - sy <= st.get_height():
+                self._ov_drag_target = ("sticky-size", st)
+                self._ov_corner = corner
+                self._ov_start = tuple(float(st.data[k]) for k in ("x", "y", "w", "h"))
+                gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+                return
+        if self._is_control_at(x, y):
+            gesture.set_state(Gtk.EventSequenceState.DENIED)
+            return
+
+        # a text box's border (the text itself is a control, above) moves it
+        for st in reversed(self.sticky_notes):
+            sx, sy = st.data["x"] * z, st.data["y"] * z
+            if sx <= x <= sx + st.get_width() and sy <= y <= sy + st.get_height():
+                st.grab_focus()
                 self._ov_drag_target = ("sticky", st)
                 self._ov_start_x = float(st.data["x"])
                 self._ov_start_y = float(st.data["y"])
@@ -2385,6 +2447,15 @@ class NotesWindow(Adw.ApplicationWindow):
             return
         z = max(0.5, self.zoom)
         kind, widget = self._ov_drag_target
+        if kind == "sticky-size":
+            x0, y0, w0, h0 = self._ov_start
+            hx, hy = self._ov_corner
+            w = max(60.0, w0 + (dx if hx else -dx) / z)
+            h = max(36.0, h0 + (dy if hy else -dy) / z)
+            widget.data.update(w=round(w), h=round(h), x=round(x0 + (0 if hx else w0 - w)),
+                               y=round(y0 + (0 if hy else h0 - h)))
+            widget.sync_zoom_geometry()
+            return
         if kind == "sticky":
             widget.data["x"] = max(8.0, round(self._ov_start_x + dx / z))
             widget.data["y"] = max(8.0, round(self._ov_start_y + dy / z))
@@ -2822,6 +2893,10 @@ class NotesWindow(Adw.ApplicationWindow):
                               css_classes=["flat"])
         text_btn.connect("clicked", lambda *_: self.add_sticky_note(text_box=True))
         ribbon.append(text_btn)
+        colour_pop = Gtk.Popover()
+        colour_pop.set_child(self.text_colour_swatches(lambda c: (colour_pop.popdown(), self._colour_text_box(c))))
+        ribbon.append(Gtk.MenuButton(icon_name="format-text-color-symbolic", css_classes=["flat"],
+                                     tooltip_text="Text colour (of the selected text box)", popover=colour_pop))
 
         comment_btn = Gtk.Button(label="Comment", icon_name="user-available-symbolic",
                                  tooltip_text="Add Margin Comment (Ctrl+Alt+M)", css_classes=["flat"])
@@ -3717,8 +3792,6 @@ class NotesWindow(Adw.ApplicationWindow):
             "color_idx": TEXT_BOX,
             "z": self._next_z(),
         }
-        if not item_data:
-            data["title"] = "Text"
         if not item_data:  # inside the sheet, however narrow it is
             data["x"] = float(max(16, min(data["x"], self.page_width() / max(0.5, self.zoom) - data["w"] - 16)))
         st = StickyNoteWidget(data, self)
@@ -3759,6 +3832,25 @@ class NotesWindow(Adw.ApplicationWindow):
         self._apply_z_order()
         self.dirty = True
         self.save_note_meta()
+
+    def text_colour_swatches(self, pick):
+        """A row of TEXT_COLOURS swatches; PICK(hex) on a click."""
+        row = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
+        for name, hex_colour in TEXT_COLOURS:
+            sw = Gtk.Button(tooltip_text=name, css_classes=["mk-swatch"])
+            prov = Gtk.CssProvider()
+            prov.load_from_string(f"button {{ background: {hex_colour}; border: 1px solid alpha(gray, 0.6); }}")
+            sw.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 3)
+            sw.connect("clicked", lambda _b, c=hex_colour: pick(c))
+            row.append(sw)
+        return row
+
+    def _colour_text_box(self, hex_colour):
+        box = getattr(self, "_active_text_box", None)
+        if box not in self.sticky_notes:
+            self.toast.add_toast(Adw.Toast(title="Click a text box first", timeout=2))
+            return
+        box.set_text_color(hex_colour)
 
     def remove_sticky_note(self, st):
         if st in self.sticky_notes:
@@ -4257,17 +4349,25 @@ class NotesWindow(Adw.ApplicationWindow):
             return False
         self._pages_id = GLib.timeout_add(150, run)
 
+    def _content_bottom(self):
+        """How far down the note's text, tables, pictures and text boxes
+        reach, in page units (zoom 100 %)."""
+        z = max(0.5, self.zoom)
+        _min, text_h, _b1, _b2 = self.view.measure(Gtk.Orientation.VERTICAL, self.page_width())
+        bottom = (text_h - self.view.get_bottom_margin()) / z + 40  # (the margin is room for the items)
+        for w in self.canvas_images + self.sticky_notes:
+            bottom = max(bottom, w.data.get("y", 0) + w.data.get("h", 160) + PAGE_GAP / 2)
+        for t in self.table_items:
+            bottom = max(bottom, t.data.get("y", 0) + t.get_height() / z + PAGE_GAP / 2)
+        return bottom
+
     def _update_pages(self):
         """As many A4 sheets as the text, tables, pictures and stickies need:
         a new page appears as soon as anything passes the last one's bottom."""
         z = max(0.5, self.zoom)
         width = self.page_width()
         self.page_overlay.set_size_request(width, -1)
-        _min, text_h, _b1, _b2 = self.view.measure(Gtk.Orientation.VERTICAL, width)
-        bottom = text_h
-        for w in self.canvas_images + self.sticky_notes:
-            bottom = max(bottom, (w.data.get("y", 0) + w.data.get("h", 160)) * z)
-        pages = max(1, math.ceil((bottom + 40 * z) / self.page_height()))
+        pages = max(1, math.ceil(self._content_bottom() * z / self.page_height()))
         if pages != getattr(self, "pages", 0) or width != getattr(self, "_sheet_w", 0):
             self.pages, self._sheet_w = pages, width
             self.paper_bg.set_size_request(width, round(pages * self.page_height()))
@@ -4698,19 +4798,28 @@ class NotesWindow(Adw.ApplicationWindow):
             self.toast.add_toast(Adw.Toast(title="Couldn't read that PDF's pages (needs bubblewrap and poppler-utils)",
                                            timeout=4))
             return
-        # below the last line of text, so the pages never cover it
-        end = self.view.get_iter_location(self.buffer.get_end_iter())
-        y = max(80.0, round((end.y + end.height) / max(0.5, self.zoom) + 60.0))
-        width = 620.0
+        # One PDF page per A4 sheet, starting on the first sheet below
+        # everything already on the note: each page centred on its sheet,
+        # 24 px from the sheet's edges and the page-break gaps.
+        z = max(0.5, self.zoom)
+        sheet_w, sheet_h = self.page_width() / z, self.page_height() / z
+        first = math.ceil(self._content_bottom() / sheet_h)
+        box_w, box_h = sheet_w - 2 * 24, sheet_h - PAGE_GAP - 2 * 24
         for i, data in enumerate(pages):
+            pw, ph = _png_size(data) or (595, 842)
+            scale = min(box_w / pw, box_h / ph)
+            w, h = pw * scale, ph * scale
+            top = (first + i) * sheet_h + PAGE_GAP / 2 + 24
             prel = self.vault.save_attachment(data, ".png", f"{stem} page {i + 1}")
-            item = {"name": Path(prel).name, "x": 56.0, "y": y, "w": width, "angle": 0, "printout": True,
-                    "z": self._next_z()}
+            # (a picture is drawn inside its frame's padding: offset by it)
+            item = {"name": Path(prel).name, "x": round((sheet_w - w) / 2 - FreeCanvasImage.PAD_SIDE / z),
+                    "y": round(top + (box_h - h) / 2 - FreeCanvasImage.PAD_TOP / z),
+                    "w": round(w), "h": round(h), "angle": 0, "printout": True, "z": self._next_z()}
             widget = FreeCanvasImage(self.vault.path(prel), item, self)
             self.canvas_fixed.put(widget, round(item["x"] * self.zoom), round(item["y"] * self.zoom))
             self.canvas_images.append(widget)
-            y += widget.data.get("h", width * 1.414) + 24
         self.ensure_page_height_for_images()
+        self._update_pages()
         self.dirty = True
         self.save_note_meta()
         self._save_now()

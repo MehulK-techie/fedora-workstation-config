@@ -72,13 +72,41 @@ closes it without saving.
 | Tables, code, dividers | Use the buttons |
 | Edit or read | Ctrl+E. In the reading view you can tick checkboxes and click links and tags |
 
+## The tool island
+
+The tools sit in one rounded island above the page, in three modes; only
+the one you're in shows, so nothing scrolls sideways even on a 1366 px
+screen with both sidebars open:
+
+- **✍️ Ink**: Pen (▾ colours and thickness), Highlighter (▾ below), Eraser,
+  Lasso, Undo / Redo stroke, Clear page, Shapes, Laser pointer. Picking Ink
+  turns drawing on; the other modes turn it off (your strokes stay).
+  While inking, one key picks a tool: **P** pen, **H** highlighter,
+  **E** eraser, **L** lasso, **T** a new text box.
+- **📝 Type**: paragraph style, bold, italic, underline, strikethrough, text
+  highlight, text colour, clear formatting, bullets, numbers, checklist,
+  divider.
+- **➕ Insert**: Insert Table, Text Box, Sticky, text box colour, picture or
+  PDF, screenshot, comment, link, mind map, grid paper, 🧮 scratchpad.
+
+Zoom (− 100 % +) and *Page X of Y* share a small pill at the bottom right.
+Select text in the page and a small card appears above it: style ▾, B, I,
+U, colour ▾, list ▾; it goes when the selection does.
+
+**Highlighter** (Ink › 🖍, ▾ for options): Solar yellow, Mint green, Coral
+pink or Sky blue; a 12, 24 or 36 px tip. Its strokes go *under* the text,
+so the letters stay sharp on top of the colour; over a picture or PDF
+printout (which sits above the text layer) they're drawn on top,
+translucent. **Snap to the line of text** turns a rough swipe into a
+straight bar behind the line.
+
 ## Screenshots, pictures and drawings
 
-- **Shapes** (Shapes in the ribbon): lines (line, arrow, double arrow, elbow
+- **Shapes** (Ink › Shapes): lines (line, arrow, double arrow, elbow
   connector), basic shapes (rectangle, rounded rectangle, oval, triangle,
   diamond) and graphs (X–Y axes with ticks, a 4-quadrant grid, 3D axes),
   picked from one menu, drawn by dragging.
-- **Tables** (Insert Table in the ribbon): one click drops a 3 x 3 table in
+- **Tables** (Insert › Insert Table): one click drops a 3 x 3 table in
   the middle of the view; its arrow opens a grid to pick up to 8 x 8.
 
 - **Paste:** Ctrl+V pastes an image from the clipboard (screenshots, "Copy
@@ -147,7 +175,7 @@ closes it without saving.
 - **Comments** open as a slim card in the right margin; click highlighted
   text to find its comment. On a small window the side panels step aside
   while the margin is open (⤢ brings them back).
-- **Text boxes** (Text Box in the ribbon): type anywhere on the page,
+- **Text boxes** (Insert › Text Box): type anywhere on the page,
   over a printout or a picture. A new one is wide and one line high
   ("Type note here…") and grows downwards as you type; one you leave
   empty is removed when you click elsewhere. The pointer shows a resize
@@ -167,18 +195,15 @@ closes it without saving.
 - **Ctrl+A** in the page selects all the text and outlines every table,
   picture and text box, with the ink in one dashed box; Delete then
   removes everything.
-- **Quick Highlight** (Highlight in the ribbon, ▾ for yellow, cyan or
-  pink): swipe roughly along a line of text and it becomes a straight bar
-  of colour behind that line; the letters stay on top.
-- **Scratchpad** (🧮, right of the ribbon): one sum per line (`2*(3+4)`,
+- **Scratchpad** (Insert › 🧮): one sum per line (`2*(3+4)`,
   `r = 2` then `pi*r^2`, `sqrt`, `sin`, `log`, `ln`, `^`); answers on the
-  right; kept with the note. Next to it: grid paper on/off and Clear page
-  (all ink; Draw › Redo Stroke brings it back, stroke by stroke).
-- **Lasso** (Lasso in the ribbon, or Draw › Lasso): draw a loop round ink strokes, pictures, text
+  right; kept with the note. Next to it: grid paper on/off. Clear page
+  (Ink) removes all ink; Redo stroke brings it back, stroke by stroke.
+- **Lasso** (Ink › Lasso, or L while inking): draw a loop round ink strokes, pictures, text
   boxes or tables (a stroke counts when most of it is inside, an item when
   its centre is). Drag inside the dashed box to move them, a corner to
   scale them, Delete or Backspace to remove them, Esc to let go.
-- **Sticky notes** (Sticky in the ribbon): pastel paper with a 📌 header
+- **Sticky notes** (Insert › Sticky): pastel paper with a 📌 header
   (drag it to move, click the title to rename), paper colour, layer order,
   × and a resize corner. In a PDF export they're left out unless Export
   options (⚙ next to Export) › Include sticky notes is on; then they come

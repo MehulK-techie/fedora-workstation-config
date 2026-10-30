@@ -4214,6 +4214,8 @@ class NotesWindow(Adw.ApplicationWindow):
 
     def _on_draw_toggled(self, btn):
         active = btn.get_active()
+        if active and hasattr(self, "mode_btns") and not self.mode_btns["ink"].get_active():
+            self.mode_btns["ink"].set_active(True)   # Ctrl+Shift+P: the island follows
         if active:
             self.shapes_toggle.set_active(False)
             self.laser_toggle.set_active(False)

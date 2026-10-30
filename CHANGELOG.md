@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Notes:** the ribbon became a tool island with three modes (Ink, Type, Insert), so it fits a 1366 px screen; a student highlighter (four pastels, 12/24/36 px, drawn under the text, optional snap to the line); a format card over selected text; P H E L T to pick tools while inking; zoom and page count in one bottom-right pill.
 - **Control Center:** Wi-Fi off no longer shows GNOME's Airplane icon (a Bluetooth that was rfkill-blocked becomes powered off in BlueZ first); Bluetooth and Airplane mode switches; Airplane mode puts each radio back as it was.
 - **MK Notes:** text boxes start wide and one line high and grow as you type; the format bar keeps 12 px clear (below the box near the top of the page); a box left empty goes away when you click elsewhere; "Type note here…" while empty; resize and move cursors. Quick Highlight (swipe along a line: a clean bar behind the text), Lasso in the ribbon, grid paper, Clear page, a 🧮 scratchpad for sums, and Ctrl+scroll zoom that glides.
 - **MK Notes:** Lasso (Draw › Lasso): draw round ink, pictures, text boxes or tables to select them; drag to move, a corner to scale, Delete to remove. Ctrl+A puts the ink in the selection too. Sticky notes are back as their own tool (Sticky in the ribbon); Export options › Include sticky notes adds them to a PDF as a footnote box (greyed out when the note has none).

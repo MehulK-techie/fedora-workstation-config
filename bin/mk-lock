@@ -3,6 +3,8 @@
 
   mk-lock app add APP          ask before APP starts (APP: name or desktop id)
   mk-lock app remove APP       stop asking
+                               (both confirm it's you first: face,
+                               fingerprint or password)
   mk-lock app list
   mk-lock folder add PATH      encrypt PATH (gocryptfs); it opens only after
                                you confirm it's you
@@ -101,6 +103,16 @@ def confirm_identity():
     if "not registered" in result.stderr or "does not exist" in result.stderr:
         die("The mk-lock polkit action isn't installed yet. Run: ./setup.sh")
     return False
+
+
+def confirm_change(what):
+    """Locking or unlocking an app asks who you are first, both ways: MK's
+    unlock window (Face ID, fingerprint, password) on the desktop, polkit in
+    a terminal. True if it was you."""
+    auth = hello()
+    if auth:
+        return auth.ask(f"Confirm it's you to {what}")[0]
+    return confirm_identity()
 
 
 # ---------------------------------------------------------------- item passwords
@@ -403,6 +415,9 @@ def cmd_app(args):
     app_id = find_app(rest[0]) or (rest[0] if action == "remove" else None)
     if not app_id:
         die(f"No app called {rest[0]!r}. Try its desktop id, e.g. org.gnome.Ptyxis")
+    if action in ("add", "remove") and not confirm_change(f"{'lock' if action == 'add' else 'unlock'} "
+                                                          f"{app_id.removesuffix('.desktop')}"):
+        die("Not confirmed; nothing changed.")
     if action == "add":
         wrap(app_id)
         write_list(APPS_FILE, locked + [app_id])

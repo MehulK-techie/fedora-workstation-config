@@ -407,9 +407,10 @@ class Center(Adw.ApplicationWindow):
         return page
 
     def _toggle_app(self, row, _param, app_id):
-        """Locking or unlocking an app asks who you are first (face,
-        fingerprint or password, MK's unlock window); a confirmation lasts
-        two minutes. Not confirmed: the switch goes back.
+        """Locking AND unlocking an app ask who you are first (face,
+        fingerprint or password: mk-lock's own unlock window, so the check
+        can't be skipped from here). The switch stays where it was until
+        that's confirmed; cancelled or failed, nothing changes.
         Nothing happens inside the switch's own notify handler: flipping the
         switch back and presenting a dialog from there hung the window
         ("not responding"). It's done one main-loop turn later."""
@@ -423,30 +424,15 @@ class Center(Adw.ApplicationWindow):
         self._reverting = False
 
     def _confirm_toggle(self, row, want, app_id):
-        def apply():
-            self._lock_ok_until = time.monotonic() + 120
-            row.set_sensitive(False)  # until mk-lock is done (in a thread)
-
-            def finished(code, out):
-                row.set_sensitive(True)
-                if code != 0:
-                    self._set_switch(row, not want)
-                self.say((out.strip().splitlines() or ["Done"])[-1].strip("✔[-] "))
-            run_bg([tool("mk-lock"), "app", "add" if want else "remove", app_id], finished)
-
-        if time.monotonic() < getattr(self, "_lock_ok_until", 0):
-            apply()
-            return
         self._set_switch(row, not want)   # until it's confirmed
-        done = []
+        row.set_sensitive(False)          # mk-lock asks, in a thread: the window stays responsive
 
-        def confirmed():
-            done.append(True)
-            self._set_switch(row, want)
-            apply()
-        dialog = auth.UnlockDialog("Confirm it's you", None, confirmed)
-        dialog.connect("closed", lambda *_: done or self.say("Not confirmed; the lock didn't change"))
-        dialog.present(self)
+        def finished(code, out):
+            row.set_sensitive(True)
+            if code == 0:
+                self._set_switch(row, want)
+            self.say((out.strip().splitlines() or ["Done"])[-1].strip("✔[-] "))
+        run_bg([tool("mk-lock"), "app", "add" if want else "remove", app_id], finished)
 
     def _lock_folders(self):
         page = Adw.PreferencesPage()

@@ -3,6 +3,8 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Notes:** Word-style page breaks: paragraphs and headings never sit on a page gap; pictures, text boxes and tables dropped on one move to the next sheet.
+- **Control Center:** the biometrics tab became Actions › Biometrics & Security (add, enroll, list faces, list fingers, test, delete); actions that open a terminal open one window, not two.
 - **MK Notes:** a format bar on text boxes (bold, italic, underline, 8 colours, A−/A+), kept per word and in PDF exports; the border, handles and bar fade in and out.
 - **Web Hang:** three windows of dark glass round Stan Lee.
 - **MK Notes:** PDF printouts lay one page per A4 sheet, centred with a 24 px margin; text boxes lose the sticky look (thin border and corner handles only while selected) and gain a text colour.

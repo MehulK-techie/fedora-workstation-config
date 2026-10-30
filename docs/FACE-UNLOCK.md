@@ -71,7 +71,7 @@ The wizard picks an IR camera automatically when your computer has one. On lapto
 
 ### Add a face from the Control Center (you, or a guest)
 
-MK Control Center › MK Lock › Face & Fingerprint › **Add a face**: pick
+MK Control Center › Actions › Biometrics & Security › **Add Face ID**: pick
 *You (primary)* or *Guest*, keep or change the model's name (`primary_model`,
 `guest`) and press Record. A terminal window titled *Face Enrollment* runs
 `mk-face-add`, which calls Howdy directly (`howdy -y -U YOU add NAME`, under one `sudo` for the whole run):
@@ -105,8 +105,8 @@ enrolled finger is connected. The check runs as root in `mk-face-auth`
   same first; cancelled, nothing changes and the switch goes back.
 - **What's enrolled:** `mk biometrics list-faces` (ID, date, label of each
   Face ID model; sudo once, Howdy's models are root's) and
-  `mk biometrics list-fingers`; Control Center › Biometrics has List face
-  models and the Enrolled fingers list.
+  `mk biometrics list-fingers`; Control Center › Actions › Biometrics &
+  Security has List Registered Faces and List Enrolled Fingers.
 - **Locked folders and the vault:** the folder's own password, or **Use the
   system prompt…** (fingerprint or account password, through polkit). Face ID
   never opens a folder: `mk-face-auth` answers yes or no to any program

@@ -70,7 +70,7 @@ CSS = b"""
 .mk-cat-blue image { color: #62a0ea; }
 """
 # Card accents: security cyan, performance emerald, system purple.
-CATEGORY_COLOUR = {"Performance": "emerald", "Security & Vault": "cyan", "Biometrics & Lock": "cyan",
+CATEGORY_COLOUR = {"Performance": "emerald", "Security & Vault": "cyan", "Biometrics & Security": "cyan",
                    "Screensavers & Wallpapers": "amber", "Notes & Focus": "blue", "System Maintenance": "purple"}
 PINS = CONFIG / "hub-pins"
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -101,8 +101,10 @@ def terminal(command, title="MK"):
     """argv that runs COMMAND (a shell line) in a new terminal window and
     keeps it open until Enter: Ptyxis (Fedora 41+), Console, or GNOME Terminal."""
     line = f"{command}; echo; read -rp 'Done. Press Enter to close'"
-    if shutil.which("ptyxis"):  # its own window, even when Ptyxis is already open
-        return ["ptyxis", "--new-window", "-T", title, "--", "bash", "-c", line]
+    if shutil.which("ptyxis"):
+        # "-- COMMAND" is already a window of its own; adding --new-window
+        # opened a second, empty terminal next to it
+        return ["ptyxis", "-T", title, "--", "bash", "-c", line]
     if shutil.which("gnome-terminal"):
         return ["gnome-terminal", f"--title={title}", "--", "bash", "-c", line]
     if shutil.which("kgx"):
@@ -118,7 +120,7 @@ def mk(*args):
 # How: ("bg", argv) runs quietly and shows the last line it prints; ("show",
 # argv) shows all of its output; ("term", "mk ...") needs a terminal (sudo or
 # questions); ("page", name) opens another page of this window.
-CATEGORIES = ("Performance", "Security & Vault", "Biometrics & Lock", "Screensavers & Wallpapers",
+CATEGORIES = ("Performance", "Security & Vault", "Biometrics & Security", "Screensavers & Wallpapers",
               "Notes & Focus", "System Maintenance")
 ACTIONS = [
     ("free-ram", "Performance", "media-flash-symbolic", "Free memory", "Drop file caches (no password)", ("bg", mk("optimize", "ram"))),
@@ -132,11 +134,15 @@ ACTIONS = [
     ("vault", "Security & Vault", "changes-prevent-symbolic", "Vault", "Open or close ~/.vault (made the first time)", ("bg", [tool("mk-lock"), "vault"])),
     ("lock-page", "Security & Vault", "changes-prevent-symbolic", "MK Lock", "Lock apps, folders and notebooks", ("page", "lock")),
     ("keyring", "Security & Vault", "dialog-password-symbolic", "Passwords and Keys", "Why apps ask for the keyring", ("bg", mk("keyring", "open"))),
-    ("face", "Biometrics & Lock", "camera-web-symbolic", "Face unlock setup", "Guided: camera, light, face models", ("term", "mk face")),
-    ("face-add", "Biometrics & Lock", "camera-web-symbolic", "Add a face", "You, or a guest / judge, in a window", ("dialog", "face")),
-    ("face-tune", "Biometrics & Lock", "camera-web-symbolic", "Re-tune the camera", "After a new webcam; faces kept", ("term", "mk face --tune-only")),
-    ("finger", "Biometrics & Lock", "auth-fingerprint-symbolic", "Enroll a finger", "You or someone else; never the same finger twice", ("dialog", "finger")),
-    ("finger-check", "Biometrics & Lock", "auth-fingerprint-symbolic", "Fingerprint check", "Is it set up everywhere?", ("show", mk("fingerprint", "check"))),
+    ("face-add", "Biometrics & Security", "camera-web-symbolic", "Add Face ID", "You, or a guest / judge, in a window", ("dialog", "face")),
+    ("finger", "Biometrics & Security", "auth-fingerprint-symbolic", "Enroll Fingerprint", "You or someone else; never the same finger twice", ("dialog", "finger")),
+    ("face-list", "Biometrics & Security", "view-list-bullet-symbolic", "List Registered Faces", "ID, date and label of each face model (sudo once)", ("term", "mk biometrics list-faces")),
+    ("finger-list", "Biometrics & Security", "view-list-bullet-symbolic", "List Enrolled Fingers", "The fingers your reader knows", ("show", mk("biometrics", "list-fingers"))),
+    ("face-try", "Biometrics & Security", "security-high-symbolic", "Test Face ID", "The unlock window MK's apps use", ("dialog", "tryface")),
+    ("face-models", "Biometrics & Security", "user-trash-symbolic", "Delete a face model", "Pick one from the list (sudo once)", ("term", f"{shlex.quote(tool('mk-face-add'))} --list")),
+    ("face", "Biometrics & Security", "camera-web-symbolic", "Full face setup", "Guided: camera, light, several looks", ("term", "mk face")),
+    ("face-tune", "Biometrics & Security", "camera-web-symbolic", "Re-tune the camera", "After a new webcam; faces kept", ("term", "mk face --tune-only")),
+    ("finger-check", "Biometrics & Security", "auth-fingerprint-symbolic", "Fingerprint check", "Is it set up everywhere?", ("show", mk("fingerprint", "check"))),
     ("saver", "Screensavers & Wallpapers", "preferences-desktop-screensaver-symbolic", "Screensaver", "Scenes, delay, lock screen", ("bg", [tool("mk-screensaver"), "settings"])),
     ("saver-show", "Screensavers & Wallpapers", "media-playback-start-symbolic", "Show a scene now", "Shuffle", ("bg", mk("screensaver", "show"))),
     ("accent", "Screensavers & Wallpapers", "preferences-color-symbolic", "Accent from wallpaper", "Desktop colour follows the wallpaper", ("bg", mk("accent", "auto"))),
@@ -330,7 +336,7 @@ class Center(Adw.ApplicationWindow):
         if how == "page":
             self.stack.set_visible_child_name(what)
         elif how == "dialog":
-            (self._face_dialog if what == "face" else self._finger_dialog)()
+            {"face": self._face_dialog, "finger": self._finger_dialog, "tryface": self._try_face}[what]()
         elif how == "term":
             mk_cmd = shlex.quote(tool("mk"))
             run_bg(terminal(mk_cmd + what[2:] if what.startswith("mk ") else what))
@@ -365,7 +371,6 @@ class Center(Adw.ApplicationWindow):
         tabs.add_titled_with_icon(self._lock_apps(), "apps", "Apps", "view-app-grid-symbolic")
         tabs.add_titled_with_icon(self._lock_folders(), "folders", "Folders & Vault", "folder-symbolic")
         tabs.add_titled_with_icon(self._lock_notes(), "notes", "Notes", "accessories-text-editor-symbolic")
-        tabs.add_titled_with_icon(self._lock_biometrics(), "biometrics", "Face & Fingerprint", "camera-web-symbolic")
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         bar = Adw.ViewSwitcher(stack=tabs, policy=Adw.ViewSwitcherPolicy.WIDE, halign=Gtk.Align.CENTER,
                                margin_top=6)
@@ -497,33 +502,6 @@ class Center(Adw.ApplicationWindow):
                lambda c, o: (self._fill_folders(), self.say((o.strip().splitlines() or ["Done"])[-1].strip("✔[-] "))))
 
     # ---------------------------------------------------------------- face and fingerprint
-    def _lock_biometrics(self):
-        page = Adw.PreferencesPage()
-        group = Adw.PreferencesGroup(title="Sign in with your face or finger",
-                                     description="New faces are added next to the ones you have; nothing is "
-                                                 "cleared. Each face or finger is recorded once.")
-        for title, sub, icon, fn in (
-                ("Add a face", "You, or a guest such as a hackathon judge: then try it at once",
-                 "camera-web-symbolic", self._face_dialog),
-                ("Enroll a finger", "You or someone else; asks which finger, never the same one twice",
-                 "auth-fingerprint-symbolic", self._finger_dialog),
-                ("List face models", "ID, date enrolled and label of each Face ID model (sudo once)",
-                 "view-list-bullet-symbolic", lambda: run_bg(terminal(f"{shlex.quote(tool('mk'))} biometrics list-faces",
-                                                                      "Face ID Models"))),
-                ("Face models", "See your face models and delete one (in a terminal: sudo once)",
-                 "view-list-symbolic", lambda: run_bg(terminal(f"{shlex.quote(tool('mk-face-add'))} --list",
-                                                               "Face Models"))),
-                ("Full face setup", "Camera, light and several looks (in a terminal: it asks questions)",
-                 "utilities-terminal-symbolic", lambda: run_bg(terminal(f"{shlex.quote(tool('mk'))} face"))),
-                ("Try Face ID", "The unlock window MK's apps use", "security-high-symbolic", self._try_face)):
-            row = Adw.ActionRow(title=title, subtitle=sub, activatable=True)
-            row.add_prefix(Gtk.Image(icon_name=icon))
-            row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
-            row.connect("activated", lambda _r, f=fn: f())
-            group.add(row)
-        page.add(group)
-        return page
-
     def _try_face(self):
         dialog = auth.UnlockDialog("Try Face ID", None, lambda: self.say("Face ID: it's you ✓"))
         dialog.present(self)

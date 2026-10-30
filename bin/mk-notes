@@ -3483,7 +3483,10 @@ class NotesWindow(Adw.ApplicationWindow):
         self.side_col.append(side_scroll)
         self.sync_label = Gtk.Label(label="", css_classes=["mk-status"], margin_bottom=8, wrap=True)
         self.side_col.append(self.sync_label)
-        main_hbox.append(self.side_col)
+        # the side panels slide in and out (220 ms, eased) instead of popping
+        self.side_rev = Gtk.Revealer(child=self.side_col, reveal_child=True, transition_duration=220,
+                                     transition_type=Gtk.RevealerTransitionType.SLIDE_RIGHT)
+        main_hbox.append(self.side_rev)
 
         self.sep_side = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
         main_hbox.append(self.sep_side)
@@ -3509,7 +3512,9 @@ class NotesWindow(Adw.ApplicationWindow):
         self.list_col.append(list_scroll)
         self.count_label = Gtk.Label(css_classes=["mk-status"], margin_bottom=8)
         self.list_col.append(self.count_label)
-        main_hbox.append(self.list_col)
+        self.list_rev = Gtk.Revealer(child=self.list_col, reveal_child=True, transition_duration=220,
+                                     transition_type=Gtk.RevealerTransitionType.SLIDE_RIGHT)
+        main_hbox.append(self.list_rev)
 
         self.sep_list = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
         main_hbox.append(self.sep_list)
@@ -3974,7 +3979,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
     def _on_nb_toggle(self, btn):
         vis = btn.get_active()
-        self.side_col.set_visible(vis)
+        self.side_rev.set_reveal_child(vis)
         self.sep_side.set_visible(vis)
 
     def toggle_focus_canvas(self):
@@ -3990,7 +3995,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
     def _on_list_toggle(self, btn):
         vis = btn.get_active()
-        self.list_col.set_visible(vis)
+        self.list_rev.set_reveal_child(vis)
         self.sep_list.set_visible(vis)
 
     def _build_ink_subbar(self):

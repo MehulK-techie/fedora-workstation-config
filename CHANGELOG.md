@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Notes:** the selection card now points at the selected words (it had been pinned to the page's corner: Python's Gdk.Rectangle ignores its arguments; the text box's right-click menu had the same bug); it gained strikethrough, inline code, four highlight presets, a link tool and copy/cut/delete, and hides while scrolling. The side panels slide in and out (220 ms).
 - **MK Notes:** the ribbon became a tool island with three modes (Ink, Type, Insert), so it fits a 1366 px screen; a student highlighter (four pastels, 12/24/36 px, drawn under the text, optional snap to the line); a format card over selected text; P H E L T to pick tools while inking; zoom and page count in one bottom-right pill.
 - **Control Center:** Wi-Fi off no longer shows GNOME's Airplane icon (a Bluetooth that was rfkill-blocked becomes powered off in BlueZ first); Bluetooth and Airplane mode switches; Airplane mode puts each radio back as it was.
 - **MK Notes:** text boxes start wide and one line high and grow as you type; the format bar keeps 12 px clear (below the box near the top of the page); a box left empty goes away when you click elsewhere; "Type note here…" while empty; resize and move cursors. Quick Highlight (swipe along a line: a clean bar behind the text), Lasso in the ribbon, grid paper, Clear page, a 🧮 scratchpad for sums, and Ctrl+scroll zoom that glides.

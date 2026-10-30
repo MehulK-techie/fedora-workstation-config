@@ -90,8 +90,13 @@ screen with both sidebars open:
   PDF, screenshot, comment, link, mind map, grid paper, 🧮 scratchpad.
 
 Zoom (− 100 % +) and *Page X of Y* share a small pill at the bottom right.
-Select text in the page and a small card appears above it: style ▾, B, I,
-U, colour ▾, list ▾; it goes when the selection does.
+Select text in the page and a card appears right above the words (below
+them when they're at the very top): paragraph style ▾, B, I, U, S, `</>`
+inline code, 🖍 highlight (one click uses the last colour; ▾ for pastel
+yellow, mint, coral or sky blue), text colour ▾, list ▾, 🔗 link (the words
+become `[words](address)`), then copy, cut and delete. It hides while you
+scroll and comes back when you stop; it goes when the selection does.
+The notebook and note-list panels slide in and out.
 
 **Highlighter** (Ink › 🖍, ▾ for options): Solar yellow, Mint green, Coral
 pink or Sky blue; a 12, 24 or 36 px tip. Its strokes go *under* the text,

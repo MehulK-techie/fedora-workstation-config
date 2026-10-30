@@ -38,7 +38,7 @@ for _lib in (Path(__file__).resolve().parent.parent / "lib",
     if (_lib / "mkworkstation").is_dir():
         sys.path.insert(0, str(_lib))
         break
-from mkworkstation import auth, saver_conf  # noqa: E402
+from mkworkstation import auth, radios, saver_conf  # noqa: E402
 
 FINGERS = [("Right index", "right-index-finger"), ("Right thumb", "right-thumb"),
            ("Right middle", "right-middle-finger"), ("Left index", "left-index-finger"),
@@ -273,11 +273,15 @@ class Center(Adw.ApplicationWindow):
         """Network, sound output, Night Light, power mode, keep awake and the
         camera/microphone privacy switches, in one place."""
         group = Adw.PreferencesGroup(title="Quick settings", css_classes=["mk-quick"])
-        # network: the connection, and Wi-Fi on/off (only Wi-Fi: Bluetooth isn't touched)
+        # radios, each on its own (lib/mkworkstation/radios.py): Wi-Fi off is
+        # never Airplane mode, and Airplane mode gives each radio back as it was
         self.net_row = Adw.SwitchRow(title="Wi-Fi", subtitle="…")
-        self.net_row.connect("notify::active", lambda r, _p: getattr(self, "_net_sync", False) or run_bg(
-            ["nmcli", "radio", "wifi", "on" if r.get_active() else "off"], lambda c, o: self._load_network()))
-        group.add(self.net_row)
+        self.bt_row = Adw.SwitchRow(title="Bluetooth")
+        self.plane_row = Adw.SwitchRow(title="Airplane mode", subtitle="Wi-Fi and Bluetooth off; back as they were after")
+        for row, how in ((self.net_row, "set_wifi"), (self.bt_row, "set_bluetooth"),
+                         (self.plane_row, "set_airplane")):
+            row.connect("notify::active", lambda r, _p, h=how: self._radio(h, r.get_active()))
+            group.add(row)
         self._load_network()
         # sound output
         self.sink_row = Adw.ComboRow(title="Sound output", model=Gtk.StringList())
@@ -319,15 +323,48 @@ class Center(Adw.ApplicationWindow):
             group.add(row)
         return group
 
+    def _radio(self, how, on):
+        if getattr(self, "_net_sync", False):
+            return
+        for row in (self.net_row, self.bt_row, self.plane_row):
+            row.set_sensitive(False)
+
+        def work():
+            try:
+                getattr(radios.Radios(), how)(on)
+                err = None
+            except GLib.Error as e:
+                err = e.message
+            GLib.idle_add(lambda: (self._load_network(), err and self.say(f"Couldn't change it: {err}"), False)[-1])
+        threading.Thread(target=work, daemon=True).start()
+
     def _load_network(self):
-        def done(_c, out):
-            radio, _n, active = out.partition("\n--\n")
+        """The radios' states and the connection, read off the main loop."""
+        def work():
+            try:
+                r = radios.Radios()
+                states = (r.wifi_on(), r.bt_on(), r.airplane(), r.bus.adapter() is not None)
+            except GLib.Error:
+                states = None
+            out = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"],
+                                 capture_output=True, text=True).stdout
+            GLib.idle_add(done, states, out)
+
+        def done(states, out):
             self._net_sync = True
-            self.net_row.set_active(radio.strip() == "enabled")
+            if states:
+                wifi, bt, plane, has_bt = states
+                self.net_row.set_active(wifi)
+                self.bt_row.set_active(bt)
+                self.bt_row.set_visible(has_bt)
+                self.plane_row.set_active(plane)
             self._net_sync = False
-            conns = [line.split(":", 1)[0] for line in active.splitlines() if ":" in line and "loopback" not in line]
+            for row in (self.net_row, self.bt_row, self.plane_row):
+                row.set_sensitive(True)
+            conns = [line.split(":", 1)[0] for line in out.splitlines() if ":" in line and "loopback" not in line]
             self.net_row.set_subtitle("Connected: " + ", ".join(conns) if conns else "Not connected")
-        run_bg(["sh", "-c", "nmcli radio wifi; echo --; nmcli -t -f NAME,TYPE connection show --active"], done)
+            return False
+        threading.Thread(target=work, daemon=True).start()
 
     def _load_sinks(self):
         def done(code, out):

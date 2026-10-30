@@ -241,6 +241,10 @@ BASE_CSS = """
 .mk-img-bar button { color: #ffffff; min-height: 24px; min-width: 24px; padding: 2px 5px; border-radius: 5px; }
 .mk-img-bar button:hover { background: rgba(255,255,255,0.18); }
 .mk-sticky { border-radius: 10px; box-shadow: 0 6px 16px rgba(0,0,0,0.28); padding: 6px; }
+.mk-pad { border-radius: 10px; box-shadow: 0 6px 16px rgba(0,0,0,0.28); padding: 4px;
+          transition: box-shadow 160ms cubic-bezier(0.25, 1, 0.5, 1); }
+.mk-pad-head { border-bottom: 1px solid alpha(currentColor, 0.18); }
+entry.mk-pad-title { font-weight: 700; box-shadow: none; min-height: 24px; padding: 0 2px; }
 .mk-textbox-frame { padding: 7px; border: 1px solid rgba(0,0,0,0); background: rgba(0,0,0,0);
                     transition: border-color 160ms cubic-bezier(0.25, 1, 0.5, 1); }
 .mk-textbox.selected .mk-textbox-frame { border-color: #3584e4; }
@@ -776,6 +780,93 @@ class StickyNoteWidget(Gtk.Box):
         py = max(8, round(self.data["y"] * z))
         if self.get_parent() is self.win.canvas_fixed:
             self.win.canvas_fixed.move(self, px, py)
+
+
+class StickyPad(Gtk.Box):
+    """A sticky note (Sticky in the ribbon): translucent pastel paper with
+    a pinned header (drag it to move; the title is editable), a colour
+    picker, layer order and ×, and room to write. Unlike a text box it
+    stays a note on top of the page; a PDF export lists it in a footnote
+    box (Include sticky notes, next to Export). Its bottom-right corner
+    resizes it."""
+    GRIP_H = 34   # the header's height, the part that drags
+
+    def __init__(self, item_data, note_win):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=2, halign=Gtk.Align.START,
+                         valign=Gtk.Align.START, css_classes=["mk-pad"])
+        self.data = item_data
+        self.win = note_win
+        for k, v in (("x", 420.0), ("y", 120.0), ("w", 220.0), ("h", 180.0), ("color_idx", 0), ("text", ""),
+                     ("title", "Sticky note")):
+            self.data.setdefault(k, v)
+        head = Gtk.Box(spacing=4, height_request=self.GRIP_H - 6, css_classes=["mk-pad-head"])
+        head.append(Gtk.Label(label="📌", margin_start=4, can_target=False))
+        title = Gtk.Entry(text=self.data["title"], hexpand=True, has_frame=False, max_length=40,
+                          css_classes=["mk-pad-title"])
+        title.connect("changed", lambda e: (self.data.__setitem__("title", e.get_text()), self.win.save_note_meta()))
+        title.set_position(0)  # show its start, not its end
+        head.append(title)
+        palette = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
+        pop = Gtk.Popover(child=palette)
+        for i, (name, bg, _fg) in enumerate(STICKY_PALETTES[:TEXT_BOX]):
+            sw = Gtk.Button(tooltip_text=name, css_classes=["mk-swatch"])
+            prov = Gtk.CssProvider()
+            prov.load_from_string(f"button {{ background: {bg}; border: 1px solid alpha(black, 0.25); }}")
+            sw.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 3)
+            sw.connect("clicked", lambda _b, k=i: (pop.popdown(), self._set_color(k)))
+            palette.append(sw)
+        head.append(Gtk.MenuButton(icon_name="color-select-symbolic", css_classes=["flat"], popover=pop,
+                                   tooltip_text="Paper colour"))
+        layers = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=4, margin_bottom=4)
+        lpop = Gtk.Popover(child=layers)
+        for icon, tip, how in LAYER_ACTIONS:
+            row = Gtk.Button(css_classes=["flat"])
+            line = Gtk.Box(spacing=8)
+            line.append(Gtk.Image(icon_name=icon))
+            line.append(Gtk.Label(label=tip))
+            row.set_child(line)
+            row.connect("clicked", lambda _b, h=how: (lpop.popdown(), self.win.restack(self, h)))
+            layers.append(row)
+        head.append(Gtk.MenuButton(child=Gtk.Label(label="⇅"), css_classes=["flat"], popover=lpop,
+                                   tooltip_text="Layer order"))
+        close = Gtk.Button(icon_name="window-close-symbolic", css_classes=["flat"], tooltip_text="Delete this sticky note")
+        close.connect("clicked", lambda *_: self.win.remove_pinned_sticky(self))
+        head.append(close)
+        head.set_cursor(Gdk.Cursor.new_from_name("move"))
+        self.append(head)
+        self.text_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, hexpand=True, vexpand=True,
+                                      left_margin=8, right_margin=8, top_margin=4, bottom_margin=4)
+        self.text_view.get_buffer().set_text(self.data["text"])
+        self.text_view.get_buffer().connect("changed", self._on_text)
+        self.append(Gtk.ScrolledWindow(child=self.text_view, hexpand=True, vexpand=True,
+                                       hscrollbar_policy=Gtk.PolicyType.NEVER))
+        self._css = Gtk.CssProvider()
+        for w in (self, self.text_view, title):
+            w.get_style_context().add_provider(self._css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
+        self._apply()
+        self.sync_zoom_geometry()
+
+    def _apply(self):
+        _name, bg, fg = STICKY_PALETTES[int(self.data.get("color_idx", 0)) % TEXT_BOX]
+        self._css.load_from_string(
+            f".mk-pad {{ background: alpha({bg}, 0.88); color: {fg}; }}"
+            f"textview, textview text, entry.mk-pad-title, entry.mk-pad-title text "
+            f"{{ background: transparent; color: {fg}; }}")
+
+    def _set_color(self, idx):
+        self.data["color_idx"] = idx
+        self._apply()
+        self.win.save_note_meta()
+
+    def _on_text(self, buf):
+        self.data["text"] = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        self.win.save_note_meta()
+
+    def sync_zoom_geometry(self):
+        z = self.win.zoom
+        self.set_size_request(round(self.data["w"] * z), round(self.data["h"] * z))
+        if self.get_parent() is self.win.canvas_fixed:
+            self.win.canvas_fixed.move(self, max(8, round(self.data["x"] * z)), max(8, round(self.data["y"] * z)))
 
 
 class TableItem(Gtk.Box):
@@ -2483,7 +2574,7 @@ PDF_FONTS = {"title": "Sans Heavy 22", "h1": "Sans Bold 18", "h2": "Sans Bold 15
              "h3": "Sans Semi-Bold 13", "body": "Sans 11"}
 
 
-def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_img_fn, stickies=(), tables=()):
+def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_img_fn, stickies=(), tables=(), pads=()):
     """Render a note to PDF with Cairo (no print dialog). LINES: (Pango markup,
     kind) pairs from NotesWindow._export_lines; kind picks the font. STICKIES
     (the note's sticky notes) come after the text as coloured callout cards."""
@@ -2634,6 +2725,31 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
         PangoCairo.show_layout(cr, layout)
         y += box_h + 12.0
 
+    # sticky notes (when included): one footnote box at the end, each note
+    # a line of its own: 📌 title, its words, small
+    notes = [p for p in pads if (p.get("text") or "").strip()]
+    if notes:
+        layout = PangoCairo.create_layout(cr)
+        layout.set_width(int((CONTENT_W - 24) * Pango.SCALE))
+        layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+        layout.set_font_description(Pango.FontDescription("Sans 8.5"))
+        layout.set_markup("<b>Sticky notes</b>\n" + "\n".join(
+            f"📌 <b>{GLib.markup_escape_text(p.get('title') or 'Sticky note')}</b>: "
+            f"{GLib.markup_escape_text(p['text'].strip())}" for p in notes), -1)
+        _ink, logical = layout.get_pixel_extents()
+        box_h = logical.height + 16.0
+        ensure_space(box_h + 12.0)
+        cr.set_source_rgb(*hex_rgb(STICKY_PALETTES[0][1]))
+        cr.rectangle(MARGIN, y, CONTENT_W, box_h)
+        cr.fill()
+        cr.set_source_rgb(*hex_rgb(STICKY_PALETTES[0][2]))
+        cr.set_line_width(0.6)
+        cr.rectangle(MARGIN, y, CONTENT_W, box_h)
+        cr.stroke()
+        cr.move_to(MARGIN + 12, y + 8)
+        PangoCairo.show_layout(cr, layout)
+        y += box_h + 12.0
+
     surface.finish()
 
 
@@ -2703,6 +2819,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.rows = {}
         self.canvas_images = []
         self.sticky_notes = []
+        self.pinned_stickies = []   # StickyPad: sticky notes (sticky_notes holds the text boxes, an old name)
         self.table_items = []
         self.comments = []
         self.selected_img = None
@@ -2789,9 +2906,26 @@ class NotesWindow(Adw.ApplicationWindow):
                 self._ov_start = tuple(float(st.data[k]) for k in ("x", "y", "w", "h"))
                 gesture.set_state(Gtk.EventSequenceState.CLAIMED)
                 return
+        # a sticky note: its bottom-right corner resizes it, its header moves it
+        for pad in reversed(self.pinned_stickies):
+            px, py = pad.data["x"] * z, pad.data["y"] * z
+            pw, ph = pad.get_width(), pad.get_height()
+            if px + pw - 18 <= x <= px + pw and py + ph - 18 <= y <= py + ph:
+                self._ov_drag_target = ("sticky-size", pad)
+                self._ov_corner = (1, 1)
+                self._ov_start = tuple(float(pad.data[k]) for k in ("x", "y", "w", "h"))
+                gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+                return
         if self._is_control_at(x, y):
             gesture.set_state(Gtk.EventSequenceState.DENIED)
             return
+        for pad in reversed(self.pinned_stickies):
+            px, py = pad.data["x"] * z, pad.data["y"] * z
+            if px <= x <= px + pad.get_width() and py <= y <= py + pad.GRIP_H:
+                self._ov_drag_target = ("sticky", pad)
+                self._ov_start_x, self._ov_start_y = float(pad.data["x"]), float(pad.data["y"])
+                gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+                return
 
         # a text box's border (the text itself is a control, above) moves it
         for st in reversed(self.sticky_notes):
@@ -3123,6 +3257,10 @@ class NotesWindow(Adw.ApplicationWindow):
         self.fmt_drop.connect("notify::selected", lambda d, _p: conf_set(
             "EXPORT_FORMAT", "docx" if d.get_selected() == 1 else "pdf"))
         exp_box.append(self.fmt_drop)
+        self.export_pads = Gtk.CheckButton(label="Include sticky notes in export", active=True, sensitive=False,
+                                           margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
+        exp_box.append(Gtk.MenuButton(icon_name="emblem-system-symbolic", css_classes=["flat"],
+                                      tooltip_text="Export options", popover=Gtk.Popover(child=self.export_pads)))
         self.top_bar.pack_end(exp_box)
 
         root_view.add_top_bar(self.top_bar)
@@ -3292,6 +3430,11 @@ class NotesWindow(Adw.ApplicationWindow):
                               css_classes=["flat"])
         text_btn.connect("clicked", lambda *_: self.add_sticky_note(text_box=True))
         ribbon.append(text_btn)
+        pad_btn = Gtk.Button(label="Sticky", icon_name="note-symbolic", css_classes=["flat"],
+                             tooltip_text="Sticky note: pastel paper with a pinned header, on top of the page")
+        pad_btn.set_child(Adw.ButtonContent(icon_name="mail-attachment-symbolic", label="Sticky"))
+        pad_btn.connect("clicked", lambda *_: self.add_pinned_sticky())
+        ribbon.append(pad_btn)
         colour_pop = Gtk.Popover()
         colour_pop.set_child(self.text_colour_swatches(lambda c: (colour_pop.popdown(), self._colour_text_box(c))))
         ribbon.append(Gtk.MenuButton(child=_colour_a_label(), css_classes=["flat"],
@@ -4230,11 +4373,12 @@ class NotesWindow(Adw.ApplicationWindow):
 
     # ---------- layers: every picture and sticky has a z; higher is in front
     def _layers(self):
-        items = self.canvas_images + self.sticky_notes + self.table_items
+        items = self.canvas_images + self.sticky_notes + self.table_items + self.pinned_stickies
         return sorted(items, key=lambda w: (w.data.get("z", 0), items.index(w)))
 
     def _next_z(self):
-        return 1 + max((w.data.get("z", 0) for w in self.canvas_images + self.sticky_notes + self.table_items),
+        return 1 + max((w.data.get("z", 0) for w in self.canvas_images + self.sticky_notes + self.table_items
+                        + self.pinned_stickies),
                        default=0)
 
     def _apply_z_order(self):
@@ -4258,6 +4402,39 @@ class NotesWindow(Adw.ApplicationWindow):
         self._apply_z_order()
         self.dirty = True
         self.save_note_meta()
+
+    def add_pinned_sticky(self):
+        scroll_y = self.page_scroll.get_vadjustment().get_value() / max(0.5, self.zoom)
+        z = max(0.5, self.zoom)
+        data = {"x": float(max(16, self.page_width() / z - 260 - 24 * (len(self.pinned_stickies) % 5))),
+                "y": float(max(60, round(scroll_y + 80 + 24 * (len(self.pinned_stickies) % 5)))),
+                "z": self._next_z(), "color_idx": len(self.pinned_stickies) % TEXT_BOX}
+        pad = StickyPad(data, self)
+        self.canvas_fixed.put(pad, round(data["x"] * self.zoom), round(data["y"] * self.zoom))
+        self.pinned_stickies.append(pad)
+        self.dirty = True
+        self.save_note_meta()
+        self._sync_export_toggle()
+        GLib.idle_add(lambda: pad.text_view.grab_focus() and False)
+
+    def remove_pinned_sticky(self, pad):
+        if pad in self.pinned_stickies:
+            self.pinned_stickies.remove(pad)
+            if pad.get_parent() is self.canvas_fixed:
+                self.canvas_fixed.remove(pad)
+            self.dirty = True
+            self.save_note_meta()
+            self._sync_export_toggle()
+
+    def has_sticky_notes(self):
+        return bool(self.pinned_stickies)
+
+    def _sync_export_toggle(self):
+        """'Include sticky notes' only means something when there are some."""
+        check = getattr(self, "export_pads", None)
+        if check:
+            check.set_sensitive(self.has_sticky_notes())
+            check.set_tooltip_text(None if self.has_sticky_notes() else "This note has no sticky notes")
 
     def text_colour_swatches(self, pick):
         """A row of TEXT_COLOURS swatches; PICK(hex) on a click."""
@@ -4545,6 +4722,7 @@ class NotesWindow(Adw.ApplicationWindow):
             "spans": spans,
             "images": [w.data for w in self.canvas_images],
             "stickies": [s.data for s in self.sticky_notes],
+            "pinned_stickies": [p.data for p in self.pinned_stickies],
             "tables": [dict(t.data) for t in self._live_tables()],
             "comments": self.comments,
             "strokes": self.ink_canvas.strokes,
@@ -4700,7 +4878,8 @@ class NotesWindow(Adw.ApplicationWindow):
             self.note_links = list(meta.get("links", []))
             self.note_tags = list(meta.get("tags", []))
             self.comments = list(meta.get("comments", []))
-            self._rebuild_canvas_objects(meta.get("images", []), meta.get("stickies", []))
+            self._rebuild_canvas_objects(meta.get("images", []), meta.get("stickies", []),
+                                         meta.get("pinned_stickies", []))
             for t in pending_tables:
                 data = {k: v for k, v in t.items() if k != "offset"}
                 if "y" not in data:  # an older in-text table: where its line was
@@ -4728,14 +4907,20 @@ class NotesWindow(Adw.ApplicationWindow):
         if not self.ink_canvas.active:
             GLib.idle_add(lambda: self.view.grab_focus() and False)  # once: True would repeat it forever
 
-    def _rebuild_canvas_objects(self, images_list, stickies_list):
-        for w in self.canvas_images + self.sticky_notes:
+    def _rebuild_canvas_objects(self, images_list, stickies_list, pads_list=()):
+        for w in self.canvas_images + self.sticky_notes + self.pinned_stickies:
             try:
                 self.canvas_fixed.remove(w)
             except Exception:
                 pass
         self.canvas_images = []
         self.sticky_notes = []
+        self.pinned_stickies = []
+        for item in pads_list:
+            pad = StickyPad(dict(item), self)
+            self.canvas_fixed.put(pad, round(pad.data["x"] * self.zoom), round(pad.data["y"] * self.zoom))
+            self.pinned_stickies.append(pad)
+        self._sync_export_toggle()
         self.selected_img = None
 
         for item in images_list:
@@ -4781,7 +4966,7 @@ class NotesWindow(Adw.ApplicationWindow):
         z = max(0.5, self.zoom)
         _min, text_h, _b1, _b2 = self.view.measure(Gtk.Orientation.VERTICAL, self.page_width())
         bottom = (text_h - self.view.get_bottom_margin()) / z + 40  # (the margin is room for the items)
-        for w in self.canvas_images + self.sticky_notes:
+        for w in self.canvas_images + self.sticky_notes + self.pinned_stickies:
             bottom = max(bottom, w.data.get("y", 0) + w.data.get("h", 160) + PAGE_GAP / 2)
         for t in self.table_items:
             bottom = max(bottom, t.data.get("y", 0) + t.get_height() / z + PAGE_GAP / 2)
@@ -5114,7 +5299,7 @@ class NotesWindow(Adw.ApplicationWindow):
         the editor itself); off again on the next other key or click."""
         self._all_selected = on
         self.ink_canvas.select_all(on)   # the ink too, in one dashed box
-        for w in self.canvas_images + self.sticky_notes:
+        for w in self.canvas_images + self.sticky_notes + self.pinned_stickies:
             (w.add_css_class if on else w.remove_css_class)("mk-all-selected")
         for t in self.table_items:
             t._all = on
@@ -5129,6 +5314,8 @@ class NotesWindow(Adw.ApplicationWindow):
             self.remove_canvas_image(w)
         for st in list(self.sticky_notes):
             self.remove_sticky_note(st)
+        for pad in list(self.pinned_stickies):
+            self.remove_pinned_sticky(pad)
         for t in list(self.table_items):
             self.remove_table(t)
         self._all_selected = False
@@ -5895,7 +6082,7 @@ class NotesWindow(Adw.ApplicationWindow):
             self.dirty = False
             self.buffer.set_text("")
             self._clear_tables()
-            self._rebuild_canvas_objects([], [])
+            self._rebuild_canvas_objects([], [], [])
             self.ink_canvas.strokes = []
             self.comments = []
             self.loading = False
@@ -5995,7 +6182,8 @@ class NotesWindow(Adw.ApplicationWindow):
         lines = self._export_lines()
         stickies = [dict(st.data) for st in self.sticky_notes]
         tables = [dict(t.data) for t in self._live_tables()]
-        return lambda: export_pdf_direct(title, meta, lines, imgs, out_path, resolve, stickies, tables)
+        pads = [dict(p.data) for p in self.pinned_stickies] if self.export_pads.get_active() else []
+        return lambda: export_pdf_direct(title, meta, lines, imgs, out_path, resolve, stickies, tables, pads)
 
     def _do_export(self, out_path, fmt):
         self._export_job(out_path, fmt)()

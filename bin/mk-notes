@@ -3653,7 +3653,7 @@ class NotesWindow(Adw.ApplicationWindow):
                                                        self.paper_bg.queue_draw()))
         ribbon.append(self.grid_toggle)
         clear_btn = Gtk.Button(icon_name="edit-clear-all-symbolic", css_classes=["flat"],
-                               tooltip_text="Clear page: remove every pen, highlighter and shape stroke (Ctrl+Z undoes)")
+                               tooltip_text="Clear page: remove every pen, highlighter and shape stroke (Draw › Redo Stroke brings them back)")
         clear_btn.connect("clicked", lambda *_: self.ink_canvas.clear())
         ribbon.append(clear_btn)
         scratch = Gtk.MenuButton(child=Gtk.Label(label="🧮"), css_classes=["flat"], popover=self._scratchpad(),

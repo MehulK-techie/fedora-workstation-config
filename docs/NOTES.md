@@ -173,7 +173,7 @@ closes it without saving.
 - **Scratchpad** (🧮, right of the ribbon): one sum per line (`2*(3+4)`,
   `r = 2` then `pi*r^2`, `sqrt`, `sin`, `log`, `ln`, `^`); answers on the
   right; kept with the note. Next to it: grid paper on/off and Clear page
-  (all ink; Ctrl+Z brings it back).
+  (all ink; Draw › Redo Stroke brings it back, stroke by stroke).
 - **Lasso** (Lasso in the ribbon, or Draw › Lasso): draw a loop round ink strokes, pictures, text
   boxes or tables (a stroke counts when most of it is inside, an item when
   its centre is). Drag inside the dashed box to move them, a corner to

@@ -553,6 +553,7 @@ def _photo_levels(cols, rows):
 
 
 UNLIT = (0x16 / 255, 0x19 / 255, 0x24 / 255)   # unlit office glass
+OFF_GLASS = (15 / 255, 18 / 255, 28 / 255)     # the switched-off windows round Stan Lee
 
 
 def _unlit_feature(u, v):
@@ -723,18 +724,30 @@ def tribute_tower(cr, w, h):
     dense = (0.86, 0.86)  # the portrait's glass wall: almost no mullion between panes
 
     levels = _photo_levels(pcols, prows)
-    # a clear margin round his silhouette: no office lights touching him
-    near = None
+    # Negative space: office windows within three of the facade's windows
+    # of his silhouette are off (dark glass), so nothing lit touches him.
+    # NEAR is the portrait grid widened by REACH cells on every side.
+    near, reach = None, math.ceil(3 * pitch / ppitch)
     if levels is not None:
-        reach = int(pitch / ppitch) + 2
-        near = [[False] * pcols for _ in range(prows)]
+        near = [[False] * (pcols + 2 * reach) for _ in range(prows + 2 * reach)]
         for r in range(prows):
             for c in range(pcols):
                 if levels[r][c] is not None:
-                    for rr in range(max(0, r - reach), min(prows, r + reach + 1)):
+                    for rr in range(r, r + 2 * reach + 1):
                         row = near[rr]
-                        for cc in range(max(0, c - reach), min(pcols, c + reach + 1)):
+                        for cc in range(c, c + 2 * reach + 1):
                             row[cc] = True
+
+    def by_portrait(x, y):
+        """'him' (a portrait window is there), 'margin' (the dark space
+        round him) or None, for the facade window at (x, y)."""
+        r, c = math.floor((y - py0) / ppitch), math.floor((x - px0) / ppitch)
+        if near is None:
+            return "him" if px0 - pitch <= x <= px0 + pside and py0 - pitch <= y <= py0 + pheight else None
+        if not (-reach <= r < prows + reach and -reach <= c < pcols + reach) or not near[r + reach][c + reach]:
+            return None
+        inside = 0 <= r < prows and 0 <= c < pcols and levels[r][c] is not None
+        return "him" if inside or (0 <= r + 1 < prows and 0 <= c < pcols and levels[r + 1][c] is not None) else "margin"
     # every office window on every tier (around Stan Lee's silhouette, not a box)
     for tx, tw, top, bottom in spans:
         cols = int((tw - pitch) / pitch)
@@ -746,11 +759,12 @@ def tribute_tower(cr, w, h):
             busy = rand.uniform(0.25, 0.65)            # how many are still in
             for c in range(cols):
                 x = left + c * pitch
-                inside_portrait = (px0 - pitch <= x <= px0 + pside and py0 - pitch <= floor_y <= py0 + pheight
-                                   and (near is None or near[min(prows - 1, max(0, int((floor_y - py0) / ppitch)))]
-                                        [min(pcols - 1, max(0, int((x - px0) / ppitch)))]))
+                where = by_portrait(x, floor_y)
                 inside_frieze = frieze_top - pitch * 0.5 <= floor_y <= frieze_bottom
-                if inside_portrait or inside_frieze:
+                if where == "him" or inside_frieze:
+                    continue
+                if where == "margin":
+                    lit(x, floor_y, OFF_GLASS, 0.95)
                     continue
                 if dark_floor or rand.random() > busy:
                     continue

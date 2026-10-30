@@ -167,11 +167,19 @@ def _paper(w, h, seed=7, colour="white"):
     return _CACHE[key]
 
 
-def square(photo):
-    """The middle square of PHOTO."""
+def square(photo, offset=(0.5, 0.5)):
+    """A square of PHOTO: the middle one, or OFFSET (0-1 across and down the
+    part that doesn't fit) to frame it differently."""
+    return fit(photo, 1.0, offset)
+
+
+def fit(photo, aspect, offset=(0.5, 0.5)):
+    """The largest ASPECT (width / height) part of PHOTO, placed by OFFSET."""
     w, h = photo.size
-    side = min(w, h)
-    return photo.crop(((w - side) // 2, (h - side) // 2, (w - side) // 2 + side, (h - side) // 2 + side))
+    cw, ch = (w, round(w / aspect)) if w / h < aspect else (round(h * aspect), h)
+    x = round((w - cw) * min(1.0, max(0.0, offset[0])))
+    y = round((h - ch) * min(1.0, max(0.0, offset[1])))
+    return photo.crop((x, y, x + cw, y + ch))
 
 
 def _recess(w, h):
@@ -192,12 +200,12 @@ def _recess(w, h):
     return _CACHE[key]
 
 
-def polaroid_frame(photo, colour="white"):
+def polaroid_frame(photo, colour="white", offset=(0.5, 0.5)):
     """The instant-photo card, 3:4: the photo cut square and set into the
     card (a soft shadow inside the cutout, a light edge on the card), with a
     thick bottom edge for a caption. Returns (card, (x, y, w, h) of the
     photo, (x, y, w, h) of the caption area)."""
-    photo = square(photo)
+    photo = square(photo, offset)
     s = photo.width
     side = top = round(s * 0.06)
     card_w = s + 2 * side
@@ -227,6 +235,90 @@ def polaroid_frame(photo, colour="white"):
         for i, rgb in enumerate(RAINBOW):
             card.paste(Image.new("RGB", (card_w - 2 * side, band), rgb), (side, y0 + i * band))
     return card, (side, top, s, s), (side, top + s, s, bottom - (round(bottom * 0.3) if colour == "rainbow" else 0))
+
+
+# Frames beyond the instant-photo card: (label, function)
+FRAME_STYLES_EXTRA = {"dual": "Dual border", "film": "35mm film strip", "postcard": "Postcard stamp"}
+
+
+def frame(photo, style, offset=(0.5, 0.5)):
+    """PHOTO in frame STYLE (a FRAME_COLOURS card or a FRAME_STYLES_EXTRA
+    one), the photo placed by OFFSET. Returns (image, photo box, caption box
+    or None), as polaroid_frame."""
+    if style == "dual":
+        return dual_frame(photo, offset)
+    if style == "film":
+        return film_frame(photo, offset)
+    if style == "postcard":
+        return postcard_frame(photo, offset)
+    return polaroid_frame(photo, style, offset)
+
+
+def dual_frame(photo, offset=(0.5, 0.5)):
+    """Minimal: a wide white mat, a hairline dark rule a little way out
+    from the photo, equal borders all round (4:5)."""
+    from PIL import ImageDraw
+    photo = fit(photo, 4 / 5, offset)
+    w, h = photo.size
+    pad = round(w * 0.09)
+    card = Image.new("RGB", (w + 2 * pad, h + 2 * pad), (248, 247, 244))
+    card.paste(photo, (pad, pad))
+    d = ImageDraw.Draw(card)
+    gap, line = round(pad * 0.35), max(1, round(w * 0.003))
+    d.rectangle((pad - gap, pad - gap, pad + w + gap - 1, pad + h + gap - 1), outline=(40, 40, 46), width=line)
+    return card, (pad, pad, w, h), None
+
+
+def film_frame(photo, offset=(0.5, 0.5)):
+    """A 35mm negative strip: black film, a row of rounded sprocket holes
+    along the top and bottom, edge print, the photo 3:2 in the middle."""
+    from PIL import ImageDraw, ImageFont
+    photo = fit(photo, 3 / 2, offset)
+    w, h = photo.size
+    band = round(h * 0.17)
+    side = round(w * 0.04)
+    card = Image.new("RGB", (w + 2 * side, h + 2 * band), (18, 16, 15))
+    card.paste(photo, (side, band))
+    d = ImageDraw.Draw(card)
+    hole_w, hole_h = round(band * 0.42), round(band * 0.5)
+    step = round(hole_w * 1.9)
+    r = max(1, hole_h // 5)
+    for x in range(round(step * 0.4), card.width - hole_w, step):
+        for y in ((band - hole_h) // 2, card.height - band + (band - hole_h) // 2):
+            d.rounded_rectangle((x, y, x + hole_w, y + hole_h), radius=r, fill=(236, 232, 224))
+    try:
+        font = ImageFont.truetype("DejaVuSansMono-Bold.ttf", max(8, round(band * 0.2)))
+    except OSError:
+        font = ImageFont.load_default()
+    d.text((side, card.height - round(band * 0.24)), "MK 400   ▸ 24A", fill=(232, 160, 60), font=font, anchor="ls")
+    return card, (side, band, w, h), None
+
+
+def postcard_frame(photo, offset=(0.5, 0.5)):
+    """A postage stamp: a white border with a perforated (scalloped) edge,
+    on a soft shadow, the photo 4:5."""
+    from PIL import ImageDraw
+    photo = fit(photo, 4 / 5, offset)
+    w, h = photo.size
+    border = round(w * 0.07)
+    tooth = max(4, round(w * 0.022))     # the perforation's radius
+    margin = tooth * 2
+    cw, ch = w + 2 * border, h + 2 * border
+    mask = Image.new("L", (cw + 2 * margin, ch + 2 * margin), 0)
+    d = ImageDraw.Draw(mask)
+    d.rectangle((margin, margin, margin + cw - 1, margin + ch - 1), fill=255)
+    for x in range(margin, margin + cw + 1, tooth * 3):  # bites out of every edge
+        for y in (margin, margin + ch):
+            d.ellipse((x - tooth, y - tooth, x + tooth, y + tooth), fill=0)
+    for y in range(margin, margin + ch + 1, tooth * 3):
+        for x in (margin, margin + cw):
+            d.ellipse((x - tooth, y - tooth, x + tooth, y + tooth), fill=0)
+    out = Image.new("RGB", mask.size, (232, 226, 214))
+    shadow = mask.filter(ImageFilter.GaussianBlur(tooth))
+    out.paste((180, 172, 158), (round(tooth * 0.6), round(tooth * 0.8)), shadow)
+    out.paste((252, 251, 248), (0, 0), mask)
+    out.paste(photo, (margin + border, margin + border))
+    return out, (margin + border, margin + border, w, h), None
 
 
 def _grain(size, seed=5):

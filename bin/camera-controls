@@ -263,6 +263,7 @@ class Booth(Adw.ApplicationWindow):
         self.pipeline = None
         self.items = []
         self.shot = None           # the captured photo (PIL), before decorations
+        self.crop_offset = (0.5, 0.5)  # which part of it a frame shows (dragged)
 
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS)
@@ -577,6 +578,7 @@ class Booth(Adw.ApplicationWindow):
         else:
             self.shot = photo.apply(img, self.look) if self.look else img
             self.frame_on = False
+        self.crop_offset = (0.5, 0.5)
         self.items = []
         self.selected = None
         self.taken_at = time.localtime()
@@ -685,16 +687,19 @@ class Booth(Adw.ApplicationWindow):
         tools.append(layer)
 
         frame_row = Gtk.Box(spacing=8)
-        frame_row.append(Gtk.Label(label="Polaroid frame", hexpand=True, xalign=0))
+        frame_row.append(Gtk.Label(label="Frame", hexpand=True, xalign=0,
+                                   tooltip_text="Drag the photo inside the frame to choose what shows"))
         self.frame_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
         self.frame_switch.connect("notify::active", lambda sw, _p: (setattr(self, "frame_on", sw.get_active()),
                                                                     self._compose()))
         frame_row.append(self.frame_switch)
         tools.append(frame_row)
-        self.frame_colour = Gtk.DropDown.new_from_strings([v[0] for v in photo.FRAME_COLOURS.values()])
+        self.frame_styles = list(photo.FRAME_COLOURS) + list(photo.FRAME_STYLES_EXTRA)
+        self.frame_colour = Gtk.DropDown.new_from_strings(
+            [v[0] for v in photo.FRAME_COLOURS.values()] + list(photo.FRAME_STYLES_EXTRA.values()))
         self.frame_colour.connect("notify::selected", lambda *_: self._compose())
         stock = Gtk.Box(spacing=8)
-        stock.append(Gtk.Label(label="Card", xalign=0, hexpand=True))
+        stock.append(Gtk.Label(label="Style", xalign=0, hexpand=True))
         stock.append(self.frame_colour)
         tools.append(stock)
         leak_row = Gtk.Box(spacing=8)
@@ -790,9 +795,8 @@ class Booth(Adw.ApplicationWindow):
         if leak:
             shot = photo.light_leak(shot, list(photo.LEAKS)[leak - 1])
         if self.frame_on:
-            colour = list(photo.FRAME_COLOURS)[self.frame_colour.get_selected()]
-            framed, photo_box, caption_box = photo.polaroid_frame(shot, colour)
-            return framed, photo_box, caption_box
+            style = self.frame_styles[self.frame_colour.get_selected()]
+            return photo.frame(shot, style, self.crop_offset)
         return shot, (0, 0, shot.width, shot.height), None
 
     def _render(self, base_photo):
@@ -817,7 +821,7 @@ class Booth(Adw.ApplicationWindow):
                 text = time.strftime(fmt)
             colour = STAMP_WHITE if self.stamp_white.get_active() else DATE_STYLES[style][2]
             date = (style, text, colour)
-        noir = self.frame_on and list(photo.FRAME_COLOURS)[self.frame_colour.get_selected()] == "noir"
+        noir = self.frame_on and self.frame_styles[self.frame_colour.get_selected()] == "noir"
         return draw_items(base, placed, self.caption.get_text().strip() if self.frame_on else None,
                           caption_box, date, (px, py, pw, ph), caption_font=self._font_key(),
                           caption_colour=(0.93, 0.92, 0.88) if noir else (0.18, 0.16, 0.2))
@@ -906,6 +910,9 @@ class Booth(Adw.ApplicationWindow):
         self.drag_start = (x, y)
         hit = self._hit(x, y)
         self.drag_mode = hit[0] if hit else None
+        if not hit and self.frame_on and self.shot is not None:
+            self.drag_mode, self.selected = "pan", None   # move the photo inside its frame
+            self.drag_offset = self.crop_offset
         if hit:
             self.selected = hit[1]
             it = self.items[self.selected]
@@ -917,6 +924,9 @@ class Booth(Adw.ApplicationWindow):
         self.handles.queue_draw()
 
     def _drag_update(self, _g, dx, dy):
+        if self.drag_mode == "pan":
+            self._pan(dx, dy)
+            return
         if not self.drag_mode or self.selected is None:
             return
         it, start = self.items[self.selected], self.drag_item
@@ -939,11 +949,29 @@ class Booth(Adw.ApplicationWindow):
 
     def _drag_end(self, _g, dx, dy):
         self.angle_label.set_visible(False)
-        if abs(dx) + abs(dy) < 4 and not self.drag_mode:
+        if abs(dx) + abs(dy) < 4 and self.drag_mode in (None, "pan"):
+            if self.drag_mode == "pan":
+                self.crop_offset = self.drag_offset
             self._place(*self.drag_start)  # a click on an empty spot
         elif abs(dx) + abs(dy) < 4 and self.drag_mode == "move":
             pass  # a click on a layer just selects it
         self.drag_mode = None
+
+    def _pan(self, dx, dy):
+        """Dragging the photo inside its frame: the crop follows the hand."""
+        small = self.view_photo_size()
+        _base, (_px, _py, pw, ph), _cap = self._composed_parts(small)
+        k, _ox, _oy = self._to_view()
+        # how far the visible part can slide, in view pixels
+        room_x = max(1.0, small.width * (ph / small.height) - pw) if small.width / small.height > pw / ph else None
+        room_y = max(1.0, small.height * (pw / small.width) - ph) if small.width / small.height < pw / ph else None
+        ox, oy = self.drag_offset
+        if room_x:
+            ox = min(1.0, max(0.0, ox - dx / k / room_x))
+        if room_y:
+            oy = min(1.0, max(0.0, oy - dy / k / room_y))
+        self.crop_offset = (ox, oy)
+        self._compose()
 
     def view_photo_size(self):
         small = self.shot.copy()

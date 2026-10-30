@@ -69,6 +69,8 @@ NOTEBOOK_COLORS = [
     ("Cyan Teal", "#06b6d4"),
 ]
 
+HIGHLIGHTER_COLOURS = (("Solar yellow", "#fde047"), ("Mint green", "#86efac"), ("Coral pink", "#fca5a5"),
+                       ("Sky blue", "#93c5fd"))
 INK_COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#ffffff", "#1e293b"]
 
 STICKY_PALETTES = [
@@ -256,6 +258,19 @@ BASE_CSS = """
 .mk-table-pill { font-size: 0.82em; padding: 2px 10px; min-height: 0; border-radius: 99px;
                  background: alpha(@window_fg_color, 0.08); }
 .mk-sheet { border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
+.mk-island .mk-inkbar { background: none; border: none; box-shadow: none; padding: 0; margin: 0; }
+.mk-island { border-radius: 12px; background: rgba(30, 34, 46, 0.85); color: #e5e7eb; padding: 4px 6px;
+             border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22); }
+.mk-island button, .mk-island menubutton > button { color: #e5e7eb; transition: all 120ms ease; }
+.mk-island button:hover, .mk-island menubutton > button:hover { background: rgba(255, 255, 255, 0.08); }
+.mk-island dropdown > button { color: #e5e7eb; }
+.mk-modes button { padding: 4px 10px; font-weight: 600; }
+.mk-modes button:checked { background: alpha(@accent_bg_color, 0.85); color: white; }
+.mk-tool:checked { background: rgba(255, 255, 255, 0.10);
+                   box-shadow: inset 0 -3px 0 @accent_bg_color; }  /* the pill under the tool in use */
+.mk-zoom-pill { background: alpha(black, 0.55); color: white; border-radius: 99px; padding: 1px 6px; }
+.mk-zoom-pill button { color: white; min-height: 22px; min-width: 22px; padding: 0 6px; }
+.mk-zoom-pill .mk-page-badge { background: none; }
 .mk-page-badge { background: alpha(black, 0.55); color: white; border-radius: 99px; padding: 3px 10px;
                  font-size: 0.85em; font-weight: 600; }
 .mk-comment-active { box-shadow: inset 3px 0 0 @accent_color; background: alpha(@accent_bg_color, 0.18); }
@@ -1912,6 +1927,8 @@ class StudioInkCanvas(Gtk.DrawingArea):
             return
         self.current = {"tool": self.tool, "color": self.ink, "width": self.width,
                         "points": [[px, py, self._pressure(gesture)]]}
+        if self.tool == "highlighter":   # the student highlighter: under the text, in its own colour and size
+            self.current.update(color=self.win.hl_colour, width=self.win.hl_width, under=True, v=2)
         self.queue_draw()
 
     def _motion(self, gesture, x, y):
@@ -1954,8 +1971,18 @@ class StudioInkCanvas(Gtk.DrawingArea):
             pts = [pts[0]] + [[(a[0] + 2 * b[0] + c[0]) / 4, (a[1] + 2 * b[1] + c[1]) / 4, b[2]]
                               for a, b, c in zip(pts, pts[1:], pts[2:])] + [pts[-1]]
         stroke["points"] = [[round(px, 1), round(py, 1), round(p, 2)] for px, py, p in pts]
-        if stroke.get("under"):
+        if stroke.get("under") and (self.tool == "quickhl" or self.win.hl_snap):
             stroke = self.win.snap_highlight(stroke)
+        if stroke.get("under"):
+            # over a printout or picture the layer under the text would be
+            # hidden by it: there the stroke is drawn on top, translucent
+            cx = sum(p[0] for p in stroke["points"]) / len(stroke["points"])
+            cy = sum(p[1] for p in stroke["points"]) / len(stroke["points"])
+            for img in self.win.canvas_images:
+                x, y, bw, bh = self._item_box(img)
+                if x <= cx <= x + bw and y <= cy <= y + bh:
+                    stroke["under"] = False
+                    break
         self.strokes.append(stroke)
         self.redo_stack.clear()
         self.win.save_note_meta()
@@ -2226,8 +2253,9 @@ class StudioInkCanvas(Gtk.DrawingArea):
         w = stroke.get("width", 4.0)
 
         if tool == "highlighter":
-            cr.set_source_rgba(r, g, b, 0.36)
-            cr.set_line_width(w * 3.5)
+            v2 = stroke.get("v") == 2   # the student highlighter: its width is the tip's; older ones were x 3.5
+            cr.set_source_rgba(r, g, b, 0.42 if v2 else 0.36)
+            cr.set_line_width(w if v2 else w * 3.5)
             cr.set_line_cap(1)
             cr.set_line_join(1)
             cr.move_to(*pts[0][:2])
@@ -3473,7 +3501,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
         # Ribbon Container (Word tools + distinct Inking, Shapes & Laser toolbars)
         ribbon_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
-                               margin_start=16, margin_end=16, margin_top=8, margin_bottom=4)
+                               margin_start=6, margin_end=6, margin_top=8, margin_bottom=4)
         ribbon = Gtk.Box(spacing=3, css_classes=["mk-ribbon"])
 
         self.style_drop = Gtk.DropDown.new_from_strings(["Body Text", "Heading 1", "Heading 2", "Heading 3", "Page Title"])
@@ -3499,7 +3527,10 @@ class NotesWindow(Adw.ApplicationWindow):
         self.strike_btn.connect("toggled", lambda b: self._on_format_btn_toggled("strike", b.get_active()))
         ribbon.append(self.strike_btn)
 
-        self.hl_btn = Gtk.ToggleButton(icon_name="marker-symbolic", tooltip_text="Highlight Text", css_classes=["flat"])
+        self.hl_btn = Gtk.ToggleButton(tooltip_text="Highlight Text", css_classes=["flat"])
+        hl_face = Gtk.Label()
+        hl_face.set_markup('<span background="#fde047" foreground="#111111"> ab </span>')
+        self.hl_btn.set_child(hl_face)
         self.hl_tag = "hl-yellow"
         self.hl_btn.connect("toggled", lambda b: self._on_format_btn_toggled(self.hl_tag, b.get_active()))
         ribbon.append(self.hl_btn)
@@ -3670,11 +3701,55 @@ class NotesWindow(Adw.ApplicationWindow):
         z_in.connect("clicked", lambda *_: self.set_zoom(self.zoom + 0.1))
         ribbon.append(z_in)
 
-        ribbon_outer.append(ribbon)
-
+        # The tool island: three modes (Ink, Type, Insert), one deck each,
+        # instead of every tool on one strip. The widgets were built above
+        # (on `ribbon`) and are moved into their deck here.
+        kids, c = [], ribbon.get_first_child()
+        while c:
+            kids.append(c)
+            c = c.get_next_sibling()
+        for k in kids:
+            ribbon.remove(k)
+        at = kids.index
         self.ink_bar = self._build_ink_subbar()
-        self.ink_revealer = Gtk.Revealer(child=self.ink_bar, transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
-        ribbon_outer.append(self.ink_revealer)
+        decks = {
+            "type": kids[at(self.style_drop):at(div_btn) + 1],
+            "ink": [self.ink_bar, Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), self.shapes_toggle,
+                    self.laser_toggle],
+            "insert": [table_btn, text_btn, pad_btn, kids[at(pad_btn) + 1],
+                       Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), img_btn, shot_btn, comment_btn,
+                       link_btn, map_btn, Gtk.Separator(orientation=Gtk.Orientation.VERTICAL),
+                       self.grid_toggle, scratch],
+        }
+        self.deck_stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=150,
+                                    hhomogeneous=False, interpolate_size=True)
+        for name, widgets in decks.items():
+            deck = Gtk.Box(spacing=1, css_classes=["mk-deck"])
+            for wdg in widgets:
+                if isinstance(wdg, Gtk.Separator):
+                    wdg.set_margin_start(2)
+                    wdg.set_margin_end(2)
+                deck.append(wdg)
+            self.deck_stack.add_named(deck, name)
+        switch = Gtk.Box(css_classes=["linked", "mk-modes"])
+        self.mode_btns, group = {}, None
+        for name, label, tip in (("ink", "✍️ Ink", "Pen, highlighter, eraser, lasso, shapes (P H E L)"),
+                                 ("type", "📝 Type", "Paragraph styles, bold, italic, lists"),
+                                 ("insert", "➕ Insert", "Table, text box, sticky note, picture, PDF")):
+            b = Gtk.ToggleButton(label=label, tooltip_text=tip, group=group, active=name == "type")
+            group = group or b
+            b.connect("toggled", lambda btn, n=name: btn.get_active() and self._set_mode(n))
+            self.mode_btns[name] = b
+            switch.append(b)
+        # the modes above, the deck below: each fits a 1366 px screen with the sidebars open
+        island = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER,
+                         css_classes=["mk-island"])
+        switch.set_halign(Gtk.Align.CENTER)
+        island.append(switch)
+        island.append(self.deck_stack)
+        self.deck_stack.set_visible_child_name("type")
+        ribbon_outer.append(island)
+        self._zoom_widgets = (z_out, self.zoom_lbl_btn, z_in)   # into the floating pill, bottom right
 
         self.shapes_bar = self._build_shapes_subbar()
         self.shapes_revealer = Gtk.Revealer(child=self.shapes_bar, transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
@@ -3768,12 +3843,19 @@ class NotesWindow(Adw.ApplicationWindow):
 
         self.page_scroll = Gtk.ScrolledWindow(child=self.page_overlay, hexpand=True, vexpand=True)
         # "Page X of Y" by the scrollbar, as in Google Docs
-        self.page_badge = Gtk.Label(css_classes=["mk-page-badge"], halign=Gtk.Align.END, valign=Gtk.Align.END,
-                                    margin_end=18, margin_bottom=14, can_target=False)
+        self.page_badge = Gtk.Label(css_classes=["mk-page-badge"], can_target=False)
+        # zoom and the page count: one small floating pill, bottom right
+        pill = Gtk.Box(spacing=2, halign=Gtk.Align.END, valign=Gtk.Align.END, margin_end=18, margin_bottom=14,
+                       css_classes=["mk-zoom-pill"])
+        for wdg in self._zoom_widgets:
+            pill.append(wdg)
+        pill.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+        pill.append(self.page_badge)
         scroll_box = Gtk.Overlay(child=self.page_scroll, hexpand=True, vexpand=True)
-        scroll_box.add_overlay(self.page_badge)
+        scroll_box.add_overlay(pill)
         doc_body_hbox.append(scroll_box)
         self.page_scroll.get_vadjustment().connect("value-changed", lambda *_: self._update_badge())
+        self._build_selection_card()
         # the text's layout settling (long notes are measured a bit at a time): page breaks again
         self.page_scroll.get_vadjustment().connect("changed", lambda *_: self._queue_pages())
         # pinch anywhere on the page (over pictures and tables too), not only on the text
@@ -3837,8 +3919,23 @@ class NotesWindow(Adw.ApplicationWindow):
         root_view.set_content(self.toast)
         self.set_content(root_view)
 
-    def _on_lasso_key(self, _ctrl, keyval, _code, _state):
+    def _on_lasso_key(self, _ctrl, keyval, _code, state):
         ink = self.ink_canvas
+        if ink.active and not state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK) \
+                and not isinstance(self.get_focus(), (Gtk.Text, Gtk.Entry)) \
+                and not any(self.get_focus() is box.text_view for box in self.sticky_notes):
+            # one-key tools while inking: P pen, H highlighter, E eraser, L lasso, T text box
+            tool = {Gdk.KEY_p: "pen", Gdk.KEY_h: "highlighter", Gdk.KEY_e: "eraser", Gdk.KEY_l: "lasso"}.get(
+                Gdk.keyval_to_lower(keyval))
+            if tool:
+                if not self.draw_toggle.get_active():
+                    self.draw_toggle.set_active(True)
+                self.ink_tool_btns[tool].set_active(True)
+                return True
+            if Gdk.keyval_to_lower(keyval) == Gdk.KEY_t:
+                self.mode_btns["insert"].set_active(True)
+                self.add_sticky_note(text_box=True)
+                return True
         if not (ink.active and ink.tool == "lasso" and ink.selection):
             return False
         if keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
@@ -3879,8 +3976,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.sep_list.set_visible(vis)
 
     def _build_ink_subbar(self):
-        bar = Gtk.Box(spacing=6, css_classes=["mk-inkbar"])
-        bar.append(Gtk.Label(label="✏ Studio Ink:", css_classes=["mk-row-title"]))
+        bar = Gtk.Box(spacing=3, css_classes=["mk-inkbar"])
         self.ink_tool_btns = {}
         grp = None
         for tool, icon, label, tip in (
@@ -3890,32 +3986,49 @@ class NotesWindow(Adw.ApplicationWindow):
             ("lasso", "edit-select-symbolic", "Lasso",
              "Draw round ink, pictures or text to select them: drag to move, a corner to scale, Delete to remove"),
         ):
-            b = Gtk.ToggleButton(label=label, tooltip_text=tip, group=grp, active=tool == "pen")
+            b = Gtk.ToggleButton(icon_name=icon, tooltip_text=f"{label}: {tip}", group=grp,
+                                 active=tool == "pen", css_classes=["flat", "mk-tool"])
+            if tool == "highlighter":   # a chisel-tip marker (the theme has no marker icon)
+                b.set_child(Gtk.Label(label="🖍"))
             grp = grp or b
             b.connect("toggled", lambda btn, t=tool: btn.get_active() and self._set_ink_tool(t))
             self.ink_tool_btns[tool] = b
             bar.append(b)
+            if tool == "pen":
+                self._pen_pop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=8,
+                                            margin_bottom=8, margin_start=8, margin_end=8)
+                bar.append(Gtk.MenuButton(icon_name="pan-down-symbolic", css_classes=["flat"],
+                                          popover=Gtk.Popover(child=self._pen_pop_box),
+                                          tooltip_text="Pen colour and thickness"))
+            if tool == "highlighter":
+                bar.append(Gtk.MenuButton(icon_name="pan-down-symbolic", css_classes=["flat"],
+                                          popover=self._highlighter_popover(), tooltip_text="Highlighter colour and size"))
 
         bar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+        # the pen's colours and thickness live in its ▾ popover
+        pen_row = Gtk.Box(spacing=4)
+        self._pen_pop_box.append(pen_row)
         self.ink_swatches = []
         for idx, color in enumerate(INK_COLORS):
             sw = Gtk.Button(css_classes=["mk-swatch", f"mk-ink-{idx}"], valign=Gtk.Align.CENTER)
             sw.connect("clicked", self._pick_ink_color, color)
             self.ink_swatches.append((sw, color))
-            bar.append(sw)
+            pen_row.append(sw)
 
         ink_rgba = Gdk.RGBA()
         ink_rgba.parse("#3b82f6")
         ink_col_btn = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(title="Pick Ink Color", with_alpha=False),
                                             rgba=ink_rgba, tooltip_text="Custom Ink Color")
         ink_col_btn.connect("notify::rgba", lambda b, _p: setattr(self.ink_canvas, "ink", rgba_to_hex(b.get_rgba())))
-        bar.append(ink_col_btn)
+        pen_row.append(ink_col_btn)
 
         scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 18, 1)
         scale.set_value(4.0)
-        scale.set_size_request(80, -1)
+        scale.set_size_request(200, -1)
+        scale.set_draw_value(True)
         scale.connect("value-changed", lambda s: setattr(self.ink_canvas, "width", s.get_value()))
-        bar.append(scale)
+        self._pen_pop_box.append(Gtk.Label(label="Thickness", xalign=0, css_classes=["caption"]))
+        self._pen_pop_box.append(scale)
 
         for icon, tip, cb in (
             ("edit-undo-symbolic", "Undo Stroke", lambda: self.ink_canvas.undo()),
@@ -3926,11 +4039,121 @@ class NotesWindow(Adw.ApplicationWindow):
             b.connect("clicked", lambda *_, f=cb: f())
             bar.append(b)
 
-        bar.append(Gtk.Box(hexpand=True))
-        done = Gtk.Button(label="Done Drawing", css_classes=["suggested-action"])
-        done.connect("clicked", lambda *_: self.draw_toggle.set_active(False))
-        bar.append(done)
         return bar
+
+    # ---------- the format card over selected text
+    def _build_selection_card(self):
+        """[Style] B I U [Colour] [List], floating above text you select in
+        the page; gone when the selection is or focus leaves the page."""
+        row = Gtk.Box(spacing=2, margin_top=2, margin_bottom=2, margin_start=2, margin_end=2)
+
+        def btn(child, fn, tip):
+            b = Gtk.Button(child=child, css_classes=["flat"], focus_on_click=False, tooltip_text=tip)
+            b.connect("clicked", lambda *_: fn())
+            row.append(b)
+
+        def menu(label, items, tip):
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=4, margin_bottom=4)
+            pop = Gtk.Popover(child=box)
+            for text, fn in items:
+                b = Gtk.Button(label=text, css_classes=["flat"], focus_on_click=False)
+                b.connect("clicked", lambda _b, f=fn: (pop.popdown(), f()))
+                box.append(b)
+            m = Gtk.MenuButton(label=label, css_classes=["flat"], popover=pop, tooltip_text=tip)
+            m.set_focus_on_click(False)
+            row.append(m)
+        menu("H1 ▾", [(name, lambda i=i: self.style_drop.set_selected(i)) for i, name in
+                      enumerate(["Body Text", "Heading 1", "Heading 2", "Heading 3", "Page Title"])], "Paragraph style")
+        for markup, name, tip in (("<b>B</b>", "bold", "Bold"), ("<i>I</i>", "italic", "Italic"),
+                                  ("<u>U</u>", "underline", "Underline")):
+            lab = Gtk.Label()
+            lab.set_markup(markup)
+            btn(lab, lambda n=name: self.toggle_shortcut_format(n), tip)
+        colour_box = self.text_colour_swatches(lambda c: (cpop.popdown(), self._colour_selection(c)))
+        cpop = Gtk.Popover(child=colour_box)
+        cm = Gtk.MenuButton(child=_colour_a_label(), css_classes=["flat"], popover=cpop, tooltip_text="Text colour")
+        cm.set_focus_on_click(False)
+        row.append(cm)
+        menu("List ▾", [("• Bullets", lambda: self.toggle_line_prefix("• ")),
+                        ("1. Numbers", lambda: self.toggle_line_prefix("1. ")),
+                        ("☐ Checklist", lambda: self.toggle_line_prefix("☐ "))], "Lists")
+        self.sel_card = Gtk.Popover(child=row, autohide=False, has_arrow=True, position=Gtk.PositionType.TOP,
+                                    css_classes=["mk-sel-card"])
+        self.sel_card.set_parent(self.view)
+        self.buffer.connect("mark-set", lambda _b, _i, mark: mark.get_name() in ("insert", "selection_bound")
+                            and self._queue_sel_card())
+        leave = Gtk.EventControllerFocus()
+        leave.connect("leave", lambda *_: GLib.timeout_add(120, self._sel_card_check))
+        self.view.add_controller(leave)
+
+    def _queue_sel_card(self):
+        if not getattr(self, "_sel_card_id", 0):
+            self._sel_card_id = GLib.timeout_add(90, self._sel_card_check)
+
+    def _sel_card_check(self):
+        self._sel_card_id = 0
+        bounds = self.buffer.get_selection_bounds()
+        focus = self.get_focus()
+        in_card = focus is not None and focus.is_ancestor(self.sel_card)
+        if not bounds or self.ink_canvas.active or getattr(self, "loading", False) or \
+                not (focus is self.view or in_card):
+            self.sel_card.popdown()
+            return False
+        rect = self.view.get_iter_location(bounds[0])
+        x, y = self.view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, rect.x, rect.y)
+        self.sel_card.set_pointing_to(Gdk.Rectangle(round(x), round(y), max(1, rect.width), rect.height))
+        if not self.sel_card.get_visible():
+            self.sel_card.popup()
+        return False
+
+    def _colour_selection(self, hex_colour):
+        _name, tag = self._ensure_fg_tag(hex_colour)
+        bounds = self.buffer.get_selection_bounds()
+        if bounds:
+            self.buffer.apply_tag(tag, *bounds)
+            self.dirty = True
+            self._queue_save()
+
+    def _highlighter_popover(self):
+        """The student highlighter: four pastels, three tip sizes, and
+        whether a stroke snaps into a straight bar behind its line of text."""
+        self.hl_colour, self.hl_width, self.hl_snap = HIGHLIGHTER_COLOURS[0][1], 24.0, False
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=8, margin_bottom=8,
+                      margin_start=8, margin_end=8)
+        colours = Gtk.Box(spacing=6)
+        for name, colour in HIGHLIGHTER_COLOURS:
+            sw = Gtk.Button(tooltip_text=name, css_classes=["mk-swatch"])
+            prov = Gtk.CssProvider()
+            prov.load_from_string(f"button {{ background: {colour}; }}")
+            sw.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 3)
+            sw.connect("clicked", lambda _b, c=colour: (setattr(self, "hl_colour", c),
+                                                         self.ink_tool_btns["highlighter"].set_active(True)))
+            colours.append(sw)
+        box.append(colours)
+        sizes = Gtk.Box(css_classes=["linked"])
+        group = None
+        for px in (12, 24, 36):
+            b = Gtk.ToggleButton(label=f"{px}px", group=group, active=px == 24)
+            group = group or b
+            b.connect("toggled", lambda btn, v=px: btn.get_active() and setattr(self, "hl_width", float(v)))
+            sizes.append(b)
+        box.append(sizes)
+        snap = Gtk.CheckButton(label="Snap to the line of text")
+        snap.connect("toggled", lambda c: setattr(self, "hl_snap", c.get_active()))
+        box.append(snap)
+        return Gtk.Popover(child=box)
+
+    def _set_mode(self, name):
+        """Ink, Type or Insert: the deck shows; Ink turns the pen on, the
+        others turn inking off (strokes stay as they are)."""
+        self.deck_stack.set_visible_child_name(name)
+        if name == "ink":
+            if not (self.shapes_toggle.get_active() or self.laser_toggle.get_active()):
+                self.draw_toggle.set_active(True)
+        else:
+            for t in (self.draw_toggle, self.shapes_toggle, self.laser_toggle, self.quick_hl):
+                t.set_active(False)
+            self.ink_canvas.set_ink_mode(False)
 
     def _build_shapes_subbar(self):
         bar = Gtk.Box(spacing=6, css_classes=["mk-shapesbar"])
@@ -3996,7 +4219,6 @@ class NotesWindow(Adw.ApplicationWindow):
             self.laser_toggle.set_active(False)
             self.ink_canvas.tool = "pen"
             self.ink_tool_btns["pen"].set_active(True)
-        self.ink_revealer.set_reveal_child(active)
         self.ink_canvas.set_ink_mode(active)
 
     def _on_shapes_toggled(self, btn):

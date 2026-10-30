@@ -19,6 +19,7 @@ import { AppNap } from './appNap.js';
 import { LockScene } from './lockScene.js';
 import { EmojiBoard, bindEmojiBoard, unbindEmojiBoard } from './emojiBoard.js';
 import { WorkspacePurge, bindWorkspacePurge, unbindWorkspacePurge } from './workspacePurge.js';
+import { RadioMemory } from './radios.js';
 import { ClipboardHistory, bindClipboardHistory, unbindClipboardHistory } from './clipboardHistory.js';
 import { LiveWallpaper } from './liveWallpaper.js';
 
@@ -145,6 +146,8 @@ export default class MKIndicatorExtension extends Extension {
         } catch (e) {
             console.warn(`mk-indicator: emoji board key: ${e.message}`);  // schema not compiled yet
         }
+        this._radios = new RadioMemory();
+        this._radios.enable();
         this._purge = new WorkspacePurge();
         try {
             bindWorkspacePurge(this, this._purge);
@@ -353,6 +356,8 @@ export default class MKIndicatorExtension extends Extension {
             this._clipboardHistory.destroy();
             this._clipboardHistory = null;
         }
+        this._radios?.disable();
+        this._radios = null;
         if (this._purge) {
             unbindWorkspacePurge();
             this._purge.destroy();

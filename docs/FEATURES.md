@@ -196,6 +196,7 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | `mk screensaver` · `on\|off\|show\|scene\|delay` | The Screensaver settings window (live previews, Shuffle) · scenes from the terminal |
 | `mk welcome variety\|birthday\|lines` | A different greeting each time; your birthday; your own lines |
 | `mk fingerprint check` | Why the reader might not answer on the lock screen |
+| `mk storage` · `--deep` · `--last` | Storage Sense: old caches, orphan thumbnails, journal, unused Flatpaks · plus the system's (password) · the last run |
 | `mk biometrics list-faces` · `list-fingers` | Enrolled Face ID models (ID, date, label) · enrolled fingers |
 | `mk lock app NAME` · `mk lock ~/Folder` · `mk unlock` | Fingerprint before an app starts · an encrypted folder |
 | `mk users add NAME` · `mk guest on\|off` | Another person's account · a Guest login that starts empty |
@@ -275,6 +276,7 @@ them live and lets you change any of them.
 | Quick settings | Super+Shift+A | GNOME |
 | Notifications | Super+M | GNOME |
 | Clipboard history | Super+V | Extension |
+| Close this workspace's windows (5 s to Undo) | Super+Shift+Q | Extension (`workspacePurge.js`) |
 | Run a command | Alt+F2 · Super+R | GNOME |
 | Files | Super+E | GNOME |
 | Settings | Super+I | GNOME |

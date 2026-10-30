@@ -3,6 +3,13 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Notes:** Lasso (Draw › Lasso): draw round ink, pictures, text boxes or tables to select them; drag to move, a corner to scale, Delete to remove. Ctrl+A puts the ink in the selection too. Sticky notes are back as their own tool (Sticky in the ribbon); Export options › Include sticky notes adds them to a PDF as a footnote box (greyed out when the note has none).
+- **Workspace purge:** Super+Shift+Q closes the ordinary windows on this workspace after 5 seconds, with Undo; pinned, always-on-top and dialog windows are left alone.
+- **Storage Sense:** `mk-storage-sense` (weekly timer, `mk storage`, Control Center card): old cache files, thumbnails of deleted files, your journal, unused Flatpak runtimes; `--deep` adds the system journal, system Flatpaks and dnf's packages.
+- **Control Center:** Quick settings: Wi-Fi, sound output, Night Light and its warmth, power mode, keep awake, camera and microphone blocks.
+- **Photo Booth:** dual-border, 35mm film strip and postcard stamp frames; drag the photo inside its frame.
+- **Standalone apps:** `apps/<app>/install.sh` for MK Notes, Photo Booth, Control Center and MK Lock.
+- **Fixed:** the battery reading in the system monitor is energy_now / energy_full, smoothed, and a firmware "Full" below 99 % shows as Not charging; Bluetooth stays off after Airplane mode if it was off before.
 - **MK Notes:** Word-style page breaks: paragraphs and headings never sit on a page gap; pictures, text boxes and tables dropped on one move to the next sheet.
 - **Control Center:** the biometrics tab became Actions › Biometrics & Security (add, enroll, list faces, list fingers, test, delete); actions that open a terminal open one window, not two.
 - **MK Notes:** a format bar on text boxes (bold, italic, underline, 8 colours, A−/A+), kept per word and in PDF exports; the border, handles and bar fade in and out.

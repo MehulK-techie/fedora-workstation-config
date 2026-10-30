@@ -162,7 +162,18 @@ closes it without saving.
   at the end of a PDF. (Sticky notes from older notes open as text boxes,
   words intact.)
 - **Ctrl+A** in the page selects all the text and outlines every table,
-  picture and text box; Delete then removes everything.
+  picture and text box, with the ink in one dashed box; Delete then
+  removes everything.
+- **Lasso** (Draw › Lasso): draw a loop round ink strokes, pictures, text
+  boxes or tables (a stroke counts when most of it is inside, an item when
+  its centre is). Drag inside the dashed box to move them, a corner to
+  scale them, Delete or Backspace to remove them, Esc to let go.
+- **Sticky notes** (Sticky in the ribbon): pastel paper with a 📌 header
+  (drag it to move, click the title to rename), paper colour, layer order,
+  × and a resize corner. In a PDF export they're left out unless Export
+  options (⚙ next to Export) › Include sticky notes is on; then they come
+  as one footnote box at the end. The option is greyed out when the note
+  has no sticky notes.
 - **Layers**: pictures and sticky notes have an order; a new one goes on top. A picture's bar and a sticky's layers button (▤) have Bring Forward, Send Backward, Bring to Front and Send to Back. Drawings stay on their own layer above the page.
 - **Pages**: the note is an A4 sheet (800 px wide at 100 %, narrower in a narrow window) centred on a darker workspace with a soft shadow; a new page appears as soon as text, a table, a picture or a sticky passes the bottom of the last one, with a page gap between sheets; a *Page X of Y* badge sits by the scrollbar. Nothing sits on a page gap: a paragraph that would cross the bottom of a sheet (or its 32 px margin) moves whole to the top of the next one, and a heading never stays alone at the bottom: it moves with the line after it, as in Word. (A paragraph taller than a whole page still runs across.) A picture, text box or table you drop across a gap moves to the top of the next sheet. The PDF export lays out its own A4 pages.
 - **Locks**: right-click a locked note for Lock Now or Remove Lock

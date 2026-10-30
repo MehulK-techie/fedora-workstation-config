@@ -93,6 +93,7 @@ LAYER_ACTIONS = (("go-up-symbolic", "Bring Forward", "forward"), ("go-down-symbo
 TABLES_MARK = "\n<!-- MK Notes tables (shown as tables in MK Notes) -->"
 PAGE_W = 800  # the sheet's width at 100 %; A4 height is 1.414 times that
 PAGE_GAP = 24  # the workspace gap between two sheets at 100 %
+PAGE_PAD = 32  # the clear margin inside a sheet, above and below its text, at 100 %
 
 
 def _colour_a_label():
@@ -831,8 +832,8 @@ class TableItem(Gtk.Box):
         drag = Gtk.GestureDrag()
         drag.connect("drag-begin", self._move_begin)
         drag.connect("drag-update", self._move_update)
-        drag.connect("drag-end", lambda *_: (self.set_opacity(1.0), self.win._queue_save_meta(),
-                                             self.win.ensure_page_height_for_images()))
+        drag.connect("drag-end", lambda *_: (self.set_opacity(1.0), self.win.keep_off_gaps(self),
+                                             self.win._queue_save_meta(), self.win.ensure_page_height_for_images()))
         move.add_controller(drag)
         bar.append(move)
         menu = Gio.Menu()
@@ -2740,6 +2741,7 @@ class NotesWindow(Adw.ApplicationWindow):
         if kind == "image":
             widget.drag_mode = None
             widget.canvas.queue_draw()
+        self.keep_off_gaps(widget)
         self._ov_drag_target = None
         self._ov_drag_mode = None
         self.save_note_meta()
@@ -3225,6 +3227,8 @@ class NotesWindow(Adw.ApplicationWindow):
         scroll_box.add_overlay(self.page_badge)
         doc_body_hbox.append(scroll_box)
         self.page_scroll.get_vadjustment().connect("value-changed", lambda *_: self._update_badge())
+        # the text's layout settling (long notes are measured a bit at a time): page breaks again
+        self.page_scroll.get_vadjustment().connect("changed", lambda *_: self._queue_pages())
         # pinch anywhere on the page (over pictures and tables too), not only on the text
         page_pinch = Gtk.GestureZoom(propagation_phase=Gtk.PropagationPhase.CAPTURE)
         page_pinch.connect("begin", lambda *_: setattr(self, "_pinch_base", self.zoom))
@@ -4565,9 +4569,109 @@ class NotesWindow(Adw.ApplicationWindow):
             bottom = max(bottom, t.data.get("y", 0) + t.get_height() / z + PAGE_GAP / 2)
         return bottom
 
+    # ---------- pagination: nothing on a page gap
+    def _paginate(self):
+        """Word-style page breaks in the one text view: a paragraph that would
+        run into the gap between two sheets (or their PAGE_PAD margins) is
+        pushed whole to the top of the next sheet, by space above it (a tag
+        of its own, so nothing is added to the text). A heading that would
+        be left at the bottom of a page goes over with the line after it.
+        Positions are worked out from where every paragraph would be with no
+        pushes at all, so running it again changes nothing."""
+        z = max(0.5, self.zoom)
+        page_h, gap, pad = self.page_height(), PAGE_GAP * z, PAGE_PAD * z
+        usable = page_h - gap - 2 * pad
+        buf, table = self.buffer, self.buffer.get_tag_table()
+        pushes = getattr(self, "_pb_push", {})  # pb tag name -> its push, px
+        lines = []                                # (natural top, natural height, heading?, current push, base)
+        shift = 0.0
+        for n in range(buf.get_line_count()):
+            _ok, it = buf.get_iter_at_line(n)
+            y, h = self.view.get_line_yrange(it)
+            tags = it.get_tags()
+            push = sum(pushes.get(t.props.name or "", 0) for t in tags)
+            base = next((t.props.pixels_above_lines for t in reversed(tags)
+                         if not (t.props.name or "").startswith("pb-") and t.props.pixels_above_lines_set),
+                        self.view.get_pixels_above_lines())
+            heading = any((t.props.name or "") in ("title", "h1", "h2", "h3") for t in tags)
+            lines.append((y - shift, h - push, heading, push, base))
+            shift += push
+        want, offset = [0.0] * len(lines), 0.0
+
+        def push_to_next(i, top):
+            k = math.floor(top / page_h)
+            return (k + 1) * page_h + gap / 2 + pad - top
+        i = 0
+        while i < len(lines):
+            top, h, heading, _p, _b = lines[i]
+            top += offset
+            k = math.floor(top / page_h)
+            limit = (k + 1) * page_h - gap / 2 - pad
+            need = 0.0
+            if k >= 1 and top < k * page_h + gap / 2 + pad and h <= usable:   # starts in the gap or its margin
+                need = k * page_h + gap / 2 + pad - top
+            elif h <= usable:
+                # a heading needs room for the first line after it too
+                after = min(lines[i + 1][1], 28 * z) if heading and i + 1 < len(lines) else 0
+                if top + h + after > limit:
+                    need = push_to_next(i, top)
+            if need > 0.5:
+                want[i] = round(need)
+                offset += round(need)
+            i += 1
+        if [round(p) for *_x, p, _b in lines] == want:
+            return
+        # apply: one tag per pushed paragraph, the previous ones removed
+        for name in list(pushes):
+            tag = table.lookup(name)
+            if tag:
+                buf.remove_tag(tag, buf.get_start_iter(), buf.get_end_iter())
+                table.remove(tag)
+        self._pb_push = {}
+        for n, (line, q) in enumerate(zip(lines, want)):
+            if not q:
+                continue
+            _ok, start = buf.get_iter_at_line(n)
+            end = start.copy()
+            if not end.forward_line():
+                end = buf.get_end_iter()
+            if start.equal(end):
+                continue   # an empty last line: nothing to hang the space on
+            name = f"pb-{n}-{q}"
+            buf.apply_tag(buf.create_tag(name, pixels_above_lines=line[4] + q), start, end)
+            self._pb_push[name] = q
+
+    def keep_off_gaps(self, widget):
+        """A picture, text box or table dropped across a page gap moves to
+        the top of the next sheet (when it's shorter than a sheet)."""
+        z = max(0.5, self.zoom)
+        page_h = self.page_height() / z
+        if isinstance(widget, FreeCanvasImage):
+            lead, h = FreeCanvasImage.PAD_TOP / z, widget.data.get("h", 0)
+        elif isinstance(widget, StickyNoteWidget):
+            lead, h = widget.BAR_H / z, widget.data.get("h", 0)
+        else:
+            lead, h = 0.0, widget.get_height() / z
+        top = widget.data.get("y", 0) + lead
+        if h > page_h - PAGE_GAP - 2 * 8:
+            return
+        k = math.floor(top / page_h)
+        if k >= 1 and top < k * page_h + PAGE_GAP / 2:
+            widget.data["y"] = k * page_h + PAGE_GAP / 2 + 8 - lead
+        elif top + h > (k + 1) * page_h - PAGE_GAP / 2:
+            widget.data["y"] = (k + 1) * page_h + PAGE_GAP / 2 + 8 - lead
+        else:
+            return
+        if hasattr(widget, "sync_zoom_geometry"):
+            widget.sync_zoom_geometry()
+        elif hasattr(widget, "sync_zoom"):
+            widget.sync_zoom()
+        self.dirty = True
+
     def _update_pages(self):
         """As many A4 sheets as the text, tables, pictures and stickies need:
         a new page appears as soon as anything passes the last one's bottom."""
+        self._paginate()
         z = max(0.5, self.zoom)
         width = self.page_width()
         self.page_overlay.set_size_request(width, -1)

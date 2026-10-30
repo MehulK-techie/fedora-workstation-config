@@ -96,6 +96,53 @@ PAGE_GAP = 24  # the workspace gap between two sheets at 100 %
 PAGE_PAD = 32  # the clear margin inside a sheet, above and below its text, at 100 %
 
 
+def scratch_eval(text):
+    """Each line of the scratchpad worked out: a number, "x = …" (remembered
+    for the lines below), "" for blank lines, "?" for what isn't a sum. Only
+    arithmetic and a few maths functions: nothing else can run."""
+    import ast
+    import operator
+    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv,
+           ast.Pow: operator.pow, ast.Mod: operator.mod, ast.FloorDiv: operator.floordiv}
+    funcs = {"sqrt": math.sqrt, "sin": math.sin, "cos": math.cos, "tan": math.tan, "log": math.log10,
+             "ln": math.log, "abs": abs, "round": round, "exp": math.exp}
+    names = {"pi": math.pi, "e": math.e}
+
+    def ev(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in ops:
+            a, b = ev(node.left), ev(node.right)
+            if isinstance(node.op, ast.Pow) and abs(b) > 1000:
+                raise ValueError("too big")
+            return ops[type(node.op)](a, b)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+            return -ev(node.operand) if isinstance(node.op, ast.USub) else ev(node.operand)
+        if isinstance(node, ast.Name) and node.id in names:
+            return names[node.id]
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in funcs \
+                and len(node.args) == 1 and not node.keywords:
+            return funcs[node.func.id](ev(node.args[0]))
+        raise ValueError("not a sum")
+    out = []
+    for line in text.splitlines():
+        expr = line.strip().replace("×", "*").replace("÷", "/").replace("−", "-").replace("^", "**")
+        if not expr:
+            out.append("")
+            continue
+        target = None
+        if "=" in expr and expr.split("=", 1)[0].strip().isidentifier():
+            target, expr = (part.strip() for part in expr.split("=", 1))
+        try:
+            value = ev(ast.parse(expr, mode="eval").body)
+            if target:
+                names[target] = value
+            out.append(f"= {value:.10g}")
+        except (SyntaxError, ValueError, ZeroDivisionError, OverflowError, TypeError, RecursionError):
+            out.append("?")
+    return out
+
+
 def _colour_a_label():
     """The text-colour button's face: an A over a red bar (the icon isn't
     in every theme)."""
@@ -1842,6 +1889,11 @@ class StudioInkCanvas(Gtk.DrawingArea):
         if self.tool == "lasso":
             self._lasso_down(px, py)
             return
+        if self.tool == "quickhl":   # Quick Highlight: a marker that settles behind the line of text
+            self.current = {"tool": "highlighter", "color": self.win.quick_hl_colour, "width": 14.0,
+                            "under": True, "points": [[px, py, 0.5]]}
+            self.queue_draw()
+            return
         if self.tool == "eraser":
             self._erase_at(px, py)
             self.current = {"erasing": True}
@@ -1902,6 +1954,8 @@ class StudioInkCanvas(Gtk.DrawingArea):
             pts = [pts[0]] + [[(a[0] + 2 * b[0] + c[0]) / 4, (a[1] + 2 * b[1] + c[1]) / 4, b[2]]
                               for a, b, c in zip(pts, pts[1:], pts[2:])] + [pts[-1]]
         stroke["points"] = [[round(px, 1), round(py, 1), round(p, 2)] for px, py, p in pts]
+        if stroke.get("under"):
+            stroke = self.win.snap_highlight(stroke)
         self.strokes.append(stroke)
         self.redo_stack.clear()
         self.win.save_note_meta()
@@ -2156,6 +2210,16 @@ class StudioInkCanvas(Gtk.DrawingArea):
             self.queue_draw()
 
     def _draw_stroke_or_shape(self, cr, stroke):
+        if stroke.get("straight"):
+            (x0, y0, _p0), (x1, y1, _p1) = stroke["points"][0], stroke["points"][-1]
+            r, g, b = hex_rgb(stroke.get("color", "#facc15"))
+            cr.set_source_rgba(r, g, b, 0.42)
+            cr.set_line_width(stroke.get("width", 14))
+            cr.set_line_cap(1)
+            cr.move_to(x0, y0)
+            cr.line_to(x1, y1)
+            cr.stroke()
+            return
         r, g, b = hex_rgb(stroke["color"])
         tool = stroke["tool"]
         pts = stroke["points"]
@@ -2223,7 +2287,9 @@ class StudioInkCanvas(Gtk.DrawingArea):
             cr.rectangle(1, 1, w - 2, h - 2)
             cr.stroke()
 
-        all_s = self.strokes + ([self.current] if self.current and "points" in self.current else [])
+        all_s = [s for s in self.strokes if not s.get("under")] + \
+            ([self.current] if self.current and "points" in self.current else [])
+        self.win.under_ink.queue_draw()
         if all_s:
             cr.save()
             cr.scale(z, z)
@@ -2261,6 +2327,29 @@ class StudioInkCanvas(Gtk.DrawingArea):
                     cr.line_to(x1, y1)
                     cr.stroke()
             cr.restore()
+
+
+class UnderInk(Gtk.DrawingArea):
+    """Quick Highlight strokes, drawn between the paper and the text, so the
+    letters stay crisp on top of the colour (the ink canvas, above the
+    text, draws everything else)."""
+
+    def __init__(self, note_win):
+        super().__init__(hexpand=True, vexpand=True, can_target=False)
+        self.win = note_win
+        self.set_draw_func(self._draw)
+
+    def _draw(self, _a, cr, _w, _h):
+        ink = self.win.ink_canvas
+        under = [s for s in ink.strokes if s.get("under")]
+        if not under:
+            return
+        z = max(0.5, self.win.zoom)
+        cr.save()
+        cr.scale(z, z)
+        for s in under:
+            ink._draw_stroke_or_shape(cr, s)
+        cr.restore()
 
 
 class PassThroughFixed(Gtk.Fixed):
@@ -3462,7 +3551,6 @@ class NotesWindow(Adw.ApplicationWindow):
                                     tooltip_text="Insert a 3 x 3 table", dropdown_tooltip="Pick the table's size",
                                     css_classes=["flat"], popover=self._table_picker())
         table_btn.connect("clicked", lambda *_: self.insert_table(3, 3, centre=True))
-        ribbon.append(table_btn)
 
         ribbon.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=2, margin_end=2))
 
@@ -3482,6 +3570,27 @@ class NotesWindow(Adw.ApplicationWindow):
                                             css_classes=["flat"])
         self.draw_toggle.connect("toggled", self._on_draw_toggled)
         ribbon.append(self.draw_toggle)
+        # Quick Highlight: draw roughly along a line of text; it becomes a
+        # clean bar of colour behind that line
+        self.quick_hl_colour = "#facc15"
+        self.quick_hl = Gtk.ToggleButton(child=Adw.ButtonContent(icon_name="marker-symbolic", label="Highlight"),
+                                         css_classes=["flat"],
+                                         tooltip_text="Quick Highlight: swipe along a line of text; it settles behind it")
+        self.quick_hl.connect("toggled", self._on_quick_hl)
+        ribbon.append(self.quick_hl)
+        qpop = Gtk.Popover()
+        qrow = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
+        for name, colour in (("Yellow", "#facc15"), ("Cyan", "#22d3ee"), ("Pink", "#f472b6")):
+            sw = Gtk.Button(tooltip_text=name, css_classes=["mk-swatch"])
+            prov = Gtk.CssProvider()
+            prov.load_from_string(f"button {{ background: {colour}; }}")
+            sw.get_style_context().add_provider(prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 3)
+            sw.connect("clicked", lambda _b, c=colour: (qpop.popdown(), setattr(self, "quick_hl_colour", c),
+                                                         self.quick_hl.set_active(True)))
+            qrow.append(sw)
+        qpop.set_child(qrow)
+        ribbon.append(Gtk.MenuButton(icon_name="pan-down-symbolic", popover=qpop, css_classes=["flat"],
+                                     tooltip_text="Quick Highlight colour"))
 
         # SEPARATE SHAPES BUTTON
         self.shapes_toggle = Gtk.ToggleButton(label="📐 Shapes", icon_name="view-grid-symbolic",
@@ -3499,6 +3608,12 @@ class NotesWindow(Adw.ApplicationWindow):
 
         ribbon.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=2, margin_end=2))
 
+        lasso_btn = Gtk.Button(child=Adw.ButtonContent(icon_name="edit-select-symbolic", label="Lasso"),
+                               css_classes=["flat"], tooltip_text="Lasso: draw round ink, pictures or text to "
+                                                                  "move, scale or delete them")
+        lasso_btn.connect("clicked", lambda *_: self._start_lasso())
+        ribbon.append(lasso_btn)
+        ribbon.append(table_btn)
         text_btn = Gtk.Button(label="Text Box", icon_name="format-text-plus-symbolic",
                               tooltip_text="Text box: type anywhere on the page, on a printout or picture",
                               css_classes=["flat"])
@@ -3530,6 +3645,20 @@ class NotesWindow(Adw.ApplicationWindow):
         ribbon.append(map_btn)
 
         ribbon.append(Gtk.Box(hexpand=True))
+        # utilities: grid paper, clear the page's ink, the scratchpad, zoom
+        self.grid_toggle = Gtk.ToggleButton(icon_name="view-grid-symbolic", css_classes=["flat"],
+                                            active=look_conf().get("PAPER_PATTERN", "dots") == "grid",
+                                            tooltip_text="Grid paper (off: back to dots)")
+        self.grid_toggle.connect("toggled", lambda b: (conf_set("PAPER_PATTERN", "grid" if b.get_active() else "dots"),
+                                                       self.paper_bg.queue_draw()))
+        ribbon.append(self.grid_toggle)
+        clear_btn = Gtk.Button(icon_name="edit-clear-all-symbolic", css_classes=["flat"],
+                               tooltip_text="Clear page: remove every pen, highlighter and shape stroke (Ctrl+Z undoes)")
+        clear_btn.connect("clicked", lambda *_: self.ink_canvas.clear())
+        ribbon.append(clear_btn)
+        scratch = Gtk.MenuButton(child=Gtk.Label(label="🧮"), css_classes=["flat"], popover=self._scratchpad(),
+                                 tooltip_text="Scratchpad: quick sums beside your notes (kept with the note)")
+        ribbon.append(scratch)
 
         z_out = Gtk.Button(icon_name="zoom-out-symbolic", tooltip_text="Zoom Out (Ctrl+-)", css_classes=["flat"])
         z_out.connect("clicked", lambda *_: self.set_zoom(self.zoom - 0.1))
@@ -3629,6 +3758,8 @@ class NotesWindow(Adw.ApplicationWindow):
         # workspace, as long as the note needs in whole pages (_update_pages).
         self.page_overlay = Gtk.Overlay(child=self.paper_bg, hexpand=False, vexpand=True, halign=Gtk.Align.CENTER,
                                         margin_top=24, margin_bottom=24, css_classes=["mk-sheet"])
+        self.under_ink = UnderInk(self)
+        self.page_overlay.add_overlay(self.under_ink)
         self.page_overlay.add_overlay(self.view)
         self.page_overlay.set_measure_overlay(self.view, True)
         self.page_overlay.add_overlay(self.canvas_fixed)
@@ -4512,6 +4643,70 @@ class NotesWindow(Adw.ApplicationWindow):
             check.set_sensitive(self.has_sticky_notes())
             check.set_tooltip_text(None if self.has_sticky_notes() else "This note has no sticky notes")
 
+    def _on_quick_hl(self, btn):
+        if btn.get_active():
+            for other in (self.draw_toggle, self.shapes_toggle, self.laser_toggle):
+                other.set_active(False)
+            self.ink_canvas.tool = "quickhl"
+            self.ink_canvas.set_ink_mode(True)
+        elif self.ink_canvas.tool == "quickhl":
+            self.ink_canvas.set_ink_mode(False)
+
+    def _start_lasso(self):
+        self.quick_hl.set_active(False)
+        if not self.draw_toggle.get_active():
+            self.draw_toggle.set_active(True)
+        self.ink_tool_btns["lasso"].set_active(True)
+
+    def snap_highlight(self, stroke):
+        """A Quick Highlight stroke becomes a straight bar behind the line of
+        text it was drawn along: as wide as the swipe, as tall as the line."""
+        z = max(0.5, self.zoom)
+        pts = stroke["points"]
+        xs = [p[0] for p in pts]
+        y = sum(p[1] for p in pts) / len(pts)
+        # (the view's own coordinates are the page's; its text, "buffer", ones start below its margins)
+        bx, by = self.view.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, round(sum(xs) / len(xs) * z),
+                                                   round(y * z))
+        ok, it = self.view.get_iter_at_location(bx, by)
+        if ok:
+            rect = self.view.get_iter_location(it)
+            _wx, wy = self.view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, rect.x, rect.y)
+            y, height = (wy + rect.height / 2) / z, rect.height / z
+        else:
+            height = 18.0
+        stroke.update(points=[[round(min(xs), 1), round(y, 1), 0.5], [round(max(xs), 1), round(y, 1), 0.5]],
+                      width=round(height * 0.9, 1), straight=True)
+        return stroke
+
+    def _scratchpad(self):
+        """A card for sums: one per line (2*(3+4), sqrt(2), x = 5 then x^2);
+        the answers show on the right. Kept with the note."""
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=8, margin_bottom=8,
+                       margin_start=8, margin_end=8, width_request=340)
+        card.append(Gtk.Label(label="Scratchpad", xalign=0, css_classes=["heading"]))
+        row = Gtk.Box(spacing=8)
+        self.scratch_view = Gtk.TextView(monospace=True, hexpand=True, top_margin=4, left_margin=6,
+                                         wrap_mode=Gtk.WrapMode.NONE)
+        self.scratch_out = Gtk.Label(xalign=1, yalign=0, css_classes=["monospace", "dim-label"], margin_top=4,
+                                     selectable=True)
+        row.append(Gtk.ScrolledWindow(child=self.scratch_view, min_content_height=160, hexpand=True))
+        row.append(self.scratch_out)
+        card.append(row)
+        card.append(Gtk.Label(label="+ − × ÷ ^ %, sqrt sin cos tan log ln abs, pi e; x = 5", xalign=0,
+                              css_classes=["caption", "dim-label"]))
+        self.scratch_view.get_buffer().connect("changed", lambda b: self._scratch_changed(b))
+        pop = Gtk.Popover(child=card)
+        pop.connect("show", lambda *_: GLib.idle_add(lambda: self.scratch_view.grab_focus() and False))
+        return pop
+
+    def _scratch_changed(self, buf):
+        text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        self.scratch_out.set_label("\n".join(scratch_eval(text)))
+        if not getattr(self, "loading", False) and getattr(self, "rel", None):
+            self.scratch_text = text
+            self.save_note_meta()
+
     def text_colour_swatches(self, pick):
         """A row of TEXT_COLOURS swatches; PICK(hex) on a click."""
         row = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
@@ -4686,11 +4881,27 @@ class NotesWindow(Adw.ApplicationWindow):
     def _on_zoom_scroll(self, ctrl, _dx, dy):
         if not ctrl.get_current_event_state() & Gdk.ModifierType.CONTROL_MASK:
             return False
-        self.set_zoom(self.zoom + (-0.08 if dy > 0 else 0.08), quiet=True)
+        # glide there: each frame closes 35 % of the gap to the target (lerp),
+        # and further notches move the target, not the page
+        base = getattr(self, "_zoom_target", None) or self.zoom
+        self._zoom_target = max(0.65, min(2.2, base * (1 / 1.08 if dy > 0 else 1.08)))
+        if not getattr(self, "_zoom_tick", 0):
+            self._zoom_tick = self.page_scroll.add_tick_callback(self._zoom_glide)
         return True
 
+    def _zoom_glide(self, *_):
+        target = self._zoom_target
+        gap = target - self.zoom
+        move = math.copysign(max(0.011, abs(gap) * 0.35), gap)   # (set_zoom ignores steps under 0.01)
+        step = target if abs(gap) <= abs(move) else self.zoom + move
+        self.set_zoom(step, quiet=True)
+        if step == target or abs(target - self.zoom) < 0.01:
+            self._zoom_target, self._zoom_tick = None, 0
+            return GLib.SOURCE_REMOVE
+        return GLib.SOURCE_CONTINUE
+
     def set_zoom(self, zoom, quiet=False):
-        zoom = max(0.65, min(2.2, round(zoom, 2)))
+        zoom = max(0.65, min(2.2, round(zoom, 3)))
         if abs(zoom - self.zoom) < 0.01:
             return
         self.zoom = zoom
@@ -4700,7 +4911,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.apply_theme_and_zoom()
         for img_w in self.canvas_images:
             img_w.sync_zoom_geometry()
-        for st in self.sticky_notes:
+        for st in self.sticky_notes + self.pinned_stickies:
             st.sync_zoom_geometry()
         for t in self._live_tables():
             t.sync_zoom()
@@ -4802,6 +5013,7 @@ class NotesWindow(Adw.ApplicationWindow):
             "tables": [dict(t.data) for t in self._live_tables()],
             "comments": self.comments,
             "strokes": self.ink_canvas.strokes,
+            "scratch": getattr(self, "scratch_text", ""),
             "links": getattr(self, "note_links", []),
             "tags": getattr(self, "note_tags", []),
         }
@@ -4953,6 +5165,9 @@ class NotesWindow(Adw.ApplicationWindow):
                     self.buffer.apply_tag(t, self.buffer.get_iter_at_offset(s_off), self.buffer.get_iter_at_offset(e_off))
             self.note_links = list(meta.get("links", []))
             self.note_tags = list(meta.get("tags", []))
+            self.scratch_text = meta.get("scratch", "")
+            if hasattr(self, "scratch_view"):
+                self.scratch_view.get_buffer().set_text(self.scratch_text)
             self.comments = list(meta.get("comments", []))
             self._rebuild_canvas_objects(meta.get("images", []), meta.get("stickies", []),
                                          meta.get("pinned_stickies", []))
@@ -5067,6 +5282,7 @@ class NotesWindow(Adw.ApplicationWindow):
         for n in range(buf.get_line_count()):
             _ok, it = buf.get_iter_at_line(n)
             y, h = self.view.get_line_yrange(it)
+            y = self.view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, 0, y)[1]   # on the page
             tags = it.get_tags()
             push = sum(pushes.get(t.props.name or "", 0) for t in tags)
             base = next((t.props.pixels_above_lines for t in reversed(tags)

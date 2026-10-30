@@ -11,5 +11,10 @@
       <summary>Open the clipboard history</summary>
       <description>Beside the text cursor; a click copies an entry back.</description>
     </key>
+    <key name="workspace-purge" type="as">
+      <default><![CDATA[['<Shift><Super>q']]]></default>
+      <summary>Close the windows on this workspace</summary>
+      <description>Every ordinary window on the current workspace closes after 5 seconds; Undo in the notification brings them back.</description>
+    </key>
   </schema>
 </schemalist>

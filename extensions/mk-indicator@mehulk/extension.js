@@ -18,6 +18,7 @@ import { FocusHelper } from './focus.js';
 import { AppNap } from './appNap.js';
 import { LockScene } from './lockScene.js';
 import { EmojiBoard, bindEmojiBoard, unbindEmojiBoard } from './emojiBoard.js';
+import { WorkspacePurge, bindWorkspacePurge, unbindWorkspacePurge } from './workspacePurge.js';
 import { ClipboardHistory, bindClipboardHistory, unbindClipboardHistory } from './clipboardHistory.js';
 import { LiveWallpaper } from './liveWallpaper.js';
 
@@ -143,6 +144,12 @@ export default class MKIndicatorExtension extends Extension {
             bindEmojiBoard(this, this._emoji);
         } catch (e) {
             console.warn(`mk-indicator: emoji board key: ${e.message}`);  // schema not compiled yet
+        }
+        this._purge = new WorkspacePurge();
+        try {
+            bindWorkspacePurge(this, this._purge);
+        } catch (e) {
+            console.warn(`mk-indicator: workspace purge key: ${e.message}`);
         }
         // GNOME lets the screenshot keys work on the lock screen; keep them to
         // the unlocked desktop (the lock screen's own UI is all they'd show,
@@ -345,6 +352,11 @@ export default class MKIndicatorExtension extends Extension {
             unbindClipboardHistory();
             this._clipboardHistory.destroy();
             this._clipboardHistory = null;
+        }
+        if (this._purge) {
+            unbindWorkspacePurge();
+            this._purge.destroy();
+            this._purge = null;
         }
         if (this._emoji) {
             unbindEmojiBoard();

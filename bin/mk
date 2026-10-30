@@ -241,6 +241,12 @@ case "${1:-help}" in
         esac
         ;;
 
+    storage)
+        # mk storage [--deep | --dry-run | --last]: Storage Sense
+        shift
+        exec "$HOME/.local/bin/mk-storage-sense" "$@"
+        ;;
+
     biometrics)
         # mk biometrics list-faces | list-fingers: what's enrolled, one kind at a time
         case "${2:-}" in
@@ -917,6 +923,7 @@ KEYRING
         echo "  notes      MK Notes: mk notes, mk notes today, mk notes serve (phone sync)"
         echo "  accent     Desktop colour: auto (from your wallpaper), #rrggbb, status"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
+        echo "  storage    Storage Sense: old caches, orphan thumbnails, journal, unused Flatpaks (--deep, --dry-run, --last)"
         echo "  biometrics What's enrolled: mk biometrics list-faces (Face ID models), list-fingers (fingerprints)"
         echo "  lock       Fingerprint before an app starts, or an encrypted folder: mk lock app NAME, mk lock ~/Folder"
         echo "  unlock     Open a locked folder (mk unlock ~/Folder) or stop locking an app (mk unlock app NAME)"

@@ -319,8 +319,31 @@ AccuracySec=30s
 [Install]
 WantedBy=timers.target
 UNIT
+cat > "$UNIT_DIR/mk-storage-sense.service" << 'UNIT'
+[Unit]
+Description=Storage Sense: old cache files, orphan thumbnails, your journal, unused Flatpak runtimes
+
+[Service]
+Type=oneshot
+Nice=19
+IOSchedulingClass=idle
+ExecStart=%h/.local/bin/mk-storage-sense
+UNIT
+cat > "$UNIT_DIR/mk-storage-sense.timer" << 'UNIT'
+[Unit]
+Description=Run Storage Sense once a week
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target
+UNIT
 systemctl --user daemon-reload 2>/dev/null \
-    && systemctl --user enable --now mk-update-check.timer mk-reminders.timer mk-watchdog.timer &>/dev/null \
+    && systemctl --user enable --now mk-update-check.timer mk-reminders.timer mk-watchdog.timer \
+        mk-storage-sense.timer &>/dev/null \
     || echo "    [*] Couldn't enable the update check and reminders (no systemd user session)"
 
 # Laptops: smart power profiles (performance plugged in, balanced on battery,

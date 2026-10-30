@@ -2440,10 +2440,19 @@ class PaperPatternBackground(Gtk.DrawingArea):
         cr.set_source_rgba(1, 1, 1, 0.06) if is_dark else cr.set_source_rgba(0, 0, 0, 0.07)
         step = max(18, round(28 * self.win.zoom))
         if pattern == "dots":
-            for x in range(step, w, step):
-                for y in range(step, h, step):
-                    cr.arc(x, y, 1.2, 0, 2 * math.pi)
-                    cr.fill()
+            # one dot on a step x step tile, repeated: a single fill for the
+            # whole note (a dot at a time was ~70 000 calls on a long note)
+            tile = cairo.ImageSurface(cairo.FORMAT_ARGB32, step, step)
+            tc = cairo.Context(tile)
+            tc.set_source(cr.get_source())
+            tc.arc(step / 2, step / 2, 1.2, 0, 2 * math.pi)
+            tc.fill()
+            dots = cairo.SurfacePattern(tile)
+            dots.set_extend(cairo.EXTEND_REPEAT)
+            dots.set_matrix(cairo.Matrix(x0=step / 2, y0=step / 2))   # dots at multiples of the step
+            cr.set_source(dots)
+            cr.rectangle(step / 2, step / 2, w - step / 2, h - step / 2)
+            cr.fill()
         elif pattern == "grid":
             cr.set_line_width(1.0)
             for x in range(0, w, step):
@@ -3888,7 +3897,8 @@ class NotesWindow(Adw.ApplicationWindow):
         self.page_scroll.add_controller(page_pinch)
         # the column's width changed (window resized, a panel folded): re-fit the sheet
         self.page_scroll.get_hadjustment().connect("changed", lambda *_: self._queue_pages())
-        self.buffer.connect("changed", lambda *_: self._queue_pages())
+        self.buffer.connect("changed", lambda *_: (setattr(self, "_text_rev", getattr(self, "_text_rev", 0) + 1),
+                                                   self._queue_pages()))
 
         # Google Docs Style Margin Comments Sidebar (Right side, distinct card container with Resolve / Delete)
         self.comments_sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, width_request=260,
@@ -3978,9 +3988,7 @@ class NotesWindow(Adw.ApplicationWindow):
         return False
 
     def _on_nb_toggle(self, btn):
-        vis = btn.get_active()
-        self.side_rev.set_reveal_child(vis)
-        self.sep_side.set_visible(vis)
+        self._slide_panel(self.side_rev, self.sep_side, btn.get_active())
 
     def toggle_focus_canvas(self):
         """One click: both side panels away for a wide page; again: back."""
@@ -3994,9 +4002,36 @@ class NotesWindow(Adw.ApplicationWindow):
             self.list_toggle.set_active(lst)
 
     def _on_list_toggle(self, btn):
-        vis = btn.get_active()
-        self.list_rev.set_reveal_child(vis)
-        self.sep_list.set_visible(vis)
+        self._slide_panel(self.list_rev, self.sep_list, btn.get_active())
+
+    def _slide_panel(self, revealer, sep, show):
+        """Slide a side panel in or out without stutter: while it moves the
+        sheet keeps its width and nothing is re-laid out (re-wrapping a long
+        note and its page breaks took ~100 ms a time, mid-slide); the sheet
+        is refitted once, when the slide ends."""
+        if revealer.get_reveal_child() == show:
+            return
+        self._panel_moving = True
+        self.page_scroll.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.AUTOMATIC)  # no scrollbar popping in
+        if pending := getattr(self, "_pages_id", 0):
+            GLib.source_remove(pending)
+            self._pages_id = 0
+            self._pages_after_slide = True
+        if show:
+            sep.set_visible(True)
+        revealer.set_reveal_child(show)
+
+        def done():
+            self._slide_done_id = 0
+            sep.set_visible(revealer.get_reveal_child())
+            self._panel_moving = False
+            self.page_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+            self._pages_after_slide = False
+            self._update_pages()
+            return False
+        if getattr(self, "_slide_done_id", 0):
+            GLib.source_remove(self._slide_done_id)
+        self._slide_done_id = GLib.timeout_add(revealer.get_transition_duration() + 30, done)
 
     def _build_ink_subbar(self):
         bar = Gtk.Box(spacing=3, css_classes=["mk-inkbar"])
@@ -5609,6 +5644,9 @@ class NotesWindow(Adw.ApplicationWindow):
         return self.page_width() * 1.414
 
     def _queue_pages(self):
+        if getattr(self, "_panel_moving", False):
+            self._pages_after_slide = True   # refit once the panel has finished moving
+            return
         if getattr(self, "_pages_id", 0):
             return
 
@@ -5733,7 +5771,10 @@ class NotesWindow(Adw.ApplicationWindow):
     def _update_pages(self):
         """As many A4 sheets as the text, tables, pictures and stickies need:
         a new page appears as soon as anything passes the last one's bottom."""
-        self._paginate()
+        key = (self.page_width(), round(self.zoom, 3), getattr(self, "_text_rev", 0))
+        if key != getattr(self, "_paginated", None):
+            self._paginate()
+            self._paginated = key
         z = max(0.5, self.zoom)
         width = self.page_width()
         self.page_overlay.set_size_request(width, -1)

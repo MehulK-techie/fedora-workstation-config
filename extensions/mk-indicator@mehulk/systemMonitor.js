@@ -168,7 +168,6 @@ class Sampler {
         s.gpu = this.sensors.gpuBusy ? readInt(this.sensors.gpuBusy) : null;
         if (this.sensors.battery) {
             const b = this.sensors.battery;
-            s.battery = readInt(`${b}/capacity`);
             s.batteryStatus = (read(`${b}/status`) || '').trim();
             let power = readInt(`${b}/power_now`);
             if (!power) {
@@ -177,6 +176,7 @@ class Sampler {
             }
             s.power = power ? power / 1e6 : null;
             const energy = readInt(`${b}/energy_now`), full = readInt(`${b}/energy_full`);
+            s.battery = this._batteryPercent(b, energy, full, s);
             if (s.power && energy) {
                 s.timeLeft = s.batteryStatus === 'Discharging' ? energy / 1e6 / s.power
                     : s.batteryStatus === 'Charging' && full ? (full - energy) / 1e6 / s.power : null;
@@ -185,6 +185,29 @@ class Sampler {
         if (withProcesses)
             s.top = this._processes(total);
         return s;
+    }
+
+    // The battery's real charge, energy_now / energy_full (charge_* on
+    // batteries that count in µAh), smoothed so a reading can't jump: the
+    // shown value moves 35 % of the way to the new one each sample. Plugging
+    // in can make firmware say "Full" (and UPower 100 %) at 95-97 %; here it
+    // is "Full" only after 30 s of under 1 W going in, and below 99 % it is
+    // "Not charging" at the real figure.
+    _batteryPercent(b, energy, full, s) {
+        let now = energy, cap = full;
+        if (!now || !cap)
+            [now, cap] = [readInt(`${b}/charge_now`), readInt(`${b}/charge_full`)];
+        const raw = now && cap ? Math.min(100, 100 * now / cap) : readInt(`${b}/capacity`);
+        if (raw === null || raw === undefined)
+            return undefined;
+        const st = this._bat ??= {ema: raw, lowSince: 0};
+        st.ema = Math.abs(raw - st.ema) > 15 ? raw : st.ema + 0.35 * (raw - st.ema);  // (a new battery: no slow climb)
+        const t = GLib.get_monotonic_time() / 1e6;
+        const trickle = s.power === null || s.power < 1.0;
+        st.lowSince = trickle ? st.lowSince || t : 0;
+        if (s.batteryStatus === 'Full' && !(raw >= 99 && st.lowSince && t - st.lowSince >= 30))
+            s.batteryStatus = 'Not charging';
+        return Math.round(st.ema);
     }
 
     // Busiest processes since the last reading (only while the menu is open).

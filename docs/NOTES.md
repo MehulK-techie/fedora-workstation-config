@@ -150,11 +150,15 @@ closes it without saving.
 - **Text boxes** (Text Box in the ribbon): type anywhere on the page,
   over a printout or a picture. No paper or header: while you type in one
   it has a thin blue border and four corner handles (drag a corner to
-  resize, the border to move it); click elsewhere and the border goes, so
-  the words sit straight on the page. Text colour (the **A** button next to
-  Text Box, or right-click the border): white, black, red, blue, amber,
-  emerald or violet. Esc then Delete or Backspace removes a box; the
-  right-click menu has layer order and Delete too. They print as callouts
+  resize, the border to move it) and a format bar above it: **B**, *I*,
+  U (also Ctrl+B, Ctrl+I, Ctrl+U), text colour and A− / A+ for size. Bold,
+  italic, underline and colour apply to the selected words, or with
+  nothing selected to what you type next (colour: the whole box). Click
+  elsewhere and the border, handles and bar fade out, so the words sit
+  straight on the page. Colours: white, slate gray, crimson, amber,
+  emerald, sky blue, purple, dark charcoal (also on the **A** next to Text
+  Box, and right-click the border). Esc then Delete or Backspace removes a
+  box; the right-click menu has layer order and Delete too. They print as callouts
   at the end of a PDF. (Sticky notes from older notes open as text boxes,
   words intact.)
 - **Ctrl+A** in the page selects all the text and outlines every table,

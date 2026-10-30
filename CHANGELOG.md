@@ -3,6 +3,8 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Notes:** a format bar on text boxes (bold, italic, underline, 8 colours, A−/A+), kept per word and in PDF exports; the border, handles and bar fade in and out.
+- **Web Hang:** three windows of dark glass round Stan Lee.
 - **MK Notes:** PDF printouts lay one page per A4 sheet, centred with a 24 px margin; text boxes lose the sticky look (thin border and corner handles only while selected) and gain a text colour.
 - **MK Lock:** unlocking an app asks who you are too, not only locking it.
 - **Biometrics:** `mk biometrics list-faces` and `list-fingers`.

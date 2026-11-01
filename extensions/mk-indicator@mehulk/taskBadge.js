@@ -1,8 +1,9 @@
-// A small pill in the top bar: how many Companion tasks are for today
-// ("[ 2 Tasks ]"): open tasks that are pinned or have a reminder due today
-// (overdue ones too). Click: the Companion's tasks. Right-click: hide it
-// (TASK_BADGE=off in ~/.config/mk-workstation/welcome.conf; mk tasks badge on).
-// It's hidden when nothing is due, and on the lock screen.
+// A small pill in the top bar with the Companion's to-do list: "📋 3 Left"
+// (every unfinished task), with a dot when any are for today (pinned, or a
+// reminder due today or overdue), and "✓ All Done" once they're all ticked off.
+// It follows companion.json live. Click: the Companion's tasks. Right-click:
+// hide it (TASK_BADGE=off in ~/.config/mk-workstation/welcome.conf;
+// mk tasks badge on). Hidden on the lock screen.
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -13,17 +14,24 @@ const COMPANION = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstatio
 const USER_CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'welcome.conf']);
 const BIN = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin']);
 
-// Tasks for today, as the badge and the spoken briefing count them.
-export function tasksToday() {
+// The to-do list in two numbers: remaining (not done) and scheduled (of those, the ones for today).
+export function taskMetrics() {
     let data = {};
     try {
         const [ok, bytes] = GLib.file_get_contents(COMPANION);
         data = ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
     } catch (e) {
-        return 0;
+        return {remaining: 0, scheduled: 0};
     }
     const midnight = new Date().setHours(24, 0, 0, 0) / 1000;
-    return (data.tasks || []).filter(t => !t.done && (t.pinned || (t.remind_at && t.remind_at < midnight))).length;
+    const open = (data.tasks || []).filter(t => !t.done);
+    return {remaining: open.length,
+        scheduled: open.filter(t => t.pinned || (t.remind_at && t.remind_at < midnight)).length};
+}
+
+// Tasks for today, as the spoken briefing counts them.
+export function tasksToday() {
+    return taskMetrics().scheduled;
 }
 
 function badgeOn() {
@@ -37,8 +45,13 @@ function badgeOn() {
 
 export class TaskBadge {
     enable() {
+        this._label = new St.Label({y_align: Clutter.ActorAlign.CENTER});
+        this._dot = new St.Widget({style_class: 'mk-task-badge-dot', y_align: Clutter.ActorAlign.CENTER, visible: false});
+        const box = new St.BoxLayout({style_class: 'mk-task-badge-box'});
+        box.add_child(this._label);
+        box.add_child(this._dot);
         this._button = new St.Button({style_class: 'mk-task-badge', y_align: Clutter.ActorAlign.CENTER,
-            reactive: true, can_focus: true, visible: false});
+            reactive: true, can_focus: true, visible: false, child: box});
         this._button.connect('button-release-event', (_b, event) => {
             if (event.get_button() === 3) {
                 this._hide();
@@ -68,9 +81,12 @@ export class TaskBadge {
     _refresh() {
         if (!this._button)
             return;
-        const n = tasksToday();
-        this._button.label = `${n} ${n === 1 ? 'Task' : 'Tasks'}`;
-        this._button.visible = !this._locked && n > 0 && badgeOn();
+        const {remaining, scheduled} = taskMetrics();
+        this._label.text = remaining > 0 ? `📋 ${remaining} Left` : '✓ All Done';
+        this._dot.visible = scheduled > 0;             // (something's for today)
+        this._button.accessible_name = remaining > 0 ?
+            `${remaining} tasks left${scheduled ? `, ${scheduled} for today` : ''}` : 'All tasks done';
+        this._button.visible = !this._locked && badgeOn();
     }
 
     _hide() {
@@ -100,6 +116,6 @@ export class TaskBadge {
         this._monitors?.forEach(m => m.cancel());
         this._monitors = null;
         this._button?.destroy();
-        this._button = null;
+        this._button = this._label = this._dot = null;
     }
 }

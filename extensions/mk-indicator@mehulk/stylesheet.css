@@ -262,6 +262,8 @@
 .mk-task-badge { font-size: 0.85em; font-weight: 700; padding: 1px 10px; margin: 5px 4px; border-radius: 99px;
   color: #ffffff; background-color: rgba(255, 255, 255, 0.14); }
 .mk-task-badge:hover { background-color: rgba(255, 255, 255, 0.24); }
+.mk-task-badge-box { spacing: 6px; }
+.mk-task-badge-dot { width: 6px; height: 6px; border-radius: 3px; background-color: #22d3ee; }
 
 /* Track change pill (mediaTile.js) */
 .mk-track-pill { background-color: rgba(18, 20, 28, 0.88); border-radius: 99px; padding: 6px 16px 6px 6px;

@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Task badge:** the top-bar pill shows the whole to-do list: "📋 3 Left" (unfinished tasks), a cyan dot when any are for today, and "✓ All Done" at zero (it used to count only today's tasks, and vanish when there were none). Still live from `companion.json`, click for the Companion's Tasks.
 - **Dock:** after login the dock hides as soon as a window covers its spot, without a hover first: mk-indicator now has Dash to Dock recompute its overlap (`forceUpdate`) at 1.5, 4 and 8 s and on every focus change for the first 30 s (the old one-shot re-check reused a stale "nothing overlaps"). Intellihide follows the focused app's windows; no edge pressure to show it; 200 ms animation; a click minimizes or shows previews, scrolling cycles windows; dots for each open window, notification counters and emblems on icons; Trash and mounted drives at the end of the dock.
 - **MK Notes:** side panels slide at a steady 60 fps: nothing is re-laid out while they move (the page is refitted once, after), and the dotted paper is one tiled fill instead of ~70 000 dots drawn one by one.
 - **MK Notes:** the selection card now points at the selected words (it had been pinned to the page's corner: Python's Gdk.Rectangle ignores its arguments; the text box's right-click menu had the same bug); it gained strikethrough, inline code, four highlight presets, a link tool and copy/cut/delete, and hides while scrolling. The side panels slide in and out (220 ms).

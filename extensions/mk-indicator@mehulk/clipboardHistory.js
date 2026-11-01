@@ -1,8 +1,11 @@
 // Clipboard history (Super+V): a deck in the middle of the screen over a
 // dimmed, blurred backdrop (Esc or a click outside closes it). A click copies
 // an entry back to the clipboard (nothing is typed for you: paste with
-// Ctrl+V). Tabs: All, Images, Text, Pinned. Pictures show as previews with
-// their size, 👁 opens one full size; text can be edited before you paste
+// Ctrl+V). Tabs: All, Images, Text, Pinned; under Pinned, a switch between
+// pinned text and pinned pictures, so a few big screenshots never bury your
+// pinned snippets. Pictures show as previews with their size, 👁 opens one
+// full size; "Hide screenshots" folds every picture outside the Images tab
+// into a one-line row (remembered). Text can be edited before you paste
 // it; 🏷 tags an entry (#code, #receipt) and the search box finds tags with #;
 // pins stay on top. Clear keeps the pinned ones.
 //
@@ -23,6 +26,7 @@ const TABS = [['all', '📋 All'], ['images', '🖼️ Images'], ['text', '📝 
 
 const DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'clipboard']);
 const STORE = GLib.build_filenamev([DIR, 'history.json']);
+const VIEW = GLib.build_filenamev([DIR, 'view.json']);   // the switches: {pinned: 'text'|'images', foldImages}
 const KEEP = 60;
 const MAX_TEXT = 100000;  // characters; longer copies are kept cut short
 const SECRET_HINT = 'x-kde-passwordManagerHint';
@@ -51,11 +55,12 @@ function pngSize(bytes) {
 export class ClipboardHistory {
     constructor() {
         this._items = this._load();
-        this._cards = new Map();     // entry id -> its card, kept between openings
+        this._cards = new Map();     // entry id (or "id:folded") -> its card, kept between openings
         this._version = 0;           // bumped on every change to the entries
         this._filled = null;         // what the list shows now: [version, tab, query]
         this._orphans = new Set();   // cards to throw away at the next fill
         this._clipboard = St.Clipboard.get_default();
+        this._view = this._loadView();
         this._thumbQueue = this._items.filter(i => i.image && !GLib.file_test(this._thumbPath(i), GLib.FileTest.EXISTS));
         this._nextThumb();
         // Build the deck (and the first cards) a few seconds after login, so
@@ -104,6 +109,39 @@ export class ClipboardHistory {
         } catch (e) {
             return [];
         }
+    }
+
+    _loadView() {
+        const view = {pinned: 'text', foldImages: false};
+        try {
+            const [ok, bytes] = GLib.file_get_contents(VIEW);
+            const saved = ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+            if (saved.pinned === 'images')
+                view.pinned = 'images';
+            view.foldImages = saved.foldImages === true;
+        } catch (e) {
+            // first time: text first, pictures shown
+        }
+        return view;
+    }
+
+    _saveView() {
+        try {
+            GLib.mkdir_with_parents(DIR, 0o700);
+            GLib.file_set_contents(VIEW, JSON.stringify(this._view));
+        } catch (e) {
+            console.warn(`mk-indicator: clipboard history: ${e.message}`);
+        }
+    }
+
+    // what decides the list beyond the entries and the search: the tab, and the two switches
+    _viewKey() {
+        return `${this._tab}/${this._view.pinned}/${this._view.foldImages}`;
+    }
+
+    // a picture outside the Images tab, with "Hide screenshots" on: a one-line row instead of a preview
+    _folded(item) {
+        return !!item.image && this._view.foldImages && this._tab !== 'images';
     }
 
     _save() {
@@ -239,7 +277,7 @@ export class ClipboardHistory {
         this._entry.set_text('');
         // Nothing changed since last time: the list is already right.
         const f = this._filled;
-        if (!f || f[0] !== this._version || f[1] !== this._tab || f[2] !== '')
+        if (!f || f[0] !== this._version || f[1] !== this._viewKey() || f[2] !== '')
             this._fill();
         this._scroll.vadjustment.value = 0;
         if (d.state !== ModalDialog.State.OPENED && d.state !== ModalDialog.State.OPENING)
@@ -312,12 +350,40 @@ export class ClipboardHistory {
                 this._tab = key;
                 for (const [k, other] of this._tabButtons)
                     other.checked = k === key;
+                this._pinBar.visible = key === 'pinned';
                 this._fill();
             });
             tabs.add_child(b);
             return [key, b];
         });
+        tabs.add_child(new St.Widget({x_expand: true}));
+        this._foldButton = new St.Button({style_class: 'mk-clip-tab mk-clip-fold', can_focus: true, toggle_mode: true,
+            checked: this._view.foldImages, label: '👁️ Hide screenshots',
+            accessible_name: 'Fold pictures into one-line rows (the Images tab still shows them)'});
+        this._foldButton.connect('clicked', () => {
+            this._view.foldImages = this._foldButton.checked;
+            this._saveView();
+            this._fill();
+        });
+        tabs.add_child(this._foldButton);
         box.add_child(tabs);
+        // Pinned: text and pictures apart (text first)
+        this._pinBar = new St.BoxLayout({style_class: 'mk-clip-segment', visible: false,
+            x_align: Clutter.ActorAlign.START});
+        this._pinButtons = [['text', '📝 Pinned text'], ['images', '🖼️ Pinned images']].map(([kind, label]) => {
+            const b = new St.Button({label, style_class: 'mk-clip-seg', can_focus: true, toggle_mode: true,
+                checked: this._view.pinned === kind});
+            b.connect('clicked', () => {
+                this._view.pinned = kind;
+                for (const [k, other] of this._pinButtons)
+                    other.checked = k === kind;
+                this._saveView();
+                this._fill();
+            });
+            this._pinBar.add_child(b);
+            return [kind, b];
+        });
+        box.add_child(this._pinBar);
         this._list = new St.BoxLayout({vertical: true, style_class: 'mk-clip-list'});
         this._scroll = new St.ScrollView({style_class: 'mk-clip-scroll', child: this._list,
             hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC});
@@ -377,10 +443,12 @@ export class ClipboardHistory {
 
     // A card changed (pin, edit, tags, delete): build it again next time.
     _forget(item) {
-        const card = this._cards.get(item.id);
-        if (card) {
-            this._cards.delete(item.id);
-            this._orphans.add(card);
+        for (const key of [item.id, `${item.id}:folded`]) {
+            const card = this._cards.get(key);
+            if (card) {
+                this._cards.delete(key);
+                this._orphans.add(card);
+            }
         }
         this._version++;
     }
@@ -393,15 +461,16 @@ export class ClipboardHistory {
         this._empty?.destroy();
         this._empty = null;
         const ids = new Set(this._items.map(i => i.id));
-        for (const [id, card] of this._cards) {  // entries that are gone
-            if (!ids.has(id)) {
+        for (const [key, card] of this._cards) {  // entries that are gone
+            if (!ids.has(card._mkId)) {
                 card.destroy();
-                this._cards.delete(id);
+                this._cards.delete(key);
             }
         }
         const q = this._entry.get_text().toLowerCase().trim();
         const inTab = i => this._tab === 'all' || (this._tab === 'images' && i.image) ||
-            (this._tab === 'text' && i.text) || (this._tab === 'pinned' && i.pinned);
+            (this._tab === 'text' && i.text) ||
+            (this._tab === 'pinned' && i.pinned && (this._view.pinned === 'images' ? !!i.image : !!i.text));
         const matches = i => {
             if (!q)
                 return true;
@@ -413,11 +482,13 @@ export class ClipboardHistory {
         };
         const shown = [...this._items.filter(i => i.pinned), ...this._items.filter(i => !i.pinned)]
             .filter(i => inTab(i) && matches(i));
-        this._filled = [this._version, this._tab, q];
+        this._filled = [this._version, this._viewKey(), q];
         this._first = shown[0] ?? null;
         this._firstButton = null;
         if (!shown.length) {
-            this._empty = new St.Label({text: q ? 'Nothing matches.' : 'Copy something and it shows up here.',
+            const none = this._tab === 'pinned' ? `No pinned ${this._view.pinned === 'images' ? 'pictures' : 'text'} yet: ☆ pins one.` :
+                'Copy something and it shows up here.';
+            this._empty = new St.Label({text: q ? 'Nothing matches.' : none,
                 style_class: 'mk-clip-empty'});
             this._list.add_child(this._empty);
             return;
@@ -427,17 +498,20 @@ export class ClipboardHistory {
         if (this._fillId)
             GLib.source_remove(this._fillId);
         this._fillId = 0;
+        // (a folded picture is its own card: both kinds stay cached, so the switch is instant)
+        const key = item => this._folded(item) ? `${item.id}:folded` : item.id;
         const card = item => {
-            let c = this._cards.get(item.id);
+            let c = this._cards.get(key(item));
             if (!c) {
-                c = this._card(item);
-                this._cards.set(item.id, c);
+                c = this._card(item, this._folded(item));
+                c._mkId = item.id;
+                this._cards.set(key(item), c);
             }
             return c;
         };
         this._firstButton = card(shown[0])._mkMain;
         const FIRST = 12, BATCH = 16;
-        const ready = shown.findIndex((item, i) => i >= FIRST && !this._cards.has(item.id));
+        const ready = shown.findIndex((item, i) => i >= FIRST && !this._cards.has(key(item)));
         const now = ready === -1 ? shown.length : ready;
         shown.slice(0, now).forEach(item => this._list.add_child(card(item)));
         let next = now;
@@ -458,11 +532,19 @@ export class ClipboardHistory {
         }
     }
 
-    _card(item) {
-        const card = new St.BoxLayout({style_class: item.pinned ? 'mk-clip-card pinned' : 'mk-clip-card'});
+    _card(item, folded = false) {
+        const card = new St.BoxLayout({style_class: `mk-clip-card${item.pinned ? ' pinned' : ''}${folded ? ' folded' : ''}`});
         const main = new St.Button({style_class: 'mk-clip-main', can_focus: true, x_expand: true,
             x_align: Clutter.ActorAlign.FILL});
-        if (item.image) {
+        if (item.image && folded) {                    // one line: a small swatch, what it is and its size
+            const thumb = this._thumbPath(item);
+            const row = new St.BoxLayout({style: 'spacing: 10px;', x_expand: true});
+            row.add_child(new St.Widget({style_class: 'mk-clip-swatch', y_align: Clutter.ActorAlign.CENTER,
+                style: GLib.file_test(thumb, GLib.FileTest.EXISTS) ? `background-image: url("file://${thumb}");` : ''}));
+            row.add_child(new St.Label({text: `🖼️ Screenshot${item.w ? `  ·  ${item.w} × ${item.h}` : ''}`,
+                style_class: 'mk-clip-text', y_align: Clutter.ActorAlign.CENTER}));
+            main.set_child(row);
+        } else if (item.image) {
             const thumb = this._thumbPath(item);
             const ready = GLib.file_test(thumb, GLib.FileTest.EXISTS);
             const pic = new St.Widget({style_class: 'mk-clip-image',
@@ -489,7 +571,7 @@ export class ClipboardHistory {
         main.connect('key-press-event', (_a, event) => this._cardKey(main, item, event));
         card._mkMain = main;
         card.add_child(main);
-        const tools = new St.BoxLayout({vertical: true, style_class: 'mk-clip-tools'});
+        const tools = new St.BoxLayout({vertical: !folded, style_class: 'mk-clip-tools'});
         const tool = (icon, tip, fn) => {
             const b = new St.Button({style_class: 'mk-clip-tool', can_focus: true, accessible_name: tip,
                 child: new St.Icon({icon_name: icon, icon_size: 14})});

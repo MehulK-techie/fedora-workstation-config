@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Clipboard history:** Pinned has its own switch, 📝 Pinned text / 🖼️ Pinned images (text first), and a 👁️ Hide screenshots toggle folds pictures into 32 px rows (a small swatch and the size) outside the Images tab, so pinned snippets and links aren't buried under 1920×1080 previews. Both are remembered (`~/.cache/mk-workstation/clipboard/view.json`); switching is instant (both kinds of card stay cached).
 - **Task badge:** the top-bar pill shows the whole to-do list: "📋 3 Left" (unfinished tasks), a cyan dot when any are for today, and "✓ All Done" at zero (it used to count only today's tasks, and vanish when there were none). Still live from `companion.json`, click for the Companion's Tasks.
 - **Dock:** after login the dock hides as soon as a window covers its spot, without a hover first: mk-indicator now has Dash to Dock recompute its overlap (`forceUpdate`) at 1.5, 4 and 8 s and on every focus change for the first 30 s (the old one-shot re-check reused a stale "nothing overlaps"). Intellihide follows the focused app's windows; no edge pressure to show it; 200 ms animation; a click minimizes or shows previews, scrolling cycles windows; dots for each open window, notification counters and emblems on icons; Trash and mounted drives at the end of the dock.
 - **MK Notes:** side panels slide at a steady 60 fps: nothing is re-laid out while they move (the page is refitted once, after), and the dotted paper is one tiled fill instead of ~70 000 dots drawn one by one.

@@ -3792,8 +3792,11 @@ class NotesWindow(Adw.ApplicationWindow):
                                                hscrollbar_policy=Gtk.PolicyType.EXTERNAL,
                                                propagate_natural_height=True))
 
-        title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
-                            margin_start=32, margin_end=32, margin_top=6, margin_bottom=4)
+        # the title and its date line sit over the sheet, lined up with the text on it (sized in
+        # _update_pages); they used to hug the column's left edge, off to one side of a centred page
+        title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER,
+                            margin_top=6, margin_bottom=4)
+        self.title_box = title_box
         self.title_entry = Gtk.Entry(placeholder_text="Note Title", css_classes=["mk-title-entry"])
         self.title_entry.connect("activate", lambda *_: (self._commit_title(), self.view.grab_focus()))
         f_ctrl = Gtk.EventControllerFocus()
@@ -5778,6 +5781,11 @@ class NotesWindow(Adw.ApplicationWindow):
         z = max(0.5, self.zoom)
         width = self.page_width()
         self.page_overlay.set_size_request(width, -1)
+        # the title over the sheet: as wide as its text column (the sheet less its 32 px margins), and
+        # centred on the sheet's column (the comments panel, when open, narrows that column on the right)
+        self.title_box.set_size_request(max(200, width - 2 * round(32 * z)), -1)
+        comments = self.comments_sidebar.get_width() if self.comments_sidebar.get_visible() else 0
+        self.title_box.set_margin_end(comments)
         pages = max(1, math.ceil(self._content_bottom() * z / self.page_height()))
         if pages != getattr(self, "pages", 0) or width != getattr(self, "_sheet_w", 0):
             self.pages, self._sheet_w = pages, width

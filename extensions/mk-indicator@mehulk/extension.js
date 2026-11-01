@@ -199,14 +199,11 @@ export default class MKIndicatorExtension extends Extension {
                 Main.layoutManager.disconnect(this._startupId);
                 this._startupId = 0;
                 greetOnce();
-                // Dash to Dock slides the dock in at login and leaves it up
-                // until the pointer visits it: re-check once its animation
-                // is over, so a window already on screen hides it at once.
-                this._hideDocksSoon(1500);
+                this._settleDocksAfterLogin();
             });
         } else if (shellAgeSeconds() < 90 && !Main.sessionMode.isLocked) {
             greetOnce();
-            this._hideDocksSoon(1500);
+            this._settleDocksAfterLogin();
         }
     }
 
@@ -275,24 +272,62 @@ export default class MKIndicatorExtension extends Extension {
     // pointer visits. Once they exist, let the dock decide again from what's
     // on screen: hidden over a window (intellihide), hidden when autohide has
     // nothing under the pointer; the pointer at the screen edge brings it back.
+    // Dash to Dock slides the dock in at login and leaves it up until the
+    // pointer visits it: its intellihide only re-checks for overlapping
+    // windows on some window events, and the windows that open as the session
+    // starts can arrive before it's listening. So for the first 30 s, check
+    // again when its slide-in is over (1.5 s), as the session settles (4 s,
+    // 8 s), and whenever the focused window changes; then leave it be.
+    _settleDocksAfterLogin() {
+        this._stopDockSettle();
+        this._dockSettleIds = [1500, 4000, 8000].map(ms => GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+            this._recheckDocks();
+            return GLib.SOURCE_REMOVE;
+        }));
+        this._dockSettle = {};                     // (what the focus watch is tracked by)
+        global.display.connectObject('notify::focus-window', () => this._hideDocksSoon(250), this._dockSettle);
+        this._dockSettleIds.push(GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 30, () => {
+            this._stopDockSettle();
+            return GLib.SOURCE_REMOVE;
+        }));
+    }
+
+    _stopDockSettle() {
+        for (const id of this._dockSettleIds || [])
+            GLib.source_remove(id);
+        this._dockSettleIds = [];
+        if (this._dockSettle)
+            global.display.disconnectObject(this._dockSettle);
+        this._dockSettle = null;
+    }
+
     _hideDocksSoon(delay = 700) {
         if (this._unlockDockId)
             GLib.source_remove(this._unlockDockId);
         this._unlockDockId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
             this._unlockDockId = 0;
-            if (Main.overview.visible)
-                return GLib.SOURCE_REMOVE;
-            for (const dock of this._docks()) {
-                dock._box?.sync_hover();
-                if (dock._box?.hover)
-                    continue;
-                if (dock.intellihideEnabled && dock.updateDashVisibility)
-                    dock.updateDashVisibility();
-                else if (dock.autohideEnabled)
-                    dock.hideDock?.();
-            }
+            this._recheckDocks();
             return GLib.SOURCE_REMOVE;
         });
+    }
+
+    // hide each dock now if a window covers its spot (and the pointer isn't on it)
+    _recheckDocks() {
+        if (Main.overview.visible)
+            return;
+        for (const dock of this._docks()) {
+            dock._box?.sync_hover();
+            if (dock._box?.hover)
+                continue;
+            if (dock.intellihideEnabled && dock.updateDashVisibility) {
+                // (forceUpdate: drop its cached overlap answer and look at the windows again;
+                // updateDashVisibility alone would reuse a stale "nothing overlaps")
+                dock._intellihide?.forceUpdate?.();
+                dock.updateDashVisibility();
+            } else if (dock.autohideEnabled) {
+                dock.hideDock?.();
+            }
+        }
     }
 
     _refreshBlur() {
@@ -318,6 +353,8 @@ export default class MKIndicatorExtension extends Extension {
     }
 
     disable() {
+        if (this._dockSettleIds)
+            this._stopDockSettle();
         if (this._sessionId) {
             Main.sessionMode.disconnect(this._sessionId);
             this._sessionId = 0;

@@ -93,7 +93,7 @@ test with `journalctl --user -f -o cat /usr/bin/gnome-shell`.
 
 | File | Does |
 | :--- | :--- |
-| `extension.js` | Top-bar tag (follows `brand.conf` live), hides the dock in the overview, rebuilds Blur my Shell's panel blur after startup |
+| `extension.js` | Top-bar tag (follows `brand.conf` live), hides the dock in the overview, has Dash to Dock re-check what covers it for the first 30 s after login (it can otherwise stay up until hovered), rebuilds Blur my Shell's panel blur after startup |
 | `dockGlow.js` | Per-app hover colour for dock icons: saturation-weighted hue histogram of the app icon, cached per app |
 | `welcome.js` | Edge light and greeting after login (waits for extensions to settle), Quick Settings menu toggle, optional notification edge light |
 | `timerPill.js` | Focus timer countdown in the top bar, from `~/.cache/mk-workstation/timer.json` |

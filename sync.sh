@@ -407,6 +407,73 @@ DESKTOP
 NAUTILUS_EXT="$HOME/.local/share/nautilus-python/extensions"
 mkdir -p "$NAUTILUS_EXT"
 cp -f "$SCRIPT_DIR/config/nautilus/mk-lock.py" "$NAUTILUS_EXT/mk-lock.py"
+# ...and "Open in VS Code" on folders and the folder background (when VS Code is installed).
+cp -f "$SCRIPT_DIR/config/nautilus/open-in-code.py" "$NAUTILUS_EXT/open-in-code.py"
+
+# VS Code: the menu bar folded into the title bar's hamburger. VS Code's settings file
+# allows comments and trailing commas, so it's edited as text (your comments stay):
+# an existing key gets the new value, a missing one goes in right after the opening
+# "{"; the result is checked before it's written, with a one-time settings.json.bak.
+VSCODE_SETTINGS="$HOME/.config/Code/User/settings.json"
+if command -v code > /dev/null 2>&1; then
+    mkdir -p "$(dirname "$VSCODE_SETTINGS")"
+    [[ -f "$VSCODE_SETTINGS" ]] || echo "{}" > "$VSCODE_SETTINGS"
+    python3 - "$VSCODE_SETTINGS" << 'PY'
+import json, re, shutil, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+want = {"window.titleBarStyle": "custom", "window.menuBarVisibility": "compact"}
+text = original = path.read_text()
+
+
+def loads_jsonc(t):
+    """Parse VS Code's JSON with comments: drop comments and trailing commas outside strings."""
+    out, i, n = [], 0, len(t)
+    while i < n:
+        c = t[i]
+        if c == '"':
+            j = i + 1
+            while j < n and t[j] != '"':
+                j += 2 if t[j] == "\\" else 1
+            out.append(t[i:j + 1])
+            i = j + 1
+        elif t.startswith("//", i):
+            i = t.find("\n", i) if "\n" in t[i:] else n
+        elif t.startswith("/*", i):
+            i = t.find("*/", i) + 2 if "*/" in t[i:] else n
+        else:
+            out.append(c)
+            i += 1
+    return json.loads(re.sub(r",(\s*[}\]])", r"\1", "".join(out)))
+
+
+try:
+    current = loads_jsonc(text)
+except ValueError:
+    print(f"    [*] {path} couldn't be read; add these by hand: {json.dumps(want)}")
+    sys.exit(0)
+for key, value in want.items():
+    if current.get(key) == value:
+        continue
+    pattern = re.compile(r'("' + re.escape(key) + r'"\s*:\s*)("(?:[^"\\]|\\.)*"|true|false|null|-?\d[\d.eE+-]*)')
+    if key in current and pattern.search(text):
+        text = pattern.sub(lambda m: m.group(1) + json.dumps(value), text, count=1)
+    else:
+        text = re.sub(r"^\s*\{", lambda m: m.group(0) + f"\n    {json.dumps(key)}: {json.dumps(value)},", text, count=1)
+if text != original:
+    try:
+        assert all(loads_jsonc(text).get(k) == v for k, v in want.items())
+    except (ValueError, AssertionError):
+        print(f"    [*] Left {path} as it was (the edit didn't check out); add by hand: {json.dumps(want)}")
+        sys.exit(0)
+    backup = path.with_name(path.name + ".bak")
+    if not backup.exists():
+        shutil.copy2(path, backup)
+    path.write_text(text)
+    print("    [+] VS Code: menu bar in the title bar (compact)")
+PY
+fi
 rm -f "$HOME/.local/share/nautilus/scripts/Lock or unlock folder"
 RETIRED_DIR="$HOME/.config/mk-workstation/retired-autostart"
 rm -f "$HOME/.local/bin/mk-session"

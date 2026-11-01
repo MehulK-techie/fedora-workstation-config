@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Files:** right-click a folder, or a folder's empty background, for **Open in VS Code** (`config/nautilus/open-in-code.py`, shown only when `code` is installed). **VS Code:** sync.sh folds the menu bar into the title bar (`window.titleBarStyle: custom`, `window.menuBarVisibility: compact`), editing settings.json as text so your comments and trailing commas stay, checking the result first, with a one-time `settings.json.bak`.
 - **MK Notes:** the title and its date line sit over the page, lined up with the text on it, instead of hugging the column's left edge beside a centred sheet (on a wide window they drifted ~250 px off the page). They follow the sheet's width and zoom, and the comments panel.
 - **Clipboard history:** Pinned has its own switch, 📝 Pinned text / 🖼️ Pinned images (text first), and a 👁️ Hide screenshots toggle folds pictures into 32 px rows (a small swatch and the size) outside the Images tab, so pinned snippets and links aren't buried under 1920×1080 previews. Both are remembered (`~/.cache/mk-workstation/clipboard/view.json`); switching is instant (both kinds of card stay cached).
 - **Task badge:** the top-bar pill shows the whole to-do list: "📋 3 Left" (unfinished tasks), a cyan dot when any are for today, and "✓ All Done" at zero (it used to count only today's tasks, and vanish when there were none). Still live from `companion.json`, click for the Companion's Tasks.

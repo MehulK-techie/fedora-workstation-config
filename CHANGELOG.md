@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Media tile:** no more ghost song after Spotify quits. playerctl's daemon (playerctld) re-publishes the last active player under its own MPRIS name, and the tile counted it as a second player; answers from an earlier look could also arrive after a newer one and put a closed player's song back. playerctld is ignored now, late answers are dropped, and the tile looks again 0.6 s after any player quits.
 - **Task badge:** "📋 3 Left · ⏰ 2" when some tasks are for today (the dot is gone). **Clipboard:** the history switch is now an explicit 👁 Hide pinned, on by default (`hide_pinned_in_stream` in view.json; the earlier setting carries over); pictures in Pinned are always 40 px rows.
 - **Fingerprint:** `mk fingerprint` enrolls with a progress bar, `[██████░░░░] 60% (touch 6/10)`, using the touch count the reader reports to fprintd; a chime per good touch, a different one at the end, and plain advice when a touch doesn't count (off-centre, lift and press again). It checks for a reader first, and still falls back to sudo when the password prompt is refused. PAM stays with `scripts/fingerprint-pam.sh` (authselect).
 - **Face unlock:** the three enrollment models are now eye level, screen glow (the room dark, the screen lighting your face) and a slight turn left and right, instead of normal, dim and bright light. Matching stays stricter than Howdy's default (certainty 2.6, dark_threshold 50).

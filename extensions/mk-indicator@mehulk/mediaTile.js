@@ -34,6 +34,10 @@ import { expectFocus } from './focus.js';
 const PREFIX = 'org.mpris.MediaPlayer2.';
 const PATH = '/org/mpris/MediaPlayer2';
 const PLAYER = 'org.mpris.MediaPlayer2.Player';
+// playerctl's daemon re-publishes whichever player was active last under its own name: a mirror, not a
+// player. Counted as one, it could keep the tile on a song after Spotify quit (a ghost).
+const MIRRORS = new Set([`${PREFIX}playerctld`]);
+const isPlayer = name => name.startsWith(PREFIX) && !MIRRORS.has(name);
 const USER_CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'media.conf']);
 const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'media.conf']);
 const ART_DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'album-art']);
@@ -147,12 +151,22 @@ export class MediaTile {
             'NameOwnerChanged', '/org/freedesktop/DBus', null, Gio.DBusSignalFlags.NONE,
             (_c, _s, _p, _i, _sig, params) => {
                 const [name, , owner] = params.deep_unpack();
-                if (!name.startsWith(PREFIX))
+                if (!isPlayer(name))
                     return;
-                if (owner)
+                if (owner) {
                     this._players.add(name);
-                else
+                } else {
                     this._players.delete(name);
+                    // a player that just quit: look again once the dust settles, in case anything still
+                    // answered for it in the meantime
+                    if (this._goneId)
+                        GLib.source_remove(this._goneId);
+                    this._goneId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => {
+                        this._goneId = 0;
+                        this._choose();
+                        return GLib.SOURCE_REMOVE;
+                    });
+                }
                 this._choose();
             });
         this._propsId = this._bus.signal_subscribe(null, 'org.freedesktop.DBus.Properties', 'PropertiesChanged',
@@ -161,7 +175,7 @@ export class MediaTile {
             null, null, Gio.DBusCallFlags.NONE, -1, null, (c, res) => {
                 try {
                     for (const name of c.call_finish(res).deep_unpack()[0]) {
-                        if (name.startsWith(PREFIX))
+                        if (isPlayer(name))
                             this._players.add(name);
                     }
                 } catch (e) {
@@ -243,6 +257,9 @@ export class MediaTile {
             return;
         const spotifyOnly = this._conf.PLAYERS === 'spotify';
         const names = [...this._players].filter(n => !spotifyOnly || n.includes('spotify'));
+        // (each look is numbered: answers to an older one that arrive late, say from before a player
+        // quit, are dropped instead of putting its song back)
+        const round = this._round = (this._round ?? 0) + 1;
         if (!names.length) {
             this._noPlayer();
             return;
@@ -252,7 +269,7 @@ export class MediaTile {
         for (const name of names) {
             this._getAll(name, props => {
                 info[name] = props;
-                if (--pending)
+                if (--pending || round !== this._round)
                     return;
                 this._decide(names.filter(n => info[n]), info);
             });
@@ -716,7 +733,7 @@ export class MediaTile {
                 this._bus.signal_unsubscribe(this[id]);
             this[id] = 0;
         }
-        for (const id of ['_posId', '_recheckId', '_raiseCheckId', '_pillHideId']) {
+        for (const id of ['_posId', '_recheckId', '_raiseCheckId', '_pillHideId', '_goneId']) {
             if (this[id])
                 GLib.source_remove(this[id]);
             this[id] = 0;

@@ -265,10 +265,12 @@ BASE_CSS = """
 .mk-table-handle { min-width: 10px; min-height: 10px; margin: -5px; border-radius: 2px;
                    background: white; border: 2px solid #3b82f6; }
 .mk-table-selected .mk-table-grid { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.mk-table-bar { opacity: 0; transition: opacity 150ms ease; }
+.mk-table-bar.shown { opacity: 1; }
 .mk-table-divider:hover { background: alpha(@accent_color, 0.5); }
 .mk-table-pill { font-size: 0.82em; padding: 2px 10px; min-height: 0; border-radius: 99px;
                  background: alpha(@window_fg_color, 0.08); }
-.mk-sheet { border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
+.mk-sheet { border-radius: 12px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45); }
 popover.mk-sel-card > contents { border-radius: 12px; background: rgba(24, 28, 38, 0.94); color: #e5e7eb;
                                  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); padding: 2px; }
 popover.mk-sel-card > arrow { background: rgba(24, 28, 38, 0.94); }
@@ -1047,6 +1049,7 @@ class TableItem(Gtk.Box):
         data["col_w"] = (data["col_w"] + [140] * width)[:width]
         self.active = (0, 0)
         self.anchor = None
+        self.selected = False
         self.grid = Gtk.Grid(css_classes=["mk-table-grid"])
         # The selection frame: 8 handles (corners scale both ways, edges one;
         # the left and top ones move the table too), shown while selected.
@@ -1069,14 +1072,18 @@ class TableItem(Gtk.Box):
         focus.connect("enter", lambda *_: self.select(True))
         focus.connect("leave", lambda *_: GLib.timeout_add(150, lambda: (self._maybe_unselect(), False)[1]))
         self.add_controller(focus)
-        bar = Gtk.Box(spacing=6)
+        # ⠿ Move table and ▼: shown while the pointer is over the table (or its menu is open), faded out
+        # otherwise (opacity, not visibility: the text below never jumps), so typing in a cell is clean
+        bar = Gtk.Box(spacing=6, css_classes=["mk-table-bar"], can_target=False)
+        self.bar = bar
         move = Gtk.Label(label="⠿ Move table", css_classes=["mk-table-pill"],
                          cursor=Gdk.Cursor.new_from_name("grab"),
                          tooltip_text="Drag to another place in the text")
         drag = Gtk.GestureDrag()
         drag.connect("drag-begin", self._move_begin)
         drag.connect("drag-update", self._move_update)
-        drag.connect("drag-end", lambda *_: (self.set_opacity(1.0), self.win.keep_off_gaps(self),
+        drag.connect("drag-end", lambda *_: (self.set_opacity(1.0), setattr(self, "_moving", False), self._show_bar(),
+                                             self.win.keep_off_gaps(self),
                                              self.win._queue_save_meta(), self.win.ensure_page_height_for_images()))
         move.add_controller(drag)
         bar.append(move)
@@ -1091,11 +1098,21 @@ class TableItem(Gtk.Box):
             act.connect("activate", lambda *_a, w=what: self.edit(w))
             group.add_action(act)
         self.insert_action_group("table", group)
-        bar.append(Gtk.MenuButton(label="▼", menu_model=menu, css_classes=["mk-table-pill"],
-                                  tooltip_text="Rows and columns (for the cell you're in)"))
-
+        self.menu_btn = Gtk.MenuButton(label="▼", menu_model=menu, css_classes=["mk-table-pill"],
+                                       tooltip_text="Rows and columns (for the cell you're in)")
+        self.menu_btn.connect("notify::active", lambda *_: self._show_bar())
+        bar.append(self.menu_btn)
         self.append(bar)
+        hover = Gtk.EventControllerMotion()
+        hover.connect("enter", lambda *_: (setattr(self, "_hover", True), self._show_bar()))
+        hover.connect("leave", lambda *_: (setattr(self, "_hover", False), self._show_bar()))
+        self.add_controller(hover)
         self.build()
+
+    def _show_bar(self):
+        on = getattr(self, "_hover", False) or self.menu_btn.get_active() or getattr(self, "_moving", False)
+        (self.bar.add_css_class if on else self.bar.remove_css_class)("shown")
+        self.bar.set_can_target(on)
 
     # ----- the grid: cells at even columns, dividers between them
     def build(self, focus=None):
@@ -1173,6 +1190,9 @@ class TableItem(Gtk.Box):
         self.win._queue_save_meta()
 
     def _key(self, _ctl, keyval, _code, state, r, c):
+        if keyval == Gdk.KEY_Escape:                  # out of the table, back to the text below it
+            self.win.leave_table(self)
+            return True
         if keyval not in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
             return False
         rows, cols = len(self.data["rows"]), len(self.data["rows"][0])
@@ -1227,6 +1247,7 @@ class TableItem(Gtk.Box):
         return (x, y) if ok else None
 
     def _move_begin(self, gesture, *_a):
+        self._moving = True                 # (the bar stays up and in reach through the drag)
         self._start = (self.data.get("x", 56.0), self.data.get("y", 80.0))
         self._origin = self._window_point(gesture)
         self.select(True)
@@ -1276,12 +1297,16 @@ class TableItem(Gtk.Box):
         self.sync_zoom()
 
     def select(self, on):
+        """Selected: the blue outline and the 8 handles. Unselected: the plain grid again (the
+        ⠿ / ▼ bar follows the pointer, see _show_bar)."""
         if getattr(self, "selected", False) == on:
             return
         self.selected = on
         for h in self.handles:
             h.set_visible(on)
         (self.add_css_class if on else self.remove_css_class)("mk-table-selected")
+        if not on:
+            self._show_bar()
 
     def _maybe_unselect(self):
         if getattr(self, "_dragging", False) or getattr(self, "_all", False):
@@ -3886,7 +3911,8 @@ class NotesWindow(Adw.ApplicationWindow):
         # The page: an A4 sheet (PAGE_W wide, 1:1.414) centred on the darker
         # workspace, as long as the note needs in whole pages (_update_pages).
         self.page_overlay = SheetOverlay(child=self.paper_bg, hexpand=False, vexpand=True, halign=Gtk.Align.CENTER,
-                                        margin_top=24, margin_bottom=24, css_classes=["mk-sheet"])
+                                        margin_top=24, margin_bottom=24, css_classes=["mk-sheet"],
+                                        overflow=Gtk.Overflow.HIDDEN)   # (the paper follows the card's rounded corners)
         self.under_ink = UnderInk(self)
         self.page_overlay.add_overlay(self.under_ink)
         self.page_overlay.add_overlay(self.view)
@@ -3962,6 +3988,12 @@ class NotesWindow(Adw.ApplicationWindow):
         self.doc_col.append(self.status_bar)
         main_hbox.append(self.doc_col)
 
+        # A click anywhere outside a selected table lets go of it: blank paper and the dark space
+        # around the page take no focus, so the table's focus-leave alone missed those clicks.
+        # (Capture phase, only watching: the click still goes where it was going.)
+        outside = Gtk.GestureClick(button=0, propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        outside.connect("pressed", self._on_window_press)
+        self.add_controller(outside)
         # Window-level key controller (instant Delete / Backspace for canvas images)
         win_keys = Gtk.EventControllerKey()
         win_keys.connect("key-pressed", self._on_window_key_pressed)
@@ -4001,7 +4033,33 @@ class NotesWindow(Adw.ApplicationWindow):
             return True
         return False
 
+    def _on_window_press(self, _gesture, _n, x, y):
+        picked = self.pick(x, y, Gtk.PickFlags.DEFAULT)
+        for table in self.table_items:
+            if table.selected and not (picked and (picked is table or picked.is_ancestor(table))):
+                table.select(False)
+
+    def leave_table(self, table):
+        """Esc on a table: unselect it and type on in the text, just below it."""
+        table.select(False)
+        z = max(0.5, self.zoom)
+        y = round(table.data.get("y", 0) * z + table.get_height() + 4)
+        found, it = self.view.get_iter_at_location(round(32 * z) + 2, y)
+        if found:
+            self.buffer.place_cursor(it)
+        # (the page stays where it is: focusing the text, which is taller than the window, would have
+        # the scrolled window bring all of it into view, i.e. jump to its end)
+        adj = self.page_scroll.get_vadjustment()
+        keep = adj.get_value()
+        self.view.grab_focus()
+        GLib.idle_add(lambda: (adj.set_value(keep), False)[1])
+
     def _on_window_key_pressed(self, _ctrl, keyval, _code, _state):
+        if keyval == Gdk.KEY_Escape and (chosen := [t for t in self.table_items if t.selected]):
+            for table in chosen[1:]:
+                table.select(False)
+            self.leave_table(chosen[0])
+            return True
         if self.selected_img and keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
             self.remove_canvas_image(self.selected_img)
             return True

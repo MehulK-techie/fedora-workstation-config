@@ -174,7 +174,9 @@ straight bar behind the line.
   8 blue handles: corners resize both ways, edges one; drag the line between two columns (⟷) to trade width between
   them. One click in a cell types there; cells wrap and a row grows to its
   tallest cell. ▼ adds or deletes rows and columns, or the table; Tab walks
-  the cells and adds a row from the last one. Tables are kept with the note,
+  the cells (Shift+Tab back) and adds a row from the last one. ⠿ and ▼ show
+  while the pointer is over the table. A click anywhere outside it, or Esc,
+  lets go of the table (Esc puts the cursor on the line below). Tables are kept with the note,
   plus a Markdown copy at the end of the file for other apps. Tables from
   older MK Notes move onto the page where their line was.
 - **Comments** open as a slim card in the right margin; click highlighted

@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Face unlock:** the three enrollment models are now eye level, screen glow (the room dark, the screen lighting your face) and a slight turn left and right, instead of normal, dim and bright light. Matching stays stricter than Howdy's default (certainty 2.6, dark_threshold 50).
 - **Clipboard history:** All, Text and Images are the plain history, newest first: pinned entries no longer sit on top of it (★ Show pinned mixes them back in, in their place in time). Pinned is their one home, filtered All pinned / Code & text / Screenshots. Compact pictures (was Hide screenshots) makes slim 36 px rows. Tabs and switches use Adwaita symbolic icons; the deck opens with a quick spring from 0.97 (150 ms).
 - **Task badge:** with nothing left to do it's gone from the top bar (no "✓ All Done" pill); the today dot breathes a few times when it appears, then stays lit.
 - **MK Notes:** tables let go: a click anywhere outside a selected table (blank paper and the space around the page included, which take no focus) unselects it, and Esc unselects it and puts the cursor on the line below, without scrolling the page. The ⠿ Move table and ▼ pills appear only while the pointer is over the table (or its menu is open), fading in and out without moving the text. The page card has 12 px corners (the paper is clipped to them) and a softer, deeper shadow.

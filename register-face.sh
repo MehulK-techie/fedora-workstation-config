@@ -271,10 +271,10 @@ if (( EXISTING > 0 )); then
 fi
 
 SCENES=(
-    "Normal light|Sit the way you usually do, in your normal room light."
-    "Dim light|Dim the room: switch off the main light or close the curtains."
+    "Eye level|Sit square to the screen, the camera level with your eyes, in your usual room light."
+    "Screen glow|Turn the room light down so the screen lights your face, the way it does at night."
+    "Slight angle|While it records, turn your head a little to the left, then a little to the right."
     "Bright or side light|Sit near a window or lamp, or put on glasses if you wear them."
-    "Different angle|Lean back a little or tilt your head slightly."
     "Extra condition|Any other look you often have (hat, headphones, makeup)."
 )
 recorded=0

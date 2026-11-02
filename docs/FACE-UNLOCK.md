@@ -14,13 +14,16 @@ Unlock the login screen (and optionally `sudo`) by looking at your camera. It us
    ```
 
    (Or, from the repo folder, `sudo ./register-face.sh`.) Type your password when asked.
-3. Follow the prompts. The wizard asks you to look at the camera three times, each in different lighting:
+3. Follow the prompts. The wizard asks you to look at the camera three times, each a little differently:
 
    | Model | What to do |
    | :--- | :--- |
-   | 1. Normal light | Sit the way you usually do, in your normal room light. |
-   | 2. Dim light | Switch off the main light or close the curtains. |
-   | 3. Bright or side light | Sit near a window or lamp, or put on glasses if you wear them. |
+   | 1. Eye level | Sit square to the screen, the camera level with your eyes, in your usual room light. |
+   | 2. Screen glow | Turn the room light down so the screen lights your face, the way it does at night. |
+   | 3. Slight angle | While it records, turn your head a little to the left, then a little to the right. |
+
+   `mk face --models 5` adds two more: bright or side light (or glasses), and any other look you often
+   have (hat, headphones).
 
    Press **Enter** to record each one, **s** to skip one, or **q** to stop early.
 
@@ -134,7 +137,7 @@ enrolled finger is connected. The check runs as root in `mk-face-auth`
 | Problem | Fix |
 | :--- | :--- |
 | "No face model was recorded" | Light your face from the front and run `mk face` again. |
-| Works by day, fails at night | Add a dim-light model: `mk face --models 1` in the dark room, choosing *Dim light*. |
+| Works by day, fails at night | Add a screen-glow model: in the dark room run `mk face --models 2`, press **s** to skip the first, and record *Screen glow*. |
 | Fails with glasses or a hat | Add a model wearing them: `mk face --models 1`. |
 | Takes a long time, then asks for the password | Move closer to the camera and check `mk doctor`. With a webcam, add light in front of you. |
 | "All frames were too dark" in `howdy test` | Run `mk face --tune-only`, or raise `dark_threshold` in `/etc/howdy/config.ini` by 5–10. |

@@ -36,8 +36,9 @@ Everything above is skipped quietly on machines that don't have it.
 ## Fingerprint login
 
 1. `sudo ./setup.sh` once (turns fingerprint login on when a reader exists).
-2. `mk fingerprint` and touch the sensor about 8–12 times, shifting your
-   finger a little each time.
+2. `mk fingerprint` and touch the sensor as many times as your reader asks
+   (it says how many, with a progress bar and a chime for each good touch),
+   shifting your finger a little each time.
 3. Lock the screen (Super+L) and touch the sensor.
 
 ```bash

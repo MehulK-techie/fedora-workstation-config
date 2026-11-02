@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Fingerprint:** `mk fingerprint` enrolls with a progress bar, `[██████░░░░] 60% (touch 6/10)`, using the touch count the reader reports to fprintd; a chime per good touch, a different one at the end, and plain advice when a touch doesn't count (off-centre, lift and press again). It checks for a reader first, and still falls back to sudo when the password prompt is refused. PAM stays with `scripts/fingerprint-pam.sh` (authselect).
 - **Face unlock:** the three enrollment models are now eye level, screen glow (the room dark, the screen lighting your face) and a slight turn left and right, instead of normal, dim and bright light. Matching stays stricter than Howdy's default (certainty 2.6, dark_threshold 50).
 - **Clipboard history:** All, Text and Images are the plain history, newest first: pinned entries no longer sit on top of it (★ Show pinned mixes them back in, in their place in time). Pinned is their one home, filtered All pinned / Code & text / Screenshots. Compact pictures (was Hide screenshots) makes slim 36 px rows. Tabs and switches use Adwaita symbolic icons; the deck opens with a quick spring from 0.97 (150 ms).
 - **Task badge:** with nothing left to do it's gone from the top bar (no "✓ All Done" pill); the today dot breathes a few times when it appears, then stays lit.

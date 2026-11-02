@@ -44,6 +44,71 @@ updates_available() {
     [[ "$(git -C "$REPO_DIR" rev-parse HEAD)" != "$(git -C "$REPO_DIR" rev-parse '@{u}')" ]]
 }
 
+# A short sound (the desktop's sound theme), in the background; silent if there's no player.
+chime() {
+    if command -v canberra-gtk-play &> /dev/null; then
+        canberra-gtk-play -i "$1" &> /dev/null &
+    fi
+}
+
+# How many touches the fingerprint reader wants for one finger (fprintd says, over D-Bus; 10 if it won't).
+enroll_stages() {
+    local dev stages
+    dev=$(gdbus call --system --dest net.reactivated.Fprint --object-path /net/reactivated/Fprint/Manager \
+        --method net.reactivated.Fprint.Manager.GetDefaultDevice 2> /dev/null | grep -o "/net/[^']*") || true
+    [[ -n "$dev" ]] && stages=$(gdbus introspect --system --dest net.reactivated.Fprint --object-path "$dev" \
+        --only-properties 2> /dev/null | grep -oP 'num-enroll-stages = \K[0-9]+') || true
+    echo "${stages:-10}"
+}
+
+# [████░░░░░░]: n of w filled
+progress_bar() {
+    local bar="" i
+    for (( i = 0; i < $2; i++ )); do
+        if (( i < $1 )); then bar+="█"; else bar+="░"; fi
+    done
+    printf '[%s]' "$bar"
+}
+
+# Enroll one finger with a progress bar, [████░░░░░░] 40% (touch 4/10), a chime for each good touch,
+# and what to do when one doesn't take. $1: the finger; any further words run first (sudo).
+# Prints the result (enroll-completed, enroll-failed, ...) last; returns 3 if polkit refused.
+enroll_finger() {
+    local finger=$1 total good=0 line result=""
+    shift
+    total=$(enroll_stages)
+    echo "[1/${total}] Touch the sensor with your ${finger//-/ }..."
+    while IFS= read -r line; do
+        case "$line" in
+            *"not authorized"*|*"not authorised"*|*PermissionDenied*) return 3 ;;
+            *enroll-stage-passed*)
+                good=$((good + 1))
+                if (( good > total )); then total=$good; fi
+                printf '\r\e[K%s %d%% (touch %d/%d) ' "$(progress_bar $((good * 20 / total)) 20)" \
+                    $((good * 100 / total)) "$good" "$total"
+                chime message
+                ;;
+            *enroll-retry-scan*) echo; echo "  ↻ That touch didn't count: lift your finger and press again." ;;
+            *enroll-swipe-too-short*|*enroll-finger-not-centered*)
+                echo; echo "  ↻ Off-centre: press the middle of your fingertip flat on the sensor." ;;
+            *enroll-remove-and-retry*) echo; echo "  ↻ Lift your finger off completely, then press again." ;;
+        esac
+        if [[ "$line" == *"Enroll result: "* ]]; then
+            result=${line##*Enroll result: }
+        fi
+    done < <("$@" fprintd-enroll -f "$finger" "$USER" 2>&1)
+    if [[ "$result" == enroll-completed ]]; then   # (some readers finish before the count says so)
+        printf '\r\e[K%s 100%% (done)' "$(progress_bar 20 20)"
+    fi
+    echo
+    case "$result" in
+        enroll-completed) chime complete ;;
+        "") ;;
+        *) chime dialog-error ;;
+    esac
+    echo "${result:-no-result}"
+}
+
 case "${1:-help}" in
     update)
         # One command keeps everything current: the repo, any app added to
@@ -183,15 +248,26 @@ case "${1:-help}" in
         case "${1:-enroll}" in
             enroll)
                 finger="${2:-right-index-finger}"
-                echo "Enrolling $finger. Lift and touch the sensor each time it asks (about 8-12 times),"
-                echo "moving your finger slightly so the whole fingertip gets recorded."
+                if ! fprintd-list "$USER" 2> /dev/null | grep -q '^Device at'; then
+                    echo "[-] No fingerprint reader found. 'mk fingerprint check' shows what the system sees." >&2
+                    exit 1
+                fi
+                echo "Enrolling your ${finger//-/ }. Lift and press each time, moving your finger a little"
+                echo "so the whole fingertip gets recorded."
                 # GNOME asks for your password first (polkit). If that's refused
                 # or no prompt appears (SSH, some terminals), enroll through sudo.
-                out=$(fprintd-enroll -f "$finger" "$USER" 2>&1 | tee /dev/tty) || true
-                if grep -qiE "not authori[sz]ed|PermissionDenied" <<< "$out"; then
+                status=0
+                result=$(enroll_finger "$finger" | tee /dev/tty | tail -1) || status=$?
+                if (( status == 3 )); then
                     echo "[*] The password prompt was refused or didn't appear. Trying again with sudo..."
-                    sudo fprintd-enroll -f "$finger" "$USER"
+                    result=$(enroll_finger "$finger" sudo | tee /dev/tty | tail -1) || true
                 fi
+                case "$result" in
+                    enroll-completed) echo "✔ Recorded." ;;
+                    enroll-duplicate) echo "[*] That finger is already enrolled (for you or someone else)." ;;
+                    enroll-data-full) echo "[-] The reader's memory is full: delete a print first (mk fingerprint delete)." >&2 ;;
+                    *) echo "[*] The reader stopped (${result}). Try again; 'mk fingerprint check' shows why." ;;
+                esac
                 if ! fprintd-list "$USER" 2> /dev/null | grep -q '^ - '; then
                     echo "[-] No finger was saved. Run 'mk fingerprint' again; 'mk fingerprint check' shows why." >&2
                     exit 1

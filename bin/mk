@@ -666,7 +666,7 @@ case "${1:-help}" in
         ;;
 
     tasks)
-        # mk tasks badge on|off: the top-bar to-do pill (tasks left, or All Done)
+        # mk tasks badge on|off: the top-bar to-do pill (tasks left; hidden when none)
         if [[ "${2:-}" == badge && "${3:-}" =~ ^(on|off)$ ]]; then
             conf="$HOME/.config/mk-workstation/welcome.conf"
             mkdir -p "$(dirname "$conf")"

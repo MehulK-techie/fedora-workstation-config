@@ -1,7 +1,7 @@
 // A small pill in the top bar with the Companion's to-do list: "📋 3 Left"
-// (every unfinished task), with a dot when any are for today (pinned, or a
-// reminder due today or overdue), and "✓ All Done" once they're all ticked off.
-// It follows companion.json live. Click: the Companion's tasks. Right-click:
+// (every unfinished task), with a softly pulsing dot when any are for today
+// (pinned, or a reminder due today or overdue). With nothing left to do it's
+// gone from the bar entirely. It follows companion.json live. Click: the Companion's tasks. Right-click:
 // hide it (TASK_BADGE=off in ~/.config/mk-workstation/welcome.conf;
 // mk tasks badge on). Hidden on the lock screen.
 import Clutter from 'gi://Clutter';
@@ -82,11 +82,24 @@ export class TaskBadge {
         if (!this._button)
             return;
         const {remaining, scheduled} = taskMetrics();
-        this._label.text = remaining > 0 ? `📋 ${remaining} Left` : '✓ All Done';
-        this._dot.visible = scheduled > 0;             // (something's for today)
-        this._button.accessible_name = remaining > 0 ?
-            `${remaining} tasks left${scheduled ? `, ${scheduled} for today` : ''}` : 'All tasks done';
-        this._button.visible = !this._locked && badgeOn();
+        this._label.text = `📋 ${remaining} Left`;
+        this._button.accessible_name = `${remaining} tasks left${scheduled ? `, ${scheduled} for today` : ''}`;
+        this._pulse(scheduled > 0);                    // (something's for today)
+        // nothing to do: not in the bar at all (no "All Done" pill)
+        this._button.visible = !this._locked && remaining > 0 && badgeOn();
+    }
+
+    // the today dot breathes a few times when it appears (opacity, 1.2 s each way), then stays lit:
+    // a pulse that never stopped would redraw the top bar all day
+    _pulse(on) {
+        if (on === this._dot.visible)
+            return;
+        this._dot.remove_all_transitions();
+        this._dot.visible = on;
+        this._dot.opacity = 255;
+        if (on)
+            this._dot.ease({opacity: 90, duration: 1200, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE,
+                repeatCount: 5, autoReverse: true, onComplete: () => this._dot && (this._dot.opacity = 255)});
     }
 
     _hide() {
@@ -115,6 +128,7 @@ export class TaskBadge {
         this._timer = 0;
         this._monitors?.forEach(m => m.cancel());
         this._monitors = null;
+        this._dot?.remove_all_transitions();
         this._button?.destroy();
         this._button = this._label = this._dot = null;
     }

@@ -39,7 +39,7 @@ Every command, file and format. How the parts fit together is in
 | `mk guest on\|off` | A Guest login: no password, no admin rights, home emptied at every login (sudo) |
 | `mk speedtest [--ping] [--gui] [--ookla]` | Ping, jitter, download and upload (speed.cloudflare.com, several streams); `--gui` a gauge window; `--ookla` uses speedtest-cli |
 | `mk center [actions\|lock\|security]` | MK Control Center |
-| `mk tasks badge on\|off` | The top-bar to-do pill ("📋 N Left" / "✓ All Done") |
+| `mk tasks badge on\|off` | The top-bar to-do pill ("📋 N Left"; hidden when nothing's left) |
 | `mk nap` | Apps App Nap has paused |
 | `mk keyring [open]` | Why apps ask for the keyring after fingerprint or face login, and the two fixes |
 | `mk tour` | The walkthrough (also Super+Shift+/) |

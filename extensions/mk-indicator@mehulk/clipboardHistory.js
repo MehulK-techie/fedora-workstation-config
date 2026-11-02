@@ -1,13 +1,14 @@
 // Clipboard history (Super+V): a deck in the middle of the screen over a
 // dimmed, blurred backdrop (Esc or a click outside closes it). A click copies
 // an entry back to the clipboard (nothing is typed for you: paste with
-// Ctrl+V). Tabs: All, Images, Text, Pinned; under Pinned, a switch between
-// pinned text and pinned pictures, so a few big screenshots never bury your
-// pinned snippets. Pictures show as previews with their size, 👁 opens one
-// full size; "Hide screenshots" folds every picture outside the Images tab
-// into a one-line row (remembered). Text can be edited before you paste
-// it; 🏷 tags an entry (#code, #receipt) and the search box finds tags with #;
-// pins stay on top. Clear keeps the pinned ones.
+// Ctrl+V). Tabs: All, Text, Images: the history, newest first, without the
+// pinned entries (a switch mixes them back in, in their place in time); and
+// Pinned, the one home for starred entries, filtered All pinned / Code & text /
+// Screenshots. Pictures show as previews with their size, 👁 opens one full
+// size; "Compact pictures" turns pictures outside the Images tab into slim
+// rows. Both switches are remembered. Text can be edited before you paste it;
+// 🏷 tags an entry (#code, #receipt) and the search box finds tags with #.
+// Clear keeps the pinned ones.
 //
 // Kept in ~/.cache/mk-workstation/clipboard (a folder only you can open): the
 // last 60 entries plus pinned ones. Copies from password managers (and any
@@ -22,11 +23,13 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
-const TABS = [['all', '📋 All'], ['images', '🖼️ Images'], ['text', '📝 Text'], ['pinned', '⭐ Pinned']];
+const TABS = [['all', 'All', 'view-paged-symbolic'], ['text', 'Text', 'text-x-generic-symbolic'],
+    ['images', 'Images', 'image-x-generic-symbolic'], ['pinned', 'Pinned', 'starred-symbolic']];
+const PIN_KINDS = [['all', 'All pinned'], ['text', 'Code & text'], ['images', 'Screenshots']];
 
 const DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'clipboard']);
 const STORE = GLib.build_filenamev([DIR, 'history.json']);
-const VIEW = GLib.build_filenamev([DIR, 'view.json']);   // the switches: {pinned: 'text'|'images', foldImages}
+const VIEW = GLib.build_filenamev([DIR, 'view.json']);   // the switches: {pinned, foldImages, pinsInStream}
 const KEEP = 60;
 const MAX_TEXT = 100000;  // characters; longer copies are kept cut short
 const SECRET_HINT = 'x-kde-passwordManagerHint';
@@ -112,13 +115,14 @@ export class ClipboardHistory {
     }
 
     _loadView() {
-        const view = {pinned: 'text', foldImages: false};
+        const view = {pinned: 'all', foldImages: false, pinsInStream: false};
         try {
             const [ok, bytes] = GLib.file_get_contents(VIEW);
             const saved = ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
-            if (saved.pinned === 'images')
-                view.pinned = 'images';
+            if (PIN_KINDS.some(([k]) => k === saved.pinned))
+                view.pinned = saved.pinned;
             view.foldImages = saved.foldImages === true;
+            view.pinsInStream = saved.pinsInStream === true;
         } catch (e) {
             // first time: text first, pictures shown
         }
@@ -136,7 +140,7 @@ export class ClipboardHistory {
 
     // what decides the list beyond the entries and the search: the tab, and the two switches
     _viewKey() {
-        return `${this._tab}/${this._view.pinned}/${this._view.foldImages}`;
+        return `${this._tab}/${this._view.pinned}/${this._view.foldImages}/${this._view.pinsInStream}`;
     }
 
     // a picture outside the Images tab, with "Hide screenshots" on: a one-line row instead of a preview
@@ -289,11 +293,11 @@ export class ClipboardHistory {
         card.set_pivot_point(0.5, 0.5);
         if (card.opacity === 255 && !this._closing) {
             card.opacity = 0;
-            card.scale_x = card.scale_y = 0.96;
+            card.scale_x = card.scale_y = 0.97;
         }
         this._closing = false;
-        card.ease({opacity: 255, scale_x: 1, scale_y: 1, duration: 120,
-            mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        card.ease({opacity: 255, scale_x: 1, scale_y: 1, duration: 150,
+            mode: Clutter.AnimationMode.EASE_OUT_BACK});   // (a small spring past 1 and back)
         global.stage.set_key_focus(this._entry.clutter_text);
     }
 
@@ -343,34 +347,48 @@ export class ClipboardHistory {
         head.add_child(clear);
         box.add_child(head);
         const tabs = new St.BoxLayout({style_class: 'mk-clip-tabs'});
-        this._tabButtons = TABS.map(([key, label]) => {
-            const b = new St.Button({label, style_class: 'mk-clip-tab', can_focus: true, toggle_mode: true,
-                checked: key === 'all'});
+        this._tabButtons = TABS.map(([key, label, icon]) => {
+            const inner = new St.BoxLayout({style: 'spacing: 6px;'});
+            inner.add_child(new St.Icon({icon_name: icon, icon_size: 14, y_align: Clutter.ActorAlign.CENTER}));
+            inner.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
+            const b = new St.Button({child: inner, style_class: 'mk-clip-tab', can_focus: true, toggle_mode: true,
+                checked: key === 'all', accessible_name: label});
             b.connect('clicked', () => {
                 this._tab = key;
                 for (const [k, other] of this._tabButtons)
                     other.checked = k === key;
                 this._pinBar.visible = key === 'pinned';
+                this._streamButton.visible = key !== 'pinned';
                 this._fill();
             });
             tabs.add_child(b);
             return [key, b];
         });
         tabs.add_child(new St.Widget({x_expand: true}));
-        this._foldButton = new St.Button({style_class: 'mk-clip-tab mk-clip-fold', can_focus: true, toggle_mode: true,
-            checked: this._view.foldImages, label: '👁️ Hide screenshots',
-            accessible_name: 'Fold pictures into one-line rows (the Images tab still shows them)'});
-        this._foldButton.connect('clicked', () => {
-            this._view.foldImages = this._foldButton.checked;
-            this._saveView();
-            this._fill();
-        });
-        tabs.add_child(this._foldButton);
+        const toggle = (icon, label, key, tip) => {
+            const inner = new St.BoxLayout({style: 'spacing: 6px;'});
+            inner.add_child(new St.Icon({icon_name: icon, icon_size: 14, y_align: Clutter.ActorAlign.CENTER}));
+            inner.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
+            const b = new St.Button({child: inner, style_class: 'mk-clip-tab mk-clip-fold', can_focus: true,
+                toggle_mode: true, checked: this._view[key], accessible_name: tip});
+            b.connect('clicked', () => {
+                this._view[key] = b.checked;
+                this._saveView();
+                this._fill();
+            });
+            tabs.add_child(b);
+            return b;
+        };
+        // pinned entries live in Pinned; this mixes them back into the history, in their place in time
+        this._streamButton = toggle('starred-symbolic', 'Show pinned', 'pinsInStream',
+            'Show pinned entries in the history too');
+        this._foldButton = toggle('view-list-symbolic', 'Compact pictures', 'foldImages',
+            'Pictures as slim rows (the Images tab still shows them full)');
         box.add_child(tabs);
-        // Pinned: text and pictures apart (text first)
+        // Pinned: everything starred, or only its text, or only its pictures
         this._pinBar = new St.BoxLayout({style_class: 'mk-clip-segment', visible: false,
             x_align: Clutter.ActorAlign.START});
-        this._pinButtons = [['text', '📝 Pinned text'], ['images', '🖼️ Pinned images']].map(([kind, label]) => {
+        this._pinButtons = PIN_KINDS.map(([kind, label]) => {
             const b = new St.Button({label, style_class: 'mk-clip-seg', can_focus: true, toggle_mode: true,
                 checked: this._view.pinned === kind});
             b.connect('clicked', () => {
@@ -468,9 +486,10 @@ export class ClipboardHistory {
             }
         }
         const q = this._entry.get_text().toLowerCase().trim();
-        const inTab = i => this._tab === 'all' || (this._tab === 'images' && i.image) ||
-            (this._tab === 'text' && i.text) ||
-            (this._tab === 'pinned' && i.pinned && (this._view.pinned === 'images' ? !!i.image : !!i.text));
+        const pinKind = i => this._view.pinned === 'all' || (this._view.pinned === 'images' ? !!i.image : !!i.text);
+        const stream = i => !i.pinned || this._view.pinsInStream;
+        const inTab = i => this._tab === 'pinned' ? i.pinned && pinKind(i) :
+            stream(i) && (this._tab === 'all' || (this._tab === 'images' && i.image) || (this._tab === 'text' && i.text));
         const matches = i => {
             if (!q)
                 return true;
@@ -480,13 +499,12 @@ export class ClipboardHistory {
             return tags.some(t => t.includes(q)) ||
                 (i.text ? i.text.toLowerCase().includes(q) : 'image picture screenshot'.includes(q));
         };
-        const shown = [...this._items.filter(i => i.pinned), ...this._items.filter(i => !i.pinned)]
-            .filter(i => inTab(i) && matches(i));
+        const shown = this._items.filter(i => inTab(i) && matches(i));   // (newest first, as copied)
         this._filled = [this._version, this._viewKey(), q];
         this._first = shown[0] ?? null;
         this._firstButton = null;
         if (!shown.length) {
-            const none = this._tab === 'pinned' ? `No pinned ${this._view.pinned === 'images' ? 'pictures' : 'text'} yet: ☆ pins one.` :
+            const none = this._tab === 'pinned' ? 'Nothing pinned here yet: ☆ on an entry pins it.' :
                 'Copy something and it shows up here.';
             this._empty = new St.Label({text: q ? 'Nothing matches.' : none,
                 style_class: 'mk-clip-empty'});

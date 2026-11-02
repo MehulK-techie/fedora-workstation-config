@@ -1,7 +1,7 @@
 // A small pill in the top bar with the Companion's to-do list: "📋 3 Left"
-// (every unfinished task), with a softly pulsing dot when any are for today
-// (pinned, or a reminder due today or overdue). With nothing left to do it's
-// gone from the bar entirely. It follows companion.json live. Click: the Companion's tasks. Right-click:
+// (every unfinished task), "📋 3 Left · ⏰ 2" when some are for today (pinned,
+// or a reminder due today or overdue). With nothing left to do it's gone from
+// the bar entirely. It follows companion.json live. Click: the Companion's tasks. Right-click:
 // hide it (TASK_BADGE=off in ~/.config/mk-workstation/welcome.conf;
 // mk tasks badge on). Hidden on the lock screen.
 import Clutter from 'gi://Clutter';
@@ -45,13 +45,8 @@ function badgeOn() {
 
 export class TaskBadge {
     enable() {
-        this._label = new St.Label({y_align: Clutter.ActorAlign.CENTER});
-        this._dot = new St.Widget({style_class: 'mk-task-badge-dot', y_align: Clutter.ActorAlign.CENTER, visible: false});
-        const box = new St.BoxLayout({style_class: 'mk-task-badge-box'});
-        box.add_child(this._label);
-        box.add_child(this._dot);
         this._button = new St.Button({style_class: 'mk-task-badge', y_align: Clutter.ActorAlign.CENTER,
-            reactive: true, can_focus: true, visible: false, child: box});
+            reactive: true, can_focus: true, visible: false});
         this._button.connect('button-release-event', (_b, event) => {
             if (event.get_button() === 3) {
                 this._hide();
@@ -82,24 +77,10 @@ export class TaskBadge {
         if (!this._button)
             return;
         const {remaining, scheduled} = taskMetrics();
-        this._label.text = `📋 ${remaining} Left`;
+        this._button.label = scheduled > 0 ? `📋 ${remaining} Left · ⏰ ${scheduled}` : `📋 ${remaining} Left`;
         this._button.accessible_name = `${remaining} tasks left${scheduled ? `, ${scheduled} for today` : ''}`;
-        this._pulse(scheduled > 0);                    // (something's for today)
         // nothing to do: not in the bar at all (no "All Done" pill)
         this._button.visible = !this._locked && remaining > 0 && badgeOn();
-    }
-
-    // the today dot breathes a few times when it appears (opacity, 1.2 s each way), then stays lit:
-    // a pulse that never stopped would redraw the top bar all day
-    _pulse(on) {
-        if (on === this._dot.visible)
-            return;
-        this._dot.remove_all_transitions();
-        this._dot.visible = on;
-        this._dot.opacity = 255;
-        if (on)
-            this._dot.ease({opacity: 90, duration: 1200, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE,
-                repeatCount: 5, autoReverse: true, onComplete: () => this._dot && (this._dot.opacity = 255)});
     }
 
     _hide() {
@@ -128,8 +109,7 @@ export class TaskBadge {
         this._timer = 0;
         this._monitors?.forEach(m => m.cancel());
         this._monitors = null;
-        this._dot?.remove_all_transitions();
         this._button?.destroy();
-        this._button = this._label = this._dot = null;
+        this._button = null;
     }
 }

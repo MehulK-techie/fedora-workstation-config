@@ -29,7 +29,7 @@ const PIN_KINDS = [['all', 'All pinned'], ['text', 'Code & text'], ['images', 'S
 
 const DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'clipboard']);
 const STORE = GLib.build_filenamev([DIR, 'history.json']);
-const VIEW = GLib.build_filenamev([DIR, 'view.json']);   // the switches: {pinned, foldImages, pinsInStream}
+const VIEW = GLib.build_filenamev([DIR, 'view.json']);   // the switches: {pinned, foldImages, hide_pinned_in_stream}
 const KEEP = 60;
 const MAX_TEXT = 100000;  // characters; longer copies are kept cut short
 const SECRET_HINT = 'x-kde-passwordManagerHint';
@@ -115,14 +115,15 @@ export class ClipboardHistory {
     }
 
     _loadView() {
-        const view = {pinned: 'all', foldImages: false, pinsInStream: false};
+        const view = {pinned: 'all', foldImages: false, hide_pinned_in_stream: true};
         try {
             const [ok, bytes] = GLib.file_get_contents(VIEW);
             const saved = ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
             if (PIN_KINDS.some(([k]) => k === saved.pinned))
                 view.pinned = saved.pinned;
             view.foldImages = saved.foldImages === true;
-            view.pinsInStream = saved.pinsInStream === true;
+            // (an older view.json said pinsInStream: true for the opposite)
+            view.hide_pinned_in_stream = saved.hide_pinned_in_stream ?? saved.pinsInStream !== true;
         } catch (e) {
             // first time: text first, pictures shown
         }
@@ -140,12 +141,13 @@ export class ClipboardHistory {
 
     // what decides the list beyond the entries and the search: the tab, and the two switches
     _viewKey() {
-        return `${this._tab}/${this._view.pinned}/${this._view.foldImages}/${this._view.pinsInStream}`;
+        return `${this._tab}/${this._view.pinned}/${this._view.foldImages}/${this._view.hide_pinned_in_stream}`;
     }
 
-    // a picture outside the Images tab, with "Hide screenshots" on: a one-line row instead of a preview
+    // a picture as a slim row instead of a preview: always in Pinned (so pinned text stays in sight), and
+    // outside the Images tab when Compact pictures is on
     _folded(item) {
-        return !!item.image && this._view.foldImages && this._tab !== 'images';
+        return !!item.image && (this._tab === 'pinned' || (this._view.foldImages && this._tab !== 'images'));
     }
 
     _save() {
@@ -379,9 +381,9 @@ export class ClipboardHistory {
             tabs.add_child(b);
             return b;
         };
-        // pinned entries live in Pinned; this mixes them back into the history, in their place in time
-        this._streamButton = toggle('starred-symbolic', 'Show pinned', 'pinsInStream',
-            'Show pinned entries in the history too');
+        // pinned entries live in Pinned; switched off, this mixes them back into the history in their place in time
+        this._streamButton = toggle('view-conceal-symbolic', 'Hide pinned', 'hide_pinned_in_stream',
+            'Keep pinned entries out of All, Text and Images (they are always in Pinned)');
         this._foldButton = toggle('view-list-symbolic', 'Compact pictures', 'foldImages',
             'Pictures as slim rows (the Images tab still shows them full)');
         box.add_child(tabs);
@@ -487,7 +489,7 @@ export class ClipboardHistory {
         }
         const q = this._entry.get_text().toLowerCase().trim();
         const pinKind = i => this._view.pinned === 'all' || (this._view.pinned === 'images' ? !!i.image : !!i.text);
-        const stream = i => !i.pinned || this._view.pinsInStream;
+        const stream = i => !i.pinned || !this._view.hide_pinned_in_stream;
         const inTab = i => this._tab === 'pinned' ? i.pinned && pinKind(i) :
             stream(i) && (this._tab === 'all' || (this._tab === 'images' && i.image) || (this._tab === 'text' && i.text));
         const matches = i => {

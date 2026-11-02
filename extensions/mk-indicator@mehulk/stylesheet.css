@@ -262,16 +262,14 @@
 .mk-clip-seg { padding: 4px 14px; border-radius: 99px; font-size: 0.85em; font-weight: 600; color: rgba(255, 255, 255, 0.7); }
 .mk-clip-seg:checked { color: white; background-color: rgba(255, 255, 255, 0.16); }
 .mk-clip-card.folded { padding: 2px 4px; }
-.mk-clip-card.folded .mk-clip-main { padding: 3px 10px; min-height: 30px; }
-.mk-clip-swatch { width: 56px; height: 30px; border-radius: 5px; background-size: cover; background-position: center;
+.mk-clip-card.folded .mk-clip-main { padding: 2px 10px; min-height: 40px; }
+.mk-clip-swatch { width: 64px; height: 36px; border-radius: 5px; background-size: cover; background-position: center;
     background-color: rgba(255, 255, 255, 0.08); }
 
 /* Task badge (taskBadge.js) */
 .mk-task-badge { font-size: 0.85em; font-weight: 700; padding: 1px 10px; margin: 5px 4px; border-radius: 99px;
   color: #ffffff; background-color: rgba(255, 255, 255, 0.14); }
 .mk-task-badge:hover { background-color: rgba(255, 255, 255, 0.24); }
-.mk-task-badge-box { spacing: 6px; }
-.mk-task-badge-dot { width: 6px; height: 6px; border-radius: 3px; background-color: #22d3ee; }
 
 /* Track change pill (mediaTile.js) */
 .mk-track-pill { background-color: rgba(18, 20, 28, 0.88); border-radius: 99px; padding: 6px 16px 6px 6px;

@@ -13,15 +13,19 @@ the photo, after an optional 3-2-1 countdown.
 G shows nine looks at once, live (3 x 3); click one to use it.
 
 Decorate page (the camera and its light are off here; Retake turns them
-back on): type text or pick an emoji sticker, then click the photo to
+back on): type text or pick a vector badge or stamp (MK crest, Stick Havoc
+shield, 1st place crown; GG, CLUTCH, MVP, SQUAD), then click the photo to
 place it. A placed layer can be selected and moved, resized from its
 corners and turned from the knob on top (the angle shows as you turn);
 bring it forward or send it back, or delete it. With a Polaroid frame,
 write a caption on it; add a date stamp (90s digital, typewriter or
-handwritten). Save: the photo goes to ~/Pictures/MK Booth/.
+handwritten). Ratio (16:9 Wide, 4:3, Square, Auto) and Fit (Crop / fill, or
+Full image / contain: all of the camera picture on dark metal bars) make room
+for big groups. Save PNG: ~/Pictures/MK Booth/, with an MK footer (switchable);
+Copy puts it on the clipboard.
 
-The looks come from lib/mkworkstation/photo.py; text and stickers are drawn
-with Pango and cairo (colour emoji). Hardware controls use v4l2-ctl.
+The looks come from lib/mkworkstation/photo.py; text is drawn with Pango and
+cairo, the badges and stamps by lib/mkworkstation/decals.py (vector, no emoji). Hardware controls use v4l2-ctl.
 """
 import datetime
 import glob
@@ -59,7 +63,7 @@ def _add_lib_path():
 _add_lib_path()
 from PIL import Image  # noqa: E402
 
-from mkworkstation import photo  # noqa: E402
+from mkworkstation import decals, photo  # noqa: E402
 
 APP_ID = "io.github.mehulk.MkCamera"
 OUT_DIR = Path(GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES) or Path.home() / "Pictures") / "MK Booth"
@@ -218,6 +222,15 @@ def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=
         if item["kind"] == "sticker":
             tw, th = text_at(item["text"], item["x"] * w, item["y"] * h, px, (1, 1, 1), "Noto Color Emoji",
                              outline=False, angle=angle)
+        elif item["kind"] == "decal":    # a vector badge or stamp: SIZE is its height, its width follows its shape
+            th = px
+            tw = round(px * decals.DECALS[item["key"]][2])
+            cr.save()
+            cr.translate(item["x"] * w, item["y"] * h)
+            cr.rotate(math.radians(angle))
+            cr.translate(-tw / 2, -th / 2)
+            decals.draw(cr, item["key"], tw, th)
+            cr.restore()
         else:
             font = FONTS.get(item.get("font", "sans"), FONTS["sans"])[1]
             tw, th = text_at(item["text"], item["x"] * w, item["y"] * h, px, item["colour"], font,
@@ -631,7 +644,7 @@ class Booth(Adw.ApplicationWindow):
 
         tools = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, width_request=320,
                         margin_start=16, margin_end=16, margin_top=12, margin_bottom=16)
-        tools.append(Gtk.Label(label="Add text or a sticker, then click the photo", css_classes=["heading"],
+        tools.append(Gtk.Label(label="Add text or a stamp, then click the photo", css_classes=["heading"],
                                xalign=0, wrap=True))
         self.text_entry = Gtk.Entry(placeholder_text="Your text")
         tools.append(self.text_entry)
@@ -668,13 +681,21 @@ class Booth(Adw.ApplicationWindow):
         self.shadow.connect("notify::active", lambda sw, _p: self._style_selected("shadow", sw.get_active()))
         size_row.append(self.shadow)
         tools.append(size_row)
-        flow = Gtk.FlowBox(max_children_per_line=8, selection_mode=Gtk.SelectionMode.NONE)
+        # The decal tray: vector badges and stamps (no emoji), drawn live by decals.py
         self.sticker = None
-        for ch in self._split_emoji(STICKERS):
-            b = Gtk.Button(label=ch, css_classes=["flat", "mk-booth-sticker"])
-            b.connect("clicked", lambda _b, c=ch: self._pick_sticker(c))
-            flow.append(b)
-        tools.append(flow)
+        for group, title in (("badges", "Badges & crests"), ("stamps", "Stamps")):
+            tools.append(Gtk.Label(label=title, css_classes=["caption", "dim-label"], xalign=0))
+            flow = Gtk.FlowBox(max_children_per_line=4, selection_mode=Gtk.SelectionMode.NONE, column_spacing=4,
+                               row_spacing=4)
+            for key, (label, g, aspect, _fn) in decals.DECALS.items():
+                if g != group:
+                    continue
+                area = Gtk.DrawingArea(content_height=40, content_width=round(40 * aspect))
+                area.set_draw_func(lambda _a, cr, w, h, k=key: decals.draw(cr, k, w, h))
+                b = Gtk.Button(child=area, tooltip_text=label, css_classes=["flat"])
+                b.connect("clicked", lambda _b, k=key: self._pick_decal(k))
+                flow.append(b)
+            tools.append(flow)
         layer = Gtk.Box(spacing=6, css_classes=["linked"])
         for icon, tip, cb in (("go-up-symbolic", "Bring forward", lambda: self._restack(1)),
                               ("go-down-symbolic", "Send backward", lambda: self._restack(-1)),
@@ -702,12 +723,32 @@ class Booth(Adw.ApplicationWindow):
         stock.append(Gtk.Label(label="Style", xalign=0, hexpand=True))
         stock.append(self.frame_colour)
         tools.append(stock)
+        self.ratio_keys = list(photo.RATIOS)
+        self.ratio = Gtk.DropDown.new_from_strings([v[0] for v in photo.RATIOS.values()])
+        self.ratio.set_tooltip_text("The picture's shape. 16:9 Wide gives a big group room across the frame")
+        self.ratio.connect("notify::selected", lambda *_: self._compose())
+        shape_row = Gtk.Box(spacing=8)
+        shape_row.append(Gtk.Label(label="Ratio", xalign=0, hexpand=True))
+        shape_row.append(self.ratio)
+        tools.append(shape_row)
+        self.fit_mode = Gtk.DropDown.new_from_strings(["Crop / fill", "Full image / contain"])
+        self.fit_mode.set_tooltip_text("Contain keeps the whole camera picture, on dark metal bars: nobody is cut out")
+        self.fit_mode.connect("notify::selected", lambda *_: self._compose())
+        fit_row = Gtk.Box(spacing=8)
+        fit_row.append(Gtk.Label(label="Fit", xalign=0, hexpand=True))
+        fit_row.append(self.fit_mode)
+        tools.append(fit_row)
         leak_row = Gtk.Box(spacing=8)
         leak_row.append(Gtk.Label(label="Light leak", xalign=0, hexpand=True))
         self.leak = Gtk.DropDown.new_from_strings(["None"] + list(photo.LEAKS.values()))
         self.leak.connect("notify::selected", lambda *_: self._compose())
         leak_row.append(self.leak)
         tools.append(leak_row)
+        footer_row = Gtk.Box(spacing=8)
+        footer_row.append(Gtk.Label(label="MK footer on the saved print", xalign=0, hexpand=True))
+        self.footer = Gtk.Switch(valign=Gtk.Align.CENTER, active=True)
+        footer_row.append(self.footer)
+        tools.append(footer_row)
         self.caption = Gtk.Entry(placeholder_text="Caption on the frame")
         self.caption.connect("changed", lambda *_: self._compose())
         tools.append(self.caption)
@@ -741,9 +782,12 @@ class Booth(Adw.ApplicationWindow):
         row = Gtk.Box(spacing=12, margin_top=12)
         retake = Gtk.Button(label="Retake", css_classes=["pill"])
         retake.connect("clicked", lambda *_: self._back_to_camera())
-        save = Gtk.Button(label="Save", css_classes=["pill", "suggested-action"], hexpand=True)
+        copy = Gtk.Button(label="Copy", css_classes=["pill"], tooltip_text="Copy the finished picture to paste anywhere")
+        copy.connect("clicked", lambda *_: self.copy_result())
+        save = Gtk.Button(label="Save PNG", css_classes=["pill", "suggested-action"], hexpand=True)
         save.connect("clicked", lambda *_: self.save())
         row.append(retake)
+        row.append(copy)
         row.append(save)
         tools.append(row)
 
@@ -764,10 +808,10 @@ class Booth(Adw.ApplicationWindow):
                 out.append(ch)
         return out
 
-    def _pick_sticker(self, ch):
-        self.sticker = ch
+    def _pick_decal(self, key):
+        self.sticker = key
         self.text_entry.set_text("")
-        self.toast.add_toast(Adw.Toast(title=f"{ch} picked: click the photo to place it", timeout=2))
+        self.toast.add_toast(Adw.Toast(title=f"{decals.DECALS[key][0]} picked: click the photo to place it", timeout=2))
 
     def _font_key(self):
         return list(FONTS)[self.font.get_selected()]
@@ -794,10 +838,12 @@ class Booth(Adw.ApplicationWindow):
         leak = self.leak.get_selected()
         if leak:
             shot = photo.light_leak(shot, list(photo.LEAKS)[leak - 1])
+        ratio = photo.RATIOS[self.ratio_keys[self.ratio.get_selected()]][1]
+        contain = self.fit_mode.get_selected() == 1
         if self.frame_on:
             style = self.frame_styles[self.frame_colour.get_selected()]
-            return photo.frame(shot, style, self.crop_offset)
-        return shot, (0, 0, shot.width, shot.height), None
+            return photo.frame(shot, style, self.crop_offset, ratio, contain)
+        return photo.plain(shot, ratio, self.crop_offset, contain)
 
     def _render(self, base_photo):
         base, (px, py, pw, ph), caption_box = self._composed_parts(base_photo)
@@ -910,7 +956,7 @@ class Booth(Adw.ApplicationWindow):
         self.drag_start = (x, y)
         hit = self._hit(x, y)
         self.drag_mode = hit[0] if hit else None
-        if not hit and self.frame_on and self.shot is not None:
+        if not hit and self.shot is not None:
             self.drag_mode, self.selected = "pan", None   # move the photo inside its frame
             self.drag_offset = self.crop_offset
         if hit:
@@ -959,6 +1005,8 @@ class Booth(Adw.ApplicationWindow):
 
     def _pan(self, dx, dy):
         """Dragging the photo inside its frame: the crop follows the hand."""
+        if self.fit_mode.get_selected() == 1:
+            return                      # (contain shows all of it: nothing to slide)
         small = self.view_photo_size()
         _base, (_px, _py, pw, ph), _cap = self._composed_parts(small)
         k, _ox, _oy = self._to_view()
@@ -995,11 +1043,12 @@ class Booth(Adw.ApplicationWindow):
                                "font": self._font_key(), "shadow": self.shadow.get_active(), **rel})
             self.text_entry.set_text("")
         elif self.sticker:
-            self.items.append({"kind": "sticker", "text": self.sticker, "size": 0.12, **rel})
+            self.items.append({"kind": "decal", "key": self.sticker, "size": 0.12 if decals.DECALS[self.sticker][2] < 1.2
+                               else 0.08, **rel})
         else:
             self.selected = None
             self.handles.queue_draw()
-            self.toast.add_toast(Adw.Toast(title="Type some text or pick a sticker first", timeout=2))
+            self.toast.add_toast(Adw.Toast(title="Type some text or pick a stamp first", timeout=2))
             return
         self.selected = len(self.items) - 1
         self._compose()
@@ -1021,13 +1070,22 @@ class Booth(Adw.ApplicationWindow):
 
     def save(self):
         OUT_DIR.mkdir(parents=True, exist_ok=True)
-        path = OUT_DIR / time.strftime("booth-%Y%m%d-%H%M%S.jpg")
+        path = OUT_DIR / time.strftime("booth-%Y%m%d-%H%M%S.png")
         final, _boxes = self._render(self.shot)  # full size for the file
-        final.save(path, "JPEG", quality=92)
+        if self.footer.get_active():
+            final = photo.watermark(final)
+        final.save(path, "PNG")
         toast = Adw.Toast(title=f"Saved {path.name}", button_label="Open", timeout=4)
         toast.connect("button-clicked", lambda *_: Gio.AppInfo.launch_default_for_uri(path.as_uri(), None))
         self.toast.add_toast(toast)
         self._back_to_camera()
+
+    def copy_result(self):
+        final, _boxes = self._render(self.shot)
+        if self.footer.get_active():
+            final = photo.watermark(final)
+        Gdk.Display.get_default().get_clipboard().set_texture(to_texture(final))
+        self.toast.add_toast(Adw.Toast(title="Copied: paste it anywhere", timeout=3))
 
     def _open_folder(self):
         OUT_DIR.mkdir(parents=True, exist_ok=True)

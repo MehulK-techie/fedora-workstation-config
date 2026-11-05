@@ -88,6 +88,5 @@ if (( ${#WARN[@]} )); then
 fi
 cat << 'DONE'
 ✔ Fingerprint unlock is set up. To check it: lock the screen (Super+L), and
-  with the password field showing, touch the reader. GNOME 51 doesn't say
-  "place your finger" in advance on a touch reader: a touch is enough.
+  with the password field showing, touch the reader once.
 DONE

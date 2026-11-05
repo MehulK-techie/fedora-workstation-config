@@ -9,8 +9,8 @@
 #                          that arrived lately (ClamAV) and a fresh Lynis audit:
 #                          a few minutes, at the lowest CPU priority
 #   mk security fix NAME   apply one fix the report suggests (selinux,
-#                          firewall, updates, autoupdates, ssh, permissions,
-#                          sharing, lock)
+#                          firewall, firewall-ports, llmnr, updates,
+#                          autoupdates, ssh, permissions, sharing, lock)
 #
 # What it checks: SELinux, firewall, Secure Boot, disk encryption, waiting
 # security updates, accounts, SSH, what listens to the network, permissions in
@@ -61,7 +61,7 @@ user_checks() {
 
 case "${1:-scan}" in
     fix)
-        name=${2:?Usage: mk security fix selinux|firewall|updates|autoupdates|ssh|permissions|sharing|lock}
+        name=${2:?Usage: mk security fix selinux|firewall|firewall-ports|llmnr|updates|autoupdates|ssh|permissions|sharing|lock}
         case "$name" in
             # Your own account's settings: no administrator rights needed.
             sharing)
@@ -76,7 +76,7 @@ case "${1:-scan}" in
                 echo "The screen locks as soon as it blanks (after 5 minutes idle at most)."
                 exit 0 ;;
         esac
-        [[ "$name" =~ ^(selinux|firewall|updates|autoupdates|ssh|permissions)$ ]] || { echo "Unknown fix: $name" >&2; exit 2; }
+        [[ "$name" =~ ^(selinux|firewall|firewall-ports|llmnr|updates|autoupdates|ssh|permissions)$ ]] || { echo "Unknown fix: $name" >&2; exit 2; }
         [[ -x "$FIXER" ]] || { echo "The fixer isn't installed yet. Run: sudo ./setup.sh (from the MK repo)" >&2; exit 1; }
         exec pkexec "$FIXER" fix "$name"
         ;;

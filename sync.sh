@@ -684,6 +684,8 @@ if [[ "$engine_blur" == true ]]; then
     gsettings_remove org.gnome.shell enabled-extensions blur-my-shell@aunetx
 fi
 gsettings_remove org.gnome.shell enabled-extensions compiz-alike-magic-lamp-effect@hermes83.github.com
+# Extension managers are tools you open now and then, not dock apps.
+gsettings_remove org.gnome.shell favorite-apps com.mattjakeman.ExtensionManager.desktop org.gnome.Extensions.desktop
 if [[ -d "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io" ]]; then
     gnome-extensions uninstall macos-dock@vinnytherobot.github.io 2>/dev/null \
         || rm -rf "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io"

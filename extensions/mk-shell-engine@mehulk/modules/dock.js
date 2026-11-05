@@ -22,7 +22,7 @@ import { DASH_TO_DOCK, isActive, watch } from './conflicts.js';
 import { DOCK_GLASS, addGlass, blurAllowed } from './blur.js';
 import { accentRGB } from './colour.js';
 
-const MARGIN = 6;              // the dock's gap above the screen's bottom edge
+const MARGIN = 4;              // the dock's gap above the screen's bottom edge
 const HIDE = 260, REVEAL = 220;          // stepping down and coming back, ms
 const EDGE_DELAY = 150;        // the pointer rests on the bottom edge this long before the dock comes back
 const FOCUSED = 'rgb(99, 102, 241)';     // electric indigo: the app you're using
@@ -91,9 +91,12 @@ export class Dock {
         this._edge = new St.Widget({reactive: true, height: 2, opacity: 0, visible: false});
         Main.uiGroup.add_child(this._edge);
         this._edge.connect('enter-event', () => {
+            if (this._fullscreen())
+                return;                  // never during a full-screen video or game
             this._edgeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, EDGE_DELAY, () => {
                 this._edgeId = 0;
-                this._reveal();
+                if (!this._fullscreen())
+                    this._reveal();
                 return GLib.SOURCE_REMOVE;
             });
         });
@@ -127,7 +130,13 @@ export class Dock {
         this._connect(global.window_manager, 'unminimize', () => this._queueDodge());
         this._connect(global.window_manager, 'map', () => this._queueDodge());
         this._connect(global.window_manager, 'destroy', () => this._queueDodge());
-        this._connect(global.display, 'in-fullscreen-changed', () => this._queueDodge());
+        this._connect(global.display, 'in-fullscreen-changed', () => {
+            if (this._fullscreen()) {             // straight away, and the edge stops listening
+                this._edge.visible = false;
+                this._slide(true);
+            }
+            this._queueDodge();
+        });
         this._connect(Main.layoutManager, 'monitors-changed', () => this._place());
         // Super / the overview: the dock fades away (the overview has its own dash) and comes back after
         this._connect(Main.overview, 'showing', () => this._overview(true));
@@ -460,6 +469,12 @@ export class Dock {
         this._slide(this._covered());
     }
 
+    // Is the dock's monitor showing a full-screen window (or is the focused window full screen)?
+    _fullscreen() {
+        return global.display.get_monitor_in_fullscreen(Main.layoutManager.primaryIndex) ||
+            !!global.display.focus_window?.is_fullscreen();
+    }
+
     _reveal() {
         this._slide(false);
         this._queueDodge(1500);            // and away again if the pointer doesn't come onto it
@@ -469,11 +484,15 @@ export class Dock {
         if (hide === this._hidden)
             return;
         this._hidden = hide;
-        this._edge.visible = hide && !global.display.get_monitor_in_fullscreen(Main.layoutManager.primaryIndex);
+        this._edge.visible = hide && !this._fullscreen() && !this._inOverview;
         // (ease() retargets a slide already under way from where it is, so a quick hide-then-show never jumps)
-        this._actor.ease({translation_y: hide ? this._rect.height + MARGIN + 4 : 0, opacity: hide ? 0 : 255,
+        this._actor.ease({translation_y: hide ? this._hiddenY() : 0, opacity: hide ? 0 : 255,
             duration: hide ? HIDE : REVEAL, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         this._actor.reactive = !hide;
+    }
+
+    _hiddenY() {
+        return this._hidden ? (this._rect?.height ?? 60) + MARGIN + 4 : 0;
     }
 
     _overview(showing) {
@@ -483,15 +502,18 @@ export class Dock {
             this._tooltip(null);
             this._edge.visible = false;
             this._actor.reactive = false;
-            this._actor.ease({opacity: 0, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            // down and out of the way: the overview's own dash and the desktops are all yours
+            this._actor.ease({opacity: 0, translation_y: this._hiddenY() + 60, duration: 160,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onStopped: done => done && this._inOverview && this._actor?.hide()});
         } else {
             this._actor.show();
             if (!this._hidden) {
                 this._actor.reactive = true;
-                this._actor.ease({opacity: 255, duration: REVEAL, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+                this._actor.ease({opacity: 255, translation_y: 0, duration: 200, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
             } else {
-                this._edge.visible = true;
+                this._actor.translation_y = this._hiddenY();
+                this._edge.visible = !this._fullscreen();
             }
             this._queueDodge(250);
         }

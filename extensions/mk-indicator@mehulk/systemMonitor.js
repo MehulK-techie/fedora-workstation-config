@@ -5,6 +5,7 @@
 //
 // config/monitor.conf, yours in ~/.config/mk-workstation/monitor.conf:
 //   PANEL=cpu,temp     what the top bar shows: cpu, mem, temp, net, power
+//   COMPACT=yes        two dots (load, heat) instead; the numbers slide in on hover
 //   INTERVAL=2         seconds between readings
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
@@ -37,7 +38,7 @@ const readInt = path => {
 };
 
 function conf() {
-    const out = {PANEL: 'cpu,temp', INTERVAL: '2'};
+    const out = {PANEL: 'cpu,temp', INTERVAL: '2', COMPACT: 'yes'};
     for (const path of [DEFAULT_CONF, USER_CONF]) {
         for (const line of (read(path) || '').split('\n')) {
             const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/);
@@ -342,9 +343,18 @@ export class SystemMonitor {
         this._spark = new St.DrawingArea({width: 30, height: 14, y_align: Clutter.ActorAlign.CENTER});
         this._spark.connect('repaint', area => this._paintSpark(area));
         this._text = new St.Label({style_class: 'mk-monitor-text', y_align: Clutter.ActorAlign.CENTER});
+        // compact: a load dot and a heat dot, quiet until you point at them
+        this._dots = new St.BoxLayout({style_class: 'mk-monitor-dots', y_align: Clutter.ActorAlign.CENTER});
+        this._loadDot = new St.Widget({style_class: 'mk-monitor-dot'});
+        this._heatDot = new St.Widget({style_class: 'mk-monitor-dot'});
+        this._dots.add_child(this._loadDot);
+        this._dots.add_child(this._heatDot);
+        box.add_child(this._dots);
         box.add_child(this._spark);
         box.add_child(this._text);
         this._button.add_child(box);
+        this._button.track_hover = true;
+        this._button.connect('notify::hover', () => this._syncCompact());
 
         const menu = this._button.menu;
         menu.box.add_style_class_name('mk-monitor-menu');
@@ -447,7 +457,11 @@ export class SystemMonitor {
                 parts.push(`${s.power.toFixed(1)} W`);
         }
         this._text.text = parts.join('  ');
-        this._spark.visible = this._conf.PANEL.includes('cpu');
+        // green, amber, red: load by CPU use, heat by temperature
+        const level = (v, warn, hot) => v >= hot ? '#f87171' : v >= warn ? '#fbbf24' : '#34d399';
+        this._loadDot.style = `background-color: ${level(s.cpu, 50, 85)};`;
+        this._heatDot.style = `background-color: ${s.cpuTemp ? level(s.cpuTemp, 70, 85) : 'rgba(255,255,255,0.35)'};`;
+        this._syncCompact();
         this._spark.queue_repaint();
         this._internet?.feed(s.down, s.up);
         this._rows.cpu.push(s.cpu);
@@ -455,6 +469,14 @@ export class SystemMonitor {
         this._rows.io.push(s.diskRead + s.diskWrite);
         if (open)
             this._fillMenu(s);
+    }
+
+    _syncCompact() {
+        const compact = this._conf.COMPACT !== 'no';
+        const open = !compact || this._button.hover || this._button.menu.isOpen;
+        this._dots.visible = compact;
+        this._text.visible = open;
+        this._spark.visible = open && this._conf.PANEL.includes('cpu');
     }
 
     _fillMenu(s) {

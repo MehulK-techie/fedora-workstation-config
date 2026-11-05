@@ -94,7 +94,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `config/welcome.conf` | `WELCOME`, `GREETING` (`{title}`, `{name}`), `TITLE` (sir/maam/name/none), `SUBTITLE`, `VOICE`, `EDGE_NOTIFY`, `COLOR_A/B` (`auto` or `#rrggbb`), `TASKS` (pinned tasks and next reminder under the greeting), `VARIETY`, `BIRTHDAY` (`MM-DD` or `YYYY-MM-DD`), `BIRTHDAY_COUNTDOWN` (on/off) | mk-indicator, mk-voice |
 | `config/theme.conf` | `ACCENT=` (`auto` or `#rrggbb`), `SYSTEM_ACCENT=` (on/off), `CURSOR=` (cursor theme) | mk-indicator (`accent.js`), `mk accent`, `sync.sh` |
 | `config/notes.conf` | `NOTES_DIR=`, `SYNC=`, `SYNC_PORT=`, `HISTORY=`; look: `THEME=`, `FONT=`, `FONT_SIZE=`, `WIDTH=`, `SPACING=`, `FORMAT_BAR=`, `OPEN_IN=`, `SORT=` | `mk-notes` (Preferences writes them) |
-| `config/monitor.conf` | `PANEL=` (cpu, mem, temp, net, disk, power), `INTERVAL=` (s) | mk-indicator system monitor |
+| `config/monitor.conf` | `PANEL=` (cpu, mem, temp, net, disk, power), `COMPACT=` (yes: two dots, numbers on hover), `INTERVAL=` (s) | mk-indicator system monitor |
 | `config/appnap.conf` | `APP_NAP=` (on/off), `MEM_THRESHOLD=` (%), `PSI_THRESHOLD=` (% memory stall, /proc/pressure/memory), `CPU_THRESHOLD=` (%), `IDLE_MINUTES=`, `NEVER=` (comma-separated app ids or parts) | mk-indicator App Nap |
 | `assets/polkit/io.github.mehulk.mk-lock.policy` | polkit action (`auth_self`) | `setup.sh` installs it; `mk-lock` asks it |
 | `config/screensaver.conf` | `SCREENSAVER=` (on/off), `DELAY=` (s, 30+), `LOCKSCREEN=` (on/off: the scene behind the lock screen's clock), `SCENE=` (random, aurora, web, knight, matrix) | `mk-screensaver`, `mk screensaver` |

@@ -31,7 +31,28 @@
     <key name="blur" type="b">
       <default>true</default>
       <summary>Native blur</summary>
-      <description>Blur behind the top bar and the dock. Paused while a window is full screen; off while Blur my Shell is on.</description>
+      <description>Blur behind the top bar islands, the dock and the switcher. Paused while a window is full screen; off while Blur my Shell is on.</description>
+    </key>
+    <key name="fresh-snip" type="b">
+      <default>true</default>
+      <summary>Fresh area screenshots</summary>
+      <description>The screenshot tool opens with no box (not last time's): drag any area.</description>
+    </key>
+    <key name="snip-auto-capture" type="b">
+      <default>true</default>
+      <summary>Capture on release</summary>
+      <description>Letting go of a new area takes the screenshot at once (saved and copied).</description>
+    </key>
+    <key name="top-bar-style" type="s">
+      <choices><choice value="islands"/><choice value="edge"/></choices>
+      <default>'islands'</default>
+      <summary>Top bar style</summary>
+      <description>islands: three floating glass capsules. edge: one seamless glass bar.</description>
+    </key>
+    <key name="show-active-app" type="b">
+      <default>true</default>
+      <summary>Active app in the top bar</summary>
+      <description>The focused app's icon (in its own colours) and name, with a menu for its window.</description>
     </key>
   </schema>
 </schemalist>

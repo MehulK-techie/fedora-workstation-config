@@ -99,7 +99,8 @@ export function addGlass(actor, glass, radius = 0) {
 
 export const blurAllowed = settings => settings.get_boolean('blur') && !isActive(BLUR_MY_SHELL);
 
-// The top bar's blur, on and off with the setting and with Blur my Shell.
+// The whole top bar's blur, on and off with the setting and with Blur my Shell
+// (the islands top bar, panel.js, blurs each island itself instead).
 export class Blur {
     constructor(settings) {
         this._settings = settings;

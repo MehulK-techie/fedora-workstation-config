@@ -10,7 +10,6 @@ wack-shell@rinzler69-wastaken.github.com
 text-extractor@imshaaz21.github.com
 mk-indicator@mehulk
 places-menu@gnome-shell-extensions.gcampax.github.com
-dash-to-dock@micxgx.gmail.com
 appindicatorsupport@rgcjonas.gmail.com
 compiz-alike-magic-lamp-effect@hermes83.github.com
 impatience@gfxmonk.net

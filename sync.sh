@@ -669,6 +669,13 @@ gsettings_remove org.gnome.shell enabled-extensions monitor@astraext.github.io
 # MacOS Dock: a second dock whose magnification fought Dash to Dock's
 # (doubled icons). Dash to Dock + mk-indicator's magnification replace it.
 gsettings_remove org.gnome.shell enabled-extensions macos-dock@vinnytherobot.github.io
+# Dash to Dock: MK Shell Engine's own dock replaces it (the engine's dock only
+# stands aside while Dash to Dock runs, so it's switched off here). It stays
+# installed: with the engine's dock off (its `dock` key), Dash to Dock is left alone.
+engine_dock=$(gsettings --schemadir "$USER_EXT_DIR/$MK_ENGINE/schemas" get org.gnome.shell.extensions.mk-shell-engine dock 2>/dev/null || echo true)
+if [[ "$engine_dock" == true ]]; then
+    gsettings_remove org.gnome.shell enabled-extensions dash-to-dock@micxgx.gmail.com
+fi
 if [[ -d "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io" ]]; then
     gnome-extensions uninstall macos-dock@vinnytherobot.github.io 2>/dev/null \
         || rm -rf "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io"

@@ -1082,9 +1082,7 @@ class TableItem(Gtk.Box):
         drag = Gtk.GestureDrag()
         drag.connect("drag-begin", self._move_begin)
         drag.connect("drag-update", self._move_update)
-        drag.connect("drag-end", lambda *_: (self.set_opacity(1.0), setattr(self, "_moving", False), self._show_bar(),
-                                             self.win.keep_off_gaps(self),
-                                             self.win._queue_save_meta(), self.win.ensure_page_height_for_images()))
+        drag.connect("drag-end", self._move_end)
         move.add_controller(drag)
         bar.append(move)
         menu = Gio.Menu()
@@ -1246,22 +1244,26 @@ class TableItem(Gtk.Box):
         ok, x, y = event.get_position() if event else (False, 0, 0)
         return (x, y) if ok else None
 
+    # Moving: the table is part of the text (a child anchor), so it moves by
+    # line: drag ⠿ Move table and let go on the line it should go before.
     def _move_begin(self, gesture, *_a):
         self._moving = True                 # (the bar stays up and in reach through the drag)
-        self._start = (self.data.get("x", 56.0), self.data.get("y", 80.0))
         self._origin = self._window_point(gesture)
+        self._drop = self._origin
         self.select(True)
         self.set_opacity(0.6)
 
     def _move_update(self, gesture, _dx, _dy):
-        """Anywhere on the page: follows the pointer, no snapping."""
-        here = self._window_point(gesture)
-        if not here or not self._origin:
-            return
-        z = max(0.5, self.win.zoom)
-        self.data["x"] = max(0.0, self._start[0] + (here[0] - self._origin[0]) / z)
-        self.data["y"] = max(0.0, self._start[1] + (here[1] - self._origin[1]) / z)
-        self.sync_position()
+        self._drop = self._window_point(gesture) or self._drop
+
+    def _move_end(self, gesture, *_a):
+        self.set_opacity(1.0)
+        self._moving = False
+        here = self._window_point(gesture) or self._drop
+        if here and self._origin and (abs(here[0] - self._origin[0]) > 4 or abs(here[1] - self._origin[1]) > 4):
+            self.win.move_table(self, here)
+        else:
+            self._show_bar()
 
     def _handle_begin(self, gesture, _x, _y, hx, hy):
         self._dragging = True
@@ -1286,14 +1288,12 @@ class TableItem(Gtk.Box):
             grow = dx if hx == 2 else -dx
             k = max(self.MIN_COL * len(self._w0) / total, (total + grow) / total)
             self.data["col_w"] = [max(self.MIN_COL, round(w * k)) for w in self._w0]
-            if hx == 0:
-                self.data["x"] = max(0.0, self._start[0] + total - sum(self.data["col_w"]))
+
         if hy != 1:
             grow = dy if hy == 2 else -dy
             target = max(rows * 24.0, self._h0 + grow)
             self.data["row_h"] = round(target / rows)
-            if hy == 0:
-                self.data["y"] = max(0.0, self._start[1] + self._h0 - target)
+
         self.sync_zoom()
 
     def select(self, on):
@@ -1320,8 +1320,9 @@ class TableItem(Gtk.Box):
     def fit(self):
         """A Gtk.Fixed gives children their minimum size, which squashes
         wrapping cells to one line: ask for the natural size instead (after
-        building, typing and resizing)."""
-        if getattr(self, "_fit_id", 0):
+        building, typing and resizing). Only on the page: in the text, the
+        text view already gives the table its natural size."""
+        if getattr(self, "_fit_id", 0) or self.get_parent() is not self.win.canvas_fixed:
             return
 
         def run():
@@ -1334,6 +1335,8 @@ class TableItem(Gtk.Box):
         self._fit_id = GLib.idle_add(run)
 
     def sync_position(self):
+        """(In the text, the text places it: nothing to do. Only a table still on the
+        page from before is put by its x and y.)"""
         z = max(0.5, self.win.zoom)
         if self.get_parent() is self.win.canvas_fixed:
             self.win.canvas_fixed.move(self, round(self.data.get("x", 56.0) * z), round(self.data.get("y", 80.0) * z))
@@ -2045,7 +2048,7 @@ class StudioInkCanvas(Gtk.DrawingArea):
         return d["x"], d["y"], w.get_width() / z, w.get_height() / z
 
     def _items(self):
-        return self.win.canvas_images + self.win.sticky_notes + self.win.table_items + \
+        return self.win.canvas_images + self.win.sticky_notes + \
             getattr(self.win, "pinned_stickies", [])
 
     def selection_box(self):
@@ -4089,10 +4092,9 @@ class NotesWindow(Adw.ApplicationWindow):
     def leave_table(self, table):
         """Esc on a table: unselect it and type on in the text, just below it."""
         table.select(False)
-        z = max(0.5, self.zoom)
-        y = round(table.data.get("y", 0) * z + table.get_height() + 4)
-        found, it = self.view.get_iter_at_location(round(32 * z) + 2, y)
-        if found:
+        if table.anchor is not None and not table.anchor.get_deleted():
+            it = self.buffer.get_iter_at_child_anchor(table.anchor)
+            it.forward_line()                 # the line under it
             self.buffer.place_cursor(it)
         # (the page stays where it is: focusing the text, which is taller than the window, would have
         # the scrolled window bring all of it into view, i.e. jump to its end)
@@ -4748,45 +4750,79 @@ class NotesWindow(Adw.ApplicationWindow):
         return True
 
     def insert_table(self, cols, rows, centre=False):
-        """A COLS x ROWS table (TableItem): a header row, then ROWS - 1 empty
-        rows, under the cursor's line, or with CENTRE in the middle of what's
-        on screen. Drag it by ⠿ Move anywhere; saved with the note."""
+        """A COLS x ROWS table (TableItem) on its own line where the cursor is:
+        a header row, then ROWS - 1 empty rows. It's part of the text (a child
+        anchor), Google Docs style: text above pushes it down, text never runs
+        under it. Drag ⠿ Move table to another line; saved with the note."""
         z = max(0.5, self.zoom)
         col_w = max(TableItem.MIN_COL, min(140, round((self.page_width() / z - 112) / cols)))
-        if centre:
-            adj = self.page_scroll.get_vadjustment()
-            x = max(16.0, round((self.page_width() / z - col_w * cols) / 2))
-            y = max(16.0, round((adj.get_value() + adj.get_page_size() / 2) / z - rows * 18))
-        else:
-            loc = self.view.get_iter_location(self.buffer.get_iter_at_mark(self.buffer.get_insert()))
-            x, y = 56.0, round((loc.y + loc.height) / z + 16)
+        buf = self.buffer
+        if not buf.get_iter_at_mark(buf.get_insert()).starts_line():
+            buf.insert_at_cursor("\n")
         data = {"rows": [[f"Column {i + 1}" for i in range(cols)]] + [[""] * cols for _ in range(max(1, rows - 1))],
-                "col_w": [col_w] * cols, "x": x, "y": y, "z": self._next_z()}
-        widget = self._add_table(data)
+                "col_w": [col_w] * cols}
+        widget = self._add_table(data, buf.get_iter_at_mark(buf.get_insert()))
+        buf.insert_at_cursor("\n")      # (what follows starts on the line below it)
         widget.select(True)
         self.dirty = True
         self.save_note_meta()
-        self.ensure_page_height_for_images()
 
-    def _add_table(self, data):
+    def _add_table(self, data, where):
+        """Put a table into the text at the iter WHERE."""
+        data = {k: v for k, v in data.items() if k not in ("x", "y", "z", "offset")}
+        anchor = self.buffer.create_child_anchor(where)
         widget = TableItem(data, self)
-        widget.anchor = None
-        z = max(0.5, self.zoom)
-        self.canvas_fixed.put(widget, round(data.get("x", 56.0) * z), round(data.get("y", 80.0) * z))
+        widget.anchor = anchor
+        self.view.add_child_at_anchor(widget, anchor)
         self.table_items.append(widget)
         return widget
 
     def _clear_tables(self):
         for old in self.table_items:
-            if old.get_parent() is self.canvas_fixed:
+            parent = old.get_parent()
+            if parent is self.canvas_fixed:
                 self.canvas_fixed.remove(old)
+            elif parent is self.view:
+                self.view.remove(old)
         self.table_items = []
 
     def remove_table(self, widget):
-        if widget.get_parent() is self.canvas_fixed:
+        if widget.anchor is not None and not widget.anchor.get_deleted():
+            it = self.buffer.get_iter_at_child_anchor(widget.anchor)
+            end = it.copy()
+            end.forward_char()
+            if end.ends_line() and not end.is_end():
+                end.forward_char()           # (and the line it had to itself)
+            self.buffer.delete(it, end)
+        elif widget.get_parent() is self.canvas_fixed:
             self.canvas_fixed.remove(widget)
         if widget in self.table_items:
             self.table_items.remove(widget)
+        self.dirty = True
+        self.save_note_meta()
+
+    def move_table(self, widget, window_point):
+        """Re-anchor WIDGET before the line under WINDOW_POINT (window coordinates)."""
+        ok, pt = self.compute_point(self.view, Graphene.Point().init(*window_point))
+        if not ok:
+            return
+        bx, by = self.view.window_to_buffer_coords(Gtk.TextWindowType.WIDGET, int(pt.x), int(pt.y))
+        found, target = self.view.get_iter_at_location(bx, by)
+        if not found:
+            return
+        target.set_line_offset(0)
+        buf = self.buffer
+        mark = buf.create_mark(None, target, True)
+        data = dict(widget.data)
+        self.remove_table(widget)
+        where = buf.get_iter_at_mark(mark)
+        buf.delete_mark(mark)
+        moved = self._add_table(data, where)
+        after = buf.get_iter_at_child_anchor(moved.anchor)
+        after.forward_char()
+        if not after.ends_line():
+            buf.insert(after, "\n")         # the line it went before goes under it
+        moved.select(True)
         self.dirty = True
         self.save_note_meta()
 
@@ -4800,7 +4836,17 @@ class NotesWindow(Adw.ApplicationWindow):
             return False
         self._meta_id = GLib.timeout_add(400, run)
 
+    def _table_page_xy(self, table):
+        """Where a table sits on the page (page units), for the PDF: its line in the text."""
+        z = max(0.5, self.zoom)
+        if table.anchor is None or table.anchor.get_deleted():
+            return {"x": table.data.get("x", 56.0), "y": table.data.get("y", 0.0)}
+        loc = self.view.get_iter_location(self.buffer.get_iter_at_child_anchor(table.anchor))
+        return {"x": round(self.view.get_left_margin() / z, 1), "y": round(loc.y / z, 1)}
+
     def _live_tables(self):
+        # (a table whose place in the text was deleted, by Backspace or a cut, is gone)
+        self.table_items = [t for t in self.table_items if t.anchor is None or not t.anchor.get_deleted()]
         return self.table_items
 
     def insert_divider_line(self):
@@ -5156,11 +5202,11 @@ class NotesWindow(Adw.ApplicationWindow):
 
     # ---------- layers: every picture and sticky has a z; higher is in front
     def _layers(self):
-        items = self.canvas_images + self.sticky_notes + self.table_items + self.pinned_stickies
+        items = self.canvas_images + self.sticky_notes + self.pinned_stickies   # (tables are in the text)
         return sorted(items, key=lambda w: (w.data.get("z", 0), items.index(w)))
 
     def _next_z(self):
-        return 1 + max((w.data.get("z", 0) for w in self.canvas_images + self.sticky_notes + self.table_items
+        return 1 + max((w.data.get("z", 0) for w in self.canvas_images + self.sticky_notes
                         + self.pinned_stickies),
                        default=0)
 
@@ -5587,7 +5633,8 @@ class NotesWindow(Adw.ApplicationWindow):
             "images": [w.data for w in self.canvas_images],
             "stickies": [s.data for s in self.sticky_notes],
             "pinned_stickies": [p.data for p in self.pinned_stickies],
-            "tables": [dict(t.data) for t in self._live_tables()],
+            "tables": [dict(t.data, offset=self.buffer.get_iter_at_child_anchor(t.anchor).get_offset())
+                       for t in self._live_tables() if t.anchor is not None],
             "comments": self.comments,
             "strokes": self.ink_canvas.strokes,
             "scratch": getattr(self, "scratch_text", ""),
@@ -5722,15 +5769,21 @@ class NotesWindow(Adw.ApplicationWindow):
             clean_txt, _ls, _ei, _el, _et = self._import_markdown_to_clean_doc(raw_md)
             self.buffer.set_text(clean_txt)
             self._clear_tables()
-            # Tables saved inside the text (older MK Notes) each took one
-            # character there: shift the formatting back, put them on the page.
-            anchors = sorted(int(t["offset"]) for t in meta.get("tables", []) if "offset" in t)
-
-            def unshift(o):
-                return o - sum(1 for a in anchors if a < o)
-            if anchors:
-                meta["spans"] = [[n, unshift(a), unshift(b)] for n, a, b in meta.get("spans", [])]
-            pending_tables = meta.get("tables", [])
+            # Tables are part of the text: each goes back into its place first, in order, so the
+            # saved formatting (whose offsets count them) lines up. Tables from the version that
+            # had them floating on the page (an x and y, no place in the text) join the text at
+            # the line they were over, once the text is laid out.
+            saved_tables = meta.get("tables", [])
+            end_off = self.buffer.get_end_iter().get_offset()
+            for t in sorted((t for t in saved_tables if "offset" in t), key=lambda t: int(t["offset"])):
+                end = self.buffer.get_end_iter()
+                if int(t["offset"]) >= end.get_offset() and not end.starts_line():
+                    # (a table at the very end: saving trims the text's last newlines, so the
+                    # line it had to itself comes back here)
+                    self.buffer.insert(end, "\n")
+                self._add_table(t, self.buffer.get_iter_at_offset(max(0, min(int(t["offset"]),
+                                                                            self.buffer.get_end_iter().get_offset()))))
+            floating = [t for t in saved_tables if "offset" not in t]
             table = self.buffer.get_tag_table()
             end_off = self.buffer.get_end_iter().get_offset()
             for tname, s_off, e_off in meta.get("spans", []):
@@ -5748,12 +5801,25 @@ class NotesWindow(Adw.ApplicationWindow):
             self.comments = list(meta.get("comments", []))
             self._rebuild_canvas_objects(meta.get("images", []), meta.get("stickies", []),
                                          meta.get("pinned_stickies", []))
-            for t in pending_tables:
-                data = {k: v for k, v in t.items() if k != "offset"}
-                if "y" not in data:  # an older in-text table: where its line was
-                    it = self.buffer.get_iter_at_offset(min(unshift(int(t.get("offset", 0))), end_off))
-                    data["x"], data["y"] = 56.0, round(self.view.get_iter_location(it).y / max(0.5, self.zoom))
-                self._add_table(data)
+            if floating:
+                rel = self.rel
+
+                def join_text():
+                    if self.rel != rel:
+                        return False
+                    for t in sorted(floating, key=lambda t: t.get("y", 0)):
+                        z = max(0.5, self.zoom)
+                        _found, it = self.view.get_iter_at_location(0, round(t.get("y", 0) * z))
+                        it.set_line_offset(0)
+                        table = self._add_table(t, it)
+                        after = self.buffer.get_iter_at_child_anchor(table.anchor)
+                        after.forward_char()
+                        if not after.ends_line():
+                            self.buffer.insert(after, "\n")
+                    self.dirty = True
+                    self.save_note_meta()
+                    return False
+                GLib.timeout_add(300, join_text)
             self.ink_canvas.strokes = list(meta.get("strokes", []))
             self.loading = False
 
@@ -5839,8 +5905,6 @@ class NotesWindow(Adw.ApplicationWindow):
         bottom = (text_h - self.view.get_bottom_margin()) / z + 40  # (the margin is room for the items)
         for w in self.canvas_images + self.sticky_notes + self.pinned_stickies:
             bottom = max(bottom, w.data.get("y", 0) + w.data.get("h", 160) + PAGE_GAP / 2)
-        for t in self.table_items:
-            bottom = max(bottom, t.data.get("y", 0) + t.get_height() / z + PAGE_GAP / 2)
         return bottom
 
     # ---------- pagination: nothing on a page gap
@@ -5983,10 +6047,6 @@ class NotesWindow(Adw.ApplicationWindow):
                 max_bottom = b
         for s in self.sticky_notes:
             b = int((s.data.get("y", 0) + s.data.get("h", 160) + 120) * self.zoom)
-            if b > max_bottom:
-                max_bottom = b
-        for t in self.table_items:
-            b = int(t.data.get("y", 0) * self.zoom + t.get_height() + 120)
             if b > max_bottom:
                 max_bottom = b
         self.view.set_bottom_margin(max_bottom)
@@ -7064,7 +7124,7 @@ class NotesWindow(Adw.ApplicationWindow):
             meta += " · " + " ".join(f"#{t}" for t in tags)
         lines = self._export_lines()
         stickies = [dict(st.data) for st in self.sticky_notes]
-        tables = [dict(t.data) for t in self._live_tables()]
+        tables = [dict(t.data, **self._table_page_xy(t)) for t in self._live_tables()]
         pads = [dict(p.data) for p in self.pinned_stickies] if self.export_pads.get_active() else []
         return lambda: export_pdf_direct(title, meta, lines, imgs, out_path, resolve, stickies, tables, pads)
 

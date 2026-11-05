@@ -3,7 +3,9 @@
 // song title (cut short with "…", never scrolling). Its menu has the art with a
 // glow in the art's own colour, title and artist, a seek bar, controls, and
 // More: album, player, which speakers or headphones to use, Open player.
-// The tile fades out when playback stops and fades back in when it starts.
+// The tile fades out when playback stops (or stays paused for 20 s, or the
+// player quits) and fades back in when it starts. With no album art (many
+// browser videos) it shows a YouTube page's thumbnail, else the player's icon.
 //
 // config/media.conf, yours in ~/.config/mk-workstation/media.conf:
 //   MEDIA=on|off      off removes the tile completely
@@ -17,6 +19,7 @@
 import Clutter from 'gi://Clutter';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
+import Meta from 'gi://Meta';
 import Graphene from 'gi://Graphene';
 import GLib from 'gi://GLib';
 import Pango from 'gi://Pango';
@@ -62,7 +65,16 @@ export function mediaConf() {
 }
 
 const ART_MAX = 5 * 1024 * 1024;
+// A YouTube page's own thumbnail, for browsers that give a page address but no art.
+function youtubeThumb(url) {
+    const m = (url ?? '').match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{11})/);
+    return m ? `https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg` : null;
+}
+
 const BROWSER_STEADY_MS = 4000;
+// A paused player stays on the tile this long, then the tile fades away (a
+// tab or app left paused in the background isn't "playing" any more).
+const PAUSED_LINGER_MS = 20000;
 const BROWSERS = /chrom|firefox|brave|edge|opera|vivaldi|zen|librewolf|epiphany|falkon|qutebrowser|plasma-browser/i;
 
 function writeUserKey(key, value) {
@@ -293,8 +305,18 @@ export class MediaTile {
         const steady = n => !browser(n) || now - this._seen.get(n).since >= BROWSER_STEADY_MS ||
             (n === this._current && title(n) === this._meta.title);
         const playing = names.filter(n => info[n].PlaybackStatus === 'Playing' && steady(n));
-        const paused = names.filter(n => info[n].PlaybackStatus === 'Paused' &&
+        const pausedFor = n => now - this._seen.get(n).since;
+        const paused = names.filter(n => info[n].PlaybackStatus === 'Paused' && pausedFor(n) < PAUSED_LINGER_MS &&
             (!browser(n) || (n === this._current && title(n) === this._meta.title)));
+        // look again when the newest pause runs out, so the tile goes without waiting for a signal
+        if (paused.length && !this._lingerId) {
+            const left = Math.min(...paused.map(n => PAUSED_LINGER_MS - pausedFor(n)));
+            this._lingerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.ceil(left) + 100, () => {
+                this._lingerId = 0;
+                this._choose();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
         const spotify = list => list.find(n => n.includes('spotify'));
         const pick = spotify(playing) ?? (playing.includes(this._current) ? this._current : playing[0]) ??
             spotify(paused) ?? (paused.includes(this._current) ? this._current : paused[0]) ?? null;
@@ -360,7 +382,7 @@ export class MediaTile {
         const title = meta['xesam:title'] || '';
         const artist = (meta['xesam:artist'] ?? []).join(', ');
         this._meta = {title, artist, length: meta['mpris:length'] ?? 0, track: meta['mpris:trackid'],
-            art: meta['mpris:artUrl'], album: meta['xesam:album'] || ''};
+            art: meta['mpris:artUrl'] || youtubeThumb(meta['xesam:url']), album: meta['xesam:album'] || ''};
         this._showTile(this._status !== 'Stopped' && Boolean(title));
         const key = `${this._current}|${title}|${artist}`;
         if (key !== this._trackKey) {
@@ -423,9 +445,18 @@ export class MediaTile {
         }
     }
 
-    // Album art: local files directly, web addresses downloaded once.
+    // Album art: local files directly, web addresses downloaded once. With none
+    // (many browser videos), the player's own icon on a soft card instead of
+    // the previous song's art or an empty disc.
     _loadArt(url) {
-        if (!url || url === this._artUrl)
+        if (!url) {
+            if (this._artUrl !== `icon:${this._current}`) {
+                this._artUrl = `icon:${this._current}`;
+                this._setIconArt();
+            }
+            return;
+        }
+        if (url === this._artUrl)
             return;
         this._artUrl = url;
         if (url.startsWith('file://')) {
@@ -493,9 +524,30 @@ export class MediaTile {
         });
     }
 
+    _setIconArt() {
+        if (!this._button)
+            return;
+        const app = this._current ? this._findApp('', this._current) : null;
+        const gicon = app?.get_icon() ?? Gio.ThemedIcon.new('audio-x-generic-symbolic');
+        const fill = (actor, size, radius) => {
+            actor.destroy_all_children();
+            actor.style = `background-color: rgba(255,255,255,0.10); border-radius: ${radius}px;`;
+            actor.layout_manager ??= new Clutter.BinLayout();
+            actor.add_child(new St.Icon({gicon, icon_size: size, style: '-st-icon-style: requested;',
+                x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, x_expand: true, y_expand: true}));
+        };
+        fill(this._disc, 16, 10);
+        fill(this._art, 96, 18);
+        this._artStyle = 'background-color: rgba(255,255,255,0.10);';
+        if (this._pillArt)
+            this._pillArt.style = this._artStyle;
+    }
+
     _setArt(path) {
         if (!this._button || !fileLooksLikeImage(path))
             return;
+        this._disc.destroy_all_children();       // (the player's icon, if that stood in)
+        this._art.destroy_all_children();
         let glow = '79,211,255';
         try {
             const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 48, 48, true);
@@ -632,6 +684,32 @@ export class MediaTile {
             return;
         const name = this._current;
         this._button.menu.close();
+        // The window of the process that owns the player: a browser window whose
+        // title is the playing tab's (browsers title a window after its tab), or
+        // its newest window. GNOME Shell focuses it itself, so focus-stealing
+        // protection doesn't get in the way. Only without one: MPRIS Raise.
+        this._bus.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus',
+            'GetConnectionUnixProcessID', new GLib.Variant('(s)', [name]), null, Gio.DBusCallFlags.NONE,
+            1000, null, (c, res) => {
+                let pid = 0;
+                try {
+                    [pid] = c.call_finish(res).deep_unpack();
+                } catch (e) {
+                    // no pid: the player is asked instead
+                }
+                const mine = pid ? global.display.get_tab_list(Meta.TabList.NORMAL_ALL, null)
+                    .filter(w => w.get_pid() === pid) : [];
+                const title = (this._meta?.title ?? '').toLowerCase();
+                const win = mine.find(w => title && (w.get_title() ?? '').toLowerCase().includes(title)) ?? mine[0];
+                if (win) {
+                    Main.activateWindow(win);
+                    return;
+                }
+                this._raiseByPlayer(name);
+            });
+    }
+
+    _raiseByPlayer(name) {
         this._bus.call(name, PATH, 'org.freedesktop.DBus.Properties', 'GetAll',
             new GLib.Variant('(s)', ['org.mpris.MediaPlayer2']), null, Gio.DBusCallFlags.NONE,
             1000, null, (c, res) => {
@@ -733,7 +811,7 @@ export class MediaTile {
                 this._bus.signal_unsubscribe(this[id]);
             this[id] = 0;
         }
-        for (const id of ['_posId', '_recheckId', '_raiseCheckId', '_pillHideId', '_goneId']) {
+        for (const id of ['_posId', '_recheckId', '_lingerId', '_raiseCheckId', '_pillHideId', '_goneId']) {
             if (this[id])
                 GLib.source_remove(this[id]);
             this[id] = 0;

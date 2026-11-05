@@ -1,13 +1,14 @@
 // Clipboard history (Super+V): a deck in the middle of the screen over a
 // dimmed, blurred backdrop (Esc or a click outside closes it). A click copies
 // an entry back to the clipboard (nothing is typed for you: paste with
-// Ctrl+V). Tabs: All, Text, Images: the history, newest first, without the
-// pinned entries (a switch mixes them back in, in their place in time); and
-// Pinned, the one home for starred entries, filtered All pinned / Code & text /
-// Screenshots. Pictures show as previews with their size, 👁 opens one full
-// size; "Compact pictures" turns pictures outside the Images tab into slim
+// Ctrl+V). Tabs: All, Text, Images: the history, newest first, with starred
+// entries floating on top (unstarred, an entry drops back to its place in
+// time; "Hide" keeps starred ones out of these tabs); and Pinned, the one
+// home for starred entries, filtered All pinned / Code & text / Screenshots.
+// Pictures show as previews with their size, the eye opens one full
+// size; "Compact" turns pictures outside the Images tab into slim
 // rows. Both switches are remembered. Text can be edited before you paste it;
-// 🏷 tags an entry (#code, #receipt) and the search box finds tags with #.
+// the tag button tags an entry (#code, #receipt) and the search box finds tags with #.
 // Clear keeps the pinned ones.
 //
 // Kept in ~/.cache/mk-workstation/clipboard (a folder only you can open): the
@@ -115,15 +116,17 @@ export class ClipboardHistory {
     }
 
     _loadView() {
-        const view = {pinned: 'all', foldImages: false, hide_pinned_in_stream: true};
+        const view = {pinned: 'all', foldImages: false, hide_pinned_in_stream: false, pinned_on_top: true};
         try {
             const [ok, bytes] = GLib.file_get_contents(VIEW);
             const saved = ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
             if (PIN_KINDS.some(([k]) => k === saved.pinned))
                 view.pinned = saved.pinned;
             view.foldImages = saved.foldImages === true;
-            // (an older view.json said pinsInStream: true for the opposite)
-            view.hide_pinned_in_stream = saved.hide_pinned_in_stream ?? saved.pinsInStream !== true;
+            // Starred entries now sit on top of the history; a view.json from before
+            // that (no pinned_on_top) had them hidden there, so they show again once.
+            if (saved.pinned_on_top)
+                view.hide_pinned_in_stream = saved.hide_pinned_in_stream === true;
         } catch (e) {
             // first time: text first, pictures shown
         }
@@ -382,9 +385,10 @@ export class ClipboardHistory {
             return b;
         };
         // pinned entries live in Pinned; switched off, this mixes them back into the history in their place in time
-        this._streamButton = toggle('view-conceal-symbolic', 'Hide pinned', 'hide_pinned_in_stream',
-            'Keep pinned entries out of All, Text and Images (they are always in Pinned)');
-        this._foldButton = toggle('view-list-symbolic', 'Compact pictures', 'foldImages',
+        // (short labels, so they're never cut to "Hide ..." or "Comp...")
+        this._streamButton = toggle('view-conceal-symbolic', 'Hide', 'hide_pinned_in_stream',
+            'Hide pinned entries from All, Text and Images (they are always in Pinned)');
+        this._foldButton = toggle('view-list-symbolic', 'Compact', 'foldImages',
             'Pictures as slim rows (the Images tab still shows them full)');
         box.add_child(tabs);
         // Pinned: everything starred, or only its text, or only its pictures
@@ -501,12 +505,16 @@ export class ClipboardHistory {
             return tags.some(t => t.includes(q)) ||
                 (i.text ? i.text.toLowerCase().includes(q) : 'image picture screenshot'.includes(q));
         };
-        const shown = this._items.filter(i => inTab(i) && matches(i));   // (newest first, as copied)
+        // newest first, as copied; starred entries float to the top (newest starred first) and drop
+        // back to their place in time when unstarred
+        const shown = this._items.filter(i => inTab(i) && matches(i));
+        if (this._tab !== 'pinned')
+            shown.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));   // (a stable sort keeps the order within each)
         this._filled = [this._version, this._viewKey(), q];
         this._first = shown[0] ?? null;
         this._firstButton = null;
         if (!shown.length) {
-            const none = this._tab === 'pinned' ? 'Nothing pinned here yet: ☆ on an entry pins it.' :
+            const none = this._tab === 'pinned' ? 'Nothing pinned here yet: the star on an entry pins it.' :
                 'Copy something and it shows up here.';
             this._empty = new St.Label({text: q ? 'Nothing matches.' : none,
                 style_class: 'mk-clip-empty'});

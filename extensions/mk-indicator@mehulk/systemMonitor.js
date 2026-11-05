@@ -5,7 +5,8 @@
 //
 // config/monitor.conf, yours in ~/.config/mk-workstation/monitor.conf:
 //   PANEL=cpu,temp     what the top bar shows: cpu, mem, temp, net, power
-//   COMPACT=yes        two dots (load, heat) instead; the numbers slide in on hover
+//   COMPACT=yes        one health dot (green, amber, crimson) instead; on hover it
+//                      opens into "40°C · 5%"
 //   INTERVAL=2         seconds between readings
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
@@ -343,12 +344,14 @@ export class SystemMonitor {
         this._spark = new St.DrawingArea({width: 30, height: 14, y_align: Clutter.ActorAlign.CENTER});
         this._spark.connect('repaint', area => this._paintSpark(area));
         this._text = new St.Label({style_class: 'mk-monitor-text', y_align: Clutter.ActorAlign.CENTER});
-        // compact: a load dot and a heat dot, quiet until you point at them
+        // compact: one health dot, quiet until you point at it; then the
+        // readout opens out beside it
         this._dots = new St.BoxLayout({style_class: 'mk-monitor-dots', y_align: Clutter.ActorAlign.CENTER});
-        this._loadDot = new St.Widget({style_class: 'mk-monitor-dot'});
-        this._heatDot = new St.Widget({style_class: 'mk-monitor-dot'});
+        this._loadDot = new St.Widget({style_class: 'mk-monitor-dot', y_align: Clutter.ActorAlign.CENTER});
         this._dots.add_child(this._loadDot);
-        this._dots.add_child(this._heatDot);
+        this._readout = new St.Label({style_class: 'mk-monitor-readout', y_align: Clutter.ActorAlign.CENTER,
+            width: 0, opacity: 0, clip_to_allocation: true});
+        this._dots.add_child(this._readout);
         box.add_child(this._dots);
         box.add_child(this._spark);
         box.add_child(this._text);
@@ -457,10 +460,14 @@ export class SystemMonitor {
                 parts.push(`${s.power.toFixed(1)} W`);
         }
         this._text.text = parts.join('  ');
-        // green, amber, red: load by CPU use, heat by temperature
-        const level = (v, warn, hot) => v >= hot ? '#f87171' : v >= warn ? '#fbbf24' : '#34d399';
-        this._loadDot.style = `background-color: ${level(s.cpu, 50, 85)};`;
-        this._heatDot.style = `background-color: ${s.cpuTemp ? level(s.cpuTemp, 70, 85) : 'rgba(255,255,255,0.35)'};`;
+        // health: green under 40 % CPU and 55 °C, amber to 75, crimson above (the worse of the two)
+        const level = v => v > 75 ? 2 : v >= 40 ? 1 : 0;
+        const heat = t => t > 75 ? 2 : t >= 55 ? 1 : 0;
+        const worst = Math.max(level(s.cpu), s.cpuTemp ? heat(s.cpuTemp) : 0);
+        const colour = ['#10b981', '#f59e0b', '#ef4444'][worst];
+        this._loadDot.style = `background-color: ${colour}; box-shadow: 0 0 6px 1px ${colour}88;`;
+        this._readout.text = [s.cpuTemp ? `${Math.round(s.cpuTemp)}°C` : null, `${Math.round(s.cpu)}%`]
+            .filter(Boolean).join(' · ');
         this._syncCompact();
         this._spark.queue_repaint();
         this._internet?.feed(s.down, s.up);
@@ -473,10 +480,23 @@ export class SystemMonitor {
 
     _syncCompact() {
         const compact = this._conf.COMPACT !== 'no';
-        const open = !compact || this._button.hover || this._button.menu.isOpen;
         this._dots.visible = compact;
-        this._text.visible = open;
-        this._spark.visible = open && this._conf.PANEL.includes('cpu');
+        this._text.visible = !compact;
+        this._spark.visible = !compact && this._conf.PANEL.includes('cpu');
+        if (!compact)
+            return;
+        const open = this._button.hover || this._button.menu.isOpen;
+        if (open === this._readoutOpen) {
+            if (open)
+                this._readout.width = this._readout.get_preferred_width(-1)[1];    // the numbers changed width
+            return;
+        }
+        this._readoutOpen = open;
+        const [, natural] = this._readout.get_preferred_width(-1);
+        this._readout.remove_all_transitions();
+        // the pill opens out to the readout and folds back to the dot (140 ms, ease-out cubic)
+        this._readout.ease({width: open ? natural : 0, opacity: open ? 255 : 0, duration: 140,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
     }
 
     _fillMenu(s) {

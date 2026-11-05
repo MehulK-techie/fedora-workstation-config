@@ -23,7 +23,9 @@ import { DOCK_GLASS, addGlass, blurAllowed } from './blur.js';
 import { accentRGB } from './colour.js';
 
 const MARGIN = 4;              // the dock's gap above the screen's bottom edge
-const HIDE = 260, REVEAL = 220;          // stepping down and coming back, ms
+const HIDE = 480, REVEAL = 360;          // fading away and back, ms: slow and soft, never a jump
+const SINK = 14;               // how far it sinks while it fades (px): a fade with a hint of movement
+const OVERVIEW_OUT = 260, OVERVIEW_IN = 360;
 const EDGE_DELAY = 150;        // the pointer rests on the bottom edge this long before the dock comes back
 const FOCUSED = 'rgb(99, 102, 241)';     // electric indigo: the app you're using
 
@@ -143,6 +145,7 @@ export class Dock {
         this._connect(Main.overview, 'hiding', () => this._overview(false));
         if (Main.overview.visible)
             this._overview(true);
+        this._hideOverviewDash(true);
         this._connect(this._actor, 'notify::width', () => this._place());
         this._fill();
         this._followFocus();
@@ -487,12 +490,29 @@ export class Dock {
         this._edge.visible = hide && !this._fullscreen() && !this._inOverview;
         // (ease() retargets a slide already under way from where it is, so a quick hide-then-show never jumps)
         this._actor.ease({translation_y: hide ? this._hiddenY() : 0, opacity: hide ? 0 : 255,
-            duration: hide ? HIDE : REVEAL, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            duration: hide ? HIDE : REVEAL,
+            mode: hide ? Clutter.AnimationMode.EASE_IN_OUT_QUAD : Clutter.AnimationMode.EASE_OUT_CUBIC});
         this._actor.reactive = !hide;
     }
 
     _hiddenY() {
-        return this._hidden ? (this._rect?.height ?? 60) + MARGIN + 4 : 0;
+        return this._hidden ? SINK : 0;
+    }
+
+    // GNOME's overview has a dash of its own along the bottom (Dash to Dock used
+    // to take its place): with the engine's dock it would be a second dock, so
+    // it's folded away (no height, so the desktops get the room) while this runs.
+    _hideOverviewDash(hide) {
+        const dash = Main.overview.dash;
+        if (!dash)
+            return;
+        if (hide) {
+            dash.hide();
+            dash.set_height(0);
+        } else {
+            dash.set_height(-1);
+            dash.show();
+        }
     }
 
     _overview(showing) {
@@ -503,14 +523,14 @@ export class Dock {
             this._edge.visible = false;
             this._actor.reactive = false;
             // down and out of the way: the overview's own dash and the desktops are all yours
-            this._actor.ease({opacity: 0, translation_y: this._hiddenY() + 60, duration: 160,
+            this._actor.ease({opacity: 0, translation_y: SINK * 2, duration: OVERVIEW_OUT,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onStopped: done => done && this._inOverview && this._actor?.hide()});
         } else {
             this._actor.show();
             if (!this._hidden) {
                 this._actor.reactive = true;
-                this._actor.ease({opacity: 255, translation_y: 0, duration: 200, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+                this._actor.ease({opacity: 255, translation_y: 0, duration: OVERVIEW_IN, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
             } else {
                 this._actor.translation_y = this._hiddenY();
                 this._edge.visible = !this._fullscreen();
@@ -532,6 +552,7 @@ export class Dock {
             item.app && item.windowsId && item.app.disconnect(item.windowsId);
         this._items = null;
         this._tooltip(null);
+        this._hideOverviewDash(false);
         this._unblur?.();
         this._unblur = null;
         this._menus = null;

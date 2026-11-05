@@ -1,8 +1,9 @@
 // MK Shell Engine: the genie. A window being minimized pours into its app's
 // icon in the dock (270 ms), and pours back out when you bring it back
-// (260 ms). The window is a 24 x 24 mesh: the rows nearest the dock move
-// first, each row narrowing and sliding on a smoothstep (Hermite) curve, so
-// the window funnels into the icon instead of shrinking as a flat card.
+// (270 ms). The window is a 32 x 32 mesh: the rows nearest the dock move
+// first, each row narrowing and sliding on a smoothstep (Hermite) curve. The
+// top of the window keeps its width longest while the base sweeps into the
+// icon, so it funnels like a genie instead of shrinking as a flat card.
 //
 // Safety first: whatever happens (an error, the window closing mid-way,
 // GNOME cancelling window effects, the extension switching off) the window
@@ -19,8 +20,8 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { MAGIC_LAMP, isActive, watch } from './conflicts.js';
 
-const MINIMIZE = 270, UNMINIMIZE = 260;
-const TILES = 24;
+const MINIMIZE = 280, UNMINIMIZE = 270;
+const TILES = 32;
 
 const smooth = p => p * p * (3 - 2 * p);                  // Hermite smoothstep: 0 to 1, flat at both ends
 const clamp = p => Math.min(1, Math.max(0, p));
@@ -42,8 +43,9 @@ class MKLampEffect extends Clutter.DeformEffect {
         const t = this.progress, win = this._win, ico = this._target;
         // how far this row is from the icon: those nearest go first
         const d = this._below ? 1 - v.ty : v.ty;
-        const across = smooth(clamp((t * 1.3 - 0.3 * d) / 1.0));       // narrowing, a little ahead
-        const down = smooth(clamp((t - 0.3 * d) / 0.7));                 // sliding toward the icon
+        // the base narrows first and fast; the top holds its width until late
+        const across = smooth(clamp((t * 1.25 - 0.45 * d) / 0.8));
+        const down = smooth(clamp((t - 0.35 * d) / 0.65));              // sliding toward the icon
         const y = lerp(win.y + v.ty * win.height, ico.y + v.ty * ico.height, down);
         const cx = lerp(win.x + win.width / 2, ico.x + ico.width / 2, across);
         const x = cx + (v.tx - 0.5) * lerp(win.width, ico.width, across);

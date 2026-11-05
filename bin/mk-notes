@@ -955,7 +955,7 @@ class StickyPad(Gtk.Box):
                      ("title", "Sticky note")):
             self.data.setdefault(k, v)
         head = Gtk.Box(spacing=4, height_request=self.GRIP_H - 6, css_classes=["mk-pad-head"])
-        head.append(Gtk.Label(label="📌", margin_start=4, can_target=False))
+        head.append(Gtk.Image(icon_name="view-pin-symbolic", margin_start=4, can_target=False))
         title = Gtk.Entry(text=self.data["title"], hexpand=True, has_frame=False, max_length=40,
                           css_classes=["mk-pad-title"])
         title.connect("changed", lambda e: (self.data.__setitem__("title", e.get_text()), self.win.save_note_meta()))
@@ -1392,7 +1392,7 @@ class FreeCanvasImage(Gtk.Box):
         # In-canvas Crop & Filter Popover (zero modal popups)
         filter_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
                              margin_top=8, margin_bottom=8, margin_start=8, margin_end=8)
-        filter_box.append(Gtk.Label(label="✨ In-Canvas Image Filters", xalign=0, css_classes=["mk-row-title"]))
+        filter_box.append(Gtk.Label(label="In-Canvas Image Filters", xalign=0, css_classes=["mk-row-title"]))
         f_row1 = Gtk.Box(spacing=4)
         for f_lbl, f_fn in (
             ("B&W", self._apply_bw),
@@ -2985,7 +2985,7 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
         y += box_h + 12.0
 
     # sticky notes (when included): one footnote box at the end, each note
-    # a line of its own: 📌 title, its words, small
+    # a line of its own: the title in bold, its words, small
     notes = [p for p in pads if (p.get("text") or "").strip()]
     if notes:
         layout = PangoCairo.create_layout(cr)
@@ -2993,7 +2993,7 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
         layout.set_wrap(Pango.WrapMode.WORD_CHAR)
         layout.set_font_description(Pango.FontDescription("Sans 8.5"))
         layout.set_markup("<b>Sticky notes</b>\n" + "\n".join(
-            f"📌 <b>{GLib.markup_escape_text(p.get('title') or 'Sticky note')}</b>: "
+            f"<b>{GLib.markup_escape_text(p.get('title') or 'Sticky note')}</b>: "
             f"{GLib.markup_escape_text(p['text'].strip())}" for p in notes), -1)
         _ink, logical = layout.get_pixel_extents()
         box_h = logical.height + 16.0
@@ -3442,13 +3442,13 @@ class NotesWindow(Adw.ApplicationWindow):
 
         theme_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                             margin_top=10, margin_bottom=10, margin_start=10, margin_end=10, width_request=230)
-        theme_box.append(Gtk.Label(label="🎨 App Theme", xalign=0, css_classes=["mk-row-title"]))
+        theme_box.append(Gtk.Label(label="App Theme", xalign=0, css_classes=["mk-row-title"]))
         for tkey, tinfo in THEMES.items():
             tb = Gtk.Button(label=tinfo["label"], css_classes=["flat"])
             tb.connect("clicked", lambda _b, k=tkey: (conf_set("THEME_PRESET", k), self.apply_theme_and_zoom()))
             theme_box.append(tb)
         theme_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-        theme_box.append(Gtk.Label(label="📄 Page Pattern", xalign=0, css_classes=["mk-row-title"]))
+        theme_box.append(Gtk.Label(label="Page Pattern", xalign=0, css_classes=["mk-row-title"]))
         pat_row = Gtk.Box(spacing=4, homogeneous=True)
         for pkey, plbl in (("plain", "Plain"), ("dots", "Dots"), ("grid", "Grid"), ("lined", "Lined")):
             pb = Gtk.Button(label=plbl, css_classes=["flat"])
@@ -3461,7 +3461,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
         lock_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
                            margin_top=10, margin_bottom=10, margin_start=10, margin_end=10, width_request=240)
-        lock_box.append(Gtk.Label(label="🔒 Biometric & PIN Lock", xalign=0, css_classes=["mk-row-title"]))
+        lock_box.append(Gtk.Label(label="Biometric & PIN Lock", xalign=0, css_classes=["mk-row-title"]))
         self.lock_note_btn = Gtk.Button(label="Lock / Unlock This Note")
         self.lock_note_btn.connect("clicked", lambda *_: (self.lock_pop.popdown(), self._toggle_current_note_lock()))
         lock_box.append(self.lock_note_btn)
@@ -3485,7 +3485,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
         cal_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                           margin_top=10, margin_bottom=10, margin_start=10, margin_end=10, width_request=270)
-        cal_box.append(Gtk.Label(label="📓 Daily Journal", xalign=0, css_classes=["mk-row-title"]))
+        cal_box.append(Gtk.Label(label="Daily Journal", xalign=0, css_classes=["mk-row-title"]))
         self.calendar = Gtk.Calendar()
         self.calendar.connect("day-selected", self._on_cal_preview)
         self.calendar.connect("notify::month", lambda *_: self._mark_calendar())
@@ -3507,7 +3507,7 @@ class NotesWindow(Adw.ApplicationWindow):
                                              tooltip_text="Daily Journal Calendar"))
 
         exp_box = Gtk.Box(css_classes=["linked"])
-        exp_btn = Gtk.Button(label="Export ⬇", icon_name="document-save-symbolic",
+        exp_btn = Gtk.Button(label="Export", icon_name="document-save-symbolic",
                              tooltip_text="1-Click Direct Save to ~/Documents/Notes (Ctrl+Shift+E)")
         exp_btn.connect("clicked", lambda *_: self.quick_export())
         exp_box.append(exp_btn)
@@ -3550,7 +3550,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.scope_title = Gtk.Label(label="All Notes", xalign=0, hexpand=True,
                                      ellipsize=Pango.EllipsizeMode.END, css_classes=["mk-row-title"])
         list_header_box.append(self.scope_title)
-        self.show_all_btn = Gtk.Button(label="Show All ✕", css_classes=["flat"], visible=False)
+        self.show_all_btn = Gtk.Button(label="Show all", css_classes=["flat"], visible=False)
         self.show_all_btn.connect("clicked", lambda *_: self.set_scope(("all", None), "All Notes"))
         list_header_box.append(self.show_all_btn)
         self.list_col.append(list_header_box)
@@ -3672,7 +3672,7 @@ class NotesWindow(Adw.ApplicationWindow):
         ribbon.append(shot_btn)
 
         # SEPARATE DRAW BUTTON
-        self.draw_toggle = Gtk.ToggleButton(label="✏ Draw", icon_name="document-edit-symbolic",
+        self.draw_toggle = Gtk.ToggleButton(label="Draw", icon_name="document-edit-symbolic",
                                             tooltip_text="Freehand Pen, Marker & Stroke Eraser (Ctrl+Shift+P)",
                                             css_classes=["flat"])
         self.draw_toggle.connect("toggled", self._on_draw_toggled)
@@ -3700,14 +3700,14 @@ class NotesWindow(Adw.ApplicationWindow):
                                      tooltip_text="Quick Highlight colour"))
 
         # SEPARATE SHAPES BUTTON
-        self.shapes_toggle = Gtk.ToggleButton(label="📐 Shapes", icon_name="view-grid-symbolic",
+        self.shapes_toggle = Gtk.ToggleButton(label="Shapes", icon_name="view-grid-symbolic",
                                               tooltip_text="Insert Shapes (Rectangle, Circle, Line, Arrow)",
                                               css_classes=["flat"])
         self.shapes_toggle.connect("toggled", self._on_shapes_toggled)
         ribbon.append(self.shapes_toggle)
 
         # DEDICATED LASER POINTER BUTTON
-        self.laser_toggle = Gtk.ToggleButton(label="🔴 Laser Pointer", icon_name="media-record-symbolic",
+        self.laser_toggle = Gtk.ToggleButton(label="Laser Pointer", icon_name="media-record-symbolic",
                                              tooltip_text="Presentation Laser Pointer (fades out)",
                                              css_classes=["flat"])
         self.laser_toggle.connect("toggled", self._on_laser_toggled)
@@ -3763,7 +3763,7 @@ class NotesWindow(Adw.ApplicationWindow):
                                tooltip_text="Clear page: remove every pen, highlighter and shape stroke (Draw › Redo Stroke brings them back)")
         clear_btn.connect("clicked", lambda *_: self.ink_canvas.clear())
         ribbon.append(clear_btn)
-        scratch = Gtk.MenuButton(child=Gtk.Label(label="🧮"), css_classes=["flat"], popover=self._scratchpad(),
+        scratch = Gtk.MenuButton(child=Gtk.Image(icon_name="accessories-calculator-symbolic"), css_classes=["flat"], popover=self._scratchpad(),
                                  tooltip_text="Scratchpad: quick sums beside your notes (kept with the note)")
         ribbon.append(scratch)
 
@@ -3809,10 +3809,11 @@ class NotesWindow(Adw.ApplicationWindow):
             self.deck_stack.add_named(deck, name)
         switch = Gtk.Box(css_classes=["linked", "mk-modes"])
         self.mode_btns, group = {}, None
-        for name, label, tip in (("ink", "✍️ Ink", "Pen, highlighter, eraser, lasso, shapes (P H E L)"),
-                                 ("type", "📝 Type", "Paragraph styles, bold, italic, lists"),
-                                 ("insert", "➕ Insert", "Table, text box, sticky note, picture, PDF")):
-            b = Gtk.ToggleButton(label=label, tooltip_text=tip, group=group, active=name == "type")
+        for name, label, icon, tip in (("ink", "Ink", "input-tablet-symbolic", "Pen, highlighter, eraser, lasso, shapes (P H E L)"),
+                                       ("type", "Type", "text-editor-symbolic", "Paragraph styles, bold, italic, lists"),
+                                       ("insert", "Insert", "list-add-symbolic", "Table, text box, sticky note, picture, PDF")):
+            b = Gtk.ToggleButton(child=Adw.ButtonContent(icon_name=icon, label=label), tooltip_text=tip,
+                                 group=group, active=name == "type")
             group = group or b
             b.connect("toggled", lambda btn, n=name: btn.get_active() and self._set_mode(n))
             self.mode_btns[name] = b
@@ -3871,6 +3872,10 @@ class NotesWindow(Adw.ApplicationWindow):
         self.buffer.connect_after("insert-text", self._on_after_insert_text)
         self.buffer.connect("changed", lambda *_: self._queue_table_style())
         self.buffer.connect("mark-set", self._on_cursor_moved)
+        # follow the caret (Google Docs style): typing keeps it clear of the window's edges
+        self.buffer.connect_after("changed", lambda *_: self._follow_caret(typing=True))
+        self.buffer.connect_after("mark-set", lambda _b, _i, mark: mark == self.buffer.get_insert()
+                                  and self._follow_caret(typing=False))
 
         self.view = Gtk.TextView(
             buffer=self.buffer,
@@ -3953,7 +3958,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.comments_sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, width_request=260,
                                         css_classes=["mk-sidebar"], visible=False, hexpand=False)
         c_head = Gtk.Box(spacing=6, margin_start=12, margin_end=12, margin_top=12, margin_bottom=8)
-        c_head.append(Gtk.Label(label="💬 Margin Comments", xalign=0, hexpand=True, css_classes=["mk-row-title"]))
+        c_head.append(Gtk.Label(label="Margin Comments", xalign=0, hexpand=True, css_classes=["mk-row-title"]))
         new_c_btn = Gtk.Button(icon_name="list-add-symbolic", css_classes=["flat"], tooltip_text="Add Comment")
         new_c_btn.connect("clicked", lambda *_: self.prompt_add_comment())
         c_head.append(new_c_btn)
@@ -3969,7 +3974,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.status_bar = Gtk.Box(spacing=10, margin_start=16, margin_end=16, margin_top=4, margin_bottom=6)
         self.doc_stat_lbl = Gtk.Label(label="0 words · 0 chars", xalign=0, css_classes=["mk-status"])
         self.status_bar.append(self.doc_stat_lbl)
-        self.save_stat_lbl = Gtk.Label(label="Saved ✓", css_classes=["mk-status"])
+        self.save_stat_lbl = Gtk.Label(label="Saved", css_classes=["mk-status"])
         self.status_bar.append(self.save_stat_lbl)
         self.status_bar.append(Gtk.Box(hexpand=True))
 
@@ -4132,8 +4137,8 @@ class NotesWindow(Adw.ApplicationWindow):
         ):
             b = Gtk.ToggleButton(icon_name=icon, tooltip_text=f"{label}: {tip}", group=grp,
                                  active=tool == "pen", css_classes=["flat", "mk-tool"])
-            if tool == "highlighter":   # a chisel-tip marker (the theme has no marker icon)
-                b.set_child(Gtk.Label(label="🖍"))
+            if tool == "highlighter":   # highlighted letters (the theme has no marker icon)
+                b.set_child(Gtk.Label(use_markup=True, label='<span background="#fde68a" foreground="#1f2937"><b> ab </b></span>'))
             grp = grp or b
             b.connect("toggled", lambda btn, t=tool: btn.get_active() and self._set_ink_tool(t))
             self.ink_tool_btns[tool] = b
@@ -4187,8 +4192,8 @@ class NotesWindow(Adw.ApplicationWindow):
 
     # ---------- the format card over selected text
     def _build_selection_card(self):
-        """The card over selected text: style ▾, B I U S, </> code, 🖍 marker
-        (four pastels), colour ▾, list ▾, 🔗 link, then copy, cut, delete.
+        """The card over selected text: style ▾, B I U S, </> code, the marker
+        (four pastels), colour ▾, list ▾, link, then copy, cut, delete.
         It hangs from the scroll area (always on screen), pointing at the
         middle of the selection: above it, or below near the top."""
         row = Gtk.Box(spacing=1, margin_top=2, margin_bottom=2, margin_start=2, margin_end=2)
@@ -4222,7 +4227,7 @@ class NotesWindow(Adw.ApplicationWindow):
         btn(label("<tt>&lt;/&gt;</tt>"), lambda: self._card_toggle("mono"), "Inline code")
         # the marker: one click uses the last colour; ▾ picks another
         self._card_hl = CARD_HIGHLIGHTS[0]
-        btn(label("🖍"), lambda: self._card_highlight(self._card_hl), "Highlight (the last colour)")
+        btn(Gtk.Label(use_markup=True, label='<span background="#fde68a" foreground="#1f2937"><b> ab </b></span>'), lambda: self._card_highlight(self._card_hl), "Highlight (the last colour)")
         hl_box = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
         hl_pop = Gtk.Popover(child=hl_box)
         for preset in CARD_HIGHLIGHTS:
@@ -4241,10 +4246,10 @@ class NotesWindow(Adw.ApplicationWindow):
         cm = Gtk.MenuButton(child=_colour_a_label(), css_classes=["flat"], popover=cpop, tooltip_text="Text colour")
         cm.set_focus_on_click(False)
         row.append(cm)
-        menu(Gtk.Label(label="☰ ▾"), [("• Bullets", lambda: self.toggle_line_prefix("• ")),
+        menu(Gtk.Label(label="Lists ▾"), [("• Bullets", lambda: self.toggle_line_prefix("• ")),
                                      ("1. Numbers", lambda: self.toggle_line_prefix("1. ")),
                                      ("☐ Checklist", lambda: self.toggle_line_prefix("☐ "))], "Lists")
-        # 🔗: the selection becomes [words](address)
+        # link: the selection becomes [words](address)
         link_box = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
         url = Gtk.Entry(placeholder_text="https://…", width_chars=28)
         link_box.append(url)
@@ -4253,7 +4258,7 @@ class NotesWindow(Adw.ApplicationWindow):
         link_pop = Gtk.Popover(child=link_box)
         go.connect("clicked", lambda *_: (link_pop.popdown(), self._card_link(url.get_text().strip()), url.set_text("")))
         url.connect("activate", lambda *_: go.emit("clicked"))
-        lm = Gtk.MenuButton(child=Gtk.Label(label="🔗"), css_classes=["flat"], popover=link_pop, tooltip_text="Link")
+        lm = Gtk.MenuButton(child=Gtk.Image(icon_name="insert-link-symbolic"), css_classes=["flat"], popover=link_pop, tooltip_text="Link")
         row.append(lm)
         row.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=2, margin_end=2))
         clip = self.view.get_clipboard()
@@ -4419,7 +4424,7 @@ class NotesWindow(Adw.ApplicationWindow):
 
     def _build_shapes_subbar(self):
         bar = Gtk.Box(spacing=6, css_classes=["mk-shapesbar"])
-        bar.append(Gtk.Label(label="📐 Shapes:", css_classes=["mk-row-title"]))
+        bar.append(Gtk.Label(label="Shapes:", css_classes=["mk-row-title"]))
         self.shape_tool_btns = {}
         grp = None
         pop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=8, margin_bottom=8,
@@ -4501,7 +4506,7 @@ class NotesWindow(Adw.ApplicationWindow):
             self.draw_toggle.set_active(False)
             self.shapes_toggle.set_active(False)
             self.ink_canvas.tool = "laser"
-            self.toast.add_toast(Adw.Toast(title="🔴 Presentation Laser Active · Drag on note to point!", timeout=2))
+            self.toast.add_toast(Adw.Toast(title="Laser pointer on: drag on the note to point", timeout=2))
         self.ink_canvas.set_ink_mode(active)
 
     def _table_picker(self):
@@ -4969,6 +4974,48 @@ class NotesWindow(Adw.ApplicationWindow):
             self._queue_save()
         self._sync_ribbon_state()
 
+    # The page scrolls itself (the text view sits in an overlay inside it, so GTK's own
+    # scroll-to-cursor never moves it): while you type, the caret stays at least
+    # CARET_BOTTOM px above the bottom edge and CARET_TOP px below the top, gliding
+    # there in 120 ms; arrow keys and clicks scroll only when the caret leaves the view.
+    CARET_BOTTOM, CARET_TOP = 160, 80
+
+    def _follow_caret(self, typing):
+        if not self.view.has_focus() or getattr(self, "_follow_id", 0):
+            return
+        self._follow_typing = typing or getattr(self, "_follow_typing", False)
+        self._follow_id = GLib.idle_add(self._scroll_to_cursor)
+
+    def _scroll_to_cursor(self):
+        self._follow_id = 0
+        typing, self._follow_typing = self._follow_typing, False
+        it = self.buffer.get_iter_at_mark(self.buffer.get_insert())
+        rect = self.view.get_iter_location(it)
+        wx, wy = self.view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, rect.x, rect.y)
+        ok, top = self.view.compute_point(self.page_overlay, Graphene.Point().init(wx, wy))
+        ok2, bottom = self.view.compute_point(self.page_overlay, Graphene.Point().init(wx, wy + rect.height))
+        if not (ok and ok2):
+            return GLib.SOURCE_REMOVE
+        adj = self.page_scroll.get_vadjustment()
+        value, page = adj.get_value(), adj.get_page_size()
+        low, high = (self.CARET_TOP, self.CARET_BOTTOM) if typing else (0, 0)
+        target = value
+        if bottom.y > value + page - high:
+            target = bottom.y - (page - high)
+        elif top.y < value + low:
+            target = top.y - low
+        target = max(adj.get_lower(), min(target, adj.get_upper() - page))
+        if abs(target - value) < 1:
+            return GLib.SOURCE_REMOVE
+        if getattr(self, "_caret_anim", None):
+            self._caret_anim.pause()
+        anim = Adw.TimedAnimation.new(self.page_scroll, value, target, 120,
+                                      Adw.CallbackAnimationTarget.new(lambda v: adj.set_value(v)))
+        anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
+        self._caret_anim = anim
+        anim.play()
+        return GLib.SOURCE_REMOVE
+
     def _on_cursor_moved(self, _buf, _iter, mark):
         if mark != self.buffer.get_insert():
             return
@@ -5356,7 +5403,7 @@ class NotesWindow(Adw.ApplicationWindow):
             self._rebuild_comments_panel()
             self.dirty = True
             self.save_note_meta()
-            self.toast.add_toast(Adw.Toast(title="Comment resolved ✓", timeout=2))
+            self.toast.add_toast(Adw.Toast(title="Comment resolved", timeout=2))
 
     def _delete_comment(self, idx):
         if 0 <= idx < len(self.comments):
@@ -5930,8 +5977,8 @@ class NotesWindow(Adw.ApplicationWindow):
         return self.vault.path(rel) if rel else None
 
     def _sync_padlock(self):
-        """🔓 while the open note is locked (itself or by its notebook) but
-        unlocked for now; 🔒 otherwise."""
+        """Unlocked while the open note is locked (itself or by its notebook) but
+        unlocked for now; locked otherwise."""
         rel = self.rel
         if not rel or not hasattr(self, "lock_btn"):
             return
@@ -5950,13 +5997,13 @@ class NotesWindow(Adw.ApplicationWindow):
         words = len(re.findall(r"\w+", txt))
         nb = Path(self.rel).parent.as_posix()
         nb_str = "Notes" if nb == "." else nb
-        self.meta_label.set_text(f"📚 {nb_str}  ·  {words} words")
+        self.meta_label.set_text(f"{nb_str}  ·  {words} words")
 
         while (c := self.links_bar.get_first_child()) is not None:
             self.links_bar.remove(c)
         for target in getattr(self, "note_links", []):
             pill_box = Gtk.Box(spacing=2, css_classes=["mk-link-pill"])
-            open_b = Gtk.Button(label=f"🔗 {target}", css_classes=["flat"],
+            open_b = Gtk.Button(child=Adw.ButtonContent(icon_name="insert-link-symbolic", label=target), css_classes=["flat"],
                                 tooltip_text=f"Jump to connected note “{target}”")
             open_b.connect("clicked", lambda _b, t=target: self.open_note(self.vault.resolve(t) or self.vault.create("", t)))
             del_b = Gtk.Button(label="×", css_classes=["flat"], tooltip_text="Remove link")
@@ -6027,7 +6074,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.save_note_meta()
         self.dirty = False
         if hasattr(self, "save_stat_lbl"):
-            self.save_stat_lbl.set_text("Saved ✓")
+            self.save_stat_lbl.set_text("Saved")
         row = self.rows.get(self.rel)
         if row:
             row.sub_lbl.set_text(f"{when_short(time.time())}  ·  {clean_preview(body)}")
@@ -6267,8 +6314,8 @@ class NotesWindow(Adw.ApplicationWindow):
         dlg = Adw.AlertDialog(heading=f"Insert “{src.name}”",
                               body="Attach it as a file, or lay its pages on the note to write on them.")
         dlg.add_response("cancel", "Cancel")
-        dlg.add_response("attach", "📎 Attach file")
-        dlg.add_response("printout", "📄 Insert as printout")
+        dlg.add_response("attach", "Attach file")
+        dlg.add_response("printout", "Insert as printout")
         dlg.set_response_appearance("printout", Adw.ResponseAppearance.SUGGESTED)
         dlg.set_default_response("printout")
 
@@ -6405,7 +6452,7 @@ class NotesWindow(Adw.ApplicationWindow):
         rel = note["rel"]
         locked = self._is_note_protected(rel)
         raw = "" if locked else self.vault.read(rel)
-        preview = "🔒 Locked Note" if locked else clean_preview(raw)
+        preview = "Locked note" if locked else clean_preview(raw)
         row = Gtk.ListBoxRow(activatable=True, tooltip_text=note["title"])
         row.rel = rel
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
@@ -6500,17 +6547,17 @@ class NotesWindow(Adw.ApplicationWindow):
             return
         kind, val = row.scope
         titles = {"all": "All Notes", "pinned": "Pinned Notes", "daily": "Daily Journal"}
-        t = titles.get(kind) or (f"#{val}" if kind == "tag" else f"📚 {val.split('/')[-1]}")
+        t = titles.get(kind) or (f"#{val}" if kind == "tag" else f"{val.split('/')[-1]}")
         self.set_scope(row.scope, t)
 
     def _popup_notebook_menu(self, row, folder, x, y):
         menu = Gio.Menu()
         is_locked = folder in self._locked_folders()
-        menu.append("🔓 Unlock Notebook" if is_locked else "🔒 Lock Entire Notebook", f"win.nb-lock::{folder}")
+        menu.append("Unlock Notebook" if is_locked else "Lock Entire Notebook", f"win.nb-lock::{folder}")
         c_menu = Gio.Menu()
         for name, hex_c in NOTEBOOK_COLORS:
             c_menu.append(name, f"win.nb-color::{folder}|{hex_c}")
-        menu.append_submenu("🎨 Change Notebook Color", c_menu)
+        menu.append_submenu("Change Notebook Color", c_menu)
 
         if not self.lookup_action("nb-lock"):
             a_lock = Gio.SimpleAction.new("nb-lock", GLib.VariantType("s"))
@@ -6551,7 +6598,7 @@ class NotesWindow(Adw.ApplicationWindow):
                 self._unlocked_items.discard(f"folder:{folder}")
                 self.vault.save_state()
                 self.refresh_lists()
-                self.toast.add_toast(Adw.Toast(title=f"Notebook “{folder}” locked 🔒", timeout=2))
+                self.toast.add_toast(Adw.Toast(title=f"Notebook “{folder}” locked", timeout=2))
                 if self.rel and Path(self.rel).parent.as_posix() == folder:
                     self.open_note(self._first_note(), record_history=False)
             if nv.load_conf().get("NOTE_LOCK_HASH", ""):
@@ -6565,15 +6612,15 @@ class NotesWindow(Adw.ApplicationWindow):
         menu.append("Unpin" if self.vault.is_pinned(rel) else "Pin to Top", f"win.row-pin::{rel}")
         if rel in self._locked_notes():
             if rel in self._unlocked_items:
-                menu.append("Lock Now 🔒", f"win.row-relock::{rel}")
+                menu.append("Lock Now", f"win.row-relock::{rel}")
             menu.append("Remove Lock Permanently", f"win.row-lock::{rel}")
         else:
-            menu.append("Lock Note 🔒", f"win.row-lock::{rel}")
+            menu.append("Lock Note", f"win.row-lock::{rel}")
         move = Gio.Menu()
         move.append("Main Workspace", f"win.row-move::{rel}|")
         for f in self.vault.folders():
             if f not in ("Daily", "Templates", ".ink", ".mknotes_v3"):
-                move.append(f"📚 {f}", f"win.row-move::{rel}|{f}")
+                move.append(f"{f}", f"win.row-move::{rel}|{f}")
         menu.append_submenu("Move to Notebook", move)
         menu.append("Export to PDF / DOCX", f"win.row-exp::{rel}")
         menu.append("Delete Note…", f"win.row-del::{rel}")
@@ -6655,13 +6702,13 @@ class NotesWindow(Adw.ApplicationWindow):
                 folder = self.vault.create_folder(name, "")
                 self._nb_colors()[folder] = chosen_color[0]
                 self.vault.save_state()
-                self.set_scope(("folder", folder), f"📚 {folder}")
+                self.set_scope(("folder", folder), f"{folder}")
 
         dlg.connect("response", done)
         dlg.present(self)
 
     def prompt_link_note(self):
-        items = [(n["title"], f"📚 {n['folder'] or 'Notes'}", Path(n["rel"]).stem)
+        items = [(n["title"], f"{n['folder'] or 'Notes'}", Path(n["rel"]).stem)
                  for n in self.vault.notes() if n["rel"] != self.rel and n["folder"] != "Daily"]
 
         def add_link(stem):
@@ -6739,7 +6786,7 @@ class NotesWindow(Adw.ApplicationWindow):
                 locked.remove(rel)
                 self.vault.save_state()
                 self.refresh_lists()
-                self.toast.add_toast(Adw.Toast(title="Note unlocked 🔓", timeout=2))
+                self.toast.add_toast(Adw.Toast(title="Note unlocked", timeout=2))
             self._authenticate(f"Unlock Note “{Path(rel).stem}”", do_unlock)
         else:
             def do_lock():
@@ -6748,7 +6795,7 @@ class NotesWindow(Adw.ApplicationWindow):
                 self._unlocked_items.discard(rel)  # locked now, not after the next restart
                 self.vault.save_state()
                 self.refresh_lists()
-                self.toast.add_toast(Adw.Toast(title="Note locked 🔒", timeout=2))
+                self.toast.add_toast(Adw.Toast(title="Note locked", timeout=2))
                 if self.rel == rel:  # don't leave it on screen
                     self.open_note(self._first_note(), record_history=False)
             # Locking asks nothing; only the very first lock sets up the PIN.
@@ -6784,7 +6831,7 @@ class NotesWindow(Adw.ApplicationWindow):
         """Unlocked notes lock again after a minute without typing or the pointer."""
         if self._unlocked_items and time.monotonic() - getattr(self, "_last_activity", time.monotonic()) > AUTOLOCK_S:
             self.relock_note()
-            self.toast.add_toast(Adw.Toast(title="Locked again after a minute away 🔒", timeout=3))
+            self.toast.add_toast(Adw.Toast(title="Locked again after a minute away", timeout=3))
         return GLib.SOURCE_CONTINUE
 
     def _toggle_current_note_lock(self):
@@ -6819,7 +6866,7 @@ class NotesWindow(Adw.ApplicationWindow):
             if len(val) >= 4:
                 conf_set("NOTE_LOCK_HASH", auth.hash_pin(val))
                 dlg.close()
-                self.toast.add_toast(Adw.Toast(title="Lock PIN updated ✓", timeout=2))
+                self.toast.add_toast(Adw.Toast(title="Lock PIN updated", timeout=2))
 
         entry.connect("activate", save_it)
         dlg.connect("response", lambda _d, r: r == "save" and save_it())
@@ -6907,7 +6954,7 @@ class NotesWindow(Adw.ApplicationWindow):
         d = cal.get_date()
         rel = f"Daily/{d.get_year():04d}-{d.get_month():02d}-{d.get_day_of_month():02d}.md"
         if self.vault.path(rel).exists():
-            self.cal_status.set_text(f"📓 Entry exists: {clean_preview(self.vault.read(rel))}")
+            self.cal_status.set_text(f"Entry exists: {clean_preview(self.vault.read(rel))}")
         else:
             self.cal_status.set_text(f"No entry for {d.get_year():04d}-{d.get_month():02d}-{d.get_day_of_month():02d} yet.")
 
@@ -7113,7 +7160,7 @@ class NotesWindow(Adw.ApplicationWindow):
         elif not on and self.server:
             self.server.stop()
             self.server = None
-        self.sync_label.set_text(f"📱 Phone Sync Active\n{self.server.url}" if self.server else "")
+        self.sync_label.set_text(f"Phone Sync Active\n{self.server.url}" if self.server else "")
 
     def show_phone_dialog(self):
         dlg = Adw.Dialog(title="Phone Wi-Fi Sync", content_width=460, content_height=280)

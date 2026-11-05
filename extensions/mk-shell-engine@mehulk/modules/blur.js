@@ -9,7 +9,7 @@ import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { BLUR_MY_SHELL, isActive, watch } from './conflicts.js';
 
-export const PANEL_GLASS = {sigma: 26, brightness: 0.68};
+export const PANEL_GLASS = {sigma: 32, brightness: 0.62};
 export const DOCK_GLASS = {sigma: 32, brightness: 0.62};
 
 const live = new Set();        // every blur effect made here: [actor, effects]

@@ -18,7 +18,7 @@
 .mk-dock-item:focus { background-color: rgba(255, 255, 255, 0.08); }
 .mk-dock-bars { height: 3px; margin-top: 3px; spacing: 2px; }
 .mk-dock-bar { height: 3px; border-radius: 2px; }
-.mk-dock-separator { width: 1px; height: 36px; margin: 0 6px; background-color: rgba(255, 255, 255, 0.16); }
+.mk-dock-separator { width: 1px; height: 24px; margin: 0 6px; border-radius: 1px; background-color: rgba(255, 255, 255, 0.20); }
 .mk-dock-grid { color: rgba(242, 246, 255, 0.85); }
 .mk-dock-tooltip { color: #f2f6ff; font-size: 0.85em; font-weight: 600; padding: 4px 10px; border-radius: 8px;
   background-color: rgba(14, 15, 20, 0.88); border: 1px solid rgba(255, 255, 255, 0.12); }
@@ -34,10 +34,14 @@
 /* The top bar (modules/panel.js): three floating glass islands, or one seamless glass bar */
 #panel.mk-islands, #panel.mk-edge { background-color: transparent; }
 #panel.mk-islands #panelLeft, #panel.mk-islands #panelCenter, #panel.mk-islands #panelRight {
-  background-color: rgba(14, 16, 22, 0.74); border: 1px solid rgba(255, 255, 255, 0.12);
-  border-top-color: rgba(255, 255, 255, 0.22); border-radius: 12px; margin: 3px 8px; padding: 0 4px; }
+  background-color: rgba(14, 16, 22, 0.42); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.26); border-bottom-color: rgba(0, 0, 0, 0.25);
+  border-radius: 14px; margin: 3px 8px; padding: 0 4px;
+  box-shadow: 0 4px 14px 0 rgba(0, 0, 0, 0.28); }
 #panel.mk-edge { background-color: rgba(14, 16, 22, 0.74); border-bottom: 1px solid rgba(255, 255, 255, 0.10); }
-#panel.mk-islands .panel-button { border-radius: 9px; }
+#panel.mk-islands .panel-button { border-radius: 10px; transition-duration: 180ms; }
+#panel.mk-islands .panel-button:hover { background-color: rgba(255, 255, 255, 0.10); }
+#panel.mk-islands .panel-button:active, #panel.mk-islands .panel-button:checked { background-color: rgba(99, 102, 241, 0.30); }
 .mk-active-app-box { spacing: 7px; }
 .mk-active-app-name { font-weight: 700; }
 .mk-clock { font-weight: 600; font-feature-settings: "tnum"; }

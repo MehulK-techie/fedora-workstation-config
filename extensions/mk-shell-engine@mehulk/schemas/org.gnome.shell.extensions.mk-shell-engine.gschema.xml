@@ -23,10 +23,22 @@
       <description>The icons' size at rest; they grow under the pointer (dock-hover-scale).</description>
     </key>
     <key name="dock-hover-scale" type="d">
-      <range min="1.10" max="1.30"/>
-      <default>1.18</default>
+      <range min="1.00" max="1.50"/>
+      <default>1.32</default>
       <summary>Dock magnification</summary>
-      <description>How much the icon under the pointer grows; its neighbours grow a little under half as much.</description>
+      <description>How much the icon right under the pointer grows (and it lifts 10 px); icons within 130 px grow on a smooth bell, and slide apart to make room. 1.00: none.</description>
+    </key>
+    <key name="dock-hide-ms" type="i">
+      <range min="60" max="1500"/>
+      <default>480</default>
+      <summary>Dock: fade-away time (ms)</summary>
+      <description>How long the dock takes to fade away when a window covers it. 140 for a snappy dock.</description>
+    </key>
+    <key name="dock-reveal-ms" type="i">
+      <range min="60" max="1500"/>
+      <default>360</default>
+      <summary>Dock: come-back time (ms)</summary>
+      <description>How long it takes to come back. 130 for a snappy dock.</description>
     </key>
     <key name="blur" type="b">
       <default>true</default>

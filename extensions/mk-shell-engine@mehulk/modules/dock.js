@@ -23,25 +23,30 @@ import { DOCK_GLASS, addWallpaperGlass, blurAllowed } from './blur.js';
 import { accentRGB } from './colour.js';
 
 const MARGIN = 4;              // the dock's gap above the screen's bottom edge
-const HIDE = 480, REVEAL = 360;          // fading away and back, ms: slow and soft, never a jump
+// fading away and back: dock-hide-ms / dock-reveal-ms (480 / 360 by default: slow and soft, never a jump)
 const SINK = 14;               // how far it sinks while it fades (px): a fade with a hint of movement
 const OVERVIEW_OUT = 260, OVERVIEW_IN = 360;
-const EDGE_DELAY = 150;        // the pointer rests on the bottom edge this long before the dock comes back
+const EDGE_DELAY = 70;         // the pointer rests on the bottom edge this long before the dock comes back
 const FOCUSED = 'rgb(99, 102, 241)';     // electric indigo: the app you're using
 
 // The parabola: HOVER at the pointer, falling to 1 a little over one icon
 // away; the neighbour one icon away lands on HOVER minus 56 % of the growth
 // (1.18 -> 1.08, as the default).
-const NEIGHBOUR_SHARE = 0.08 / 0.18;
-const SPREAD = 1 / Math.sqrt(1 - NEIGHBOUR_SHARE);
-const grow = (distance, hover) => 1 + (hover - 1) * Math.max(0, 1 - (distance / SPREAD) ** 2);
+// Magnification, as on a Mac: a smooth bell (a raised cosine) 130 px wide on
+// each side of the pointer. Each icon grows by the bell's height where it
+// stands, lifts by up to 10 px, and its neighbours make room by sliding
+// apart, so the icons swell like a wave and never overlap. It follows the
+// pointer on every motion event and eases back when the pointer leaves.
+const RADIUS = 130, LIFT = 10;
+const bell = d => d >= RADIUS ? 0 : (1 + Math.cos(Math.PI * d / RADIUS)) / 2;
 
 export class Dock {
     constructor(settings) {
         this._settings = settings;
         this._actor = null;
         this._unwatch = watch(() => this._sync());
-        this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::blur'].map(
+        this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::dock-hide-ms',
+            'changed::dock-reveal-ms', 'changed::blur'].map(
             signal => settings.connect(signal, () => this._sync(true)));
         this._sync();
     }
@@ -75,6 +80,8 @@ export class Dock {
     _build() {
         this._size = this._settings.get_int('dock-icon-size');
         this._hover = this._settings.get_double('dock-hover-scale');
+        this._hideMs = this._settings.get_int('dock-hide-ms');
+        this._revealMs = this._settings.get_int('dock-reveal-ms');
         this._ids = [];
         this._appIds = [];
         this._hidden = false;
@@ -244,7 +251,7 @@ export class Dock {
             can_focus: true, button_mask: (St.ButtonMask.PRIMARY ?? St.ButtonMask.ONE), accessible_name: name});
         button.connect('notify::hover', () => this._tooltip(button.hover ? item : null));
         this._actor.add_child(button);
-        const item = {button, icon, bars, name};
+        const item = {button, box, icon, bars, name};
         this._items.push(item);
         return item;
     }
@@ -373,21 +380,46 @@ export class Dock {
     // ----- growing under the pointer -----
 
     _magnify(pointerX) {
-        const step = this._size + 8;         // an icon and its padding
-        for (const item of this._items ?? []) {
-            const [x] = item.button.get_transformed_position();
-            const centre = x + item.button.width / 2;
-            const s = grow(Math.abs(pointerX - centre) / step, this._hover);
-            item.icon.remove_transition('scale-x');
-            item.icon.remove_transition('scale-y');
-            item.icon.set_scale(s, s);
+        const items = this._items ?? [];
+        // where each icon stands at rest (its button's place in the dock, which the wave never moves,
+        // so the pointer always meets the same icon at the same spot)
+        const [dockX] = this._actor.get_transformed_position();
+        const heights = items.map(it => bell(Math.abs(pointerX - (dockX + it.button.x + it.button.width / 2))));
+        const extra = heights.map(g => (this._hover - 1) * g * this._size);
+        const total = extra.reduce((a, b) => a + b, 0);
+        // room for the growth: everything left of the wave moves left, everything right of it moves
+        // right (the dividers too, in their place in the row)
+        let before = 0;
+        const byButton = new Map(items.map((it, i) => [it.button, i]));
+        for (const child of this._actor.get_children()) {
+            const i = byButton.get(child);
+            if (i === undefined) {                            // a divider
+                child.remove_transition('translation-x');
+                child.translation_x = Math.round(before - total / 2);
+                continue;
+            }
+            const it = items[i], g = heights[i], s = 1 + (this._hover - 1) * g;
+            for (const p of ['scale-x', 'scale-y', 'translation-y'])
+                it.icon.remove_transition(p);
+            it.box.remove_transition('translation-x');
+            it.icon.set_scale(s, s);
+            it.icon.translation_y = -LIFT * g;
+            it.box.translation_x = Math.round(before + extra[i] / 2 - total / 2);
+            before += extra[i];
         }
         return Clutter.EVENT_PROPAGATE;
     }
 
     _settle() {
-        for (const item of this._items ?? [])
-            item.icon.ease({scale_x: 1, scale_y: 1, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        const ease = {duration: 150, mode: Clutter.AnimationMode.EASE_OUT_CUBIC};
+        for (const item of this._items ?? []) {
+            item.icon.ease({scale_x: 1, scale_y: 1, translation_y: 0, ...ease});
+            item.box.ease({translation_x: 0, ...ease});
+        }
+        for (const child of this._actor?.get_children() ?? []) {
+            if (child.has_style_class_name?.('mk-dock-separator'))
+                child.ease({translation_x: 0, ...ease});
+        }
         this._tooltip(null);
     }
 
@@ -405,7 +437,7 @@ export class Dock {
         const [x, y] = item.button.get_transformed_position();
         const [tw] = this._tip.get_preferred_width(-1);
         this._tip.set_position(Math.round(x + item.button.width / 2 - tw / 2),
-            Math.round(y - this._size * (this._hover - 1) - 36));
+            Math.round(y - this._size * (this._hover - 1) - LIFT - 36));
     }
 
     // ----- where it sits, and stepping out of the way -----
@@ -490,7 +522,7 @@ export class Dock {
         this._edge.visible = hide && !this._fullscreen() && !this._inOverview;
         // (ease() retargets a slide already under way from where it is, so a quick hide-then-show never jumps)
         this._actor.ease({translation_y: hide ? this._hiddenY() : 0, opacity: hide ? 0 : 255,
-            duration: hide ? HIDE : REVEAL,
+            duration: hide ? this._hideMs : this._revealMs,
             mode: hide ? Clutter.AnimationMode.EASE_IN_OUT_QUAD : Clutter.AnimationMode.EASE_OUT_CUBIC});
         this._actor.reactive = !hide;
     }

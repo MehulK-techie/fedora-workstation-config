@@ -108,7 +108,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - **Shortcuts window (Super+/):** every shortcut and gesture, live, each marked working, clashing, unset or broken; click to change keys, + to add your own commands, Reset to go back
 - **MK Notes (Super+N):** notes on A4 pages that grow as you write (Page X of Y), real tables (resize columns, add rows with Tab, move them), rich text, comments in the margin, sticky notes with colours and layer order, pictures with Word-style rotation and resizing, shapes and graphs, drawing, PDFs attached or laid out as printouts, notebooks, links and a mind map, PDF and Word export, locks with auto-lock, and encrypted phone sync. Saved as Markdown files. See [docs/NOTES.md](docs/NOTES.md)
 - **A private lock screen:** only the clock and your scene; no notifications, media player or screenshots while locked
-- **MK Control Center and tour:** quick actions, every `mk` command as a card, MK Lock, face and fingerprint enrollment in windows, the security check; a six-slide tour (Super+Shift+/)
+- **MK Control Center and tour:** quick actions, every `mk` command as a card, MK Lock, face and fingerprint enrollment in windows, the security check; a six-slide tour (from the Control Center)
 - **Companion (Super+Shift+N):** notes you can pin, reorder and fold away; a task list you tick off and pin; one click to MK Notes or the focus timer
 - **Reminders:** on any note or task, in 10 min, at 18:00, or every day; they fire even with the Companion closed, with Open and Snooze
 - **Capture from the terminal:** `mk note "idea"`, `mk task "pay rent" 18:00`, `mk remind "stretch" 45m`, `mk list`
@@ -125,7 +125,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - **MK Control Center:** quick actions, every `mk` command as a card, MK Lock and the security check in one window
 - **App Nap:** when memory runs short, apps you left minimized for a while are paused and wake the moment you switch back
 - **Accounts:** `mk users add NAME` for a second person (their own settings and face), `mk guest on` for a Guest login that starts empty every time
-- **Tour:** `mk tour` or Super+Shift+/ walks through the desktop, with a button to try each thing
+- **Tour:** `mk tour` (or the Control Center) walks through the desktop, with a button to try each thing
 - **A different greeting each time:** morning, Friday, your birthday, long time no see, or your own lines
 - **Make it yours:** rename it (`mk rename`), change any shortcut, app, extension or colour without touching code; see [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md). Hackers: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/REFERENCE.md](docs/REFERENCE.md)
 - OCR text-from-screen and webcam controls

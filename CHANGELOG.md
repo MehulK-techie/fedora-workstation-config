@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Shortcuts:** the tour has no hotkey any more (it was Super+Shift+/, the same key as the Shortcuts window's Super+/, one Shift apart); it's in the Control Center and the app grid, and still opens once after setup.
 - **Snap layouts (Super+Z)** are MK's own now (mk-indicator `snapLayouts.js`), replacing Tiling Assistant's picker: a frosted card that's up in 90 ms with five layouts (50 / 50 Split, 3-Column Studio, Center Stage, 2 x 2 Grid, 70 / 30 Duo). Hovering or arrowing onto one outlines its parts on the desktop; 1-5, Enter or a click tiles the focused window into the main part and your other windows into the rest, each gliding there in 140 ms. **Super+Shift+Z** gathers an editor, a terminal and a localhost browser onto a fresh desktop, side by side. Both keys are in the Shortcuts window.
 - **Media tile:** no more ghost song after Spotify quits. playerctl's daemon (playerctld) re-publishes the last active player under its own MPRIS name, and the tile counted it as a second player; answers from an earlier look could also arrive after a newer one and put a closed player's song back. playerctld is ignored now, late answers are dropped, and the tile looks again 0.6 s after any player quits.
 - **Task badge:** "📋 3 Left · ⏰ 2" when some tasks are for today (the dot is gone). **Clipboard:** the history switch is now an explicit 👁 Hide pinned, on by default (`hide_pinned_in_stream` in view.json; the earlier setting carries over); pictures in Pinned are always 40 px rows.

@@ -42,7 +42,7 @@ Every command, file and format. How the parts fit together is in
 | `mk tasks badge on\|off` | The top-bar to-do pill ("📋 N Left"; hidden when nothing's left) |
 | `mk nap` | Apps App Nap has paused |
 | `mk keyring [open]` | Why apps ask for the keyring after fingerprint or face login, and the two fixes |
-| `mk tour` | The walkthrough (also Super+Shift+/) |
+| `mk tour` | The walkthrough (also in the Control Center) |
 | `mk security [fix NAME]` | Security check (pkexec runs `/usr/local/libexec/mk-security-scan`); fixes: selinux, firewall, updates, autoupdates, ssh, permissions (root) and sharing, lock (your account) |
 | `mk vault` | Open or close `~/.vault`, an encrypted hidden folder made the first time |
 | `mk lock password set\|remove app NAME \| folder PATH` | An item's own password (10+ characters), typed instead of the fingerprint |
@@ -77,7 +77,7 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `mk-users` | | `mk users`, `mk guest` |
 | `mk-speedtest` | | `mk speedtest` |
 | `mk-center` | | `mk center`: Control Center |
-| `mk-tour [--first-run]` | Super+Shift+/ | The walkthrough; `--first-run` shows it only once |
+| `mk-tour [--first-run]` | (Control Center, app grid) | The walkthrough; `--first-run` shows it only once |
 | `mk-doctor` | | Same as `mk doctor` |
 | `mk-apps missing \| capture` | | Used by `mk update` / `mk save` |
 | `mk-scratchpad` | | Old name; opens the Companion |

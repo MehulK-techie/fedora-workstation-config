@@ -71,5 +71,10 @@
       <summary>Hide the top bar</summary>
       <description>While a window has focus the top bar glides away; the top edge, an empty desktop or the overview bring it back. Windows get its space while this is on.</description>
     </key>
+    <key name="tray-collapsed" type="b">
+      <default>true</default>
+      <summary>Fold the tray icons</summary>
+      <description>Apps' tray icons sit behind the chevron at the start of the right island; a click shows them.</description>
+    </key>
   </schema>
 </schemalist>

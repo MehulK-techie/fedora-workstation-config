@@ -21,12 +21,14 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { PANEL_GLASS, addWallpaperGlass, blurAllowed } from './blur.js';
-import { partRect } from './tiling.js';
+import { partRect, place } from './tiling.js';
 import { watch } from './conflicts.js';
 
 const ISLAND_RADIUS = 12;            // (the islands' CSS corners; the glass is cut to match)
 
-// The focused app: icon, name, and a menu of what you can do with its window.
+// The focused app: icon (its own colours), name, and a menu of what you can do
+// with its window. With nothing focused it reads "Desktop · WS 2" instead of
+// vanishing; switching crossfades (150 ms).
 class ActiveApp {
     constructor() {
         this.button = new PanelMenu.Button(0.0, 'Active app', false);
@@ -38,27 +40,39 @@ class ActiveApp {
         this._box.add_child(this._label);
         this.button.add_child(this._box);
         this._tracker = Shell.WindowTracker.get_default();
-        this._focusId = this._tracker.connect('notify::focus-app', () => this._sync(true));
-        this._overviewIds = [Main.overview.connect('showing', () => this._sync(false)),
-            Main.overview.connect('hiding', () => this._sync(false))];
+        this._ids = [
+            [this._tracker, this._tracker.connect('notify::focus-app', () => this._sync(true))],
+            [global.workspace_manager, global.workspace_manager.connect('active-workspace-changed', () => this._sync(true))],
+            [Main.overview, Main.overview.connect('showing', () => this._sync(false))],
+            [Main.overview, Main.overview.connect('hidden', () => this._sync(false))],
+        ];
         this.button.menu.connect('open-state-changed', (_m, open) => open && this._fillMenu());
+        this._key = null;
         this._sync(false);
     }
 
     _sync(animate) {
-        const app = Main.overview.visible ? null : this._tracker.focus_app;
-        this.button.visible = !!app;
-        if (!app || app === this._app)
+        this.button.visible = !Main.overview.visible;
+        const app = this._tracker.focus_app;
+        const ws = global.workspace_manager.get_active_workspace_index() + 1;
+        const key = app ? `app:${app.get_id()}` : `desk:${ws}`;
+        if (key === this._key)
             return;
+        this._key = key;
         this._app = app;
-        const icon = app.create_icon_texture(18);
-        icon.style = '-st-icon-style: requested;';           // the app's real colours
+        let icon;
+        if (app) {
+            icon = app.create_icon_texture(18);
+            icon.style = '-st-icon-style: requested;';           // the app's real colours
+        } else {
+            icon = new St.Icon({icon_name: 'user-desktop-symbolic', icon_size: 16});
+        }
         this._iconBin.set_child(icon);
-        this._label.text = app.get_name();
+        this._label.text = app ? app.get_name() : `Desktop · WS ${ws}`;
         if (animate && St.Settings.get().enable_animations) {
             this._box.remove_all_transitions();
             this._box.opacity = 0;
-            this._box.translation_y = 6;
+            this._box.translation_y = 4;
             this._box.ease({opacity: 255, translation_y: 0, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         }
     }
@@ -71,21 +85,20 @@ class ActiveApp {
     _fillMenu() {
         const menu = this.button.menu, app = this._app;
         menu.removeAll();
-        if (!app)
+        if (!app) {
+            menu.addAction('Open Files', () => Gio.AppInfo.launch_default_for_uri(`file://${GLib.get_home_dir()}`, null));
+            menu.addAction('Show Apps', () => Main.overview.showApps());
             return;
+        }
         const win = this._window();
         menu.addAction('New Window', () => app.open_new_window(-1));
         if (win) {
-            const snap = part => {
-                const area = win.get_work_area_current_monitor();
-                const r = partRect(area, part);
-                if (win.is_maximized?.())
-                    win.unmaximize?.();
-                win.move_resize_frame(true, r.x, r.y, r.width, r.height);
-            };
-            menu.addAction('Snap Left', () => snap([0, 0, 0.5, 1]));
-            menu.addAction('Snap Right', () => snap([0.5, 0, 0.5, 1]));
-            const onTop = new PopupMenu.PopupSwitchMenuItem('Keep on Top', win.is_above());
+            const to = part => place(win, partRect(win.get_work_area_current_monitor(), part));
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            menu.addAction('Split Left', () => to([0, 0, 0.5, 1]));
+            menu.addAction('Split Right', () => to([0.5, 0, 0.5, 1]));
+            menu.addAction('Center Stage', () => to([0.1, 0.05, 0.8, 0.9]));
+            const onTop = new PopupMenu.PopupSwitchMenuItem('Pin on Top', win.is_above());
             onTop.connect('toggled', (_i, state) => state ? win.make_above() : win.unmake_above());
             menu.addMenuItem(onTop);
         }
@@ -94,9 +107,104 @@ class ActiveApp {
     }
 
     destroy() {
-        this._tracker.disconnect(this._focusId);
-        for (const id of this._overviewIds)
-            Main.overview.disconnect(id);
+        for (const [object, id] of this._ids)
+            object.disconnect(id);
+        this.button.destroy();
+    }
+}
+
+// Finder: your folders in one click (they open in Files).
+class Finder {
+    constructor() {
+        this.button = new PanelMenu.Button(0.0, 'Finder', false);
+        this.button.add_style_class_name('mk-finder');
+        this.button.add_child(new St.Label({text: 'Finder', style_class: 'mk-finder-label', y_align: Clutter.ActorAlign.CENTER}));
+        const home = GLib.get_home_dir();
+        const dir = d => GLib.get_user_special_dir(d);
+        const places = [
+            ['Home', 'user-home-symbolic', home],
+            ['Desktop', 'user-desktop-symbolic', dir(GLib.UserDirectory.DIRECTORY_DESKTOP)],
+            ['Downloads', 'folder-download-symbolic', dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD)],
+            ['Documents', 'folder-documents-symbolic', dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS)],
+            ['Pictures', 'folder-pictures-symbolic', dir(GLib.UserDirectory.DIRECTORY_PICTURES)],
+            ['Projects', 'folder-symbolic', GLib.build_filenamev([home, 'Projects'])],
+        ];
+        for (const [label, icon, path] of places) {
+            if (path && GLib.file_test(path, GLib.FileTest.IS_DIR))
+                this.button.menu.addAction(label, () => open(`file://${path}`), icon);
+        }
+        this.button.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        this.button.menu.addAction('Recent', () => open('recent:///'), 'document-open-recent-symbolic');
+        this.button.menu.addAction('Trash', () => open('trash:///'), 'user-trash-symbolic');
+        function open(uri) {
+            try {
+                Gio.AppInfo.launch_default_for_uri(uri, global.create_app_launch_context(0, -1));
+            } catch (e) {
+                Main.notify('Finder', e.message);
+            }
+        }
+    }
+
+    destroy() {
+        this.button.destroy();
+    }
+}
+
+// The right island's chevron: tray icons that apps leave there (the
+// AppIndicator ones) fold away behind it, like Bartender; a click shows them.
+class TrayFold {
+    constructor(settings) {
+        this._settings = settings;
+        this._icon = new St.Icon({icon_name: 'pan-start-symbolic', icon_size: 14});
+        this.button = new St.Button({style_class: 'panel-button mk-tray-fold', can_focus: true, accessible_name: 'Tray icons'});
+        this.button.set_child(this._icon);
+        this.button.connect('destroy', () => (this._gone = true));     // (GNOME Shell quitting takes the bar down first)
+        this.button.connect('clicked', () => {
+            this._settings.set_boolean('tray-collapsed', !this._settings.get_boolean('tray-collapsed'));
+        });
+        Main.panel._rightBox.insert_child_at_index(this.button, 0);
+        this._ids = [
+            [settings, settings.connect('changed::tray-collapsed', () => this._sync())],
+            [Main.panel._rightBox, Main.panel._rightBox.connect('child-added', () => this._queue())],
+            [Main.panel._rightBox, Main.panel._rightBox.connect('child-removed', () => this._queue())],
+        ];
+        this._sync();
+    }
+
+    _tray() {
+        return Object.entries(Main.panel.statusArea)
+            .filter(([role, item]) => item && /^appindicator-|ayatana|statusnotifier|tray/i.test(role))
+            .map(([, item]) => item.container ?? item);
+    }
+
+    _queue() {
+        if (this._idle)
+            return;
+        this._idle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._idle = 0;
+            this._sync();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _sync() {
+        if (this._gone)
+            return;
+        const tray = this._tray(), folded = this._settings.get_boolean('tray-collapsed');
+        this.button.visible = tray.length > 0;
+        this._icon.icon_name = folded ? 'pan-start-symbolic' : 'pan-end-symbolic';
+        for (const actor of tray)
+            actor.visible = !folded;
+    }
+
+    destroy() {
+        this._gone = true;
+        if (this._idle)
+            GLib.source_remove(this._idle);
+        for (const [object, id] of this._ids)
+            object.disconnect(id);
+        for (const actor of this._tray())
+            actor.visible = true;
         this.button.destroy();
     }
 }
@@ -258,6 +366,18 @@ export class Panel {
                 console.error(`mk-shell-engine: active app: ${e.message}`);
             }
         }
+        try {
+            this._finder = new Finder();
+            panel.addToStatusArea('mk-finder', this._finder.button, 0, 'left');
+        } catch (e) {
+            console.error(`mk-shell-engine: finder: ${e.message}`);
+        }
+        try {
+            this._tray = new TrayFold(this._settings);
+        } catch (e) {
+            console.error(`mk-shell-engine: tray fold: ${e.message}`);
+        }
+        this._orderLeft();
         if (this._settings.get_boolean('autohide-top-bar')) {
             try {
                 this._autohide = new AutoHide();
@@ -272,7 +392,40 @@ export class Panel {
         }
     }
 
+    // The left island, flush to the corner: the MK emblem, Finder, Places, the
+    // workspace dots, a divider, the app you're in (Fitts's law: the most used
+    // things at the screen's edge, where the pointer stops by itself).
+    _orderLeft() {
+        const left = Main.panel._leftBox, area = Main.panel.statusArea;
+        const mk = Main.extensionManager.lookup('mk-indicator@mehulk')?.stateObj?._indicator;
+        if (mk && mk.get_parent() && mk.get_parent() !== left) {
+            this._mkHome = [mk.get_parent(), mk.get_parent().get_children().indexOf(mk)];
+            mk.get_parent().remove_child(mk);
+            left.insert_child_at_index(mk, 0);
+            this._mk = mk;
+        }
+        this._divider ??= new St.Widget({style_class: 'mk-island-divider', y_align: Clutter.ActorAlign.CENTER});
+        if (!this._divider.get_parent())
+            left.add_child(this._divider);
+        const order = [this._mk ?? (mk?.get_parent() === left ? mk : null), area['mk-finder']?.container,
+            area['places-menu']?.container, area.activities?.container, this._divider, area['mk-active-app']?.container]
+            .filter(a => a && a.get_parent() === left);
+        order.forEach((actor, i) => left.set_child_at_index(actor, i));
+        this._divider.visible = !!area['mk-active-app'];
+    }
+
     _teardown() {
+        if (this._mk && this._mkHome && this._mk.get_parent()) {         // the MK emblem goes back where it was
+            const [home, index] = this._mkHome;
+            this._mk.get_parent().remove_child(this._mk);
+            home.insert_child_at_index(this._mk, Math.min(index, home.get_n_children()));
+        }
+        this._mk = this._mkHome = null;
+        this._divider?.destroy();
+        this._divider = null;
+        this._finder?.destroy();
+        this._tray?.destroy();
+        this._finder = this._tray = null;
         Main.panel.remove_style_class_name('mk-islands');
         Main.panel.remove_style_class_name('mk-edge');
         for (const off of this._unblur ?? [])

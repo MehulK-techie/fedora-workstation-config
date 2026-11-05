@@ -72,3 +72,9 @@
 .mk-bento .quick-slider { background-color: rgba(255, 255, 255, 0.06); border-radius: 16px; padding: 4px 6px; }
 .mk-bento .slider { -barlevel-height: 8px; -slider-handle-radius: 0.65em;
   -barlevel-background-color: rgba(255, 255, 255, 0.14); }
+
+/* Left island: Finder, the divider before the app (panel.js); the tray chevron */
+.mk-finder-label { font-weight: 700; }
+.mk-island-divider { width: 1px; height: 16px; margin: 0 2px; background-color: rgba(255, 255, 255, 0.22); }
+.mk-tray-fold { padding: 0 6px; }
+#panel.mk-islands #panelLeft { margin-left: 6px; spacing: 10px; }   /* (after the islands' own margin, so it wins) */

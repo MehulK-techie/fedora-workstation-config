@@ -5,8 +5,8 @@
 //
 // config/monitor.conf, yours in ~/.config/mk-workstation/monitor.conf:
 //   PANEL=cpu,temp     what the top bar shows: cpu, mem, temp, net, power
-//   COMPACT=yes        one health dot (green, amber, crimson) instead; on hover it
-//                      opens into "40°C · 5%"
+//   COMPACT=pulse      MK Pulse: a small pill, "12% · 46°C", tinted green, amber
+//                      or crimson (yes: just the dot, opening on hover; no: PANEL)
 //   INTERVAL=2         seconds between readings
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
@@ -39,7 +39,7 @@ const readInt = path => {
 };
 
 function conf() {
-    const out = {PANEL: 'cpu,temp', INTERVAL: '2', COMPACT: 'yes'};
+    const out = {PANEL: 'cpu,temp', INTERVAL: '2', COMPACT: 'pulse'};
     for (const path of [DEFAULT_CONF, USER_CONF]) {
         for (const line of (read(path) || '').split('\n')) {
             const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/);
@@ -153,6 +153,16 @@ class Sampler {
         if (this.cpuHistory.length > HISTORY)
             this.cpuHistory.shift();
         s.cores = (stat.match(/^cpu\d+/gm) || []).length;
+        // each core's own load, for the menu's bars
+        const cores = [...stat.matchAll(/^cpu(\d+)\s+(.*)$/gm)].map(m => {
+            const f = m[2].trim().split(/\s+/).map(Number);
+            return [f.reduce((a, b) => a + b, 0), f[3] + (f[4] || 0)];
+        });
+        s.coreLoad = cores.map(([t, i], k) => {
+            const before = this._coresLast?.[k];
+            return before && t > before[0] ? Math.max(0, Math.min(100, 100 * (1 - (i - before[1]) / (t - before[0])))) : 0;
+        });
+        this._coresLast = cores;
         const freqs = [];
         for (let i = 0; i < s.cores; i++) {
             const f = readInt(`/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_cur_freq`);
@@ -237,7 +247,7 @@ class Sampler {
             seen.set(pid, ticks);
             const before = this._procLast.get(pid);
             if (before !== undefined && dTotal > 0)
-                out.push({name, cpu: 100 * (ticks - before) / dTotal * (this._cores || 1)});
+                out.push({name, pid: +pid, cpu: 100 * (ticks - before) / dTotal * (this._cores || 1)});
         }
         this._procLast = seen;
         this._procTotal = total;
@@ -272,6 +282,28 @@ function paintSpark(area, data, max) {
         cr.stroke();
     }
     cr.$dispose();
+}
+
+// Can the menu's stop button be offered for this process? Only your own
+// programs: never another user's or the kernel's (kswapd0 and friends have
+// no program file), and never what the desktop itself runs on (stopping
+// gnome-shell would end the session).
+const ESSENTIAL = /^(gnome-shell|gnome-session.*|gdm.*|Xwayland|mutter.*|pipewire.*|wireplumber|systemd.*|dbus.*|at-spi.*|gsd-.*|xdg-.*|ibus.*|polkit.*|gvfs.*|evolution-.*|tracker.*|localsearch.*)$/;
+const myUid = (read('/proc/self/status') || '').match(/^Uid:\s+(\d+)/m)?.[1];
+
+function stoppable(pid, name) {
+    if (!pid || ESSENTIAL.test(name))
+        return false;
+    const uid = (read(`/proc/${pid}/status`) || '').match(/^Uid:\s+(\d+)/m)?.[1];
+    if (!uid || uid !== myUid)
+        return false;
+    try {
+        return GLib.file_test(`/proc/${pid}/exe`, GLib.FileTest.EXISTS) &&
+            Gio.File.new_for_path(`/proc/${pid}/exe`).query_info('standard::symlink-target',
+                Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null).get_symlink_target() !== null;
+    } catch {
+        return false;                // a kernel thread, or not ours to look at
+    }
 }
 
 class Row {
@@ -363,6 +395,7 @@ export class SystemMonitor {
         menu.box.add_style_class_name('mk-monitor-menu');
         this._rows = {
             cpu: new Row(menu, 'Processor', true, 100),
+            cores: new Row(menu, 'Each core'),
             mem: new Row(menu, 'Memory', true, 100),
             swap: new Row(menu, 'Swap', true),
             gpu: new Row(menu, 'Graphics', true),
@@ -375,6 +408,29 @@ export class SystemMonitor {
         this._internet = new InternetSection(menu);
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Busiest right now'));
         this._procRows = [0, 1, 2].map(() => new Row(menu, ''));
+        // a stop button on each: asks the app to quit (SIGTERM, as closing it would), never force
+        for (const row of this._procRows) {
+            row.stop = new St.Button({style_class: 'mk-monitor-stop', can_focus: true, y_align: Clutter.ActorAlign.CENTER,
+                child: new St.Icon({icon_name: 'process-stop-symbolic', icon_size: 14}), accessible_name: 'Stop'});
+            row.stop.connect('clicked', () => row.pid && this._stop(row.pid, row.label.text));
+            row.value.get_parent().add_child(row.stop);
+        }
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Power mode'));
+        this._powerItem = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        const modes = new St.BoxLayout({style_class: 'mk-monitor-modes', x_expand: true});
+        this._modeButtons = [['power-saver', 'Saver', 'power-profile-power-saver-symbolic'],
+            ['balanced', 'Balanced', 'power-profile-balanced-symbolic'],
+            ['performance', 'Performance', 'power-profile-performance-symbolic']].map(([id, label, icon]) => {
+            const inner = new St.BoxLayout({style: 'spacing: 6px;', x_align: Clutter.ActorAlign.CENTER});
+            inner.add_child(new St.Icon({icon_name: icon, icon_size: 14}));
+            inner.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
+            const b = new St.Button({child: inner, style_class: 'mk-monitor-mode', toggle_mode: true, x_expand: true, can_focus: true});
+            b.connect('clicked', () => this._setPower(id));
+            modes.add_child(b);
+            return [id, b];
+        });
+        this._powerItem.add_child(modes);
+        menu.addMenuItem(this._powerItem);
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         // Free cached memory: no password (mk-drop-caches' polkit action);
         // the item shows how much came back for a few seconds. Power modes
@@ -466,8 +522,10 @@ export class SystemMonitor {
         const worst = Math.max(level(s.cpu), s.cpuTemp ? heat(s.cpuTemp) : 0);
         const colour = ['#10b981', '#f59e0b', '#ef4444'][worst];
         this._loadDot.style = `background-color: ${colour}; box-shadow: 0 0 6px 1px ${colour}88;`;
-        this._readout.text = [s.cpuTemp ? `${Math.round(s.cpuTemp)}°C` : null, `${Math.round(s.cpu)}%`]
+        this._readout.text = [`${Math.round(s.cpu)}%`, s.cpuTemp ? `${Math.round(s.cpuTemp)}°C` : null]
             .filter(Boolean).join(' · ');
+        // MK Pulse: the pill takes the health colour, faintly
+        this._dots.style = this._conf.COMPACT === 'pulse' ? `background-color: ${colour}2e; border: 1px solid ${colour}66;` : '';
         this._syncCompact();
         this._spark.queue_repaint();
         this._internet?.feed(s.down, s.up);
@@ -485,14 +543,16 @@ export class SystemMonitor {
         this._spark.visible = !compact && this._conf.PANEL.includes('cpu');
         if (!compact)
             return;
-        const open = this._button.hover || this._button.menu.isOpen;
+        const open = this._conf.COMPACT === 'pulse' || this._button.hover || this._button.menu.isOpen;
+        this._dots.style_class = this._conf.COMPACT === 'pulse' ? 'mk-monitor-dots mk-pulse' : 'mk-monitor-dots';
+        // (measured from the text itself: once a width is set, the label reports that width as its own)
+        const natural = Math.ceil(this._readout.clutter_text.get_preferred_width(-1)[1]);
         if (open === this._readoutOpen) {
-            if (open)
-                this._readout.width = this._readout.get_preferred_width(-1)[1];    // the numbers changed width
+            if (open && !this._readout.get_transition('width'))
+                this._readout.width = natural;    // the numbers changed width
             return;
         }
         this._readoutOpen = open;
-        const [, natural] = this._readout.get_preferred_width(-1);
         this._readout.remove_all_transitions();
         // the pill opens out to the readout and folds back to the dot (140 ms, ease-out cubic)
         this._readout.ease({width: open ? natural : 0, opacity: open ? 255 : 0, duration: 140,
@@ -533,9 +593,72 @@ export class SystemMonitor {
         const top = s.top || [];
         this._procRows.forEach((row, i) => {
             row.hide(!top[i]);
+            row.pid = top[i] && stoppable(top[i].pid, top[i].name) ? top[i].pid : 0;
+            row.stop.visible = row.pid > 0;
             if (top[i])
                 row.set(`${top[i].cpu.toFixed(0)}%`, null, top[i].name);
         });
+        // one small bar per core, in the order the hardware numbers them
+        const loads = s.coreLoad ?? [];
+        r.cores.hide(!loads.length);
+        r.cores.value.text = loads.length ? `${Math.round(Math.max(...loads))}% busiest` : '';
+        r.cores.bars ??= (() => {
+            const area = new St.DrawingArea({height: 22, x_expand: true, style: 'margin-top: 4px;'});
+            area.connect('repaint', a => {
+                const cr = a.get_context(), [w, h] = a.get_surface_size(), n = this._coreLoads?.length || 1;
+                const bw = Math.max(2, w / n - 2);
+                (this._coreLoads ?? []).forEach((v, k) => {
+                    const bh = Math.max(1.5, (h - 1) * v / 100);
+                    const [cr0, cg, cb] = v > 75 ? [0.94, 0.27, 0.27] : v >= 40 ? [0.96, 0.62, 0.04] : [0.06, 0.73, 0.51];
+                    cr.setSourceRGBA(cr0, cg, cb, 0.9);
+                    cr.rectangle(k * (w / n) + 1, h - bh, bw, bh);
+                    cr.fill();
+                });
+                cr.$dispose();
+            });
+            r.cores.label.get_parent().get_parent().add_child(area);
+            return area;
+        })();
+        this._coreLoads = loads;
+        if (r.cores.bars.width > 0 && r.cores.bars.is_mapped())
+            r.cores.bars.queue_repaint();
+        this._syncPower();
+    }
+
+    _stop(pid, name) {
+        if (!stoppable(pid, name))
+            return;
+        try {
+            Gio.Subprocess.new(['kill', '-TERM', `${pid}`], Gio.SubprocessFlags.STDERR_SILENCE).wait_async(null, null);
+            Main.notify('System monitor', `Asked ${name} to quit`);
+        } catch (e) {
+            console.warn(`mk-indicator: stop ${pid}: ${e.message}`);
+        }
+    }
+
+    // Power mode, from power-profiles-daemon (or tuned-ppd) over D-Bus, read and set without blocking
+    _powerCall(method, args, cb) {
+        Gio.DBus.system.call('org.freedesktop.UPower.PowerProfiles', '/org/freedesktop/UPower/PowerProfiles',
+            'org.freedesktop.DBus.Properties', method, args, null, Gio.DBusCallFlags.NONE, 2000, null, (c, res) => {
+                try {
+                    cb?.(c.call_finish(res));
+                } catch (e) {
+                    this._powerItem.visible = false;          // no power-profiles service: no row
+                }
+            });
+    }
+
+    _syncPower() {
+        this._powerCall('Get', new GLib.Variant('(ss)', ['org.freedesktop.UPower.PowerProfiles', 'ActiveProfile']), r => {
+            const now = r.deep_unpack()[0].deep_unpack();
+            for (const [id, b] of this._modeButtons)
+                b.checked = id === now;
+        });
+    }
+
+    _setPower(id) {
+        this._powerCall('Set', new GLib.Variant('(ssv)', ['org.freedesktop.UPower.PowerProfiles', 'ActiveProfile',
+            new GLib.Variant('s', id)]), () => this._syncPower());
     }
 
     _freeMemory() {

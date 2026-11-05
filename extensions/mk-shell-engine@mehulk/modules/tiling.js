@@ -95,7 +95,7 @@ const SETTLE = 45;           // ms for an app to answer "you're not maximized an
 // app confirms un-maximizing after a frame or two, and that confirmation used
 // to put back its old size over a move made at once (Super+Z then only worked
 // the second time). It's checked once more after, in case the app was slow.
-function place(win, rect) {
+export function place(win, rect) {
     if (!held(win)) {
         moveTo(win, rect);
         return;

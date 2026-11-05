@@ -799,7 +799,10 @@ ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel blur
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel static-blur true
 # Fractional scaling (e.g. 125%) without blur: native framebuffer scaling, and
 # X11 apps (Steam, many games) rendered at native size instead of upscaled.
-gsettings_append org.gnome.mutter experimental-features scale-monitor-framebuffer xwayland-native-scaling
+# (GNOME 51 has both built in and no longer has the experimental-features key.)
+if gsettings list-keys org.gnome.mutter | grep -qx experimental-features; then
+    gsettings_append org.gnome.mutter experimental-features scale-monitor-framebuffer xwayland-native-scaling
+fi
 
 # Saved extension preferences (config/extension-settings/, written by `mk export`).
 # Loaded after the defaults above, so your own tuned values win.

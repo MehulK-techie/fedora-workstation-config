@@ -1011,22 +1011,25 @@ class NightWatch(Scene):
         roof_y = h * 0.42 + 120 * sc
         bx, by = w * 0.60 + (w - w * 0.60) * 0.42, roof_y - 34 * sc
         ang = -math.pi / 2 - 0.25 + 0.30 * math.sin(t * 0.18)
-        tip_x, tip_y = bx + math.cos(ang) * h * 1.1, by + math.sin(ang) * h * 1.1
+        # the beam ends where it meets the clouds (it used to run off the top of
+        # the screen, and the signal with it): at the cloud layer, on screen
+        cloud_y = h * 0.15
+        reach = (by - cloud_y) / max(0.2, -math.sin(ang))
+        tip_x, tip_y = bx + math.cos(ang) * reach, by + math.sin(ang) * reach
         beam = cairo.LinearGradient(bx, by, tip_x, tip_y)
         beam.add_color_stop_rgba(0, 1, 0.95, 0.75, 0.22)
         beam.add_color_stop_rgba(1, 1, 0.95, 0.75, 0.02)
         cr.set_source(beam)
         spread = 0.06
         cr.move_to(bx - 8, by)
-        cr.line_to(bx + math.cos(ang - spread) * h * 1.1, by + math.sin(ang - spread) * h * 1.1)
-        cr.line_to(bx + math.cos(ang + spread) * h * 1.1, by + math.sin(ang + spread) * h * 1.1)
+        cr.line_to(bx + math.cos(ang - spread) * reach, by + math.sin(ang - spread) * reach)
+        cr.line_to(bx + math.cos(ang + spread) * reach, by + math.sin(ang + spread) * reach)
         cr.line_to(bx + 8, by)
         cr.close_path()
         cr.fill()
         projector(cr, bx, by, sc, ang)
-        # Where the beam meets the clouds: a glowing oval with the MK monogram.
-        sx, sy = tip_x, tip_y + h * 0.28
-        signal(cr, sx, sy, min(w, h) * 0.11, ang)
+        # Where the beam meets the clouds: the MK bat-signal, a bright oval with the bat in it.
+        signal(cr, tip_x, tip_y, min(w, h) * 0.085, ang)
         # bats now and then
         if not self.bats or (len(self.bats) < 4 and random.random() < dt * 0.15):
             self.bats.append([-0.05, random.uniform(0.1, 0.45), random.uniform(0.06, 0.12), random.uniform(0, 6)])
@@ -1261,32 +1264,63 @@ def projector(cr, x, y, s, angle):
     cr.restore()
 
 
+# The bat, right half, x from the centre line (0) to the wing tip (1), y down;
+# mirrored for the left half. Ears, a scalloped wing edge and a pointed tail.
+BAT_RIGHT = [(0.0, -0.17), (0.055, -0.34), (0.09, -0.16), (0.2, -0.2), (0.42, -0.4), (0.78, -0.33),
+             (1.0, -0.06), (0.83, -0.08), (0.74, 0.1), (0.56, 0.03), (0.47, 0.22), (0.31, 0.1),
+             (0.16, 0.3), (0.0, 0.44)]
+
+
+def bat_path(cr, size):
+    """A bat silhouette SIZE wide (centred on 0, 0) as the current path."""
+    k = size / 2
+    pts = [(x * k, y * k) for x, y in BAT_RIGHT] + [(-x * k, y * k) for x, y in reversed(BAT_RIGHT[:-1])]
+    cr.move_to(*pts[0])
+    for p in pts[1:]:
+        cr.line_to(*p)
+    cr.close_path()
+
+
 def signal(cr, x, y, r, angle):
-    """A searchlight's oval on the clouds, with an MK monogram in it."""
+    """The searchlight's oval on the clouds, as the MK bat-signal: a warm glow
+    (bright enough to read through the rain), the bat cut out of the light in
+    it, and a small MK monogram under the bat."""
+    lean = (angle + math.pi / 2) * 0.35       # the oval leans with the beam
     cr.save()
     cr.translate(x, y)
-    cr.rotate((angle + math.pi / 2) * 0.35)  # the oval leans with the beam
+    cr.rotate(lean)
     cr.scale(1.45, 1)
-    glow = cairo.RadialGradient(0, 0, r * 0.2, 0, 0, r * 1.6)
-    glow.add_color_stop_rgba(0, 1, 0.95, 0.75, 0.42)
-    glow.add_color_stop_rgba(0.55, 1, 0.95, 0.75, 0.22)
-    glow.add_color_stop_rgba(1, 1, 0.95, 0.75, 0)
+    glow = cairo.RadialGradient(0, 0, r * 0.3, 0, 0, r * 2.2)   # the haze round it
+    glow.add_color_stop_rgba(0, 1, 0.94, 0.54, 0.55)
+    glow.add_color_stop_rgba(0.45, 1, 0.94, 0.54, 0.22)
+    glow.add_color_stop_rgba(1, 1, 0.94, 0.54, 0)
     cr.set_source(glow)
-    cr.arc(0, 0, r * 1.6, 0, 2 * math.pi)
+    cr.arc(0, 0, r * 2.2, 0, 2 * math.pi)
     cr.fill()
-    cr.set_source_rgba(1, 0.96, 0.8, 0.30)
+    disc = cairo.RadialGradient(0, 0, 0, 0, 0, r)                # the lit oval itself
+    disc.add_color_stop_rgba(0, 1, 0.97, 0.75, 0.95)
+    disc.add_color_stop_rgba(0.8, 1, 0.94, 0.6, 0.85)
+    disc.add_color_stop_rgba(1, 1, 0.9, 0.5, 0.55)
+    cr.set_source(disc)
     cr.arc(0, 0, r, 0, 2 * math.pi)
     cr.fill()
     cr.restore()
-    # The monogram: dark letters, as if cut out of the light.
     cr.save()
     cr.translate(x, y)
-    cr.rotate((angle + math.pi / 2) * 0.35)
+    cr.rotate(lean)
+    cr.scale(1.2, 1)
+    bat_path(cr, r * 1.55)                    # the bat: obsidian, as if it blocked the light
+    cr.set_source_rgba(0.03, 0.035, 0.06, 0.94)
+    cr.fill()
+    cr.restore()
+    cr.save()
+    cr.translate(x, y)
+    cr.rotate(lean)
     cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-    cr.set_font_size(r * 0.9)
+    cr.set_font_size(r * 0.26)
     ext = cr.text_extents("MK")
-    cr.move_to(-ext.width / 2 - ext.x_bearing, ext.height / 2)
-    cr.set_source_rgba(0.04, 0.05, 0.08, 0.75)
+    cr.move_to(-ext.width / 2 - ext.x_bearing, r * 0.78)
+    cr.set_source_rgba(0.03, 0.035, 0.06, 0.8)
     cr.show_text("MK")
     cr.restore()
 

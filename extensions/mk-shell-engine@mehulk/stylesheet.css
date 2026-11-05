@@ -13,7 +13,7 @@
 
 /* The MK dock (modules/dock.js): obsidian glass */
 .mk-dock { background-color: rgba(14, 15, 20, 0.72); border: 1px solid rgba(255, 255, 255, 0.12);
-  border-top-color: rgba(255, 255, 255, 0.22); border-radius: 22px; padding: 6px 10px; spacing: 0; }
+  border-top-color: rgba(255, 255, 255, 0.22); border-radius: 20px; padding: 5px 8px; spacing: 0; }
 .mk-dock-item { padding: 4px 4px 2px; border-radius: 14px; }
 .mk-dock-item:focus { background-color: rgba(255, 255, 255, 0.08); }
 .mk-dock-bars { height: 3px; margin-top: 3px; spacing: 2px; }
@@ -22,3 +22,11 @@
 .mk-dock-grid { color: rgba(242, 246, 255, 0.85); }
 .mk-dock-tooltip { color: #f2f6ff; font-size: 0.85em; font-weight: 600; padding: 4px 10px; border-radius: 8px;
   background-color: rgba(14, 15, 20, 0.88); border: 1px solid rgba(255, 255, 255, 0.12); }
+
+/* The Super+Tab app switcher (modules/appSwitcher.js) */
+.mk-appsw-panel { border-radius: 24px; background-color: rgba(14, 15, 20, 0.72); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.22); box-shadow: 0 14px 36px 0 rgba(0, 0, 0, 0.4); }
+.mk-appsw-card { padding: 12px 12px 10px; spacing: 6px; border-radius: 16px; }
+.mk-appsw-title { color: #f2f6ff; font-weight: 700; font-size: 0.92em; }
+.mk-appsw-tag { color: rgba(242, 246, 255, 0.6); font-size: 0.75em; font-weight: 600; }
+.mk-appsw-thumb { border-radius: 8px; background-color: rgba(255, 255, 255, 0.05); margin-top: 2px; }

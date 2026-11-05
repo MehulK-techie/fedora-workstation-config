@@ -138,6 +138,8 @@ export class SwitcherAnimation {
 
         popupProto.show = function (...args) {
             const shown = show.apply(this, args);
+            if (this._mkEngineOwned)
+                return shown;        // MK Shell Engine draws this one (its Super+Tab switcher)
             // Window switching (Alt+Tab, 3-finger swipe): the MK grid instead
             // of GNOME's strip. Super+Tab (apps) keeps the strip, restyled.
             if (shown && this instanceof WindowSwitcherPopup && this._items?.length) {

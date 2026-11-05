@@ -17,10 +17,16 @@
       <description>The glass dock. It only shows while Dash to Dock is off.</description>
     </key>
     <key name="dock-icon-size" type="i">
-      <range min="32" max="64"/>
-      <default>48</default>
+      <range min="36" max="56"/>
+      <default>40</default>
       <summary>Dock icon size (px)</summary>
-      <description>Icons grow to 1.22 times this under the pointer.</description>
+      <description>The icons' size at rest; they grow under the pointer (dock-hover-scale).</description>
+    </key>
+    <key name="dock-hover-scale" type="d">
+      <range min="1.10" max="1.30"/>
+      <default>1.18</default>
+      <summary>Dock magnification</summary>
+      <description>How much the icon under the pointer grows; its neighbours grow a little under half as much.</description>
     </key>
     <key name="blur" type="b">
       <default>true</default>

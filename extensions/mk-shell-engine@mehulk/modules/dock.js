@@ -22,22 +22,24 @@ import { DASH_TO_DOCK, isActive, watch } from './conflicts.js';
 import { DOCK_GLASS, addGlass, blurAllowed } from './blur.js';
 import { accentRGB } from './colour.js';
 
-const HOVER = 1.22, NEIGHBOUR = 1.10;
-const MARGIN = 8;              // the dock's gap above the screen's bottom edge
-const SLIDE = 200;             // hiding and showing, ms
+const MARGIN = 6;              // the dock's gap above the screen's bottom edge
+const HIDE = 260, REVEAL = 220;          // stepping down and coming back, ms
+const EDGE_DELAY = 150;        // the pointer rests on the bottom edge this long before the dock comes back
 const FOCUSED = 'rgb(99, 102, 241)';     // electric indigo: the app you're using
 
-// The parabola: 1 at the pointer, 0 one and a half icons away. The neighbour
-// one icon away lands on NEIGHBOUR.
-const SPREAD = 1 / Math.sqrt(1 - (NEIGHBOUR - 1) / (HOVER - 1));
-const grow = distance => 1 + (HOVER - 1) * Math.max(0, 1 - (distance / SPREAD) ** 2);
+// The parabola: HOVER at the pointer, falling to 1 a little over one icon
+// away; the neighbour one icon away lands on HOVER minus 56 % of the growth
+// (1.18 -> 1.08, as the default).
+const NEIGHBOUR_SHARE = 0.08 / 0.18;
+const SPREAD = 1 / Math.sqrt(1 - NEIGHBOUR_SHARE);
+const grow = (distance, hover) => 1 + (hover - 1) * Math.max(0, 1 - (distance / SPREAD) ** 2);
 
 export class Dock {
     constructor(settings) {
         this._settings = settings;
         this._actor = null;
         this._unwatch = watch(() => this._sync());
-        this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::blur'].map(
+        this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::blur'].map(
             signal => settings.connect(signal, () => this._sync(true)));
         this._sync();
     }
@@ -70,6 +72,7 @@ export class Dock {
 
     _build() {
         this._size = this._settings.get_int('dock-icon-size');
+        this._hover = this._settings.get_double('dock-hover-scale');
         this._ids = [];
         this._appIds = [];
         this._hidden = false;
@@ -78,11 +81,27 @@ export class Dock {
         this._actor.set_pivot_point(0.5, 1);
         this._actor.connect('destroy', () => (this._gone = true));     // (GNOME Shell quitting takes it down first)
         this._gone = false;
-        Main.layoutManager.addChrome(this._actor, {trackFullscreen: true});
-        // the bottom edge: touching it brings the dock back while it's hidden
-        this._edge = new St.Widget({reactive: true, height: 2, visible: false});
-        Main.layoutManager.addChrome(this._edge, {trackFullscreen: true});
-        this._edge.connect('enter-event', () => this._reveal());
+        // GNOME shows and hides the chrome it tracks by itself (full screen, and
+        // whenever it re-checks), which would undo hiding the dock for the
+        // overview; so it tracks this holder, and the dock inside it is ours.
+        this._chrome = new Clutter.Actor({layout_manager: new Clutter.BinLayout()});
+        this._chrome.add_child(this._actor);
+        Main.layoutManager.addChrome(this._chrome, {trackFullscreen: true});
+        // the bottom edge: resting on it brings the dock back while it's hidden
+        this._edge = new St.Widget({reactive: true, height: 2, opacity: 0, visible: false});
+        Main.uiGroup.add_child(this._edge);
+        this._edge.connect('enter-event', () => {
+            this._edgeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, EDGE_DELAY, () => {
+                this._edgeId = 0;
+                this._reveal();
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+        this._edge.connect('leave-event', () => {
+            if (this._edgeId)
+                GLib.source_remove(this._edgeId);
+            this._edgeId = 0;
+        });
 
         this._actor.connect('motion-event', (_a, event) => this._magnify(event.get_coords()[0]));
         this._actor.connect('leave-event', () => {
@@ -90,7 +109,7 @@ export class Dock {
             this._queueDodge(600);
         });
         if (blurAllowed(this._settings))
-            this._unblur = addGlass(this._actor, DOCK_GLASS, 22);
+            this._unblur = addGlass(this._actor, DOCK_GLASS, 20);
         this._menus = new PopupMenu.PopupMenuManager(this._actor);
 
         const appSystem = Shell.AppSystem.get_default();
@@ -110,11 +129,11 @@ export class Dock {
         this._connect(global.window_manager, 'destroy', () => this._queueDodge());
         this._connect(global.display, 'in-fullscreen-changed', () => this._queueDodge());
         this._connect(Main.layoutManager, 'monitors-changed', () => this._place());
-        this._connect(Main.overview, 'showing', () => this._actor.hide());
-        this._connect(Main.overview, 'hidden', () => {
-            this._actor.show();
-            this._queueDodge();
-        });
+        // Super / the overview: the dock fades away (the overview has its own dash) and comes back after
+        this._connect(Main.overview, 'showing', () => this._overview(true));
+        this._connect(Main.overview, 'hiding', () => this._overview(false));
+        if (Main.overview.visible)
+            this._overview(true);
         this._connect(this._actor, 'notify::width', () => this._place());
         this._fill();
         this._followFocus();
@@ -295,6 +314,19 @@ export class Dock {
         return menu;
     }
 
+    // Where APP's icon is on screen, for the genie to aim at (null if it isn't in the dock or the dock is away).
+    iconRect(app) {
+        if (!this._actor || this._gone || this._inOverview)
+            return null;
+        const item = this._items?.find(i => i.app === app);
+        if (!item)
+            return null;
+        const [x, y] = item.icon.get_transformed_position();
+        const [w, h] = item.icon.get_transformed_size();
+        // (while the dock is stepped down, aim where the icon sits when it's up)
+        return {x, y: y - this._actor.translation_y, width: w, height: h};
+    }
+
     // ----- the bars under the icons -----
 
     _paintBars() {
@@ -333,7 +365,7 @@ export class Dock {
         for (const item of this._items ?? []) {
             const [x] = item.button.get_transformed_position();
             const centre = x + item.button.width / 2;
-            const s = grow(Math.abs(pointerX - centre) / step);
+            const s = grow(Math.abs(pointerX - centre) / step, this._hover);
             item.icon.remove_transition('scale-x');
             item.icon.remove_transition('scale-y');
             item.icon.set_scale(s, s);
@@ -361,7 +393,7 @@ export class Dock {
         const [x, y] = item.button.get_transformed_position();
         const [tw] = this._tip.get_preferred_width(-1);
         this._tip.set_position(Math.round(x + item.button.width / 2 - tw / 2),
-            Math.round(y - this._size * (HOVER - 1) - 36));
+            Math.round(y - this._size * (this._hover - 1) - 36));
     }
 
     // ----- where it sits, and stepping out of the way -----
@@ -375,7 +407,7 @@ export class Dock {
         const [, w] = this._actor.get_preferred_width(-1);
         const [, h] = this._actor.get_preferred_height(w);
         this._rect = {x: Math.round(m.x + (m.width - w) / 2), y: m.y + m.height - h - MARGIN, width: w, height: h};
-        this._actor.set_position(this._rect.x, this._rect.y);
+        this._chrome.set_position(this._rect.x, this._rect.y);
         this._edge.set_position(m.x, m.y + m.height - 2);
         this._edge.width = m.width;
         this._queueDodge();
@@ -421,7 +453,7 @@ export class Dock {
     }
 
     _dodge() {
-        if (!this._actor || this._gone || Main.overview.visible)
+        if (!this._actor || this._gone || this._inOverview)
             return;
         if (this._actor.hover || this._menus.activeMenu)
             return;                                         // never away from under the pointer
@@ -437,18 +469,40 @@ export class Dock {
         if (hide === this._hidden)
             return;
         this._hidden = hide;
-        this._edge.visible = hide;
+        this._edge.visible = hide && !global.display.get_monitor_in_fullscreen(Main.layoutManager.primaryIndex);
+        // (ease() retargets a slide already under way from where it is, so a quick hide-then-show never jumps)
         this._actor.ease({translation_y: hide ? this._rect.height + MARGIN + 4 : 0, opacity: hide ? 0 : 255,
-            duration: SLIDE, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            duration: hide ? HIDE : REVEAL, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         this._actor.reactive = !hide;
+    }
+
+    _overview(showing) {
+        this._inOverview = showing;
+        this._actor.remove_transition('opacity');
+        if (showing) {
+            this._tooltip(null);
+            this._edge.visible = false;
+            this._actor.reactive = false;
+            this._actor.ease({opacity: 0, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                onStopped: done => done && this._inOverview && this._actor?.hide()});
+        } else {
+            this._actor.show();
+            if (!this._hidden) {
+                this._actor.reactive = true;
+                this._actor.ease({opacity: 255, duration: REVEAL, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            } else {
+                this._edge.visible = true;
+            }
+            this._queueDodge(250);
+        }
     }
 
     // ----- taking it down -----
 
     _teardown() {
-        for (const id of [this._fillId, this._dodgeId])
+        for (const id of [this._fillId, this._dodgeId, this._edgeId])
             id && GLib.source_remove(id);
-        this._fillId = this._dodgeId = 0;
+        this._fillId = this._dodgeId = this._edgeId = 0;
         for (const [object, id] of [...this._ids ?? [], ...this._focusIds ?? []])
             object.disconnect(id);
         this._ids = this._focusIds = [];
@@ -459,15 +513,13 @@ export class Dock {
         this._unblur?.();
         this._unblur = null;
         this._menus = null;
-        for (const actor of [this._edge, this._actor]) {
-            if (!actor)
-                continue;
-            if (this._gone)
-                continue;
-            if (actor.get_parent())
-                Main.layoutManager.removeChrome(actor);
-            actor.destroy();
+        if (!this._gone) {
+            this._edge?.destroy();
+            if (this._chrome?.get_parent())
+                Main.layoutManager.removeChrome(this._chrome);
+            this._chrome?.destroy();        // (and the dock in it)
         }
+        this._chrome = null;
         this._actor = this._edge = null;
         this._appIds = [];
     }

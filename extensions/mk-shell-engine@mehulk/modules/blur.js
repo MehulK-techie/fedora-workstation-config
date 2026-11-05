@@ -176,7 +176,7 @@ export function addWallpaperGlass(target, anchor, glass, radius = 0, source = Ma
 
     // placed just before the next frame is drawn, once everything has its final place
     // (an allocation signal arrives while the parents are still being laid out)
-    let later = 0;
+    let later = 0, held = false;
     const queue = () => {
         if (later)
             return;
@@ -187,7 +187,7 @@ export function addWallpaperGlass(target, anchor, glass, radius = 0, source = Ma
         });
     };
     const sync = () => {
-        if (!target.get_stage() || !target.is_mapped() || target.width <= 0 ||
+        if (held || !target.get_stage() || !target.is_mapped() || target.width <= 0 ||
             global.display.get_monitor_in_fullscreen(Main.layoutManager.findIndexForActor(target))) {
             pane.hide();
             return;
@@ -214,13 +214,18 @@ export function addWallpaperGlass(target, anchor, glass, radius = 0, source = Ma
     ids.push([global.display, global.display.connect('in-fullscreen-changed', queue)]);
     ids.push([Main.layoutManager, Main.layoutManager.connect('monitors-changed', queue)]);
     queue();
-    return () => {
+    const off = () => {
         if (later)
             global.compositor.get_laters().remove(later);
         for (const [object, id] of ids)
             object.disconnect(id);
         pane.destroy();
     };
+    off.hold = h => {                 // (the glass set aside for now, e.g. behind a solid top bar)
+        held = h;
+        queue();
+    };
+    return off;
 }
 
 // A live copy of the whole desktop as it is now: the wallpaper and every window

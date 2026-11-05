@@ -1,6 +1,6 @@
 // MK Shell Engine: the Super+Tab app switcher. A frosted card of your apps,
-// each with its 56 px full-colour icon, its name, the desktop it's on, and a
-// small live picture of its window. One highlight glides between the cards.
+// each with its 56 px full-colour icon, its name and a pill for the desktop
+// it's on (no window pictures). One highlight moves between the cards.
 //
 // Why it no longer stutters when Tab is held: GNOME's strip builds and tears
 // down a row of window thumbnails as the selection moves, and the old ring
@@ -24,8 +24,11 @@ import { AppSwitcherPopup } from 'resource:///org/gnome/shell/ui/altTab.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
 import { accentRGB } from './colour.js';
 
-const ICON = 56, CARD_W = 176, THUMB_W = 152, THUMB_H = 92, GAP = 10, MARGIN = 16, MAX_COLS = 7;
-const GLIDE = 110, PAD = 4;
+const ICON = 56, CARD_W = 136, GAP = 8, MARGIN = 16, MAX_COLS = 8;
+// the highlight: a 70 ms glide for a single step; steps closer together than
+// HELD (Tab held down, or tapped fast) snap straight to the card, so a quick
+// run through four apps never queues up animations or trails behind the keys
+const GLIDE = 70, HELD = 110, PAD = 4;
 const SWITCHER_GLASS = {sigma: 28, brightness: 0.65};
 
 const proto = AppSwitcherPopup.prototype;
@@ -98,34 +101,21 @@ class AppGrid {
         card.add_child(title);
         card._tag = new St.Label({style_class: 'mk-appsw-tag', x_align: Clutter.ActorAlign.CENTER});
         card.add_child(card._tag);
-        card._thumb = new St.Widget({style_class: 'mk-appsw-thumb', width: THUMB_W, height: THUMB_H,
-            x_align: Clutter.ActorAlign.CENTER, layout_manager: new Clutter.BinLayout(), clip_to_allocation: true});
-        card.add_child(card._thumb);
         card._shown = undefined;
         this._showWindow(card, 0);
         return card;
     }
 
-    // Show window INDEX of the card's app in its thumbnail (only when it changes).
+    // The card's workspace pill for window INDEX of its app ("WS 2", or "WS 2 · 1 of 3").
+    // No window pictures: a compact card is quicker to read and to draw.
     _showWindow(card, index) {
         const windows = card._item.cachedWindows;
         const win = windows[Math.max(0, index)] ?? null;
         if (card._shown === win)
             return;
         card._shown = win;
-        card._thumb.destroy_all_children();
-        const count = windows.length > 1 ? `  ·  ${Math.max(0, index) + 1} of ${windows.length}` : '';
-        card._tag.text = workspaceTag(win) + count;
-        const actor = win?.get_compositor_private();
-        if (actor && !win.minimized) {
-            const [aw, ah] = actor.get_size();
-            const s = Math.min(THUMB_W / aw, THUMB_H / ah);
-            card._thumb.add_child(new Clutter.Clone({source: actor, width: aw * s, height: ah * s,
-                x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER}));
-        } else {
-            card._thumb.add_child(new St.Label({text: win ? 'Minimized' : 'No window', style_class: 'mk-appsw-tag',
-                x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER}));
-        }
+        const count = windows.length > 1 ? ` · ${Math.max(0, index) + 1} of ${windows.length}` : '';
+        card._tag.text = (win?.minimized ? 'Minimized' : workspaceTag(win)) + count;
     }
 
     // Move the highlight to card INDEX (and show its window WINDOW): an index
@@ -136,9 +126,11 @@ class AppGrid {
             return;
         this._showWindow(card, window ?? -1);
         const target = {x: card.x - PAD, y: card.y - PAD, width: CARD_W + 2 * PAD, height: card._h + 2 * PAD};
-        if (instant || !this._placed) {
+        const now = Date.now(), held = now - (this._lastStep ?? 0) < HELD;
+        this._lastStep = now;
+        this._ring.remove_all_transitions();      // (whatever was under way stops where it is)
+        if (instant || held || !this._placed) {
             this._placed = true;
-            this._ring.remove_all_transitions();
             this._ring.set_position(target.x, target.y);
             this._ring.set_size(target.width, target.height);
             return;

@@ -76,5 +76,20 @@
       <summary>Fold the tray icons</summary>
       <description>Apps' tray icons sit behind the chevron at the start of the right island; a click shows them.</description>
     </key>
+    <key name="media-previous" type="as">
+      <default><![CDATA[['XF86AudioPrev']]]></default>
+      <summary>Previous track</summary>
+      <description>One press, one skip: key repeat is ignored and presses within 350 ms count once.</description>
+    </key>
+    <key name="media-next" type="as">
+      <default><![CDATA[['XF86AudioNext']]]></default>
+      <summary>Next track</summary>
+      <description>One press, one skip: key repeat is ignored and presses within 350 ms count once.</description>
+    </key>
+    <key name="qs-hidden" type="as">
+      <default><![CDATA[['dark-style', 'airplane-mode', 'welcome-light', 'battery']]]></default>
+      <summary>Left out of Quick Settings</summary>
+      <description>Any of dark-style, airplane-mode, welcome-light, battery (the header's reading; the top bar shows it). [] shows everything.</description>
+    </key>
   </schema>
 </schemalist>

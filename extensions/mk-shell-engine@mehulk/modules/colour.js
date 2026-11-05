@@ -16,3 +16,10 @@ export function accentRGB() {
         return ACCENTS.blue;          // (GNOME before 47 has no accent setting)
     }
 }
+
+// Call CALLBACK when the accent changes in Settings; returns a function that stops it.
+export function onAccentChanged(callback) {
+    iface ??= new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
+    const id = iface.connect('changed::accent-color', () => callback());
+    return () => iface.disconnect(id);
+}

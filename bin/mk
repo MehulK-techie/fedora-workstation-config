@@ -623,9 +623,10 @@ case "${1:-help}" in
         ;;
 
     accent)
-        # mk accent [auto | #rrggbb | status | system on|off]: the desktop's
-        # accent colour. auto follows the wallpaper (mk-indicator picks its
-        # most vivid colour and updates when the wallpaper changes).
+        # mk accent [settings | auto | #rrggbb | status | system on|off]: the
+        # desktop's accent colour. settings (the default) follows the accent you
+        # pick in Settings > Appearance; auto follows the wallpaper (mk-indicator
+        # picks its most vivid colour and updates when the wallpaper changes).
         shift
         conf="$HOME/.config/mk-workstation/theme.conf"
         set_key() {
@@ -638,6 +639,10 @@ case "${1:-help}" in
             fi
         }
         case "${1:-status}" in
+            settings)
+                set_key ACCENT settings
+                echo "✔ Accent follows Settings > Appearance (change it there; MK follows at once)."
+                ;;
             auto)
                 set_key ACCENT auto
                 echo "✔ Accent follows your wallpaper."
@@ -654,12 +659,12 @@ case "${1:-help}" in
             status)
                 mode=$(sed -n 's/^ACCENT=//p' "$conf" 2> /dev/null | tail -1)
                 css="$HOME/.cache/mk-workstation/accent.css"
-                echo "Accent: ${mode:-auto}"
+                echo "Accent: ${mode:-settings}"
                 [[ -f "$css" ]] && echo "Colour now: rgb($(grep -om1 'rgba([0-9]*,[0-9]*,[0-9]*' "$css" | sed 's/rgba(//'))"
                 echo "GNOME accent: $(gsettings get org.gnome.desktop.interface accent-color | tr -d "'")"
                 ;;
             *)
-                echo "Usage: mk accent [auto | #rrggbb | system on|off | status]" >&2
+                echo "Usage: mk accent [settings | auto | #rrggbb | system on|off | status]" >&2
                 exit 2
                 ;;
         esac
@@ -699,6 +704,10 @@ case "${1:-help}" in
             gsettings set "$MEDIA_KEYS" custom-keybindings "@as []"
         fi
 
+        # the engine took Previous / Next from GNOME's media keys: give them back
+        for key in previous next previous-static next-static; do
+            gsettings reset "$MEDIA_KEYS" "$key" 2>/dev/null || true
+        done
         for ext in mk-indicator@mehulk mk-shell-engine@mehulk; do
             gnome-extensions disable "$ext" &>/dev/null || true
             rm -rf "$HOME/.local/share/gnome-shell/extensions/$ext"

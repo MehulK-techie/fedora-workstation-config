@@ -1,9 +1,9 @@
-// MK Shell Engine: the genie. A window being minimized pours into its app's
-// icon in the dock (270 ms), and pours back out when you bring it back
-// (270 ms). The window is a 32 x 32 mesh: the rows nearest the dock move
-// first, each row narrowing and sliding on a smoothstep (Hermite) curve. The
-// top of the window keeps its width longest while the base sweeps into the
-// icon, so it funnels like a genie instead of shrinking as a flat card.
+// MK Shell Engine: minimize and restore as a glide. A window being
+// minimized slides and shrinks along an eased curve into its app's icon in
+// the dock (240 ms), dissolving over the last 60 ms; restoring launches it
+// back out of the icon to its place (220 ms), with a 2 % overshoot that
+// settles. Only the window's position, scale and opacity change (no mesh
+// bending), so it stays smooth on any GPU.
 //
 // Safety first: whatever happens (an error, the window closing mid-way,
 // GNOME cancelling window effects, the extension switching off) the window
@@ -20,43 +20,13 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { MAGIC_LAMP, isActive, watch } from './conflicts.js';
 
-const MINIMIZE = 280, UNMINIMIZE = 270;
-const TILES = 32;
+const MINIMIZE = 240, UNMINIMIZE = 220, DISSOLVE = 60;
 
-const smooth = p => p * p * (3 - 2 * p);                  // Hermite smoothstep: 0 to 1, flat at both ends
 const clamp = p => Math.min(1, Math.max(0, p));
 const lerp = (a, b, t) => a + (b - a) * t;
-
-const LampEffect = GObject.registerClass(
-class MKLampEffect extends Clutter.DeformEffect {
-    // WINDOW: the actor's rect when it starts; TARGET: the icon's rect, both on screen.
-    _init(window, target) {
-        super._init();
-        this._win = window;
-        this._target = target;
-        this._below = target.y + target.height / 2 > window.y + window.height / 2;
-        this.progress = 0;
-        this.set_n_tiles(TILES, TILES);
-    }
-
-    vfunc_deform_vertex(w, h, v) {
-        const t = this.progress, win = this._win, ico = this._target;
-        // how far this row is from the icon: those nearest go first
-        const d = this._below ? 1 - v.ty : v.ty;
-        // the base narrows first and fast; the top holds its width until late
-        const across = smooth(clamp((t * 1.25 - 0.45 * d) / 0.8));
-        const down = smooth(clamp((t - 0.35 * d) / 0.65));              // sliding toward the icon
-        const y = lerp(win.y + v.ty * win.height, ico.y + v.ty * ico.height, down);
-        const cx = lerp(win.x + win.width / 2, ico.x + ico.width / 2, across);
-        const x = cx + (v.tx - 0.5) * lerp(win.width, ico.width, across);
-        v.x = (x - win.x) * (w / win.width);
-        v.y = (y - win.y) * (h / win.height);
-    }
-
-    vfunc_modify_paint_volume() {
-        return false;                // (the mesh leaves the window's own box: never cull it)
-    }
-});
+const easeOutCubic = p => 1 - (1 - p) ** 3;
+// ease-out with a small overshoot: peaks about 1.8 % past the end, then settles
+const easeOutBack = (p, c = 0.75) => 1 + (c + 1) * (p - 1) ** 3 + c * (p - 1) ** 2;
 
 export class MagicLamp {
     // DOCK: a function returning the dock (or null), for the icon to aim at.
@@ -149,7 +119,13 @@ export class MagicLamp {
                 Main.wm._unminimizeWindow(shellwm, actor);
             return;
         }
-        let done = false, timeline = null, effect = null, destroyId = 0;
+        let done = false, timeline = null, destroyId = 0;
+        const reset = () => {
+            actor.set_scale(1, 1);
+            actor.set_translation(0, 0, 0);
+            actor.set_pivot_point(0, 0);
+            actor.opacity = 255;
+        };
         const finish = () => {
             if (done)
                 return;
@@ -159,11 +135,9 @@ export class MagicLamp {
                 timeline?.stop();
                 if (destroyId)
                     actor.disconnect(destroyId);
-                if (effect)
-                    actor.remove_effect(effect);
-                actor.opacity = 255;
+                reset();
             } catch (e) {
-                console.error(`mk-shell-engine: genie cleanup: ${e.message}`);
+                console.error(`mk-shell-engine: minimize glide cleanup: ${e.message}`);
             } finally {
                 complete();                          // always, exactly once
             }
@@ -171,28 +145,41 @@ export class MagicLamp {
         this._running.set(actor, {finish});
         try {
             const [x, y] = actor.get_position();
-            const window = {x, y, width: actor.width, height: actor.height};
-            effect = new LampEffect(window, this._target(actor));
-            effect.progress = minimizing ? 0 : 1;
-            actor.add_effect_with_name('mk-lamp', effect);
-            if (!minimizing)
+            const w = actor.width, h = actor.height, icon = this._target(actor);
+            // the window at its smallest: the icon's size, centred on the icon
+            const scale = Math.max(0.02, Math.min(icon.width / w, icon.height / h));
+            const tx = icon.x + icon.width / 2 - w * scale / 2 - x, ty = icon.y + icon.height / 2 - h * scale / 2 - y;
+            actor.set_pivot_point(0, 0);
+            const frame = t => {           // t: 0 = in its place, 1 = in the icon
+                const s = lerp(1, scale, t);
+                actor.set_scale(s, s);
+                actor.set_translation(tx * t, ty * t, 0);
+            };
+            if (!minimizing) {
+                frame(1);
+                actor.opacity = 0;
                 actor.show();
+            }
             destroyId = actor.connect('destroy', () => {
                 destroyId = 0;
                 finish();
             });
-            timeline = new Clutter.Timeline({actor, duration: minimizing ? MINIMIZE : UNMINIMIZE});
+            const duration = minimizing ? MINIMIZE : UNMINIMIZE;
+            timeline = new Clutter.Timeline({actor, duration});
             timeline.connect('new-frame', () => {
-                const p = timeline.get_progress();
-                const t = minimizing ? p : 1 - p;
-                effect.progress = t;
-                actor.opacity = Math.round(255 * (1 - smooth(clamp((t - 0.7) / 0.3))));   // fades in the icon's mouth
-                effect.invalidate();
+                const p = timeline.get_progress(), ms = p * duration;
+                if (minimizing) {
+                    frame(easeOutCubic(p));
+                    actor.opacity = Math.round(255 * clamp((duration - ms) / DISSOLVE));   // dissolves into the icon
+                } else {
+                    frame(1 - easeOutBack(p));
+                    actor.opacity = Math.round(255 * clamp(ms / DISSOLVE));
+                }
             });
             timeline.connect('completed', () => finish());
             timeline.start();
         } catch (e) {
-            console.error(`mk-shell-engine: genie: ${e.message}`);
+            console.error(`mk-shell-engine: minimize glide: ${e.message}`);
             finish();
         }
     }

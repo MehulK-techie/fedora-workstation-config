@@ -27,8 +27,8 @@ import { watch } from './conflicts.js';
 const ISLAND_RADIUS = 12;            // (the islands' CSS corners; the glass is cut to match)
 
 // The focused app: icon (its own colours), name, and a menu of what you can do
-// with its window. With nothing focused it reads "Desktop · WS 2" instead of
-// vanishing; switching crossfades (150 ms).
+// with its window. Switching crossfades (150 ms); with nothing focused it's
+// gone, so an empty desktop shows only the workspace dots.
 class ActiveApp {
     constructor() {
         this.button = new PanelMenu.Button(0.0, 'Active app', false);
@@ -52,8 +52,10 @@ class ActiveApp {
     }
 
     _sync(animate) {
-        this.button.visible = !Main.overview.visible;
         const app = this._tracker.focus_app;
+        // nothing focused: no pill, only the workspace dots on an empty desktop
+        this.button.visible = !Main.overview.visible && !!app;
+        this.onVisible?.(this.button.visible);
         const ws = global.workspace_manager.get_active_workspace_index() + 1;
         const key = app ? `app:${app.get_id()}` : `desk:${ws}`;
         if (key === this._key)
@@ -118,7 +120,7 @@ class Finder {
     constructor() {
         this.button = new PanelMenu.Button(0.0, 'Finder', false);
         this.button.add_style_class_name('mk-finder');
-        this.button.add_child(new St.Label({text: 'Finder', style_class: 'mk-finder-label', y_align: Clutter.ActorAlign.CENTER}));
+        this.button.add_child(new St.Icon({icon_name: 'system-file-manager-symbolic', style_class: 'system-status-icon'}));
         const home = GLib.get_home_dir();
         const dir = d => GLib.get_user_special_dir(d);
         const places = [
@@ -339,6 +341,112 @@ class AutoHide {
     }
 }
 
+// A maximized window under the bar: the islands become one solid strip
+// (rgba(14, 16, 22, 0.98), fading in 180 ms), so the window's top edge never
+// shows through the gaps between them; back to glass when nothing's maximized.
+class SolidWhenMaximized {
+    constructor(glass) {
+        this._glass = glass;
+        this._winIds = new Map();
+        this._ids = [
+            [global.workspace_manager, global.workspace_manager.connect('active-workspace-changed', () => this._queue())],
+            [global.display, global.display.connect('window-created', (_d, win) => this._watch(win))],
+            [global.window_manager, global.window_manager.connect('minimize', () => this._queue())],
+            [global.window_manager, global.window_manager.connect('unminimize', () => this._queue())],
+            [global.window_manager, global.window_manager.connect('destroy', () => this._queue())],
+        ];
+        for (const actor of global.get_window_actors())
+            this._watch(actor.meta_window);
+        this._sync();
+    }
+
+    _watch(win) {
+        if (!win || this._winIds.has(win))
+            return;
+        this._winIds.set(win, ['notify::maximized-horizontally', 'notify::maximized-vertically', 'workspace-changed', 'unmanaged']
+            .map(signal => win.connect(signal, () => {
+                if (signal === 'unmanaged')
+                    this._forget(win);
+                this._queue();
+            })));
+        this._queue();
+    }
+
+    _forget(win) {
+        for (const id of this._winIds.get(win) ?? [])
+            win.disconnect(id);
+        this._winIds.delete(win);
+    }
+
+    _queue() {
+        if (this._idle)
+            return;
+        this._idle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._idle = 0;
+            this._sync();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _sync() {
+        const ws = global.workspace_manager.get_active_workspace(), primary = Main.layoutManager.primaryIndex;
+        const solid = ws.list_windows().some(w => !w.minimized && w.get_monitor() === primary &&
+            w.window_type === Meta.WindowType.NORMAL && w.maximized_vertically && w.maximized_horizontally);
+        if (solid === this._solid)
+            return;
+        this._solid = solid;
+        if (solid)
+            Main.panel.add_style_class_name('mk-solid');
+        else
+            Main.panel.remove_style_class_name('mk-solid');
+        for (const off of this._glass)
+            off.hold?.(solid);
+    }
+
+    destroy() {
+        if (this._idle)
+            GLib.source_remove(this._idle);
+        for (const win of [...this._winIds.keys()])
+            this._forget(win);
+        for (const [object, id] of this._ids)
+            object.disconnect(id);
+        Main.panel.remove_style_class_name('mk-solid');
+        for (const off of this._glass)
+            off.hold?.(false);
+    }
+}
+
+// Status icons that only say a setting is on (Night Light, the power mode)
+// stay out of the bar; the toggles in Quick Settings show them. Wi-Fi, Do
+// Not Disturb, volume and battery stay.
+class QuietIndicators {
+    constructor() {
+        this._qs = Main.panel.statusArea.quickSettings;
+        this._held = [];
+        // (GNOME makes some of its indicators a moment after startup: look again as they arrive)
+        this._addedId = this._qs?._indicators?.connect('child-added', () => this._hold()) ?? 0;
+        this._hold();
+    }
+
+    _hold() {
+        for (const ind of [this._qs?._nightLight, this._qs?._powerProfiles]) {
+            if (!ind || this._held.some(([held]) => held === ind))
+                continue;
+            ind.visible = false;
+            this._held.push([ind, ind.connect('notify::visible', () => ind.visible && (ind.visible = false))]);
+        }
+    }
+
+    destroy() {
+        if (this._addedId)
+            this._qs._indicators.disconnect(this._addedId);
+        for (const [ind, id] of this._held) {
+            ind.disconnect(id);
+            ind._syncIndicatorsVisible?.();     // (GNOME's own rule for when it shows)
+        }
+    }
+}
+
 export class Panel {
     constructor(settings) {
         this._settings = settings;
@@ -378,6 +486,14 @@ export class Panel {
             console.error(`mk-shell-engine: tray fold: ${e.message}`);
         }
         this._orderLeft();
+        if (style !== 'edge') {
+            try {
+                this._solid = new SolidWhenMaximized(this._unblur ?? []);
+            } catch (e) {
+                console.error(`mk-shell-engine: solid top bar: ${e.message}`);
+            }
+        }
+        this._quiet = new QuietIndicators();
         if (this._settings.get_boolean('autohide-top-bar')) {
             try {
                 this._autohide = new AutoHide();
@@ -392,9 +508,9 @@ export class Panel {
         }
     }
 
-    // The left island, flush to the corner: the MK emblem, Finder, Places, the
-    // workspace dots, a divider, the app you're in (Fitts's law: the most used
-    // things at the screen's edge, where the pointer stops by itself).
+    // The left island, flush to the corner: the workspace dots at the very edge,
+    // the MK emblem, Finder, Places, a divider, the app you're in (Fitts's law:
+    // the most used things at the screen's edge, where the pointer stops by itself).
     _orderLeft() {
         const left = Main.panel._leftBox, area = Main.panel.statusArea;
         const mk = Main.extensionManager.lookup('mk-indicator@mehulk')?.stateObj?._indicator;
@@ -407,11 +523,13 @@ export class Panel {
         this._divider ??= new St.Widget({style_class: 'mk-island-divider', y_align: Clutter.ActorAlign.CENTER});
         if (!this._divider.get_parent())
             left.add_child(this._divider);
-        const order = [this._mk ?? (mk?.get_parent() === left ? mk : null), area['mk-finder']?.container,
-            area['places-menu']?.container, area.activities?.container, this._divider, area['mk-active-app']?.container]
+        const order = [area.activities?.container, this._mk ?? (mk?.get_parent() === left ? mk : null), area['mk-finder']?.container,
+            area['places-menu']?.container, this._divider, area['mk-active-app']?.container]
             .filter(a => a && a.get_parent() === left);
         order.forEach((actor, i) => left.set_child_at_index(actor, i));
-        this._divider.visible = !!area['mk-active-app'];
+        this._divider.visible = !!area['mk-active-app']?.visible;
+        if (this._app)
+            this._app.onVisible = shown => this._divider && (this._divider.visible = shown);
     }
 
     _teardown() {
@@ -425,7 +543,9 @@ export class Panel {
         this._divider = null;
         this._finder?.destroy();
         this._tray?.destroy();
-        this._finder = this._tray = null;
+        this._solid?.destroy();
+        this._quiet?.destroy();
+        this._finder = this._tray = this._solid = this._quiet = null;
         Main.panel.remove_style_class_name('mk-islands');
         Main.panel.remove_style_class_name('mk-edge');
         for (const off of this._unblur ?? [])

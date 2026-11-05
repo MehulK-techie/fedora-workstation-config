@@ -12,6 +12,7 @@
 // focus, windows moving): nothing polls. Stands aside while Dash to Dock is on.
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -20,14 +21,13 @@ import * as AppFavorites from 'resource:///org/gnome/shell/ui/appFavorites.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { DASH_TO_DOCK, isActive, watch } from './conflicts.js';
 import { DOCK_GLASS, addWallpaperGlass, blurAllowed } from './blur.js';
-import { accentRGB } from './colour.js';
+import { accentRGB, onAccentChanged } from './colour.js';
 
 const MARGIN = 4;              // the dock's gap above the screen's bottom edge
 // fading away and back: dock-hide-ms / dock-reveal-ms (480 / 360 by default: slow and soft, never a jump)
 const SINK = 14;               // how far it sinks while it fades (px): a fade with a hint of movement
 const OVERVIEW_OUT = 260, OVERVIEW_IN = 360;
 const EDGE_DELAY = 70;         // the pointer rests on the bottom edge this long before the dock comes back
-const FOCUSED = 'rgb(99, 102, 241)';     // electric indigo: the app you're using
 
 // The parabola: HOVER at the pointer, falling to 1 a little over one icon
 // away; the neighbour one icon away lands on HOVER minus 56 % of the growth
@@ -139,6 +139,16 @@ export class Dock {
         this._connect(global.window_manager, 'unminimize', () => this._queueDodge());
         this._connect(global.window_manager, 'map', () => this._queueDodge());
         this._connect(global.window_manager, 'destroy', () => this._queueDodge());
+        // a window asking for you (a finished download, a message): its app hops twice
+        for (const signal of ['window-demands-attention', 'window-marks-urgent']) {
+            if (!GObject.signal_lookup(signal, global.display.constructor))
+                continue;               // (GNOME 51 has only the first)
+            this._connect(global.display, signal, (_d, win) => {
+                const app = Shell.WindowTracker.get_default().get_window_app(win);
+                if (app && win !== global.display.focus_window)
+                    this._bounce(app, 2, false);
+            });
+        }
         this._connect(global.display, 'in-fullscreen-changed', () => {
             if (this._fullscreen()) {             // straight away, and the edge stops listening
                 this._edge.visible = false;
@@ -154,6 +164,13 @@ export class Dock {
             this._overview(true);
         this._hideOverviewDash(true);
         this._connect(this._actor, 'notify::width', () => this._place());
+        // a new accent in Settings: the running-app bars take it at once
+        const stopAccent = onAccentChanged(() => {
+            for (const item of this._items ?? [])
+                item.state = null;
+            this._paintBars();
+        });
+        this._ids.push([{disconnect: () => stopAccent()}, 0]);
         this._fill();
         this._followFocus();
     }
@@ -268,8 +285,10 @@ export class Dock {
         if (!windows.length) {
             if (app.get_n_windows() > 0)
                 Main.activateWindow(app.get_windows()[0]);     // it's open on another desktop: go there
-            else
+            else {
                 app.activate();
+                this._bounce(app, 6, true);        // hops while it starts, stops when its window opens
+            }
             return;
         }
         const focus = global.display.focus_window;
@@ -333,6 +352,28 @@ export class Dock {
         return menu;
     }
 
+    // The dock's liveliness: APP's icon hops (up 16 px, a little bounce on
+    // landing) up to TIMES times; LAUNCH: stop once the app has a window.
+    _bounce(app, times, launch) {
+        const item = this._items?.find(i => i.app === app);
+        if (!item || item.bouncing || !St.Settings.get().enable_animations)
+            return;
+        item.bouncing = true;
+        let left = times;
+        const hop = () => {
+            if (!this._actor || this._gone || !item.box.get_stage() || !left-- || (launch && app.get_n_windows() > 0)) {
+                item.bouncing = false;
+                if (item.box.get_stage())
+                    item.box.ease({translation_y: 0, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+                return;
+            }
+            item.box.ease({translation_y: -16, duration: 200, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                onComplete: () => item.box?.ease({translation_y: 0, duration: 320, mode: Clutter.AnimationMode.EASE_OUT_BOUNCE,
+                    onComplete: hop})});
+        };
+        hop();
+    }
+
     // Where APP's icon is on screen, for the genie to aim at (null if it isn't in the dock or the dock is away).
     iconRect(app) {
         if (!this._actor || this._gone || this._inOverview)
@@ -373,7 +414,7 @@ export class Dock {
                 bar(7, 'rgba(255,255,255,0.75)');
                 bar(7, `rgba(${r},${g},${b},0.9)`);
             } else if (state === 'focus')
-                bar(22, FOCUSED);
+                bar(22, `rgb(${r},${g},${b})`);       // the accent: the app you're using
         }
     }
 

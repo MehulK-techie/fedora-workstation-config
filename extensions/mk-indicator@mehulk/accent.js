@@ -1,10 +1,12 @@
-// The workstation's accent colour follows your wallpaper: its dominant vivid
-// hue tints Alt+Tab, the calendar, top-bar hover, the dock and workspace
-// thumbnails, the welcome line and the timer ring, and GNOME's own accent
-// (so Files and other apps match). It updates when the wallpaper changes.
+// The workstation's accent colour: it tints Alt+Tab, the calendar, top-bar
+// hover, the dock and workspace thumbnails, the welcome line and the timer
+// ring. By default it's the accent you pick in Settings > Appearance (and the
+// engine's dock, top bar and Quick Settings use the same), updated the moment
+// you change it. Or it follows your wallpaper's most vivid colour (auto, which
+// then also sets GNOME's accent so Files and apps match), or a fixed colour.
 //
 // config/theme.conf, yours in ~/.config/mk-workstation/theme.conf:
-//   ACCENT=auto | #rrggbb      SYSTEM_ACCENT=on | off      (`mk accent`)
+//   ACCENT=settings | auto | #rrggbb      SYSTEM_ACCENT=on | off      (`mk accent`)
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -12,6 +14,9 @@ import St from 'gi://St';
 import { dominantHue, hsvToRgb, rgbToHsv } from './colour.js';
 
 const DEFAULT = [0, 200, 255];
+// GNOME's accents (Settings > Appearance), as Adwaita draws them
+const SETTINGS_RGB = {blue: [53, 132, 228], teal: [33, 144, 164], green: [58, 148, 74], yellow: [200, 136, 0],
+    orange: [237, 91, 0], red: [230, 45, 66], pink: [213, 97, 153], purple: [145, 65, 172], slate: [111, 131, 150]};
 const USER_CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'theme.conf']);
 const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'theme.conf']);
 const CSS = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'accent.css']);
@@ -33,7 +38,7 @@ export function accentPairUnit() {
 }
 
 function readConf() {
-    const conf = {ACCENT: 'auto', SYSTEM_ACCENT: 'on'};
+    const conf = {ACCENT: 'settings', SYSTEM_ACCENT: 'on'};
     for (const path of [DEFAULT_CONF, USER_CONF]) {
         try {
             const [ok, bytes] = GLib.file_get_contents(path);
@@ -91,6 +96,7 @@ export class Accent {
             [this._bg, this._bg.connect('changed::picture-uri', () => this.update())],
             [this._bg, this._bg.connect('changed::picture-uri-dark', () => this.update())],
             [this._iface, this._iface.connect('changed::color-scheme', () => this.update())],
+            [this._iface, this._iface.connect('changed::accent-color', () => readConf().ACCENT === 'settings' && this.update())],
         ];
         // GNOME replaced the shell theme (e.g. high contrast): load ours into
         // the new one. Loading a stylesheet also emits 'changed', so only act
@@ -108,6 +114,11 @@ export class Accent {
 
     update() {
         const conf = readConf();
+        if (conf.ACCENT === 'settings') {
+            // yours from Settings: used as it is, and GNOME's accent is never changed
+            this._apply(SETTINGS_RGB[this._iface.get_string('accent-color')] ?? SETTINGS_RGB.blue, {...conf, SYSTEM_ACCENT: 'off'});
+            return;
+        }
         const fixed = conf.ACCENT !== 'auto' && hex(conf.ACCENT);
         if (fixed) {
             this._apply(fixed, conf);

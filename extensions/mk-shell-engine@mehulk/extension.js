@@ -6,15 +6,17 @@
 //   modules/blur.js    native blur (GNOME's GPU blur) for the dock, islands and switcher (while Blur my Shell is off)
 //   modules/panel.js   the top bar as three glass islands, the active app, the clock
 //   modules/controlCenter.js  Quick Settings as a bento grid
-//   modules/magicLamp.js   the genie minimize, into the dock icon (while Magic Lamp is off)
+//   modules/magicLamp.js   minimize / restore as a glide into / out of the dock icon (while Magic Lamp is off)
 //   modules/appSwitcher.js the Super+Tab app switcher
 //   modules/snip.js        area screenshots start fresh and are taken on release
+//   modules/mediaKeys.js   Previous / Next track: one press, one skip
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { SnapLayouts, bindSnapLayouts, unbindSnapLayouts } from './modules/tiling.js';
 import { Dock } from './modules/dock.js';
 import { MagicLamp } from './modules/magicLamp.js';
 import { AppSwitcher } from './modules/appSwitcher.js';
 import { Snip } from './modules/snip.js';
+import { MediaKeys } from './modules/mediaKeys.js';
 import { Panel } from './modules/panel.js';
 import { ControlCenter } from './modules/controlCenter.js';
 
@@ -33,10 +35,11 @@ export default class MKShellEngine extends Extension {
         this._start('dock', () => (this._dock = new Dock(this._settings)));
         // the islands top bar blurs each island; the plain panel blur only without it
         this._start('top bar', () => new Panel(this._settings));
-        this._start('quick settings', () => new ControlCenter());
+        this._start('quick settings', () => new ControlCenter(this._settings));
         this._start('genie', () => new MagicLamp(() => this._dock));
         this._start('app switcher', () => new AppSwitcher());
         this._start('snip', () => new Snip(this._settings));
+        this._start('media keys', () => new MediaKeys(this._settings));
     }
 
     _start(name, make) {

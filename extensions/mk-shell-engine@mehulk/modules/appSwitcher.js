@@ -21,7 +21,7 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { AppSwitcherPopup } from 'resource:///org/gnome/shell/ui/altTab.js';
-import { addGlass } from './blur.js';
+import { addWallpaperGlass, desktopCopy } from './blur.js';
 import { accentRGB } from './colour.js';
 
 const ICON = 56, CARD_W = 176, THUMB_W = 152, THUMB_H = 92, GAP = 10, MARGIN = 16, MAX_COLS = 7;
@@ -62,7 +62,8 @@ class AppGrid {
         // on stage first: a card only knows its height once its style is loaded
         Main.uiGroup.add_child(this.actor);
         Main.uiGroup.set_child_above_sibling(this.actor, popup);
-        this._unblur = addGlass(this.actor, SWITCHER_GLASS, 24);     // (on stage first: the glass reads its size)
+        // glass over whatever is behind the card: windows and wallpaper, blurred
+        this._unblur = addWallpaperGlass(this.actor, this.actor, SWITCHER_GLASS, 24, desktopCopy);
         this._cards = popup._items.map(item => {
             const card = this._card(item);
             this.actor.add_child(card);

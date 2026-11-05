@@ -20,11 +20,11 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import { PANEL_GLASS, addGlass, blurAllowed } from './blur.js';
+import { PANEL_GLASS, addWallpaperGlass, blurAllowed } from './blur.js';
 import { partRect } from './tiling.js';
 import { watch } from './conflicts.js';
 
-const ISLAND_RADIUS = 12;
+const ISLAND_RADIUS = 12;            // (the islands' CSS corners; the glass is cut to match)
 
 // The focused app: icon, name, and a menu of what you can do with its window.
 class ActiveApp {
@@ -247,7 +247,8 @@ export class Panel {
         panel.add_style_class_name(style === 'edge' ? 'mk-edge' : 'mk-islands');
         if (blurAllowed(this._settings)) {
             const glass = style === 'edge' ? [panel] : [panel._leftBox, panel._centerBox, panel._rightBox];
-            this._unblur = glass.map(actor => addGlass(actor, PANEL_GLASS, style === 'edge' ? 0 : ISLAND_RADIUS));
+            this._unblur = glass.map(actor => addWallpaperGlass(actor, Main.layoutManager.panelBox, PANEL_GLASS,
+                style === 'edge' ? 0 : ISLAND_RADIUS));
         }
         if (this._settings.get_boolean('show-active-app')) {
             try {

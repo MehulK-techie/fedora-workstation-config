@@ -19,7 +19,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as AppFavorites from 'resource:///org/gnome/shell/ui/appFavorites.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { DASH_TO_DOCK, isActive, watch } from './conflicts.js';
-import { DOCK_GLASS, addGlass, blurAllowed } from './blur.js';
+import { DOCK_GLASS, addWallpaperGlass, blurAllowed } from './blur.js';
 import { accentRGB } from './colour.js';
 
 const MARGIN = 4;              // the dock's gap above the screen's bottom edge
@@ -114,7 +114,7 @@ export class Dock {
             this._queueDodge(600);
         });
         if (blurAllowed(this._settings))
-            this._unblur = addGlass(this._actor, DOCK_GLASS, 20);
+            this._unblur = addWallpaperGlass(this._actor, this._chrome, DOCK_GLASS, 20);
         this._menus = new PopupMenu.PopupMenuManager(this._actor);
 
         const appSystem = Shell.AppSystem.get_default();

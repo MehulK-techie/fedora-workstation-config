@@ -334,6 +334,13 @@ echo "==> Step 4/4: Enabling face unlock..."
 if (( SUDO_FACE )) && [[ ! -f /etc/pam.d/polkit-1 && -f /usr/lib/pam.d/polkit-1 ]]; then
     cp -a /usr/lib/pam.d/polkit-1 /etc/pam.d/polkit-1
 fi
+# Fedora 45 moved GDM's login stack to /usr/lib/pam.d too (an upgrade sets an
+# edited /etc copy aside as gdm-password.rpmsave): without a copy in
+# /etc/pam.d, face unlock would silently never reach the login screen.
+if [[ ! -f /etc/pam.d/gdm-password && -f /usr/lib/pam.d/gdm-password ]]; then
+    cp -a /usr/lib/pam.d/gdm-password /etc/pam.d/gdm-password
+    echo "    [+] Copied GDM's login stack to /etc/pam.d/gdm-password (Fedora 45 keeps it in /usr/lib/pam.d)."
+fi
 if [[ ! -e /usr/lib64/security/pam_howdy.so ]] && [[ ! -e /usr/lib/security/pam_howdy.so ]]; then
     echo "⚠ pam_howdy.so not found — skipping PAM changes to prevent lockout."
 else

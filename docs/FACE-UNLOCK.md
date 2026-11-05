@@ -132,6 +132,31 @@ enrolled finger is connected. The check runs as root in `mk-face-auth`
 
 ---
 
+## After upgrading to Fedora 45
+
+The upgrade to Fedora 45 **removes Howdy**: its package, its PAM module
+(`/usr/lib64/security/pam_howdy.so`) and the face models stored with it. Face
+unlock stops everywhere; your password keeps working (sudo and polkit log
+"PAM adding faulty module: pam_howdy.so" until the module is back). Two more
+changes come with it:
+
+- GDM's login stack now lives in `/usr/lib/pam.d/gdm-password`; your edited
+  copy was set aside as `/etc/pam.d/gdm-password.rpmsave`. `register-face.sh`
+  copies the new one into `/etc/pam.d` before adding face unlock to it.
+- `/etc/howdy/config.ini` is gone (`config.ini.bak`, from an earlier run, stays).
+
+As of November 2026 there is **no Howdy build for Fedora 45**: the COPR
+`principis/howdy` has none, `principis/howdy-beta` only a Fedora 43 build, and
+Fedora 45 has no `python3-dlib`, which Howdy needs. Once a Fedora 45 build
+appears:
+
+```bash
+sudo dnf install howdy          # from the COPR setup.sh enabled
+sudo ./register-face.sh         # records your face again and wires up PAM
+```
+
+Until then, fingerprint unlock (`mk fingerprint`) is unaffected.
+
 ## Troubleshooting
 
 | Problem | Fix |

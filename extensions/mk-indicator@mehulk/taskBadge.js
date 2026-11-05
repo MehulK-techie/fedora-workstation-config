@@ -153,19 +153,48 @@ export class TaskBadge {
         menu.removeAll();
         const items = upcomingReminders();
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem(items.length ? 'Coming up' : 'No reminders set'));
+        // each one opens in place: when exactly, and Done / Snooze 15 min / Open
         for (const task of items.slice(0, 12)) {
-            const item = new PopupMenu.PopupBaseMenuItem({style_class: 'mk-agenda-row'});
-            const text = new St.Label({text: task.text ?? '', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-            text.clutter_text.ellipsize = 3;   // END
-            item.add_child(text);
+            const item = new PopupMenu.PopupSubMenuMenuItem(task.text ?? '', false);
+            item.add_style_class_name('mk-agenda-row');
+            item.label.clutter_text.ellipsize = 3;   // END
             const when = countdown(task.remind_at);
-            item.add_child(new St.Label({text: when, y_align: Clutter.ActorAlign.CENTER,
-                style_class: when === 'Overdue' ? 'mk-agenda-pill mk-agenda-late' : 'mk-agenda-pill'}));
-            item.connect('activate', () => this._openTasks());
+            item.insert_child_below(new St.Label({text: when, y_align: Clutter.ActorAlign.CENTER,
+                style_class: when === 'Overdue' ? 'mk-agenda-pill mk-agenda-late' : 'mk-agenda-pill'}), item._triangleBin);
+            const at = GLib.DateTime.new_from_unix_local(task.remind_at);
+            const detail = new PopupMenu.PopupMenuItem(at.format('%A %-e %B, %-l:%M %p') +
+                (task.repeat && task.repeat !== 'none' ? `  ·  repeats ${task.repeat}` : ''), {reactive: false});
+            detail.add_style_class_name('mk-agenda-detail');
+            item.menu.addMenuItem(detail);
+            item.menu.addAction('Mark Done', () => this._updateTask(task.id, t => {
+                t.done = true;
+                if ((t.repeat ?? 'none') === 'none')
+                    t.remind_at = null;
+            }), 'object-select-symbolic');
+            item.menu.addAction('Snooze 15 min', () => this._updateTask(task.id, t => {
+                t.remind_at = Math.max(t.remind_at ?? 0, Date.now() / 1000) + 900;
+            }), 'alarm-symbolic');
+            item.menu.addAction('Open in Companion', () => this._openTasks(), 'document-open-symbolic');
             menu.addMenuItem(item);
         }
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         menu.addAction('Open Tasks', () => this._openTasks());
+    }
+
+    // change one task in companion.json (the Companion picks it up from the file)
+    _updateTask(id, change) {
+        try {
+            const [ok, bytes] = GLib.file_get_contents(COMPANION);
+            const data = ok ? JSON.parse(new TextDecoder().decode(bytes)) : null;
+            const task = data?.tasks?.find(t => t.id === id);
+            if (!task)
+                return;
+            change(task);
+            GLib.file_set_contents(COMPANION, JSON.stringify(data, null, 2));
+        } catch (e) {
+            console.warn(`mk-indicator: agenda: ${e.message}`);
+        }
+        this._refresh();
     }
 
     _openTasks() {

@@ -35,8 +35,12 @@ class ActiveApp {
         this.button = new PanelMenu.Button(0.0, 'Active app', false);
         this.button.add_style_class_name('mk-active-app');
         this._box = new St.BoxLayout({style_class: 'mk-active-app-box', y_align: Clutter.ActorAlign.CENTER});
-        this._iconBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
-        this._label = new St.Label({style_class: 'mk-active-app-name', y_align: Clutter.ActorAlign.CENTER});
+        this._iconBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER, width: 18});   // (the same for an app icon and the dot)
+        // a fixed width (CSS: 160 px) with the name cut short by "…": switching between
+        // "WS 2" and "Visual Studio Code" never makes the island grow and shrink
+        this._label = new St.Label({style_class: 'mk-active-app-name', y_align: Clutter.ActorAlign.CENTER,
+            x_align: Clutter.ActorAlign.CENTER});
+        this._label.clutter_text.ellipsize = 3;     // Pango.EllipsizeMode.END
         this._box.add_child(this._iconBin);
         this._box.add_child(this._label);
         this.button.add_child(this._box);
@@ -72,10 +76,10 @@ class ActiveApp {
         this._iconBin.set_child(icon);
         this._label.text = app ? app.get_name() : `WS ${ws}`;
         if (animate && St.Settings.get().enable_animations) {
+            // the new name crossfades in place (the capsule's size doesn't move)
             this._box.remove_all_transitions();
             this._box.opacity = 0;
-            this._box.translation_y = 4;
-            this._box.ease({opacity: 255, translation_y: 0, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            this._box.ease({opacity: 255, duration: 140, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         }
     }
 

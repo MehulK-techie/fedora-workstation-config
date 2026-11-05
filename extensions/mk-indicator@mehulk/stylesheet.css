@@ -292,3 +292,4 @@
 .mk-agenda-pill { font-size: 0.82em; font-weight: 700; padding: 1px 8px; border-radius: 8px; margin-left: 12px;
   background-color: rgba(255, 255, 255, 0.10); }
 .mk-agenda-late { background-color: rgba(239, 68, 68, 0.30); color: #ffd4d4; }
+.mk-agenda-detail { font-size: 0.85em; color: rgba(255, 255, 255, 0.65); }

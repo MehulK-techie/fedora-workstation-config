@@ -47,7 +47,7 @@
 #panel.mk-islands .panel-button:hover { background-color: rgba(255, 255, 255, 0.10); }
 #panel.mk-islands .panel-button:active, #panel.mk-islands .panel-button:checked { background-color: st-transparentize(-st-accent-color, 0.7); }
 .mk-active-app-box { spacing: 7px; }
-.mk-active-app-name { font-weight: 700; }
+.mk-active-app-name { font-weight: 700; min-width: 160px; max-width: 160px; text-align: center; }   /* fixed: the island never resizes */
 .mk-clock { font-weight: 600; font-feature-settings: "tnum"; }
 
 /* Quick Settings as a bento grid (modules/controlCenter.js) */

@@ -67,7 +67,7 @@ GNOME switches off every extension that isn't made for the lock screen when you 
 | `Super+←` or `Super+→` | Window takes the left or right half. Snap Assist then shows your other windows: click one to fill the other half. |
 | `Super+←`, then `Super+↑` (or `↓`) | Window takes the top-left (or bottom-left) quarter. Same on the right. |
 | Drag a window to a screen edge or corner | Half or quarter, with a preview |
-| `Super+Z` | MK snap layouts (mk-indicator): a card of five layouts, 50 / 50 Split, 3-Column Studio (25 / 50 / 25), Center Stage (70 + two stacked), 2 x 2 Grid, 70 / 30 Duo. Hover or arrow onto one to see its parts on the desktop; `1`-`5`, Enter or a click tiles the focused window into the main (lit) part and your other windows on this desktop, most recent first, into the rest. Esc closes |
+| `Super+Z` | MK snap layouts (mk-shell-engine): a card of five layouts chosen for the windows on this desktop, the likeliest already picked: one window: Center Stage (80 %), Left / Right Half; two: 50 / 50 Split, 70 / 30 Duo; three: 3-Column Studio (25 / 50 / 25), Main + 2 Stacked; four or more: 2 x 2 Grid. A maximized window snaps on the first press. Hover or arrow onto one to see its parts on the desktop; `1`-`5`, Enter or a click tiles the focused window into the main (lit) part and your other windows on this desktop, most recent first, into the rest. Esc closes |
 | `Super+Shift+Z` | Coder desktop: VS Code (or Zed, Builder, a JetBrains IDE), a terminal and a browser window on localhost move to a fresh desktop as terminal / editor / browser. Two of the three are enough (70 / 30 then) |
 | Click one window of a snapped group | The whole group comes to the front |
 

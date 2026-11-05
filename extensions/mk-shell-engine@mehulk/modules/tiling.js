@@ -10,6 +10,7 @@
 //
 // Nothing here polls or runs a command: it reads the window list when asked.
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -22,13 +23,32 @@ const GLIDE = 140;           // a window gliding to its place, ms
 
 // [name, parts]: a part is [x, y, width, height] in fractions of the work
 // area. The first part is the main one: the focused window goes there.
-export const LAYOUTS = [
-    ['50 / 50 Split', [[0, 0, 0.5, 1], [0.5, 0, 0.5, 1]]],
-    ['3-Column Studio', [[0.25, 0, 0.5, 1], [0, 0, 0.25, 1], [0.75, 0, 0.25, 1]]],
-    ['Center Stage', [[0, 0, 0.7, 1], [0.7, 0, 0.3, 0.5], [0.7, 0.5, 0.3, 0.5]]],
-    ['2 x 2 Grid', [[0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]]],
-    ['70 / 30 Duo', [[0, 0, 0.7, 1], [0.7, 0, 0.3, 1]]],
-];
+const L = {
+    halves: ['50 / 50 Split', [[0, 0, 0.5, 1], [0.5, 0, 0.5, 1]]],
+    studio: ['3-Column Studio', [[0.25, 0, 0.5, 1], [0, 0, 0.25, 1], [0.75, 0, 0.25, 1]]],
+    stack: ['Main + 2 Stacked', [[0, 0, 0.7, 1], [0.7, 0, 0.3, 0.5], [0.7, 0.5, 0.3, 0.5]]],
+    quad: ['2 x 2 Grid', [[0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]]],
+    duo: ['70 / 30 Duo', [[0, 0, 0.7, 1], [0.7, 0, 0.3, 1]]],
+    center: ['Center Stage', [[0.1, 0.05, 0.8, 0.9]]],
+    left: ['Left Half', [[0, 0, 0.5, 1]]],
+    right: ['Right Half', [[0.5, 0, 0.5, 1]]],
+};
+// the classic five (the coder desktop uses them by position)
+export const LAYOUTS = [L.halves, L.studio, L.stack, L.quad, L.duo];
+
+// The card offers what fits the windows on this desktop, the likeliest first
+// (it's the one picked when the card opens, so Enter takes it):
+// one window: centred or a half; two: side by side; three: three columns or
+// one big and two stacked; four or more: the grid.
+export function layoutsFor(count) {
+    if (count <= 1)
+        return [L.center, L.left, L.right, L.duo, L.halves];
+    if (count === 2)
+        return [L.halves, L.duo, L.studio, L.stack, L.quad];
+    if (count === 3)
+        return [L.studio, L.stack, L.halves, L.duo, L.quad];
+    return [L.quad, L.studio, L.stack, L.halves, L.duo];
+}
 
 const TERMINALS = /ptyxis|gnome-terminal|kgx|console|ghostty|kitty|alacritty|wezterm|foot|tilix|konsole|terminator/;
 const EDITORS = /^(code|code-oss|codium|vscodium|com\.visualstudio\.code.*|dev\.zed\.zed|zed|org\.gnome\.builder|jetbrains-.*)$/;
@@ -51,6 +71,13 @@ function windowsHere() {
     return global.display.get_tab_list(Meta.TabList.NORMAL, ws).filter(w => !w.minimized && !w.skip_taskbar);
 }
 
+// Maximized, half-maximized (snapped to an edge) or full screen: such a window
+// has to be let go first.
+function held(win) {
+    return win.is_fullscreen() || win.maximized_horizontally || win.maximized_vertically ||
+        (win.is_maximized?.() ?? false);
+}
+
 function unmaximize(win) {
     if (win.is_fullscreen())
         win.unmake_fullscreen();
@@ -61,9 +88,38 @@ function unmaximize(win) {
     }
 }
 
+const SETTLE = 45;           // ms for an app to answer "you're not maximized any more" (Wayland)
+
 // Put WIN at RECT; it glides there from where it was (unless animations are off).
+// A maximized window is let go first and moved a moment later: on Wayland the
+// app confirms un-maximizing after a frame or two, and that confirmation used
+// to put back its old size over a move made at once (Super+Z then only worked
+// the second time). It's checked once more after, in case the app was slow.
 function place(win, rect) {
+    if (!held(win)) {
+        moveTo(win, rect);
+        return;
+    }
     unmaximize(win);
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, SETTLE, () => {
+        if (win.get_compositor_private()) {
+            moveTo(win, rect);
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
+                const f = win.get_compositor_private() ? win.get_frame_rect() : null;
+                if (f && (Math.abs(f.x - rect.x) > 2 || Math.abs(f.y - rect.y) > 2 ||
+                    Math.abs(f.width - rect.width) > 2 || Math.abs(f.height - rect.height) > 2)) {
+                    if (held(win))
+                        unmaximize(win);
+                    win.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
+                }
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        return GLib.SOURCE_REMOVE;
+    });
+}
+
+function moveTo(win, rect) {
     const before = win.get_frame_rect();
     win.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
     const actor = win.get_compositor_private();
@@ -108,6 +164,8 @@ export class SnapLayouts {
         }
         this._focus = focus;
         this._area = focus.get_work_area_current_monitor();
+        const here = windowsHere().filter(w => w.get_monitor() === focus.get_monitor());
+        this._layouts = layoutsFor(new Set([focus, ...here]).size);
         const monitor = Main.layoutManager.monitors[focus.get_monitor()] ?? Main.layoutManager.primaryMonitor;
         const [r, g, b] = accentRGB();
         this._rgb = `${r},${g},${b}`;
@@ -124,14 +182,14 @@ export class SnapLayouts {
         panel.add_effect(new Shell.BlurEffect({radius: 24, brightness: 0.68, mode: Shell.BlurMode.BACKGROUND}));
         panel.add_child(new St.Label({text: 'Snap layouts', style_class: 'mk-snap-heading'}));
         const row = new St.BoxLayout({style: 'spacing: 10px;'});
-        this._cards = LAYOUTS.map((layout, i) => {
+        this._cards = this._layouts.map((layout, i) => {
             const card = this._card(layout, i);
             row.add_child(card);
             return card;
         });
         panel.add_child(row);
         panel.add_child(new St.Label({style_class: 'mk-snap-hint',
-            text: '1-5 or click: snap. Arrows and Enter pick. Esc closes. Super+Shift+Z: coder desktop.'}));
+            text: 'Picked for your windows: Enter takes the first. 1-5 or click: snap. Esc closes. Super+Shift+Z: coder desktop.'}));
         this._actor.add_child(panel);
         Main.uiGroup.add_child(this._actor);
         // centre the card on the monitor once it knows its size
@@ -189,7 +247,7 @@ export class SnapLayouts {
         });
         this._previews.destroy_all_children();
         const [ox, oy] = this._offset;
-        LAYOUTS[index][1].forEach((part, i) => {
+        this._layouts[index][1].forEach((part, i) => {
             const r = partRect(this._area, part);
             this._previews.add_child(new St.Widget({x: r.x - ox, y: r.y - oy, width: r.width, height: r.height,
                 style: `border-radius: 14px; border: 2px solid rgba(${this._rgb},${i === 0 ? 0.9 : 0.45});
@@ -200,14 +258,14 @@ export class SnapLayouts {
     _onKey(event) {
         const key = event.get_key_symbol();
         const n = key - Clutter.KEY_1;
-        if (n >= 0 && n < LAYOUTS.length) {
+        if (n >= 0 && n < this._layouts.length) {
             this._apply(n);
-        } else if (key >= Clutter.KEY_KP_1 && key < Clutter.KEY_KP_1 + LAYOUTS.length) {
+        } else if (key >= Clutter.KEY_KP_1 && key < Clutter.KEY_KP_1 + this._layouts.length) {
             this._apply(key - Clutter.KEY_KP_1);
         } else if (key === Clutter.KEY_Right || key === Clutter.KEY_Down || key === Clutter.KEY_Tab) {
-            this._select((this._selected + 1) % LAYOUTS.length);
+            this._select((this._selected + 1) % this._layouts.length);
         } else if (key === Clutter.KEY_Left || key === Clutter.KEY_Up || key === Clutter.KEY_ISO_Left_Tab) {
-            this._select((this._selected + LAYOUTS.length - 1) % LAYOUTS.length);
+            this._select((this._selected + this._layouts.length - 1) % this._layouts.length);
         } else if (key === Clutter.KEY_Return || key === Clutter.KEY_KP_Enter || key === Clutter.KEY_space) {
             this._apply(this._selected);
         } else if (key === Clutter.KEY_Escape || key === Clutter.KEY_z || key === Clutter.KEY_Z) {
@@ -222,7 +280,7 @@ export class SnapLayouts {
         if (!focus || focus.unmanaging)
             return;
         const others = windowsHere().filter(w => w !== focus && w.get_monitor() === focus.get_monitor());
-        tile(LAYOUTS[index], [focus, ...others]);
+        tile(this._layouts[index], [focus, ...others]);
     }
 
     close() {

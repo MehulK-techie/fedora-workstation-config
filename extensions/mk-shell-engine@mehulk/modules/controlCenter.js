@@ -9,9 +9,12 @@
 // It also leaves out what you rarely need there (qs-hidden): by default Dark
 // Style, Airplane Mode and the Welcome light toggle, and the battery reading
 // in the header (the top bar already shows it), so the toggles are a clean
-// 2 x 3: Wi-Fi, Bluetooth, Power Mode, Night Light, Do Not Disturb, Caffeine.
+// 2 x 4: Wi-Fi, Bluetooth, Power Mode, Night Light, Do Not Disturb, Caffeine,
+// and two the engine adds: Screenshot and Screen Record (they open GNOME's
+// screenshot tool, set to a picture or to recording).
 import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
 
 const QS_GLASS = {sigma: 52, brightness: 0.56};
@@ -44,6 +47,26 @@ export class ControlCenter {
         if (grid)
             this._ids.push([grid, grid.connect('child-added', () => this._queuePrune())]);
         this._prune();
+        this._addCaptureToggles();
+    }
+
+    // Screenshot and Screen Record, as two tiles (GNOME's screenshot tool: 0 picture, 1 recording)
+    _addCaptureToggles() {
+        this._capture = new QuickSettings.SystemIndicator();
+        for (const [title, icon, mode] of [['Screenshot', 'camera-photo-symbolic', 0],
+            ['Screen Record', 'media-record-symbolic', 1]]) {
+            const toggle = new QuickSettings.QuickToggle({title, iconName: icon, toggleMode: false});
+            toggle.connect('clicked', () => {
+                this._qs.menu.close();
+                // (after the menu has gone, so it isn't in the picture)
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+                    Main.screenshotUI.open(mode).catch?.(e => console.warn(`mk-shell-engine: ${title}: ${e.message}`));
+                    return GLib.SOURCE_REMOVE;
+                });
+            });
+            this._capture.quickSettingsItems.push(toggle);
+        }
+        this._qs.addExternalIndicator(this._capture);
     }
 
     _prune() {
@@ -93,6 +116,10 @@ export class ControlCenter {
         for (const [object, id] of this._ids)
             object.disconnect(id);
         this._unglass?.();
+        if (this._capture) {
+            this._capture.quickSettingsItems.forEach(item => item.destroy());
+            this._capture.destroy();
+        }
         this._restore();
         this._original.clear();
         this._box.remove_style_class_name('mk-bento');

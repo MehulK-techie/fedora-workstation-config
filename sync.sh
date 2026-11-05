@@ -630,6 +630,19 @@ cp -r "$SCRIPT_DIR/extensions/$MK_ENGINE" "$USER_EXT_DIR/"
 glib-compile-schemas "$USER_EXT_DIR/$MK_ENGINE/schemas" || true
 
 gsettings set org.gnome.shell disable-user-extensions false
+# GNOME 51 removed St.BoxLayout's `vertical` property; extensions that still set
+# it fail to start (WACK's lock-screen clock: "No property vertical"). Their
+# boxes get `orientation` instead, in the installed copy: idempotent, and done
+# again after an update brings the old code back. Only these known files.
+WACK_CLOCK="$USER_EXT_DIR/wack-lockscreen-clock@rinzler69-wastaken.github.com/src/main"
+if (( $(gnome_version 2> /dev/null || echo 0) >= 48 )) && [[ -d "$WACK_CLOCK" ]]; then
+    for f in wackClock.js cupertinoPrompt.js lockscreenMessageManager.js cupertinoPromptManager.js; do
+        if [[ -f "$WACK_CLOCK/$f" ]] && grep -q 'vertical: true' "$WACK_CLOCK/$f" && grep -q "import Clutter from 'gi://Clutter'" "$WACK_CLOCK/$f"; then
+            sed -i 's/\bvertical: true\b/orientation: Clutter.Orientation.VERTICAL/' "$WACK_CLOCK/$f"
+            echo "    [+] WACK lock-screen clock: $f updated for GNOME 51"
+        fi
+    done
+fi
 # Effects profile (`mk effects full|lite|auto`, default auto): lite keeps the
 # heaviest effects (config/effects.conf) installed but switched off, so older
 # or low-power machines stay smooth. auto picks lite on weak hardware.
@@ -644,46 +657,62 @@ if [[ "$EFFECTS" != full && "$EFFECTS" != lite ]]; then
         EFFECTS=full
     fi
 fi
+# Your extension switches are yours. sync enables an extension only the
+# first time it sets it up on this computer, and switches a replaced one off
+# only once; after that, whatever you turn on or off in Extension Manager
+# stays as you left it, sync after sync. What it has done is listed in
+# ~/.config/mk-workstation/extensions-applied (one "enable:" or "retire:"
+# line each; delete a line to have it done again on the next sync).
+APPLIED="$HOME/.config/mk-workstation/extensions-applied"
+mkdir -p "$(dirname "$APPLIED")"
+if [[ ! -f "$APPLIED" ]]; then
+    touch "$APPLIED"
+    # An install from before this list existed: take today's switches as yours (nothing changes now).
+    if gsettings get org.gnome.shell enabled-extensions | grep -q "$MK_INDICATOR"; then
+        for uuid in "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR" "$MK_ENGINE"; do echo "enable:$uuid"; done >> "$APPLIED"
+        for uuid in clipboard-indicator@tudmotu.com space-bar@luchrioh monitor@astraext.github.io \
+            macos-dock@vinnytherobot.github.io dash-to-dock@micxgx.gmail.com blur-my-shell@aunetx \
+            compiz-alike-magic-lamp-effect@hermes83.github.com; do echo "retire:$uuid"; done >> "$APPLIED"
+    fi
+fi
+first_time() { ! grep -qxF -- "$1" "$APPLIED"; }
+
 if [[ "$EFFECTS" == lite ]]; then
     kept=()
     for uuid in "${ACTIVE_EXTENSIONS[@]}"; do
         [[ " ${HEAVY_EXTENSIONS[*]} " == *" $uuid "* ]] || kept+=("$uuid")
     done
     ACTIVE_EXTENSIONS=("${kept[@]}")
-    gsettings_remove org.gnome.shell enabled-extensions "${HEAVY_EXTENSIONS[@]}"
-    echo "    [*] Effects: lite (blur, wobbly windows and genie off; the open/close glide stays; 'mk effects full' turns them on)"
+    echo "    [*] Effects: lite (blur, wobbly windows and genie stay off unless you turn them on; 'mk effects full' turns them on)"
 fi
-# Write the list directly: `gnome-extensions enable` fails on Wayland for
-# extensions the running shell hasn't loaded yet.
-gsettings_append org.gnome.shell enabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR" "$MK_ENGINE"
-# GNOME's disabled-extensions list overrides enabled-extensions, so an extension
-# switched off once in Extension Manager would otherwise never come back.
-gsettings_remove org.gnome.shell disabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR" "$MK_ENGINE"
-# Extensions an earlier MK version enabled and later dropped: switch them off.
-# Space Bar duplicated GNOME's own workspace dots in the top bar.
-# MK's own clipboard history (Super+V, in mk-indicator) replaced Clipboard Indicator.
-gsettings_remove org.gnome.shell enabled-extensions clipboard-indicator@tudmotu.com
-gsettings_remove org.gnome.shell enabled-extensions space-bar@luchrioh
-# Astra Monitor: replaced by mk-indicator's own lighter system monitor.
-gsettings_remove org.gnome.shell enabled-extensions monitor@astraext.github.io
-# MacOS Dock: a second dock whose magnification fought Dash to Dock's
-# (doubled icons). Dash to Dock + mk-indicator's magnification replace it.
-gsettings_remove org.gnome.shell enabled-extensions macos-dock@vinnytherobot.github.io
-# Dash to Dock: MK Shell Engine's own dock replaces it (the engine's dock only
-# stands aside while Dash to Dock runs, so it's switched off here). It stays
-# installed: with the engine's dock off (its `dock` key), Dash to Dock is left alone.
-engine_dock=$(gsettings --schemadir "$USER_EXT_DIR/$MK_ENGINE/schemas" get org.gnome.shell.extensions.mk-shell-engine dock 2>/dev/null || echo true)
-if [[ "$engine_dock" == true ]]; then
-    gsettings_remove org.gnome.shell enabled-extensions dash-to-dock@micxgx.gmail.com
+TO_ENABLE=()
+for uuid in "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR" "$MK_ENGINE"; do
+    if first_time "enable:$uuid"; then
+        TO_ENABLE+=("$uuid")
+        echo "enable:$uuid" >> "$APPLIED"
+    fi
+done
+if (( ${#TO_ENABLE[@]} )); then
+    # Write the list directly: `gnome-extensions enable` fails on Wayland for
+    # extensions the running shell hasn't loaded yet. GNOME's disabled list
+    # overrides the enabled one, so they come off it too (this once).
+    gsettings_append org.gnome.shell enabled-extensions "${TO_ENABLE[@]}"
+    gsettings_remove org.gnome.shell disabled-extensions "${TO_ENABLE[@]}"
+    echo "    [+] Enabled for the first time: ${TO_ENABLE[*]}"
 fi
-# Blur my Shell and Magic Lamp: the engine's own blur and genie replace them
-# (each of the engine's stands aside while the other runs). Blur my Shell is
-# left alone if you switched the engine's blur off (its `blur` key).
-engine_blur=$(gsettings --schemadir "$USER_EXT_DIR/$MK_ENGINE/schemas" get org.gnome.shell.extensions.mk-shell-engine blur 2>/dev/null || echo true)
-if [[ "$engine_blur" == true ]]; then
-    gsettings_remove org.gnome.shell enabled-extensions blur-my-shell@aunetx
-fi
-gsettings_remove org.gnome.shell enabled-extensions compiz-alike-magic-lamp-effect@hermes83.github.com
+# Extensions an MK version replaced, switched off once (turn one back on and it stays on):
+#   Clipboard Indicator (MK's clipboard history, Super+V), Space Bar (duplicated GNOME's workspace
+#   dots), Astra Monitor (MK's system monitor), MacOS Dock (a second dock), Dash to Dock, Blur my
+#   Shell and Magic Lamp (the engine's dock, glass and minimize glide; each of the engine's stands
+#   aside while the one it replaces runs).
+for uuid in clipboard-indicator@tudmotu.com space-bar@luchrioh monitor@astraext.github.io \
+    macos-dock@vinnytherobot.github.io dash-to-dock@micxgx.gmail.com blur-my-shell@aunetx \
+    compiz-alike-magic-lamp-effect@hermes83.github.com; do
+    if first_time "retire:$uuid"; then
+        gsettings_remove org.gnome.shell enabled-extensions "$uuid"
+        echo "retire:$uuid" >> "$APPLIED"
+    fi
+done
 # Extension managers are tools you open now and then, not dock apps.
 gsettings_remove org.gnome.shell favorite-apps com.mattjakeman.ExtensionManager.desktop org.gnome.Extensions.desktop
 if [[ -d "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io" ]]; then

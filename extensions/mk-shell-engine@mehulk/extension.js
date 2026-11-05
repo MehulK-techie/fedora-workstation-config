@@ -10,6 +10,7 @@
 //   modules/appSwitcher.js the Super+Tab app switcher
 //   modules/snip.js        area screenshots start fresh and are taken on release
 //   modules/mediaKeys.js   Previous / Next track: one press, one skip
+//   modules/windowAnimations.js  windows open and close with a little spring (while Burn My Windows is off)
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { SnapLayouts, bindSnapLayouts, unbindSnapLayouts } from './modules/tiling.js';
 import { Dock } from './modules/dock.js';
@@ -17,6 +18,7 @@ import { MagicLamp } from './modules/magicLamp.js';
 import { AppSwitcher } from './modules/appSwitcher.js';
 import { Snip } from './modules/snip.js';
 import { MediaKeys } from './modules/mediaKeys.js';
+import { WindowAnimations } from './modules/windowAnimations.js';
 import { Panel } from './modules/panel.js';
 import { ControlCenter } from './modules/controlCenter.js';
 
@@ -40,6 +42,7 @@ export default class MKShellEngine extends Extension {
         this._start('app switcher', () => new AppSwitcher());
         this._start('snip', () => new Snip(this._settings));
         this._start('media keys', () => new MediaKeys(this._settings));
+        this._start('window animations', () => new WindowAnimations());
     }
 
     _start(name, make) {

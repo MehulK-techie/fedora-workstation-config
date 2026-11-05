@@ -6,6 +6,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 export const DASH_TO_DOCK = 'dash-to-dock@micxgx.gmail.com';
 export const BLUR_MY_SHELL = 'blur-my-shell@aunetx';
 export const MAGIC_LAMP = 'compiz-alike-magic-lamp-effect@hermes83.github.com';
+export const BURN_MY_WINDOWS = 'burn-my-windows@schneegans.github.com';
 
 const ACTIVE = 1;     // ExtensionState.ACTIVE (named ENABLED before GNOME 48)
 

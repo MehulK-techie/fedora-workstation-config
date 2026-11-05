@@ -22,6 +22,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { DASH_TO_DOCK, isActive, watch } from './conflicts.js';
 import { DOCK_GLASS, addWallpaperGlass, blurAllowed } from './blur.js';
 import { accentRGB, onAccentChanged } from './colour.js';
+import * as Actions from './appActions.js';
 
 const MARGIN = 4;              // the dock's gap above the screen's bottom edge
 // fading away and back: dock-hide-ms / dock-reveal-ms (480 / 360 by default: slow and soft, never a jump)
@@ -32,13 +33,12 @@ const EDGE_DELAY = 70;         // the pointer rests on the bottom edge this long
 // The parabola: HOVER at the pointer, falling to 1 a little over one icon
 // away; the neighbour one icon away lands on HOVER minus 56 % of the growth
 // (1.18 -> 1.08, as the default).
-// Magnification, as on a Mac: a smooth bell (a raised cosine) 130 px wide on
-// each side of the pointer. Each icon grows by the bell's height where it
-// stands, lifts by up to 10 px, and its neighbours make room by sliding
-// apart, so the icons swell like a wave and never overlap. It follows the
-// pointer on every motion event and eases back when the pointer leaves.
-const RADIUS = 130, LIFT = 10;
-const bell = d => d >= RADIUS ? 0 : (1 + Math.cos(Math.PI * d / RADIUS)) / 2;
+// Magnification, focused: the icon under the pointer grows to
+// dock-hover-scale (1.32x) and lifts 12 px; the icon on each side of it grows
+// a little (1.08x); every other icon stays as it is. Each icon glides to its
+// size in 120 ms (ease-out cubic) as the pointer sweeps across, and only
+// when its own size changes, so a sweep never restarts anyone else's glide.
+const NEIGHBOUR = 1.08, LIFT = 12, GLIDE = 120;
 
 export class Dock {
     constructor(settings) {
@@ -235,7 +235,10 @@ export class Dock {
                 return Clutter.EVENT_STOP;
             }
             if (event.get_button() === Clutter.BUTTON_SECONDARY) {
-                this._menu(item).toggle();
+                const menu = this._menu(item);
+                if (!menu.isOpen)
+                    menu._mkFill();
+                menu.toggle();
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;
@@ -331,22 +334,25 @@ export class Dock {
         Main.uiGroup.add_child(menu.actor);
         menu.actor.hide();
         this._menus.addMenu(menu);
-        menu.connect('open-state-changed', (_m, open) => {
-            if (!open)
-                return;
+        // (filled before it opens: GNOME won't open an empty menu, so filling it on
+        // open-state-changed meant it never opened at all)
+        menu._mkFill = () => {
             menu.removeAll();
             const {app} = item;
             menu.addAction('New Window', () => app.open_new_window(-1));
             const favourites = AppFavorites.getAppFavorites();
             if (favourites.isFavorite(app.get_id()))
-                menu.addAction('Unpin from Dock', () => favourites.removeFavorite(app.get_id()));
+                menu.addAction('Remove from Dock', () => favourites.removeFavorite(app.get_id()));
             else
-                menu.addAction('Pin to Dock', () => favourites.addFavorite(app.get_id()));
+                menu.addAction('Keep in Dock', () => favourites.addFavorite(app.get_id()));
             if (app.get_n_windows() > 0) {
                 menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
                 menu.addAction('Quit', () => app.request_quit());
+                // for an app that has stopped answering: asks first, then ends it at once
+                if (Actions.canForceQuit(app))
+                    menu.addAction('Force Quit…', () => Actions.forceQuit(app)).add_style_class_name('mk-danger');
             }
-        });
+        };
         item.menu = menu;
         item.button.connect('destroy', () => menu.destroy());
         return menu;
@@ -422,44 +428,31 @@ export class Dock {
 
     _magnify(pointerX) {
         const items = this._items ?? [];
-        // where each icon stands at rest (its button's place in the dock, which the wave never moves,
-        // so the pointer always meets the same icon at the same spot)
+        // which icon the pointer is over (by where each button sits at rest)
         const [dockX] = this._actor.get_transformed_position();
-        const heights = items.map(it => bell(Math.abs(pointerX - (dockX + it.button.x + it.button.width / 2))));
-        const extra = heights.map(g => (this._hover - 1) * g * this._size);
-        const total = extra.reduce((a, b) => a + b, 0);
-        // room for the growth: everything left of the wave moves left, everything right of it moves
-        // right (the dividers too, in their place in the row)
-        let before = 0;
-        const byButton = new Map(items.map((it, i) => [it.button, i]));
-        for (const child of this._actor.get_children()) {
-            const i = byButton.get(child);
-            if (i === undefined) {                            // a divider
-                child.remove_transition('translation-x');
-                child.translation_x = Math.round(before - total / 2);
-                continue;
-            }
-            const it = items[i], g = heights[i], s = 1 + (this._hover - 1) * g;
-            for (const p of ['scale-x', 'scale-y', 'translation-y'])
-                it.icon.remove_transition(p);
-            it.box.remove_transition('translation-x');
-            it.icon.set_scale(s, s);
-            it.icon.translation_y = -LIFT * g;
-            it.box.translation_x = Math.round(before + extra[i] / 2 - total / 2);
-            before += extra[i];
-        }
+        let under = -1;
+        items.forEach((it, i) => {
+            const x = dockX + it.button.x;
+            if (pointerX >= x && pointerX < x + it.button.width)
+                under = i;
+        });
+        items.forEach((it, i) => {
+            const d = under < 0 ? 99 : Math.abs(i - under);
+            const scale = d === 0 ? this._hover : d === 1 ? NEIGHBOUR : 1;
+            if (it.target === scale)
+                return;
+            it.target = scale;
+            it.icon.ease({scale_x: scale, scale_y: scale, translation_y: d === 0 ? -LIFT : 0,
+                duration: GLIDE, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        });
         return Clutter.EVENT_PROPAGATE;
     }
 
     _settle() {
         const ease = {duration: 150, mode: Clutter.AnimationMode.EASE_OUT_CUBIC};
         for (const item of this._items ?? []) {
+            item.target = 1;
             item.icon.ease({scale_x: 1, scale_y: 1, translation_y: 0, ...ease});
-            item.box.ease({translation_x: 0, ...ease});
-        }
-        for (const child of this._actor?.get_children() ?? []) {
-            if (child.has_style_class_name?.('mk-dock-separator'))
-                child.ease({translation_x: 0, ...ease});
         }
         this._tooltip(null);
     }

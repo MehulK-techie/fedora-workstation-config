@@ -12,8 +12,9 @@
 .mk-snap-hint { color: rgba(242, 246, 255, 0.55); font-size: 0.78em; }
 
 /* The MK dock (modules/dock.js): obsidian glass */
-.mk-dock { background-color: rgba(14, 15, 20, 0.72); border: 1px solid rgba(255, 255, 255, 0.12);
-  border-top-color: rgba(255, 255, 255, 0.22); border-radius: 20px; padding: 4px 8px; spacing: 0; }
+.mk-dock { background-color: rgba(16, 18, 24, 0.55); border: 1px solid rgba(255, 255, 255, 0.18);
+  border-top-color: rgba(255, 255, 255, 0.32); border-radius: 20px; padding: 4px 8px; spacing: 0;
+  box-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.5); }
 .mk-dock-item { padding: 4px 4px 2px; border-radius: 14px; }
 .mk-dock-item:focus { background-color: rgba(255, 255, 255, 0.08); }
 .mk-dock-bars { height: 3px; margin-top: 3px; spacing: 2px; }
@@ -36,7 +37,7 @@
 #panel.mk-islands { background-color: transparent !important; box-shadow: none !important; border: none !important; }
 #panel.mk-edge { box-shadow: none !important; }
 #panel.mk-islands #panelLeft, #panel.mk-islands #panelCenter, #panel.mk-islands #panelRight {
-  background-color: rgba(16, 18, 26, 0.34); border: 1px solid rgba(255, 255, 255, 0.16);
+  background-color: rgba(16, 18, 24, 0.58); border: 1px solid rgba(255, 255, 255, 0.16);
   border-top-color: rgba(255, 255, 255, 0.28); border-bottom-color: rgba(0, 0, 0, 0.18);
   border-radius: 12px; margin: 3px 8px; padding: 0 4px; }
 /* (no drop shadow on the islands: it makes GNOME paint them larger than they are, and the glass's
@@ -79,7 +80,8 @@
 .mk-tray-fold { padding: 0 6px; }
 #panel.mk-islands #panelLeft { margin-left: 6px; spacing: 10px; }   /* (after the islands' own margin, so it wins) */
 
-/* A maximized window under the top bar: one solid strip (panel.js) */
-#panel.mk-islands.mk-solid { background-color: rgba(14, 16, 22, 0.98) !important; transition-duration: 180ms; }
-#panel.mk-islands.mk-solid #panelLeft, #panel.mk-islands.mk-solid #panelCenter, #panel.mk-islands.mk-solid #panelRight {
-  background-color: transparent; border-color: transparent; }
+
+/* The app pill on an empty desktop: "WS 1" with a subtle dot; Force Quit in red */
+.mk-ws-dot { width: 7px; height: 7px; border-radius: 4px; background-color: st-transparentize(-st-accent-color, 0.15); }
+.mk-danger { color: #ff6b6b; }
+.mk-danger:hover { background-color: rgba(239, 68, 68, 0.22); }

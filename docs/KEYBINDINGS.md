@@ -19,7 +19,8 @@ them live and lets you change any of them. Your changes go to
 | Snap right half | Super+Right · Super+Keypad 6 |
 | Maximize | Super+Up · Super+Keypad 5 |
 | Restore | Super+Down |
-| Snap layouts | Super+Z |
+| Snap layouts (then 1-5) | Super+Z |
+| Coder desktop | Super+Shift+Z |
 | Center window | Super+Ctrl+C |
 | Always on top | Super+Ctrl+T |
 | Full screen | Super+Ctrl+F |

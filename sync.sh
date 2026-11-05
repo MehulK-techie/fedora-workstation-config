@@ -680,7 +680,7 @@ ext_set touchpad-gesture-customization@coooolapps.com \
 # Windows-style split screen (Tiling Assistant): Super+arrows snap halves, and
 # Super+Left then Super+Up makes a quarter, as on Windows. After snapping, Snap
 # Assist offers your other windows for the free space; snapped windows raise
-# together. Super+Z picks a layout (config/tiling-layouts.json).
+# together. Super+Z is MK's own snap layouts (mk-indicator, snapLayouts.js).
 TA="tiling-assistant@leleat-on-github"
 TA_SCHEMA="org.gnome.shell.extensions.tiling-assistant"
 ext_set "$TA" "$TA_SCHEMA" dynamic-keybinding-behavior 3

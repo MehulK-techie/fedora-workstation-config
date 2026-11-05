@@ -16,5 +16,15 @@
       <summary>Close the windows on this workspace</summary>
       <description>Every ordinary window on the current workspace closes after 5 seconds; Undo in the notification brings them back.</description>
     </key>
+    <key name="snap-layouts" type="as">
+      <default><![CDATA[['<Super>z']]]></default>
+      <summary>Snap layouts</summary>
+      <description>Five layouts; 1-5 tiles the focused window and the others on this desktop.</description>
+    </key>
+    <key name="coder-desktop" type="as">
+      <default><![CDATA[['<Shift><Super>z']]]></default>
+      <summary>Coder desktop</summary>
+      <description>An editor, a terminal and a browser on localhost onto a fresh desktop, side by side.</description>
+    </key>
   </schema>
 </schemalist>

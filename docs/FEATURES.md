@@ -233,7 +233,8 @@ them live and lets you change any of them.
 | Snap right half | Super+Right | Extension |
 | Maximize | Super+Up | Extension |
 | Restore | Super+Down | Extension |
-| Snap layouts | Super+Z | Extension |
+| Snap layouts (then 1-5) | Super+Z | mk-indicator |
+| Coder desktop | Super+Shift+Z | mk-indicator |
 | Center window | Super+Ctrl+C | Extension |
 | Always on top | Super+Ctrl+T | GNOME |
 | Full screen | Super+Ctrl+F | GNOME |

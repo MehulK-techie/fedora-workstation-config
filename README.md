@@ -49,7 +49,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 | Codecs and video | `ffmpeg` swap at best | Full codecs **plus** GPU video decoding for AMD, Intel or NVIDIA |
 | Face unlock | Not offered, or one quick scan | Guided wizard: up to 5 face models across lighting conditions, several people, IR-aware security |
 | After setup | You're on your own | `mk update` installs anything newly added and updates the system; `mk save` captures apps and settings you added; `mk doctor` health check; daily update notifications |
-| Split screen | GNOME's left/right halves only | Windows-style snapping with quarters, Snap Assist and six snap layouts on Super+Z |
+| Split screen | GNOME's left/right halves only | Windows-style snapping with quarters, Snap Assist, and MK's five snap layouts on Super+Z (1-5 tiles your windows) |
 | Keyboard shortcuts | Added on top of whatever is there, clashes and all | One conflict-free keymap with Windows and macOS habits built in; `mk doctor` flags any key bound twice |
 | Changed your mind | Reinstall | `mk restore` puts back the settings snapshot taken before every sync |
 | Failures | Hidden or fatal | Listed at the end with what to do; full log in `/var/log` |
@@ -75,7 +75,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 
 **Feels familiar from Windows and macOS, still GNOME**
 - Windows habits: Super+E Files, Super+I Settings, Super+D desktop, Super+R run, Super+S search, Ctrl+Shift+Esc System Monitor, Super+V clipboard, Super+1–9 dock apps, Super+Alt+1–4 workspaces, Super+Ctrl+←/→ desktops, Super+Ctrl+D new desktop, taskbar-style dock (click focuses or minimizes, window thumbnails for apps with several windows)
-- Windows-style multitasking: snap halves and quarters, Snap Assist, Super+Z snap layouts (halves, 66/34, three columns, left + two stacked, quarters, focus centre), always on top
+- Windows-style multitasking: snap halves and quarters, Snap Assist, Super+Z snap layouts (50/50, 3-column studio, center stage, 2x2 grid, 70/30: press 1-5 and your windows tile, with a preview first), Super+Shift+Z puts your editor, terminal and localhost browser on a desktop of their own, always on top
 - macOS habits: trackpad gestures (4 fingers ←/→ switch Spaces, 3 fingers ←/→ switch apps, 3 fingers ↑ Mission Control), an auto-hiding dock with macOS-style magnification whose icons glow softly in each app's own colour (Spotify green, VS Code blue) and that steps aside in the overview, animations 25% faster, genie minimize into the dock, a soft glide when windows open and close, Super+Ctrl+F full screen, Super+Shift+3 / 4 screenshots, Quick Look (press Space on a file), Finder-style Files (expandable folders, item counts), centred new windows, Super+Q / Super+H
 - Linux habits kept: Ctrl+Alt+T terminal, workspaces on Super+Alt, the Super key opens the overview
 - System tray icons (AppIndicator) and a keep-awake toggle (Caffeine)
@@ -211,7 +211,8 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | **Windows** | `Alt+Tab` · `Super+Tab` | Every window from every workspace as a live thumbnail, themed to match · switch apps |
 | | `Super+←/→` | Snap to the left / right half |
 | | `Super+←` then `Super+↑/↓` | Snap to a quarter |
-| | `Super+Z` | Snap layouts (pick a layout, then a window for each part) |
+| | `Super+Z`, then `1`-`5` | Snap layouts: the focused window takes the main part, your other windows the rest |
+| | `Super+Shift+Z` | Coder desktop: editor, terminal and localhost browser on a fresh desktop, side by side |
 | | `Super+↑` · `Super+↓` | Maximize · restore |
 | | `Super+Ctrl+T` · `Super+Ctrl+C` · `Super+Ctrl+F` | Always on top · centre window · full screen |
 | | `Super+Ctrl+←/→` · `Super+Ctrl+D` | Previous / next desktop · new desktop (add `Shift` to take the window along) |

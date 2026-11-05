@@ -14,6 +14,7 @@ A little sox processing (lower pitch, warmth, short reverb) gives it the calm
 import hashlib
 import os
 import shutil
+import sys
 import subprocess
 import tempfile
 import urllib.request
@@ -81,8 +82,16 @@ def greeting(c=None, text=None):
     return text.replace("{title}", title).replace("{name}", first_name()).strip()
 
 
+def piper_ready():
+    """Piper is installed for the Python this system runs now. A Fedora upgrade
+    that moves Python on (3.14 to 3.15 in Fedora 45) leaves the old voice
+    environment unable to find its own packages: that counts as not installed."""
+    lib = VOICE_DIR / f"venv/lib/python{sys.version_info.major}.{sys.version_info.minor}"
+    return PIPER.exists() and MODEL.exists() and lib.is_dir()
+
+
 def engine():
-    if PIPER.exists() and MODEL.exists():
+    if piper_ready():
         return "piper"
     return "espeak" if shutil.which("espeak-ng") else None
 
@@ -118,11 +127,19 @@ def render(text=None, force=False):
         raw = Path(tmp) / "raw.wav"
         if eng == "piper":
             # A touch slower than Piper's default, with a short pause between
-            # sentences: calm, not hurried.
-            subprocess.run([str(PIPER), "-m", str(MODEL), "-f", str(raw), "--length_scale", "1.08",
-                            "--sentence_silence", "0.25"], input=text,
-                           text=True, capture_output=True, timeout=60, check=True)
-        else:
+            # sentences: calm, not hurried. If it fails anyway, the greeting is
+            # spoken by espeak-ng this time rather than not at all.
+            try:
+                subprocess.run([str(PIPER), "-m", str(MODEL), "-f", str(raw), "--length_scale", "1.08",
+                                "--sentence_silence", "0.25"], input=text,
+                               text=True, capture_output=True, timeout=60, check=True)
+            except (subprocess.SubprocessError, OSError):
+                if not shutil.which("espeak-ng"):
+                    raise
+                print("[-] The natural voice failed; using espeak-ng. Repair it: mk welcome voice install",
+                      file=sys.stderr)
+                eng = "espeak"
+        if eng != "piper":
             subprocess.run(["espeak-ng", "-v", "en-gb-x-rp", "-s", "148", "-p", "38", "-g", "3",
                             "-w", str(raw), text], capture_output=True, timeout=30, check=True)
         if shutil.which("sox"):
@@ -180,9 +197,10 @@ def install_natural_voice(progress=print):
     """Install Piper and the British "Alan" voice into ~/.local/share (no sudo)."""
     VOICE_DIR.mkdir(parents=True, exist_ok=True)
     venv = VOICE_DIR / "venv"
-    if not PIPER.exists():
+    if not piper_ready() or not PIPER.exists():
+        # (also after a Python upgrade: the old environment is rebuilt in place)
         progress("Creating the voice engine environment...")
-        subprocess.run(["python3", "-m", "venv", str(venv)], check=True)
+        subprocess.run(["python3", "-m", "venv", "--clear", str(venv)], check=True)
         progress("Downloading Piper (about 200 MB)...")
         subprocess.run([str(venv / "bin/pip"), "install", "-q", "piper-tts"], check=True)
     for url, dest in ((MODEL_URL, MODEL), (MODEL_URL + ".json", Path(str(MODEL) + ".json"))):

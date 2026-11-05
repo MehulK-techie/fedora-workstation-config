@@ -267,7 +267,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 │   ├── enabled-extensions.txt   Extensions sync.sh installs and enables
 │   ├── extension-settings/      One saved .dconf per extension
 │   └── *.dconf                  Reference snapshots written by mk export
-├── extensions/           mk-indicator (ours: top-bar tag, dock glow, Alt+Tab theme) + WACK Shell (GPL, no GNOME 50 build online)
+├── extensions/           mk-indicator (ours: top-bar tag, dock glow, Alt+Tab theme), mk-shell-engine (ours: snap layouts, glass dock, blur) + WACK Shell (GPL, no GNOME 50 build online)
 ├── scripts/              update-repo.sh (mk export), lint.sh
 ├── docs/                 GUIDE, HARDWARE, CUSTOMIZING, ARCHITECTURE, REFERENCE, FACE-UNLOCK, EXTENSIONS, BUGS
 │   ├── MK-Workstation-Overview.pdf   14-slide overview; overview/ rebuilds it

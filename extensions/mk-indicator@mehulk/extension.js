@@ -22,7 +22,6 @@ import { WorkspacePurge, bindWorkspacePurge, unbindWorkspacePurge } from './work
 import { RadioMemory } from './radios.js';
 import { ClipboardHistory, bindClipboardHistory, unbindClipboardHistory } from './clipboardHistory.js';
 import { LiveWallpaper } from './liveWallpaper.js';
-import { SnapLayouts, bindSnapLayouts, unbindSnapLayouts } from './snapLayouts.js';
 
 const SCREENSHOT_KEYS = ['show-screenshot-ui', 'screenshot'];
 
@@ -149,12 +148,6 @@ export default class MKIndicatorExtension extends Extension {
         }
         this._radios = new RadioMemory();
         this._radios.enable();
-        this._snap = new SnapLayouts();
-        try {
-            bindSnapLayouts(this, this._snap);
-        } catch (e) {
-            console.warn(`mk-indicator: snap layout keys: ${e.message}`);
-        }
         this._purge = new WorkspacePurge();
         try {
             bindWorkspacePurge(this, this._purge);
@@ -402,11 +395,6 @@ export default class MKIndicatorExtension extends Extension {
         }
         this._radios?.disable();
         this._radios = null;
-        if (this._snap) {
-            unbindSnapLayouts();
-            this._snap.destroy();
-            this._snap = null;
-        }
         if (this._purge) {
             unbindWorkspacePurge();
             this._purge.destroy();

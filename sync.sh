@@ -621,6 +621,13 @@ MK_INDICATOR="mk-indicator@mehulk"
 rm -rf "${USER_EXT_DIR:?}/$MK_INDICATOR"
 cp -r "$SCRIPT_DIR/extensions/$MK_INDICATOR" "$USER_EXT_DIR/"
 glib-compile-schemas "$USER_EXT_DIR/$MK_INDICATOR/schemas" || true
+# MK Shell Engine: MK's own shell pieces (snap layouts now; its dock and blur
+# start only while Dash to Dock / Blur my Shell are off). Refreshed the same way.
+MK_ENGINE="mk-shell-engine@mehulk"
+[[ -d "$USER_EXT_DIR/$MK_ENGINE" ]] || NEW_EXTENSIONS=1
+rm -rf "${USER_EXT_DIR:?}/$MK_ENGINE"
+cp -r "$SCRIPT_DIR/extensions/$MK_ENGINE" "$USER_EXT_DIR/"
+glib-compile-schemas "$USER_EXT_DIR/$MK_ENGINE/schemas" || true
 
 gsettings set org.gnome.shell disable-user-extensions false
 # Effects profile (`mk effects full|lite|auto`, default auto): lite keeps the
@@ -648,10 +655,10 @@ if [[ "$EFFECTS" == lite ]]; then
 fi
 # Write the list directly: `gnome-extensions enable` fails on Wayland for
 # extensions the running shell hasn't loaded yet.
-gsettings_append org.gnome.shell enabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR"
+gsettings_append org.gnome.shell enabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR" "$MK_ENGINE"
 # GNOME's disabled-extensions list overrides enabled-extensions, so an extension
 # switched off once in Extension Manager would otherwise never come back.
-gsettings_remove org.gnome.shell disabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR"
+gsettings_remove org.gnome.shell disabled-extensions "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR" "$MK_ENGINE"
 # Extensions an earlier MK version enabled and later dropped: switch them off.
 # Space Bar duplicated GNOME's own workspace dots in the top bar.
 # MK's own clipboard history (Super+V, in mk-indicator) replaced Clipboard Indicator.

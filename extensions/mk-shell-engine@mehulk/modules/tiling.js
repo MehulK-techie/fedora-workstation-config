@@ -1,4 +1,4 @@
-// MK snap layouts (Super+Z): a frosted card of five layouts, up at once.
+// MK Shell Engine: snap layouts (Super+Z): a frosted card of five layouts, up at once.
 // 1-5 (or the arrows and Enter, or a click) tiles the focused window into the
 // layout's main part and your other windows on this desktop, most recent
 // first, into the rest. Hover or arrow onto a layout and its parts show on
@@ -14,7 +14,7 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import { accentRGB } from './accent.js';
+import { accentRGB } from './colour.js';
 
 const GAP = 8;               // between tiles, and to the screen's edge
 const FADE = 90;             // the card's fade in, ms

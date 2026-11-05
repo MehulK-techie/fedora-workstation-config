@@ -1,0 +1,24 @@
+/* Snap layouts, Super+Z (modules/tiling.js) */
+.mk-snap-panel { border-radius: 22px; padding: 16px 18px; spacing: 12px; background-color: rgba(15, 16, 22, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12); border-top-color: rgba(255, 255, 255, 0.24);
+  box-shadow: 0 14px 36px 0 rgba(0, 0, 0, 0.4); }
+.mk-snap-heading { color: #f2f6ff; font-weight: 700; font-size: 1.05em; }
+.mk-snap-card { border-radius: 14px; padding: 10px; background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent; transition-duration: 90ms; }
+.mk-snap-card:hover, .mk-snap-card:checked { background-color: rgba(255, 255, 255, 0.10); border-color: rgba(255, 255, 255, 0.22); }
+.mk-snap-key { color: #f2f6ff; font-size: 0.75em; font-weight: 800; padding: 1px 7px; border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.16); }
+.mk-snap-name { color: rgba(242, 246, 255, 0.9); font-size: 0.85em; font-weight: 600; }
+.mk-snap-hint { color: rgba(242, 246, 255, 0.55); font-size: 0.78em; }
+
+/* The MK dock (modules/dock.js): obsidian glass */
+.mk-dock { background-color: rgba(14, 15, 20, 0.72); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.22); border-radius: 22px; padding: 6px 10px; spacing: 0; }
+.mk-dock-item { padding: 4px 4px 2px; border-radius: 14px; }
+.mk-dock-item:focus { background-color: rgba(255, 255, 255, 0.08); }
+.mk-dock-bars { height: 3px; margin-top: 3px; spacing: 2px; }
+.mk-dock-bar { height: 3px; border-radius: 2px; }
+.mk-dock-separator { width: 1px; height: 36px; margin: 0 6px; background-color: rgba(255, 255, 255, 0.16); }
+.mk-dock-grid { color: rgba(242, 246, 255, 0.85); }
+.mk-dock-tooltip { color: #f2f6ff; font-size: 0.85em; font-weight: 600; padding: 4px 10px; border-radius: 8px;
+  background-color: rgba(14, 15, 20, 0.88); border: 1px solid rgba(255, 255, 255, 0.12); }

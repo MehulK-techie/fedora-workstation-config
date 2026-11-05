@@ -699,8 +699,10 @@ case "${1:-help}" in
             gsettings set "$MEDIA_KEYS" custom-keybindings "@as []"
         fi
 
-        gnome-extensions disable mk-indicator@mehulk &>/dev/null || true
-        rm -rf "$HOME/.local/share/gnome-shell/extensions/mk-indicator@mehulk"
+        for ext in mk-indicator@mehulk mk-shell-engine@mehulk; do
+            gnome-extensions disable "$ext" &>/dev/null || true
+            rm -rf "$HOME/.local/share/gnome-shell/extensions/$ext"
+        done
         rm -rf "$HOME/.local/share/mk-workstation/lib" "$HOME/.local/share/mk-workstation/config" "$HOME/.local/share/mk-workstation/assets"
         for tool in mk mk-apps mk-doctor mk-session mk-scratchpad mk-companion mk-notes mk-screensaver mk-timer mk-reminders mk-power mk-voice mk-sound mk-watchdog ocr-snip show-shortcuts \
             camera-controls fix-alt-tab close-workspace-apps; do

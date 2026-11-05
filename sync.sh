@@ -676,6 +676,14 @@ engine_dock=$(gsettings --schemadir "$USER_EXT_DIR/$MK_ENGINE/schemas" get org.g
 if [[ "$engine_dock" == true ]]; then
     gsettings_remove org.gnome.shell enabled-extensions dash-to-dock@micxgx.gmail.com
 fi
+# Blur my Shell and Magic Lamp: the engine's own blur and genie replace them
+# (each of the engine's stands aside while the other runs). Blur my Shell is
+# left alone if you switched the engine's blur off (its `blur` key).
+engine_blur=$(gsettings --schemadir "$USER_EXT_DIR/$MK_ENGINE/schemas" get org.gnome.shell.extensions.mk-shell-engine blur 2>/dev/null || echo true)
+if [[ "$engine_blur" == true ]]; then
+    gsettings_remove org.gnome.shell enabled-extensions blur-my-shell@aunetx
+fi
+gsettings_remove org.gnome.shell enabled-extensions compiz-alike-magic-lamp-effect@hermes83.github.com
 if [[ -d "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io" ]]; then
     gnome-extensions uninstall macos-dock@vinnytherobot.github.io 2>/dev/null \
         || rm -rf "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io"

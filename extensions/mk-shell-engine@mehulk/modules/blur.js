@@ -3,6 +3,7 @@
 // rounded corners where the glass is rounded. Every blur pauses while the
 // monitor it's on shows a full-screen window (a game, a film), so it costs the
 // GPU nothing then. Stands aside while Blur my Shell is on.
+import Clutter from 'gi://Clutter';
 import Cogl from 'gi://Cogl';
 import GObject from 'gi://GObject';
 import Shell from 'gi://Shell';
@@ -14,38 +15,82 @@ export const DOCK_GLASS = {sigma: 32, brightness: 0.62};
 
 const live = new Set();        // every blur effect made here: [actor, effects]
 
-// Cuts the blurred picture to a rounded rectangle (Shell.BlurEffect has no corners of its own).
-const RoundedCorners = GObject.registerClass(
-class MKRoundedCorners extends Shell.GLSLEffect {
-    _init(radius) {
-        super._init();
-        this._radius = radius;
-    }
+// Cuts the blurred picture to a rounded rectangle (Shell.BlurEffect has no
+// corners of its own): a fragment snippet that fades out everything past the
+// rounded corners. GNOME 51 builds it on Clutter.ShaderEffect (with a Cogl
+// snippet, as GNOME's own lightbox does); GNOME 48-50 on Shell.GLSLEffect,
+// which 51 removed. Made on first use, so if a future GNOME changes this
+// again, the blur goes square instead of the engine failing to start.
+const CORNERS_DECLARATIONS = 'uniform vec2 mk_size;\nuniform float mk_radius;\n';
+const CORNERS_CODE = `
+vec2 mk_p = cogl_tex_coord_in[0].xy * mk_size;
+vec2 mk_q = abs(mk_p - mk_size * 0.5) - (mk_size * 0.5 - mk_radius);
+float mk_d = length(max(mk_q, 0.0)) - mk_radius;
+cogl_color_out *= clamp(0.5 - mk_d, 0.0, 1.0);`;
 
-    vfunc_build_pipeline() {
-        const hook = (Shell.SnippetHook ?? Cogl.SnippetHook).FRAGMENT;
-        this.add_glsl_snippet(hook, 'uniform vec2 mk_size; uniform float mk_radius;', `
-            vec2 p = cogl_tex_coord_in[0].xy * mk_size;
-            vec2 q = abs(p - mk_size * 0.5) - (mk_size * 0.5 - mk_radius);
-            float d = length(max(q, 0.0)) - mk_radius;
-            cogl_color_out *= clamp(0.5 - d, 0.0, 1.0);`, false);
-    }
+// keep the uniforms in step with the actor's size
+function trackSize(effect, actor) {
+    if (effect._sizeId)
+        effect._sized?.disconnect(effect._sizeId);
+    effect._sized = actor;
+    effect._sizeId = actor?.connect('notify::size', () => effect._sync()) ?? 0;
+    effect._sync();
+}
 
-    vfunc_set_actor(actor) {
-        this._sizeId && this.actor?.disconnect(this._sizeId);
-        super.vfunc_set_actor(actor);
-        this._sizeId = actor?.connect('notify::size', () => this._sync()) ?? 0;
-        this._sync();
-    }
+let RoundedCorners = null;
+function roundedCorners(radius) {
+    if (!RoundedCorners && Shell.GLSLEffect) {
+        RoundedCorners = GObject.registerClass(
+        class MKRoundedCornersGLSL extends Shell.GLSLEffect {
+            _init(r) {
+                this._radius = r;
+                super._init();
+            }
 
-    _sync() {
-        if (!this.actor)
-            return;
-        this.set_uniform_float(this.get_uniform_location('mk_size'), 2, [this.actor.width, this.actor.height]);
-        this.set_uniform_float(this.get_uniform_location('mk_radius'), 1, [this._radius]);
-        this.queue_repaint();
+            vfunc_build_pipeline() {
+                this.add_glsl_snippet((Shell.SnippetHook ?? Cogl.SnippetHook).FRAGMENT, CORNERS_DECLARATIONS, CORNERS_CODE, false);
+            }
+
+            vfunc_set_actor(actor) {
+                super.vfunc_set_actor(actor);
+                trackSize(this, actor);
+            }
+
+            _sync() {
+                if (!this.actor)
+                    return;
+                this.set_uniform_float(this.get_uniform_location('mk_size'), 2, [this.actor.width, this.actor.height]);
+                this.set_uniform_float(this.get_uniform_location('mk_radius'), 1, [this._radius]);
+                this.queue_repaint();
+            }
+        });
     }
-});
+    RoundedCorners ??= GObject.registerClass(
+    class MKRoundedCorners extends Clutter.ShaderEffect {
+        _init(r) {
+            this._radius = r;
+            super._init();
+        }
+
+        vfunc_get_static_snippet() {
+            return Cogl.Snippet.new(Cogl.SnippetHook.FRAGMENT, CORNERS_DECLARATIONS, CORNERS_CODE);
+        }
+
+        vfunc_set_actor(actor) {
+            super.vfunc_set_actor(actor);
+            trackSize(this, actor);
+        }
+
+        _sync() {
+            if (!this.actor)
+                return;
+            this.set_uniform_float('mk_size', 2, [Math.max(1, this.actor.width), Math.max(1, this.actor.height)]);
+            this.set_uniform_float('mk_radius', 1, [this._radius]);
+            this.queue_repaint();
+        }
+    });
+    return new RoundedCorners(radius);
+}
 
 function pauseForFullscreen() {
     for (const [actor, effects] of live) {
@@ -70,7 +115,7 @@ export function addGlass(actor, glass, radius = 0) {
     const effects = [];
     if (radius > 0) {
         try {
-            const corners = new RoundedCorners(radius);
+            const corners = roundedCorners(radius);
             actor.add_effect_with_name('mk-blur-corners', corners);
             effects.push(corners);
         } catch (e) {

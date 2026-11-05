@@ -277,7 +277,7 @@ function paintSpark(area, data, max) {
 class Row {
     constructor(menu, label, meter = false, spark = null) {
         this.item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'mk-monitor-row'});
-        const box = new St.BoxLayout({vertical: true, x_expand: true});
+        const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true});
         const line = new St.BoxLayout({x_expand: true, style: 'spacing: 14px;'});
         this.label = new St.Label({text: label, style_class: 'mk-monitor-name', x_expand: true});
         this.label.clutter_text.ellipsize = Pango.EllipsizeMode.END;

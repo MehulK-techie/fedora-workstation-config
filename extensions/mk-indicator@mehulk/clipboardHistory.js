@@ -408,7 +408,7 @@ export class ClipboardHistory {
             return [kind, b];
         });
         box.add_child(this._pinBar);
-        this._list = new St.BoxLayout({vertical: true, style_class: 'mk-clip-list'});
+        this._list = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-clip-list'});
         this._scroll = new St.ScrollView({style_class: 'mk-clip-scroll', child: this._list,
             hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC});
         box.add_child(this._scroll);
@@ -589,7 +589,7 @@ export class ClipboardHistory {
             main.set_child(label);
         }
         if (item.tags?.length) {
-            const column = new St.BoxLayout({vertical: true, x_expand: true, style: 'spacing: 4px;'});
+            const column = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, style: 'spacing: 4px;'});
             const content = main.get_child();
             main.set_child(column);
             column.add_child(content);
@@ -599,7 +599,7 @@ export class ClipboardHistory {
         main.connect('key-press-event', (_a, event) => this._cardKey(main, item, event));
         card._mkMain = main;
         card.add_child(main);
-        const tools = new St.BoxLayout({vertical: !folded, style_class: 'mk-clip-tools'});
+        const tools = new St.BoxLayout({orientation: folded ? Clutter.Orientation.HORIZONTAL : Clutter.Orientation.VERTICAL, style_class: 'mk-clip-tools'});
         const tool = (icon, tip, fn) => {
             const b = new St.Button({style_class: 'mk-clip-tool', can_focus: true, accessible_name: tip,
                 child: new St.Icon({icon_name: icon, icon_size: 14})});
@@ -648,7 +648,7 @@ export class ClipboardHistory {
         copy.connect('clicked', () => this._copy(item));
         row.add_child(back);
         row.add_child(copy);
-        this._preview_box = new St.BoxLayout({vertical: true, style: 'spacing: 8px;'});
+        this._preview_box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style: 'spacing: 8px;'});
         this._preview_box.add_child(big);
         this._preview_box.add_child(row);
         this._list.add_child(this._preview_box);
@@ -678,7 +678,7 @@ export class ClipboardHistory {
     _edit(card, item) {
         this._forget(item);
         card.destroy_all_children();
-        const column = new St.BoxLayout({vertical: true, x_expand: true, style: 'spacing: 6px;'});
+        const column = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, style: 'spacing: 6px;'});
         const entry = new St.Entry({text: item.text, can_focus: true, x_expand: true, style_class: 'mk-clip-edit'});
         entry.clutter_text.single_line_mode = false;
         entry.clutter_text.line_wrap = true;

@@ -82,7 +82,7 @@ export class EmojiBoard {
         this._grid = new St.Widget({layout_manager: new Clutter.GridLayout({column_homogeneous: true}),
             style_class: 'mk-emoji-grid'});
         // A ScrollView needs a scrollable child: the grid sits in a box.
-        const holder = new St.BoxLayout({vertical: true});
+        const holder = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL});
         holder.add_child(this._grid);
         const scroll = new St.ScrollView({style_class: 'mk-emoji-scroll', child: holder,
             hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC});

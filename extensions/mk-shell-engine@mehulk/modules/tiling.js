@@ -120,7 +120,7 @@ export class SnapLayouts {
         this._previews = new St.Widget({layout_manager: new Clutter.FixedLayout()});
         this._actor.add_child(this._previews);
 
-        const panel = new St.BoxLayout({vertical: true, style_class: 'mk-snap-panel', reactive: true});
+        const panel = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-snap-panel', reactive: true});
         panel.add_effect(new Shell.BlurEffect({radius: 24, brightness: 0.68, mode: Shell.BlurMode.BACKGROUND}));
         panel.add_child(new St.Label({text: 'Snap layouts', style_class: 'mk-snap-heading'}));
         const row = new St.BoxLayout({style: 'spacing: 10px;'});
@@ -155,7 +155,7 @@ export class SnapLayouts {
     // A layout card: a small drawing of its parts (the main one lit) and its number and name.
     _card(layout, index) {
         const W = 132, H = 82;
-        const card = new St.BoxLayout({vertical: true, reactive: true, track_hover: true, style_class: 'mk-snap-card'});
+        const card = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, reactive: true, track_hover: true, style_class: 'mk-snap-card'});
         const art = new St.Widget({width: W, height: H, layout_manager: new Clutter.FixedLayout()});
         layout[1].forEach(([x, y, w, h], i) => {
             art.add_child(new St.Widget({x: Math.round(x * W) + 2, y: Math.round(y * H) + 2,

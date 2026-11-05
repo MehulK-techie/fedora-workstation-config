@@ -238,7 +238,7 @@ export class EdgeLight {
         const glow = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},0.85)`;
         // Full monitor width with centred text, so nothing gets ellipsized.
         const box = new St.BoxLayout({
-            vertical: true, reactive: false, opacity: 0, width: monitor.width,
+            orientation: Clutter.Orientation.VERTICAL, reactive: false, opacity: 0, width: monitor.width,
         });
         const title = new St.Label({
             text,

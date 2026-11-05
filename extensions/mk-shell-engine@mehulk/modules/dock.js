@@ -235,13 +235,13 @@ export class Dock {
 
     // One dock entry: the icon (which grows), and a bar under it.
     _item(icon, name) {
-        const box = new St.BoxLayout({vertical: true});
+        const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL});
         icon.set_pivot_point(0.5, 1);
         box.add_child(icon);
         const bars = new St.BoxLayout({style_class: 'mk-dock-bars', x_align: Clutter.ActorAlign.CENTER});
         box.add_child(bars);
         const button = new St.Button({style_class: 'mk-dock-item', child: box, reactive: true, track_hover: true,
-            can_focus: true, button_mask: St.ButtonMask.ONE, accessible_name: name});
+            can_focus: true, button_mask: (St.ButtonMask.PRIMARY ?? St.ButtonMask.ONE), accessible_name: name});
         button.connect('notify::hover', () => this._tooltip(button.hover ? item : null));
         this._actor.add_child(button);
         const item = {button, icon, bars, name};

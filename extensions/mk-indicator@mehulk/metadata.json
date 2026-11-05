@@ -3,12 +3,10 @@
   "name": "MK Workstation Indicator",
   "description": "MK Workstation: top-bar tag, dock icons that glow in their app's colour and magnify on hover, themed Alt+Tab, and the dock tucked away in the overview.",
   "shell-version": [
-    "45",
-    "46",
-    "47",
     "48",
     "49",
-    "50"
+    "50",
+    "51"
   ],
   "session-modes": [
     "user",

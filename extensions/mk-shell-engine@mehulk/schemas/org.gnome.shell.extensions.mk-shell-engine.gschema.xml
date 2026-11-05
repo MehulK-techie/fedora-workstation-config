@@ -54,5 +54,10 @@
       <summary>Active app in the top bar</summary>
       <description>The focused app's icon (in its own colours) and name, with a menu for its window.</description>
     </key>
+    <key name="autohide-top-bar" type="b">
+      <default>false</default>
+      <summary>Hide the top bar</summary>
+      <description>While a window has focus the top bar glides away; the top edge, an empty desktop or the overview bring it back. Windows get its space while this is on.</description>
+    </key>
   </schema>
 </schemalist>

@@ -52,7 +52,6 @@ class AppGrid {
         const monitor = Main.layoutManager.currentMonitor ?? Main.layoutManager.primaryMonitor;
         this.actor = new St.Widget({style_class: 'mk-appsw-panel', reactive: false,
             layout_manager: new Clutter.FixedLayout()});
-        this._unblur = addGlass(this.actor, SWITCHER_GLASS, 24);
         const [r, g, b] = accentRGB();
         this._ring = new St.Widget({reactive: false, style: `border-radius: ${16 + PAD}px;
             border: 2px solid rgba(${r},${g},${b},0.95); background-color: rgba(${r},${g},${b},0.14);`});
@@ -63,6 +62,7 @@ class AppGrid {
         // on stage first: a card only knows its height once its style is loaded
         Main.uiGroup.add_child(this.actor);
         Main.uiGroup.set_child_above_sibling(this.actor, popup);
+        this._unblur = addGlass(this.actor, SWITCHER_GLASS, 24);     // (on stage first: the glass reads its size)
         this._cards = popup._items.map(item => {
             const card = this._card(item);
             this.actor.add_child(card);
@@ -86,7 +86,7 @@ class AppGrid {
     }
 
     _card(item) {
-        const card = new St.BoxLayout({vertical: true, style_class: 'mk-appsw-card', width: CARD_W});
+        const card = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-appsw-card', width: CARD_W});
         card._item = item;
         const icon = item.app.create_icon_texture(ICON);
         icon.style = '-st-icon-style: requested;';        // the app's own colours

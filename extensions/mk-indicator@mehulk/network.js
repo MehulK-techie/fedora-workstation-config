@@ -6,6 +6,7 @@
 import Cairo from 'cairo';
 import GLib from 'gi://GLib';
 import Pango from 'gi://Pango';
+import Clutter from 'gi://Clutter';
 import St from 'gi://St';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { accentRGB } from './accent.js';
@@ -41,7 +42,7 @@ export class InternetSection {
         this._up = [];
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Network'));
         const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'mk-monitor-row'});
-        const box = new St.BoxLayout({vertical: true, x_expand: true, style: 'spacing: 4px;'});
+        const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, style: 'spacing: 4px;'});
         const head = new St.BoxLayout({x_expand: true, style: 'spacing: 14px;'});
         this._conn = new St.Label({text: '…', style_class: 'mk-monitor-name', x_expand: true});
         this._conn.clutter_text.ellipsize = Pango.EllipsizeMode.END;

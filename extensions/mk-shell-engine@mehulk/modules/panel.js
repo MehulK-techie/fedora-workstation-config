@@ -8,11 +8,13 @@
 //   - a typographic clock in the centre: "Thu Nov 5 · 2:25 PM" (24-hour if
 //     GNOME is set to it).
 // top-bar-style: 'islands' or 'edge' (one seamless glass bar); show-active-app
-// switches the app button off. Everything else stays GNOME's own.
+// switches the app button off; autohide-top-bar slides the bar away while a
+// window has focus. Everything else stays GNOME's own.
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import GnomeDesktop from 'gi://GnomeDesktop';
+import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -129,11 +131,111 @@ class Clock {
     }
 }
 
+// autohide-top-bar: while a window has focus the bar glides up and out
+// (220 ms); resting the pointer on the top edge brings it back (180 ms), and
+// so do an empty desktop, the overview and an open menu. While it's on, the
+// bar's strip is handed to windows (GNOME otherwise keeps that space for the
+// bar even while it's away), and handed back when it's switched off.
+class AutoHide {
+    constructor() {
+        this._box = Main.layoutManager.panelBox;
+        this._retrack(false);
+        this._hidden = false;
+        this._edge = new St.Widget({reactive: true, height: 2, opacity: 0, visible: false});
+        Main.uiGroup.add_child(this._edge);
+        this._edge.connect('enter-event', () => this._show());
+        this._hoverWas = Main.panel.track_hover;
+        Main.panel.track_hover = true;
+        this._ids = [
+            [global.display, global.display.connect('notify::focus-window', () => this._queue(300))],
+            [Main.panel, Main.panel.connect('notify::hover', () => this._queue(Main.panel.hover ? 0 : 700))],
+            [Main.overview, Main.overview.connect('showing', () => this._show())],
+            [Main.overview, Main.overview.connect('hidden', () => this._queue(400))],
+            [Main.layoutManager, Main.layoutManager.connect('monitors-changed', () => this._placeEdge())],
+        ];
+        this._placeEdge();
+        this._queue(500);
+    }
+
+    // GNOME keeps a strip of the screen for the bar (its "strut"); off while hiding
+    _retrack(reserve) {
+        try {
+            Main.layoutManager._untrackActor(this._box);
+            Main.layoutManager._trackActor(this._box, {affectsStruts: reserve, trackFullscreen: true});
+        } catch (e) {
+            console.warn(`mk-shell-engine: top bar autohide: ${e.message}`);
+        }
+    }
+
+    _placeEdge() {
+        const m = Main.layoutManager.primaryMonitor;
+        if (!m)
+            return;
+        this._edge.set_position(m.x, m.y);
+        this._edge.width = m.width;
+    }
+
+    _queue(delay) {
+        if (this._timer)
+            GLib.source_remove(this._timer);
+        this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.max(1, delay), () => {
+            this._timer = 0;
+            this._sync();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _sync() {
+        const win = global.display.focus_window;
+        const focused = win && !win.minimized && win.get_monitor() === Main.layoutManager.primaryIndex &&
+            win.window_type === Meta.WindowType.NORMAL;
+        if (Main.panel.menuManager.activeMenu) {
+            this._queue(800);                // a menu is open: look again once it closes
+            return;
+        }
+        if (focused && !Main.overview.visible && !Main.panel.hover)
+            this._hide();
+        else if (!focused)
+            this._show();
+    }
+
+    _hide() {
+        if (this._hidden)
+            return;
+        this._hidden = true;
+        this._edge.visible = true;
+        this._box.ease({translation_y: -this._box.height, opacity: 0, duration: 220,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+    }
+
+    _show() {
+        this._edge.visible = false;
+        if (!this._hidden)
+            return;
+        this._hidden = false;
+        this._box.ease({translation_y: 0, opacity: 255, duration: 180, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        this._queue(2000);                   // and away again if the pointer doesn't stay on it
+    }
+
+    destroy() {
+        if (this._timer)
+            GLib.source_remove(this._timer);
+        for (const [object, id] of this._ids)
+            object.disconnect(id);
+        Main.panel.track_hover = this._hoverWas;
+        this._edge.destroy();
+        this._box.remove_all_transitions();
+        this._box.translation_y = 0;
+        this._box.opacity = 255;
+        this._retrack(true);
+    }
+}
+
 export class Panel {
     constructor(settings) {
         this._settings = settings;
         this._parts = [];
-        this._ids = ['changed::top-bar-style', 'changed::show-active-app', 'changed::blur'].map(
+        this._ids = ['changed::top-bar-style', 'changed::show-active-app', 'changed::blur', 'changed::autohide-top-bar'].map(
             signal => settings.connect(signal, () => this._rebuild()));
         this._unwatch = watch(() => this._rebuild());        // Blur my Shell on or off
         this._build();
@@ -155,6 +257,13 @@ export class Panel {
                 console.error(`mk-shell-engine: active app: ${e.message}`);
             }
         }
+        if (this._settings.get_boolean('autohide-top-bar')) {
+            try {
+                this._autohide = new AutoHide();
+            } catch (e) {
+                console.error(`mk-shell-engine: top bar autohide: ${e.message}`);
+            }
+        }
         try {
             this._clock = new Clock();
         } catch (e) {
@@ -170,7 +279,8 @@ export class Panel {
         this._unblur = null;
         this._app?.destroy();
         this._clock?.destroy();
-        this._app = this._clock = null;
+        this._autohide?.destroy();
+        this._app = this._clock = this._autohide = null;
     }
 
     _rebuild() {

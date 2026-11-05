@@ -201,7 +201,7 @@ export class MediaTile {
         const menu = this._button.menu;
         menu.box.add_style_class_name('mk-media-menu');
         const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
-        const col = new St.BoxLayout({vertical: true, x_expand: true, style: 'spacing: 10px;'});
+        const col = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, style: 'spacing: 10px;'});
         this._art = new St.Widget({style_class: 'mk-media-art', width: 240, height: 240, x_align: Clutter.ActorAlign.CENTER});
         col.add_child(this._art);
         this._title = new St.Label({style_class: 'mk-media-title', x_align: Clutter.ActorAlign.CENTER});
@@ -577,7 +577,7 @@ export class MediaTile {
             this._pill = new St.BoxLayout({style_class: 'mk-track-pill', opacity: 0, reactive: false});
             this._pillArt = new St.Widget({style_class: 'mk-track-pill-art', width: 32, height: 32,
                 y_align: Clutter.ActorAlign.CENTER});
-            const text = new St.BoxLayout({vertical: true, y_align: Clutter.ActorAlign.CENTER});
+            const text = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, y_align: Clutter.ActorAlign.CENTER});
             this._pillTitle = new St.Label({style_class: 'mk-track-pill-title'});
             this._pillArtist = new St.Label({style_class: 'mk-track-pill-artist'});
             for (const label of [this._pillTitle, this._pillArtist]) {

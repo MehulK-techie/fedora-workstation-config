@@ -2,7 +2,12 @@
   "uuid": "mk-shell-engine@mehulk",
   "name": "MK Shell Engine",
   "description": "MK Workstation's own shell pieces in one place: the glass dock, native blur, and snap layouts (Super+Z). The dock and blur stand aside while Dash to Dock or Blur my Shell is on.",
-  "shell-version": ["46", "47", "48", "49", "50"],
+  "shell-version": [
+    "48",
+    "49",
+    "50",
+    "51"
+  ],
   "settings-schema": "org.gnome.shell.extensions.mk-shell-engine",
   "url": "https://github.com/MehulK-techie/fedora-workstation-config"
 }

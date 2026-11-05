@@ -94,7 +94,7 @@ export class WindowGrid {
 
     _card(win, index, tw, th) {
         const card = new St.Bin({style_class: 'mk-switch-card'});
-        const box = new St.BoxLayout({vertical: true, style: 'spacing: 6px;'});
+        const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style: 'spacing: 6px;'});
         const thumb = new St.Widget({style_class: 'mk-switch-thumb', width: tw, height: th,
             layout_manager: new Clutter.BinLayout(), clip_to_allocation: true});
         const actor = win.get_compositor_private();

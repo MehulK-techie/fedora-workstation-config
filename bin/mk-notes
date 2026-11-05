@@ -1979,6 +1979,7 @@ class StudioInkCanvas(Gtk.DrawingArea):
         z = max(0.5, self.win.zoom)
         px, py = x / z, y / z
         if self.current.get("lasso"):
+            self._shift = bool(gesture.get_current_event_state() & Gdk.ModifierType.SHIFT_MASK)
             self._lasso_motion(px, py)
             return
         if self.current.get("erasing"):
@@ -2092,8 +2093,26 @@ class StudioInkCanvas(Gtk.DrawingArea):
                 return opposite
         return None
 
+    # the rotation knob: above the selection's top edge, on a short stalk (strokes only:
+    # pictures have their own, text boxes and tables don't turn)
+    ROTATE_GAP = 26   # px on screen
+
+    def _rotate_knob(self):
+        box = self.selection_box()
+        if not box or not self.selection["strokes"]:
+            return None
+        return (box[0] + box[2]) / 2, box[1] - self.ROTATE_GAP / max(0.5, self.win.zoom)
+
     def _lasso_down(self, px, py):
         box = self.selection_box()
+        knob = self._rotate_knob()
+        if knob and math.hypot(px - knob[0], py - knob[1]) <= (self.HANDLE + 5) / max(0.5, self.win.zoom):
+            cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+            self._grab = {"rotate": (cx, cy), "start": math.atan2(py - cy, px - cx), "box": box,
+                          "strokes": [[list(p) for p in st["points"]] for st in self.selection["strokes"]]}
+            self.current = {"lasso": True}
+            self.queue_draw()
+            return
         anchor = self._corner_at(px, py)
         if anchor or (box and box[0] <= px <= box[2] and box[1] <= py <= box[3]):
             # move (inside the box) or scale (a corner) what's selected
@@ -2116,6 +2135,19 @@ class StudioInkCanvas(Gtk.DrawingArea):
             return
         g = self._grab
         if not g:
+            return
+        if "rotate" in g:   # turn about the selection's centre; Shift: in 15 degree steps
+            cx, cy = g["rotate"]
+            a = math.atan2(py - cy, px - cx) - g["start"]
+            if getattr(self, "_shift", False):
+                step = math.radians(15)
+                a = round(a / step) * step
+            ca, sa = math.cos(a), math.sin(a)
+            for st, pts in zip(self.selection["strokes"], g["strokes"]):
+                st["points"] = [[cx + (p[0] - cx) * ca - (p[1] - cy) * sa, cy + (p[0] - cx) * sa + (p[1] - cy) * ca, p[2]]
+                                for p in pts]
+            g["angle"] = a
+            self.queue_draw()
             return
         if g["anchor"]:   # scale about the opposite corner
             ax, ay = g["anchor"]
@@ -2210,6 +2242,26 @@ class StudioInkCanvas(Gtk.DrawingArea):
             cr.set_source_rgb(1, 1, 1)
             cr.fill_preserve()
             cr.set_source_rgba(0.21, 0.52, 0.89, 1)
+            cr.stroke()
+        knob = self._rotate_knob()
+        if knob:
+            kx, ky = knob
+            cr.set_source_rgba(0.21, 0.52, 0.89, 0.9)       # the stalk
+            cr.move_to(kx, y0)
+            cr.line_to(kx, ky + hs * 0.7)
+            cr.stroke()
+            cr.arc(kx, ky, hs * 0.7, 0, 2 * math.pi)         # the knob, with a turning arrow in it
+            cr.set_source_rgb(1, 1, 1)
+            cr.fill_preserve()
+            cr.set_source_rgba(0.21, 0.52, 0.89, 1)
+            cr.stroke()
+            r = hs * 0.35
+            cr.arc(kx, ky, r, math.radians(-200), math.radians(60))
+            cr.stroke()
+            ex, ey = kx + r * math.cos(math.radians(60)), ky + r * math.sin(math.radians(60))
+            cr.move_to(ex + 1.6 / z, ey - 2.2 / z)
+            cr.line_to(ex, ey)
+            cr.line_to(ex - 2.4 / z, ey + 0.6 / z)
             cr.stroke()
 
     def _ensure_laser_timer(self):
@@ -3654,7 +3706,7 @@ class NotesWindow(Adw.ApplicationWindow):
         ribbon.append(div_btn)
         # Insert Table: one click drops a 3 x 3 table in the middle of the
         # view; the arrow opens the grid to pick another size
-        table_btn = Adw.SplitButton(child=Adw.ButtonContent(icon_name="view-grid-symbolic", label="Insert Table"),
+        table_btn = Adw.SplitButton(child=Adw.ButtonContent(icon_name="mk-table-symbolic", label="Insert Table"),
                                     tooltip_text="Insert a 3 x 3 table", dropdown_tooltip="Pick the table's size",
                                     css_classes=["flat"], popover=self._table_picker())
         table_btn.connect("clicked", lambda *_: self.insert_table(3, 3, centre=True))
@@ -3700,14 +3752,14 @@ class NotesWindow(Adw.ApplicationWindow):
                                      tooltip_text="Quick Highlight colour"))
 
         # SEPARATE SHAPES BUTTON
-        self.shapes_toggle = Gtk.ToggleButton(label="Shapes", icon_name="view-grid-symbolic",
+        self.shapes_toggle = Gtk.ToggleButton(label="Shapes", icon_name="mk-shapes-symbolic",
                                               tooltip_text="Insert Shapes (Rectangle, Circle, Line, Arrow)",
                                               css_classes=["flat"])
         self.shapes_toggle.connect("toggled", self._on_shapes_toggled)
         ribbon.append(self.shapes_toggle)
 
         # DEDICATED LASER POINTER BUTTON
-        self.laser_toggle = Gtk.ToggleButton(label="Laser Pointer", icon_name="media-record-symbolic",
+        self.laser_toggle = Gtk.ToggleButton(label="Laser Pointer", icon_name="mk-laser-symbolic",
                                              tooltip_text="Presentation Laser Pointer (fades out)",
                                              css_classes=["flat"])
         self.laser_toggle.connect("toggled", self._on_laser_toggled)
@@ -3978,17 +4030,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.status_bar.append(self.save_stat_lbl)
         self.status_bar.append(Gtk.Box(hexpand=True))
 
-        sb_z_out = Gtk.Button(icon_name="zoom-out-symbolic", tooltip_text="Zoom Out (Ctrl+-)", css_classes=["flat"])
-        sb_z_out.connect("clicked", lambda *_: self.set_zoom(self.zoom - 0.1))
-        self.status_bar.append(sb_z_out)
-
-        self.sb_zoom_reset_btn = Gtk.Button(label="100%", tooltip_text="Reset Zoom to 100% (Ctrl+0)", css_classes=["flat"])
-        self.sb_zoom_reset_btn.connect("clicked", lambda *_: self.set_zoom(1.0))
-        self.status_bar.append(self.sb_zoom_reset_btn)
-
-        sb_z_in = Gtk.Button(icon_name="zoom-in-symbolic", tooltip_text="Zoom In (Ctrl++)", css_classes=["flat"])
-        sb_z_in.connect("clicked", lambda *_: self.set_zoom(self.zoom + 0.1))
-        self.status_bar.append(sb_z_in)
+        # (zoom lives in one place: the floating pill at the page's bottom right, with the page count)
 
         self.doc_col.append(self.status_bar)
         main_hbox.append(self.doc_col)
@@ -4131,7 +4173,7 @@ class NotesWindow(Adw.ApplicationWindow):
         for tool, icon, label, tip in (
             ("pen", "document-edit-symbolic", "Pen", "Freehand Pen"),
             ("highlighter", "marker-symbolic", "Highlighter", "Translucent Marker"),
-            ("eraser", "edit-clear-symbolic", "Stroke Eraser", "Touch any stroke to erase it"),
+            ("eraser", "mk-eraser-symbolic", "Stroke Eraser", "Touch any stroke to erase it"),
             ("lasso", "edit-select-symbolic", "Lasso",
              "Draw round ink, pictures or text to select them: drag to move, a corner to scale, Delete to remove"),
         ):
@@ -7256,6 +7298,14 @@ class NotesApp(Adw.Application):
 
     def do_startup(self):
         Adw.Application.do_startup(self)
+        # MK's own tool icons (eraser, shapes, table, laser), from the repo or the installed copy
+        disp = Gdk.Display.get_default()
+        if disp:
+            theme = Gtk.IconTheme.get_for_display(disp)
+            for folder in (Path(__file__).resolve().parent.parent / "assets/icons/symbolic",
+                           Path(GLib.get_user_data_dir()) / "mk-workstation/assets/icons/symbolic"):
+                if folder.is_dir():
+                    theme.add_search_path(str(folder))
         prov = Gtk.CssProvider()
         prov.load_from_string(BASE_CSS)
         disp = Gdk.Display.get_default()

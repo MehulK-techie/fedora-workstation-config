@@ -3,6 +3,7 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **MK Notes:** a **rotation knob** above the selection's top edge (a round handle on a short stalk, with a turning arrow): drag it to turn the selected ink and shapes freely around their centre, Shift for 15 degree steps. Tools have icons of their own (`assets/icons/symbolic`): an eraser for the Stroke Eraser (it had a "clear" broom), and distinct glyphs for Shapes, Insert Table (a 3 x 3 grid) and the Laser Pointer (a wand with a spark). Zoom is in one place: the floating pill at the page's bottom right (- 100% + | Page 1 of 1); the second set in the status bar is gone.
 - **Top bar, left:** flush to the corner (2 px): WACK Shell's menu or Finder, Places, the workspace dots, a divider, then the app; the MK emblem stays where mk-indicator puts it. The right island's icons get even spacing.
 - **Quick Settings:** the 2 x 3 is Wi-Fi, Bluetooth, Power Mode, Night Light, Do Not Disturb, Airplane Mode (Screenshot and Screen Record are back on their keys only). Toggles are glass now: dim at rest, and when on a translucent accent glow with a soft gradient and a fine border instead of a solid block.
 - **Super+Tab:** **P** pulls the picked window onto this desktop and switches to it; **S** (or Shift+Right) sends it to the next desktop without leaving the switcher. **Super+Shift+Left / Right** move the focused window to the next desktop and follow it (moving to the other screen is Super+Shift+Ctrl+Left / Right now).

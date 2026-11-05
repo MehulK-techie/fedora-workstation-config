@@ -49,7 +49,7 @@ them live and lets you change any of them. Your changes go to
 
 | Action | Keys |
 | :--- | :--- |
-| Full screen, instantly | Print · Super+Shift+3 |
+| Full screen, instantly (saved and copied) | Print · Super+Print · Super+Shift+3 |
 | Current window | Alt+Print |
 | Pick an area or window | Shift+Print · Super+Shift+S · Super+Shift+4 |
 | Copy text from screen (OCR) | Super+Shift+C |

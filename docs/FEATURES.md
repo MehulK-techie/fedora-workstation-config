@@ -99,7 +99,7 @@ MK changes these GNOME settings; the features themselves are GNOME's.
 
 - **Windows:** Alt+Tab across all workspaces, Super+Tab apps, Super+1–9 dock apps, Super+Alt+1–4 workspaces (Super+Shift+Alt+1–4 move the window there), Alt+` windows of one app, W/F4 in Alt+Tab closes a window, minimize and maximize buttons, centred new windows, always on top, full screen, 20 s before "not responding".
 - **Workspaces:** dynamic workspaces (Spaces style), new desktop on Super+Ctrl+D, Super+Alt/Ctrl arrows.
-- **Screenshots:** full screen, window and area keys (Print, Super+Shift+3/4/S), saved and copied.
+- **Screenshots:** full screen, window and area keys (Print, Super+Print, Super+Shift+3/4/S), saved and copied; an area screenshot opens fresh (no box from last time) and is taken when you let go.
 - **Files:** expandable folders, folders first, item counts, Create Link, Delete Permanently, Quick Look (Space, via Sushi).
 - **Comfort:** tap to click, natural scrolling, palm rejection that lets go 300 ms after typing, Bibata Modern Classic cursor (GPL-3.0, `CURSOR=` in `theme.conf`), battery percentage, weekday in the clock, Night Light, hot corner, dark style.
 - **Housekeeping:** Trash and temp files older than 30 days removed; slow search providers (Boxes, Contacts, Passwords) skipped.
@@ -263,7 +263,7 @@ them live and lets you change any of them.
 
 | Action | Keys | Built by |
 | :--- | :--- | :--- |
-| Full screen, instantly | Print · Super+Shift+3 | GNOME |
+| Full screen, instantly (saved and copied) | Print · Super+Print · Super+Shift+3 | GNOME |
 | Current window | Alt+Print | GNOME |
 | Pick an area or window | Shift+Print · Super+Shift+S · Super+Shift+4 | GNOME |
 | Copy text from screen (OCR) | Super+Shift+C | MK tool |

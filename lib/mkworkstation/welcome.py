@@ -31,6 +31,10 @@ VOICE_CACHE = CACHE_DIR / "voice"
 GREETING_FILES = (DEFAULTS_DIR / "greetings.conf", CONFIG_DIR / "greetings.conf")
 VOICE_DIR = DATA_DIR / "voice"
 PIPER = VOICE_DIR / "venv/bin/piper"
+# Piper as a standalone program (no Python): used when pip can't install it
+# for the Python this system runs (Fedora 45's 3.15 had no onnxruntime yet)
+PIPER_BIN = VOICE_DIR / "piper-bin/piper/piper"
+PIPER_BIN_URL = "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz"
 MODEL = VOICE_DIR / "en_GB-alan-medium.onnx"
 MODEL_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx"
 TITLES = {"sir": "sir", "maam": "ma'am", "ma'am": "ma'am", "name": None, "none": ""}
@@ -82,12 +86,19 @@ def greeting(c=None, text=None):
     return text.replace("{title}", title).replace("{name}", first_name()).strip()
 
 
-def piper_ready():
-    """Piper is installed for the Python this system runs now. A Fedora upgrade
-    that moves Python on (3.14 to 3.15 in Fedora 45) leaves the old voice
-    environment unable to find its own packages: that counts as not installed."""
+def piper_cmd():
+    """The Piper program to run: the Python one if it's installed for the Python
+    this system runs now, else the standalone one, else None. (A Fedora upgrade
+    that moves Python on, 3.14 to 3.15 in Fedora 45, leaves the old environment
+    unable to find its own packages: that counts as not installed.)"""
     lib = VOICE_DIR / f"venv/lib/python{sys.version_info.major}.{sys.version_info.minor}"
-    return PIPER.exists() and MODEL.exists() and lib.is_dir()
+    if PIPER.exists() and lib.is_dir():
+        return PIPER
+    return PIPER_BIN if PIPER_BIN.exists() else None
+
+
+def piper_ready():
+    return piper_cmd() is not None and MODEL.exists()
 
 
 def engine():
@@ -130,7 +141,7 @@ def render(text=None, force=False):
             # sentences: calm, not hurried. If it fails anyway, the greeting is
             # spoken by espeak-ng this time rather than not at all.
             try:
-                subprocess.run([str(PIPER), "-m", str(MODEL), "-f", str(raw), "--length_scale", "1.08",
+                subprocess.run([str(piper_cmd()), "-m", str(MODEL), "-f", str(raw), "--length_scale", "1.08",
                                 "--sentence_silence", "0.25"], input=text,
                                text=True, capture_output=True, timeout=60, check=True)
             except (subprocess.SubprocessError, OSError):
@@ -197,12 +208,17 @@ def install_natural_voice(progress=print):
     """Install Piper and the British "Alan" voice into ~/.local/share (no sudo)."""
     VOICE_DIR.mkdir(parents=True, exist_ok=True)
     venv = VOICE_DIR / "venv"
-    if not piper_ready() or not PIPER.exists():
+    if piper_cmd() is None:
         # (also after a Python upgrade: the old environment is rebuilt in place)
         progress("Creating the voice engine environment...")
         subprocess.run(["python3", "-m", "venv", "--clear", str(venv)], check=True)
         progress("Downloading Piper (about 200 MB)...")
-        subprocess.run([str(venv / "bin/pip"), "install", "-q", "piper-tts"], check=True)
+        try:
+            subprocess.run([str(venv / "bin/pip"), "install", "-q", "piper-tts"], check=True)
+        except subprocess.CalledProcessError:
+            # no Piper for this Python yet: the standalone program instead (about 26 MB)
+            shutil.rmtree(venv, ignore_errors=True)
+            install_piper_binary(progress)
     for url, dest in ((MODEL_URL, MODEL), (MODEL_URL + ".json", Path(str(MODEL) + ".json"))):
         if not dest.exists():
             progress(f"Downloading {dest.name}...")
@@ -212,6 +228,24 @@ def install_natural_voice(progress=print):
     progress("Rendering the greeting...")
     render(force=True)
     return True
+
+
+def install_piper_binary(progress=print):
+    """Piper's standalone Linux release (the program and its own libraries) into
+    the voice folder; unpacked into a fresh folder of its own, files only."""
+    import tarfile
+    dest = VOICE_DIR / "piper-bin"
+    shutil.rmtree(dest, ignore_errors=True)
+    dest.mkdir(parents=True)
+    progress("Downloading Piper, the standalone program (about 26 MB)...")
+    archive = VOICE_DIR / "piper-bin.tar.gz.part"
+    urllib.request.urlretrieve(PIPER_BIN_URL, archive)
+    with tarfile.open(archive) as tar:
+        tar.extractall(dest, filter="data")
+    archive.unlink()
+    PIPER_BIN.chmod(0o755)
+    if not PIPER_BIN.exists():
+        raise RuntimeError("Piper's release didn't contain piper/piper")
 
 
 def remove_natural_voice():

@@ -201,46 +201,46 @@ def reminder_button(item, on_change):
         on_change()
         pop.popdown()
 
-    grid = Gtk.Grid(column_spacing=6, row_spacing=6, column_homogeneous=True)
-    tomorrow9 = (datetime.now() + timedelta(days=1)).replace(hour=9, minute=0, second=0)
-    evening = datetime.now().replace(hour=18, minute=0, second=0)
-    presets = [("10 min", lambda: time.time() + 600), ("30 min", lambda: time.time() + 1800),
-               ("1 hour", lambda: time.time() + 3600), ("3 hours", lambda: time.time() + 10800),
-               ("This evening", lambda: evening.timestamp() if evening > datetime.now()
-                else (evening + timedelta(days=1)).timestamp()),
-               ("Tomorrow 9:00", lambda: tomorrow9.timestamp())]
-    for i, (label, when) in enumerate(presets):
+    # one tap: the times people mean most
+    def tonight():
+        at = datetime.now().replace(hour=20, minute=0, second=0, microsecond=0)
+        return (at if at > datetime.now() else at + timedelta(days=1)).timestamp()
+    tomorrow9 = (datetime.now() + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    presets = [("+15m", lambda: time.time() + 900), ("+30m", lambda: time.time() + 1800),
+               ("+1h", lambda: time.time() + 3600), ("Tonight 8 PM", tonight),
+               ("Tomorrow 9 AM", lambda: tomorrow9.timestamp())]
+    pills = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=3,
+                        column_spacing=6, row_spacing=6, homogeneous=True)
+    for label, when in presets:
         b = Gtk.Button(label=label)
         b.add_css_class("mk-preset")
         b.connect("clicked", lambda *_, w=when: set_at(w()))
-        grid.attach(b, i % 2, i // 2, 1, 1)
-    box.append(grid)
+        pills.append(b)
+    box.append(pills)
     box.append(Gtk.Separator())
 
-    def spin(lo, hi, value, step=1):
-        sp = Gtk.SpinButton.new_with_range(lo, hi, step)
-        sp.set_value(value)
-        return sp
+    # or any time, typed: "5:30", "6pm", "45m", "2h", "1h30m", "tomorrow 10am"
+    typed = Gtk.Entry(placeholder_text="5:30, 6pm, 45m, 2h, tomorrow 10am", hexpand=True)
+    hint = Gtk.Label(xalign=0, wrap=True, visible=False)
+    hint.add_css_class("dim-label")
+    hint.add_css_class("caption")
+    go = Gtk.Button(label="Set", css_classes=["suggested-action"])
 
-    after = Gtk.Box(spacing=6)
-    hours, minutes = spin(0, 72, 0), spin(0, 59, 25)
-    go_after = Gtk.Button(label="Set")
-    go_after.connect("clicked", lambda *_: set_at(
-        time.time() + hours.get_value_as_int() * 3600 + minutes.get_value_as_int() * 60))
-    for w in (Gtk.Label(label="In"), hours, Gtk.Label(label="h"), minutes,
-              Gtk.Label(label="min"), go_after):
-        after.append(w)
-    box.append(after)
-
-    at = Gtk.Box(spacing=6)
-    current = datetime.fromtimestamp(item["remind_at"]) if item.get("remind_at") else datetime.now()
-    hh, mm = spin(0, 23, current.hour), spin(0, 59, (current.minute // 5) * 5, 5)
-    go_at = Gtk.Button(label="Set")
-    go_at.connect("clicked", lambda *_: set_at(
-        cstore.parse_when(f"{hh.get_value_as_int()}:{mm.get_value_as_int():02d}")))
-    for w in (Gtk.Label(label="At"), hh, Gtk.Label(label=":"), mm, go_at):
-        at.append(w)
-    box.append(at)
+    def set_typed(*_):
+        try:
+            set_at(cstore.parse_when(typed.get_text()))
+            typed.set_text("")
+            hint.set_visible(False)
+        except ValueError:
+            hint.set_text("Try a time (5:30, 6pm), a wait (45m, 2h) or 'tomorrow 10am'.")
+            hint.set_visible(True)
+    typed.connect("activate", set_typed)
+    go.connect("clicked", set_typed)
+    line = Gtk.Box(spacing=6)
+    line.append(typed)
+    line.append(go)
+    box.append(line)
+    box.append(hint)
 
     row = Gtk.Box(spacing=6)
     row.append(Gtk.Label(label="Repeat", hexpand=True, xalign=0))
@@ -671,10 +671,24 @@ class CompanionWindow(Adw.ApplicationWindow):
         clamp = Adw.Clamp(maximum_size=760, child=box)
         return Gtk.ScrolledWindow(child=clamp, vexpand=True)
 
+    # `mk-companion remind 2026-11-12` (the calendar's "Schedule reminder"): the next
+    # task you add is reminded on that day, at 9:00
+    def remind_on(self, day):
+        self.pending_day = day
+        self.stack.set_visible_child_name("tasks")
+        self.task_entry.set_title(f"A reminder for {day.strftime('%a %-d %b')}: type it, press Enter")
+        self.task_entry.grab_focus()
+
     def _add_task(self, *_):
         text = self.task_entry.get_text().strip()
         if text:
-            self.store.add_task(text)
+            task = self.store.add_task(text)
+            day = getattr(self, "pending_day", None)
+            if day:
+                task["remind_at"] = day.replace(hour=9, minute=0, second=0, microsecond=0).timestamp()
+                task.setdefault("repeat", "none")
+                self.pending_day = None
+                self.task_entry.set_title("Add a task and press Enter")
             self.store.save()
             self.task_entry.set_text("")
             self.refresh_tasks()
@@ -787,6 +801,11 @@ class CompanionApp(Adw.Application):
         elif args and args[0] == "welcome":
             self.window.present()
             self.window.welcome_dialog()
+        elif len(args) == 2 and args[0] == "remind":
+            try:
+                self.window.remind_on(datetime.strptime(args[1], "%Y-%m-%d"))
+            except ValueError:
+                print("Usage: mk-companion remind YYYY-MM-DD", file=sys.stderr)
         elif len(args) == 2 and args[0] == "note":
             self.window.store.merge_from_disk()
             self.window.open_note(args[1])

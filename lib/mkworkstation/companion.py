@@ -135,7 +135,7 @@ def latest_occurrence(item, now):
 def _notify(kind, item):
     """Show a notification with Open / Snooze buttons; act on the click.
     Runs detached so the checker can finish while the notification waits."""
-    title = "⏰ " + (item.get("title") or item.get("text") or "Reminder").strip().splitlines()[0][:80]
+    title = "Reminder: " + (item.get("title") or item.get("text") or "Reminder").strip().splitlines()[0][:80]
     body = "Task" if kind == "tasks" else (item.get("body", "").strip()[:160] or "Note")
     bin_dir = Path.home() / ".local/bin"
     script = (

@@ -288,3 +288,7 @@
 .mk-monitor-mode { border-radius: 10px; padding: 6px 8px; background-color: rgba(255, 255, 255, 0.07); font-size: 0.88em; }
 .mk-monitor-mode:hover { background-color: rgba(255, 255, 255, 0.13); }
 .mk-monitor-mode:checked { background-color: rgba(99, 102, 241, 0.45); color: #ffffff; }
+.mk-agenda { min-width: 300px; }
+.mk-agenda-pill { font-size: 0.82em; font-weight: 700; padding: 1px 8px; border-radius: 8px; margin-left: 12px;
+  background-color: rgba(255, 255, 255, 0.10); }
+.mk-agenda-late { background-color: rgba(239, 68, 68, 0.30); color: #ffd4d4; }

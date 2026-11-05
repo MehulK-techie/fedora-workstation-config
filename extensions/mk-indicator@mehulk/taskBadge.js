@@ -1,14 +1,18 @@
-// A small pill in the top bar with the Companion's to-do list: "📋 3 Left"
-// (every unfinished task), "📋 3 Left · ⏰ 2" when some are for today (pinned,
-// or a reminder due today or overdue). With nothing left to do it's gone from
-// the bar entirely. It follows companion.json live. Click: the Companion's tasks. Right-click:
-// hide it (TASK_BADGE=off in ~/.config/mk-workstation/welcome.conf;
-// mk tasks badge on). Hidden on the lock screen.
+// A small pill in the top bar with the Companion's to-do list: a checklist
+// icon and "3 Left" (every unfinished task), then a calendar glyph and "2"
+// when some are for today (pinned, or a reminder due today or overdue). With
+// nothing left to do it's gone from the bar entirely. It follows
+// companion.json live. Click: the agenda, every upcoming reminder in time
+// order with a countdown ("in 25 mins", "in 2 hours", "Tomorrow 9:00 AM"),
+// and the Companion's tasks one click away. Right-click: hide it
+// (TASK_BADGE=off in ~/.config/mk-workstation/welcome.conf; mk tasks badge
+// on). Hidden on the lock screen.
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 const COMPANION = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'companion.json']);
 const USER_CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'welcome.conf']);
@@ -29,6 +33,36 @@ export function taskMetrics() {
         scheduled: open.filter(t => t.pinned || (t.remind_at && t.remind_at < midnight)).length};
 }
 
+// Open tasks with a reminder, soonest first (overdue ones lead).
+export function upcomingReminders() {
+    try {
+        const [ok, bytes] = GLib.file_get_contents(COMPANION);
+        const data = ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+        return (data.tasks || []).filter(t => !t.done && t.remind_at).sort((a, b) => a.remind_at - b.remind_at);
+    } catch (e) {
+        return [];
+    }
+}
+
+// "Overdue", "in 25 mins", "in 2 hours", "Tomorrow 9:00 AM", "Thu 12 Nov, 9:00 AM"
+export function countdown(at, now = Date.now() / 1000) {
+    const d = at - now;
+    if (d < 0)
+        return 'Overdue';
+    if (d < 3600)
+        return `in ${Math.max(1, Math.round(d / 60))} min${Math.round(d / 60) === 1 ? '' : 's'}`;
+    const when = GLib.DateTime.new_from_unix_local(at), today = GLib.DateTime.new_now_local();
+    const clock = when.format('%-l:%M %p');
+    if (when.get_day_of_year() === today.get_day_of_year() && when.get_year() === today.get_year()) {
+        const h = Math.round(d / 3600);
+        return `in ${h} hour${h === 1 ? '' : 's'}`;
+    }
+    const tomorrow = today.add_days(1);
+    if (when.get_day_of_year() === tomorrow.get_day_of_year() && when.get_year() === tomorrow.get_year())
+        return `Tomorrow ${clock}`;
+    return when.format('%a %-e %b, ') + clock;
+}
+
 // Tasks for today, as the spoken briefing counts them.
 export function tasksToday() {
     return taskMetrics().scheduled;
@@ -47,16 +81,30 @@ export class TaskBadge {
     enable() {
         this._button = new St.Button({style_class: 'mk-task-badge', y_align: Clutter.ActorAlign.CENTER,
             reactive: true, can_focus: true, visible: false});
+        // a checklist icon and "3 Left"; a calendar glyph and "2" for today's (no emoji)
+        const row = new St.BoxLayout({style: 'spacing: 5px;', y_align: Clutter.ActorAlign.CENTER});
+        row.add_child(new St.Icon({icon_name: 'checkbox-checked-symbolic', icon_size: 13}));
+        this._left = new St.Label({y_align: Clutter.ActorAlign.CENTER});
+        row.add_child(this._left);
+        this._todayIcon = new St.Icon({icon_name: 'x-office-calendar-symbolic', icon_size: 13, style: 'margin-left: 4px;'});
+        this._today = new St.Label({y_align: Clutter.ActorAlign.CENTER});
+        row.add_child(this._todayIcon);
+        row.add_child(this._today);
+        this._button.set_child(row);
+        // the agenda: every reminder ahead, in time order, with a countdown
+        this._menu = new PopupMenu.PopupMenu(this._button, 0.5, St.Side.TOP);
+        this._menu.box.add_style_class_name('mk-agenda');
+        Main.uiGroup.add_child(this._menu.actor);
+        this._menu.actor.hide();
+        Main.panel.menuManager.addMenu(this._menu);
         this._button.connect('button-release-event', (_b, event) => {
             if (event.get_button() === 3) {
                 this._hide();
                 return Clutter.EVENT_STOP;
             }
-            try {
-                Gio.Subprocess.new([`${BIN}/mk-companion`, 'tasks'], Gio.SubprocessFlags.NONE);
-            } catch (e) {
-                console.warn(`mk-indicator: companion: ${e.message}`);
-            }
+            if (!this._menu.isOpen)
+                this._fillAgenda();
+            this._menu.toggle();
             return Clutter.EVENT_STOP;
         });
         Main.panel._rightBox.insert_child_at_index(this._button, 0);
@@ -77,7 +125,9 @@ export class TaskBadge {
         if (!this._button)
             return;
         const {remaining, scheduled} = taskMetrics();
-        this._button.label = scheduled > 0 ? `📋 ${remaining} Left · ⏰ ${scheduled}` : `📋 ${remaining} Left`;
+        this._left.text = `${remaining} Left`;
+        this._today.text = `${scheduled}`;
+        this._todayIcon.visible = this._today.visible = scheduled > 0;
         this._button.accessible_name = `${remaining} tasks left${scheduled ? `, ${scheduled} for today` : ''}`;
         // nothing to do: not in the bar at all (no "All Done" pill)
         this._button.visible = !this._locked && remaining > 0 && badgeOn();
@@ -98,6 +148,34 @@ export class TaskBadge {
         this._refresh();
     }
 
+    _fillAgenda() {
+        const menu = this._menu;
+        menu.removeAll();
+        const items = upcomingReminders();
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem(items.length ? 'Coming up' : 'No reminders set'));
+        for (const task of items.slice(0, 12)) {
+            const item = new PopupMenu.PopupBaseMenuItem({style_class: 'mk-agenda-row'});
+            const text = new St.Label({text: task.text ?? '', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+            text.clutter_text.ellipsize = 3;   // END
+            item.add_child(text);
+            const when = countdown(task.remind_at);
+            item.add_child(new St.Label({text: when, y_align: Clutter.ActorAlign.CENTER,
+                style_class: when === 'Overdue' ? 'mk-agenda-pill mk-agenda-late' : 'mk-agenda-pill'}));
+            item.connect('activate', () => this._openTasks());
+            menu.addMenuItem(item);
+        }
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        menu.addAction('Open Tasks', () => this._openTasks());
+    }
+
+    _openTasks() {
+        try {
+            Gio.Subprocess.new([`${BIN}/mk-companion`, 'tasks'], Gio.SubprocessFlags.NONE);
+        } catch (e) {
+            console.warn(`mk-indicator: companion: ${e.message}`);
+        }
+    }
+
     setLocked(locked) {
         this._locked = locked;
         this._refresh();
@@ -109,7 +187,8 @@ export class TaskBadge {
         this._timer = 0;
         this._monitors?.forEach(m => m.cancel());
         this._monitors = null;
+        this._menu?.destroy();
         this._button?.destroy();
-        this._button = null;
+        this._button = this._menu = null;
     }
 }

@@ -85,3 +85,15 @@
 .mk-ws-dot { width: 7px; height: 7px; border-radius: 4px; background-color: st-transparentize(-st-accent-color, 0.15); }
 .mk-danger { color: #ff6b6b; }
 .mk-danger:hover { background-color: rgba(239, 68, 68, 0.22); }
+
+/* The calendar, as glass (modules/calendarDeck.js) */
+.mk-cal { background-color: rgba(18, 20, 28, 0.82); border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.10); }
+.mk-cal #calendarArea .message, .mk-cal .events-button, .mk-cal .world-clocks-button, .mk-cal .weather-button,
+.mk-cal .datemenu-today-button { background-color: rgba(255, 255, 255, 0.07); border-radius: 14px; }
+.mk-cal #calendarArea .message:hover, .mk-cal .events-button:hover, .mk-cal .world-clocks-button:hover,
+.mk-cal .weather-button:hover { background-color: rgba(255, 255, 255, 0.12); }
+.mk-cal .calendar { background-color: rgba(255, 255, 255, 0.05); border-radius: 16px; }
+.mk-cal .calendar-today { background-color: -st-accent-color; color: #ffffff; }
+.mk-cal-schedule { margin-top: 8px; border-radius: 12px; padding: 8px 10px; font-weight: 700;
+  background-color: st-transparentize(-st-accent-color, 0.7); }
+.mk-cal-schedule:hover { background-color: st-transparentize(-st-accent-color, 0.5); }

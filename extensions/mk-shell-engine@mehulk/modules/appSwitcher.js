@@ -11,7 +11,9 @@
 //
 // While Super is held: Tab / Shift+Tab or the arrows pick an app, ` (the key
 // above Tab) cycles the picked app's windows, Q closes the picked window and
-// M minimizes it (both without leaving the switcher), Esc cancels. Hover
+// M minimizes it, S (or Shift+Right) sends it to the next desktop (all
+// without leaving the switcher), P pulls it onto this desktop and switches to
+// it, Esc cancels. Hover
 // picks, a click switches. GNOME's switcher still runs underneath, so screen
 // readers and every other key work as before.
 import Clutter from 'gi://Clutter';
@@ -270,6 +272,31 @@ export class AppSwitcher {
                 if (win) {
                     win.connect('unmanaged', () => this._items && forget(this, win));
                     win.delete(global.get_current_time());
+                }
+                return Clutter.EVENT_STOP;
+            }
+            // P: pull the picked window onto this desktop and switch to it
+            if (keysym === Clutter.KEY_p || keysym === Clutter.KEY_P) {
+                const win = pickedWindow(this);
+                if (win) {
+                    const here = global.workspace_manager.get_active_workspace_index();
+                    if (!win.is_on_all_workspaces() && win.get_workspace()?.index() !== here)
+                        win.change_workspace_by_index(here, false);
+                    this._currentWindow = Math.max(0, item.cachedWindows.indexOf(win));
+                    this._finish(global.get_current_time());
+                }
+                return Clutter.EVENT_STOP;
+            }
+            // S (or Shift+Right): send the picked window to the next desktop, the switcher stays
+            const shift = (Clutter.get_current_event()?.get_state() ?? 0) & Clutter.ModifierType.SHIFT_MASK;
+            if (keysym === Clutter.KEY_s || keysym === Clutter.KEY_S || (shift && keysym === Clutter.KEY_Right)) {
+                const win = pickedWindow(this);
+                if (win && !win.is_on_all_workspaces()) {
+                    const manager = global.workspace_manager, next = (win.get_workspace()?.index() ?? 0) + 1;
+                    while (manager.n_workspaces <= next)
+                        manager.append_new_workspace(false, global.get_current_time());
+                    win.change_workspace_by_index(next, false);
+                    this._mkAppGrid.refresh(this._selectedIndex);
                 }
                 return Clutter.EVENT_STOP;
             }

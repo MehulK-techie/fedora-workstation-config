@@ -54,19 +54,22 @@
 .quick-settings.mk-bento { border-radius: 26px; background-color: rgba(18, 20, 28, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.10); }
 .mk-bento .quick-toggle, .mk-bento .quick-toggle-has-menu {
-  border-radius: 16px; min-width: 14.5em; max-width: 14.5em; min-height: 3.6em; }
+  border-radius: 12px; min-width: 14.5em; max-width: 14.5em; min-height: 3.6em; }
 .mk-bento .quick-toggle-has-menu .quick-toggle { min-width: auto; max-width: none; }
-.mk-bento .quick-toggle { background-color: rgba(255, 255, 255, 0.08); color: #f2f6ff; }
+.mk-bento .quick-toggle { background-color: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08); }
 .mk-bento .quick-toggle:hover { background-color: rgba(255, 255, 255, 0.13); }
-.mk-bento .quick-toggle:checked { color: #ffffff; background-color: -st-accent-color;
-  box-shadow: 0 0 14px 0 st-transparentize(-st-accent-color, 0.55); }
-.mk-bento .quick-toggle:checked:hover { background-color: st-lighten(-st-accent-color, 6%); }
-.mk-bento .quick-toggle-has-menu .quick-toggle { border-radius: 16px 0 0 16px; }
-.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button { border-radius: 0 16px 16px 0;
+.mk-bento .quick-toggle:checked { color: #ffffff; background-color: st-transparentize(-st-accent-color, 0.65);
+  background-gradient-direction: vertical; background-gradient-start: st-transparentize(st-lighten(-st-accent-color, 12%), 0.6);
+  background-gradient-end: st-transparentize(-st-accent-color, 0.7);
+  border: 1px solid st-transparentize(-st-accent-color, 0.3); box-shadow: 0 0 12px 0 st-transparentize(-st-accent-color, 0.7); }
+.mk-bento .quick-toggle:checked:hover { background-color: st-transparentize(-st-accent-color, 0.55); }
+.mk-bento .quick-toggle-has-menu .quick-toggle { border-radius: 12px 0 0 12px; }
+.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button { border-radius: 0 12px 12px 0;
   background-color: rgba(255, 255, 255, 0.11); color: #f2f6ff; }
 .mk-bento .quick-toggle-has-menu .quick-toggle-menu-button:hover { background-color: rgba(255, 255, 255, 0.17); }
 .mk-bento .quick-toggle-has-menu:checked .quick-toggle-menu-button,
-.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button:checked { background-color: st-darken(-st-accent-color, 6%); color: #ffffff; }
+.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button:checked { background-color: st-transparentize(-st-accent-color, 0.55); color: #ffffff; }
 .mk-bento .quick-toggle-has-menu .quick-toggle-separator { background-color: rgba(255, 255, 255, 0.12); width: 1px; }
 .mk-bento .quick-toggle-title { font-weight: 700; }
 .mk-bento .quick-toggle-menu { border-radius: 18px; background-color: rgba(255, 255, 255, 0.07); }
@@ -76,9 +79,11 @@
 
 /* Left island: Finder, the divider before the app (panel.js); the tray chevron */
 .mk-finder-label { font-weight: 700; }
-.mk-island-divider { width: 1px; height: 16px; margin: 0 2px; background-color: rgba(255, 255, 255, 0.22); }
+.mk-island-divider { width: 1px; height: 16px; margin: 0 2px; background-color: rgba(255, 255, 255, 0.18); }
 .mk-tray-fold { padding: 0 6px; }
-#panel.mk-islands #panelLeft { margin-left: 6px; spacing: 10px; }   /* (after the islands' own margin, so it wins) */
+#panel.mk-islands #panelLeft { margin-left: 2px; padding-left: 4px; spacing: 8px; }   /* flush to the corner (after the islands' margin, so it wins) */
+#panel.mk-islands #panelRight { margin-right: 2px; spacing: 2px; }
+#panel.mk-islands #panelRight .panel-button { padding: 0 7px; }
 
 
 /* The app pill on an empty desktop: "WS 1" with a subtle dot; Force Quit in red */
@@ -94,6 +99,12 @@
 .mk-cal .weather-button:hover { background-color: rgba(255, 255, 255, 0.12); }
 .mk-cal .calendar { background-color: rgba(255, 255, 255, 0.05); border-radius: 16px; }
 .mk-cal .calendar-today { background-color: -st-accent-color; color: #ffffff; }
-.mk-cal-schedule { margin-top: 8px; border-radius: 12px; padding: 8px 10px; font-weight: 700;
-  background-color: st-transparentize(-st-accent-color, 0.7); }
-.mk-cal-schedule:hover { background-color: st-transparentize(-st-accent-color, 0.5); }
+.mk-cal-card { margin-top: 10px; padding: 10px 12px; spacing: 8px; border-radius: 16px;
+  background-color: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.08); }
+.mk-cal-card-title { font-weight: 800; color: #f2f6ff; }
+.mk-cal-entry { border-radius: 10px; }
+.mk-cal-chips { spacing: 6px; }
+.mk-cal-chip { border-radius: 10px; padding: 4px 10px; font-size: 0.85em; font-weight: 700;
+  background-color: st-transparentize(-st-accent-color, 0.75); border: 1px solid st-transparentize(-st-accent-color, 0.5); }
+.mk-cal-chip:hover { background-color: st-transparentize(-st-accent-color, 0.55); }
+.mk-cal-saved { font-size: 0.82em; color: rgba(242, 246, 255, 0.7); }

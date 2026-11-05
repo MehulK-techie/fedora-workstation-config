@@ -437,38 +437,25 @@ export class Panel {
         }
     }
 
-    // The left island, flush to the corner: the MK emblem, a divider, WACK Shell's
-    // menu when it's on, the app you're in (or "WS 1" on an empty desktop), the
-    // workspace dots, then Finder and Places (Fitts's law: the most used things at
-    // the screen's edge, where the pointer stops by itself).
+    // The left island, flush to the corner (Fitts's law: the pointer stops at the
+    // screen's edge by itself): WACK Shell's menu or Finder, Places, the workspace
+    // dots, a divider, then the app you're in (or "WS 1" on an empty desktop).
+    // The MK emblem stays where mk-indicator puts it.
     _orderLeft() {
         const left = Main.panel._leftBox, area = Main.panel.statusArea;
-        const mk = Main.extensionManager.lookup('mk-indicator@mehulk')?.stateObj?._indicator;
-        if (mk && mk.get_parent() && mk.get_parent() !== left) {
-            this._mkHome = [mk.get_parent(), mk.get_parent().get_children().indexOf(mk)];
-            mk.get_parent().remove_child(mk);
-            left.insert_child_at_index(mk, 0);
-            this._mk = mk;
-        }
         this._divider ??= new St.Widget({style_class: 'mk-island-divider', y_align: Clutter.ActorAlign.CENTER});
         if (!this._divider.get_parent())
             left.add_child(this._divider);
-        // MK emblem, divider, WACK's menu, the app (or "WS 1"), the workspace dots; then Finder, Places
-        const order = [this._mk ?? (mk?.get_parent() === left ? mk : null), this._divider, area['wack-logo-menu']?.container,
-            area['mk-active-app']?.container, area.activities?.container, area['mk-finder']?.container,
-            area['places-menu']?.container]
+        // WACK's menu (when on) or Finder at the very corner, Places, the workspace dots, a divider,
+        // the app you're in (Finder follows WACK's menu when both are there)
+        const order = [area['wack-logo-menu']?.container, area['mk-finder']?.container, area['places-menu']?.container,
+            area.activities?.container, this._divider, area['mk-active-app']?.container]
             .filter(a => a && a.get_parent() === left);
         order.forEach((actor, i) => left.set_child_at_index(actor, i));
         this._divider.visible = true;
     }
 
     _teardown() {
-        if (this._mk && this._mkHome && this._mk.get_parent()) {         // the MK emblem goes back where it was
-            const [home, index] = this._mkHome;
-            this._mk.get_parent().remove_child(this._mk);
-            home.insert_child_at_index(this._mk, Math.min(index, home.get_n_children()));
-        }
-        this._mk = this._mkHome = null;
         this._divider?.destroy();
         this._divider = null;
         this._finder?.destroy();

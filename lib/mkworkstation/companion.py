@@ -133,16 +133,18 @@ def latest_occurrence(item, now):
 
 # ---------------------------------------------------------------- checking
 def _notify(kind, item):
-    """Show a notification with Open / Snooze buttons; act on the click.
+    """Show a notification with Done / Snooze 15 min / Open buttons; act on the
+    click. Critical urgency: GNOME keeps it on screen until you answer it.
     Runs detached so the checker can finish while the notification waits."""
     title = "Reminder: " + (item.get("title") or item.get("text") or "Reminder").strip().splitlines()[0][:80]
     body = "Task" if kind == "tasks" else (item.get("body", "").strip()[:160] or "Note")
     bin_dir = Path.home() / ".local/bin"
     script = (
         'a=$(notify-send -a "Reminders" -u critical -i alarm-symbolic '
-        '-A open="Open" -A snooze="Snooze 10 min" --wait "$1" "$2"); '
+        '-A done="Done" -A snooze="Snooze 15 min" -A open="Open" --wait "$1" "$2"); '
         'case "$a" in open) "$3/mk-companion" "$4" "$5";; '
-        'snooze) "$3/mk-reminders" snooze "$5" 600;; esac'
+        'done) "$3/mk-reminders" done "$5";; '
+        'snooze) "$3/mk-reminders" snooze "$5" 900;; esac'
     )
     if shutil.which("notify-send"):
         subprocess.Popen(["sh", "-c", script, "sh", title, body, str(bin_dir),
@@ -184,6 +186,19 @@ def _notify_brief(text):
         subprocess.Popen(["sh", "-c", script, "sh", text, str(Path.home() / ".local/bin")],
                          start_new_session=True, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL)
+
+
+def complete(item_id):
+    """Mark task (or note reminder) ITEM_ID done: a task is ticked, a note's reminder cleared."""
+    data = load()
+    for task in data["tasks"]:
+        if task["id"] == item_id:
+            task["done"] = True
+            task["remind_at"] = None if task.get("repeat", "none") == "none" else task["remind_at"]
+    for note in data["notes"]:
+        if note["id"] == item_id:
+            note["remind_at"] = None
+    save(data)
 
 
 def snooze(item_id, seconds):

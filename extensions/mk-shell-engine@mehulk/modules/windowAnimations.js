@@ -1,7 +1,7 @@
 // MK Shell Engine: windows opening and closing with a little spring.
-//   open  (210 ms): the window rises from 0.90x, swells just past its size
+//   open  (200 ms): the window rises from 0.92x, swells just past its size
 //         (about 1.03x) and settles, fading in over the first 80 ms
-//   close (170 ms): a tiny lift (1.01x), then it sinks toward the dock as it
+//   close (160 ms): a tiny lift (1.01x), then it sinks toward the dock as it
 //         shrinks to 0.92x and fades out
 // Only scale, position and opacity change (GPU-cheap). Like the minimize
 // glide, GNOME's own handlers are set aside while this runs, every window is
@@ -16,11 +16,11 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { BURN_MY_WINDOWS, isActive, watch } from './conflicts.js';
 
-const OPEN = 210, CLOSE = 170, FADE_IN = 80;
+const OPEN = 200, CLOSE = 160, FADE_IN = 80;
 const clamp = p => Math.min(1, Math.max(0, p));
 const lerp = (a, b, t) => a + (b - a) * t;
-// ease-out with overshoot: c = 3.2 peaks about 27 % past the end, so 0.90 -> 1.00 swells to ~1.03
-const springOut = (p, c = 3.2) => 1 + (c + 1) * (p - 1) ** 3 + c * (p - 1) ** 2;
+// ease-out with overshoot: c = 4 peaks about 38 % past the end, so 0.92 -> 1.00 swells to ~1.03
+const springOut = (p, c = 4) => 1 + (c + 1) * (p - 1) ** 3 + c * (p - 1) ** 2;
 const easeIn = p => p * p;
 
 const TYPES = [Meta.WindowType.NORMAL, Meta.WindowType.DIALOG, Meta.WindowType.MODAL_DIALOG];
@@ -120,7 +120,7 @@ export class WindowAnimations {
             actor.set_pivot_point(0.5, 1);           // grows up from its base, sinks toward the dock
             const frame = opening
                 ? p => {
-                    const s = lerp(0.9, 1, springOut(p));
+                    const s = lerp(0.92, 1, springOut(p));
                     actor.set_scale(s, s);
                     actor.translation_y = lerp(18, 0, clamp(p * 1.4));
                     actor.opacity = Math.round(255 * clamp(p * OPEN / FADE_IN));

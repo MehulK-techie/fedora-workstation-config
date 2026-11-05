@@ -4,6 +4,7 @@
   mk-reminders                 fire every reminder that's due (run each minute
                                by the mk-reminders.timer user unit)
   mk-reminders snooze ID SECS  remind about item ID again in SECS seconds
+  mk-reminders done ID         mark item ID done (the notification's Done button)
 """
 import os
 import sys
@@ -28,6 +29,8 @@ if __name__ == "__main__":
         companion.check()
     elif args[0] == "snooze" and len(args) == 3 and args[2].isdigit():
         companion.snooze(args[1], int(args[2]))
+    elif args[0] == "done" and len(args) == 2:
+        companion.complete(args[1])
     else:
         print(__doc__.strip(), file=sys.stderr)
         sys.exit(2)

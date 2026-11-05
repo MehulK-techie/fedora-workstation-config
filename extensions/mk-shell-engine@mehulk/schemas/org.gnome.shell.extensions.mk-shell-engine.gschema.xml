@@ -87,7 +87,7 @@
       <description>One press, one skip: key repeat is ignored and presses within 350 ms count once.</description>
     </key>
     <key name="qs-hidden" type="as">
-      <default><![CDATA[['dark-style', 'airplane-mode', 'welcome-light', 'battery']]]></default>
+      <default><![CDATA[['dark-style', 'welcome-light', 'battery']]]></default>
       <summary>Left out of Quick Settings</summary>
       <description>Any of dark-style, airplane-mode, welcome-light, battery (the header's reading; the top bar shows it). [] shows everything.</description>
     </key>

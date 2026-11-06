@@ -213,6 +213,7 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | | `Super+←` then `Super+↑/↓` | Snap to a quarter |
 | | `Super+Z`, then `1`-`5` | Snap layouts: the focused window takes the main part; your other windows fill the rest when they fit, otherwise Snap Assist asks which goes where (1-9 or click) |
 | | `Super+Left` / `Super+Right` | Snap to a half (again: back); with two windows side by side, swap them |
+| | `Super+Alt+A` | The calendar, ready to type a reminder ("Review code in 25m", "Standup @ 11:30") |
 | | `Super+Shift+Z` | Coder desktop: editor, terminal and localhost browser on a fresh desktop, side by side |
 | | `Super+↑` · `Super+↓` | Maximize · restore |
 | | `Super+Ctrl+T` · `Super+Ctrl+C` · `Super+Ctrl+F` | Always on top · centre window · full screen |

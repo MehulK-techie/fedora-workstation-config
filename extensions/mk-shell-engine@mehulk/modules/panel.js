@@ -4,7 +4,7 @@
 // rounded, blurred island. Plus two things GNOME's bar doesn't have:
 //   - the app you're using, in its own colours (never a grey symbolic icon),
 //     with its name; a click opens New Window, Snap Left / Right, Keep on Top,
-//     Quit. The pill keeps one width; the name crossfades (120 ms).
+//     Quit. The pill fits the name; the name crossfades (120 ms), nothing tweens its width.
 //   - the battery tinted by its state (charging, high, mid, low).
 //   - the workspace dots in a fixed 58 px anchor, so they never push the bar about.
 //   - a typographic clock in the centre: "Thu Nov 5 · 2:25 PM" (24-hour if
@@ -38,8 +38,8 @@ class ActiveApp {
         this.button.add_style_class_name('mk-active-app');
         this._box = new St.BoxLayout({style_class: 'mk-active-app-box', y_align: Clutter.ActorAlign.CENTER});
         this._iconBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER, width: 18});   // (the same for an app icon and the dot)
-        // a fixed width (CSS: 150 px, longer names cut short by "…"): the blurred island
-        // behind it never resizes, so switching apps never shifts or re-renders the bar
+        // its natural width (up to 240 px, then cut short by "…"): the pill fits the name,
+        // and the glass behind the island follows the island's size (no width animation)
         this._label = new St.Label({style_class: 'mk-active-app-name', y_align: Clutter.ActorAlign.CENTER,
             x_align: Clutter.ActorAlign.CENTER});
         this._label.clutter_text.ellipsize = 3;     // Pango.EllipsizeMode.END

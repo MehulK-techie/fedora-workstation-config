@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.mk-shell-engine" path="/org/gnome/shell/extensions/mk-shell-engine/">
+    <key name="calendar-quick-add" type="as">
+      <default><![CDATA[['<Super><Alt>a']]]></default>
+      <summary>Calendar quick add</summary>
+      <description>Opens the calendar with the reminder box ready to type in (again: closes it).</description>
+    </key>
     <key name="snap-layouts" type="as">
       <default><![CDATA[['<Super>z']]]></default>
       <summary>Snap layouts</summary>

@@ -255,6 +255,7 @@ export class Dock {
             style_class: 'mk-dock-grid'});
         const holder = new St.Bin({width: this._size, height: this._size, child: icon});
         const item = this._item(holder, 'Show Apps');
+        item.isAppGrid = true;          // never magnifies or lifts (_magnify)
         item.button.connect('clicked', () => {
             if (Main.overview.visible)
                 Main.overview.hide();
@@ -448,11 +449,12 @@ export class Dock {
         });
         items.forEach((it, i) => {
             const d = under < 0 ? 99 : Math.abs(i - under);
-            const scale = d === 0 ? this._hover : d === 1 ? NEIGHBOUR : 1;
+            // Show Apps stays as it is: a fixed target at the end of the shelf
+            const scale = it.isAppGrid ? 1 : d === 0 ? this._hover : d === 1 ? NEIGHBOUR : 1;
             if (it.target === scale)
                 return;
             it.target = scale;
-            it.icon.ease({scale_x: scale, scale_y: scale, translation_y: d === 0 ? -LIFT : 0,
+            it.icon.ease({scale_x: scale, scale_y: scale, translation_y: d === 0 && !it.isAppGrid ? -LIFT : 0,
                 duration: GLIDE, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         });
         return Clutter.EVENT_PROPAGATE;

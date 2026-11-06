@@ -88,6 +88,13 @@ export class DockGlow {
             return GLib.SOURCE_CONTINUE;
         });
         this._attachDocks();
+        // the shell quitting takes the UI down before disable(): stop looking then
+        this._uiId = Main.uiGroup.connect('destroy', () => {
+            if (this._findId)
+                GLib.source_remove(this._findId);
+            this._findId = 0;
+            this._uiId = 0;
+        });
         // Switching desktops rebuilds the dock (it shows only this desktop's
         // apps): drop any magnified clones at once, and don't magnify until the
         // switch has settled, so icons never jump or hang in the old places.
@@ -150,6 +157,9 @@ export class DockGlow {
     }
 
     disable() {
+        if (this._uiId)
+            Main.uiGroup.disconnect(this._uiId);
+        this._uiId = 0;
         if (this._wsId)
             global.workspace_manager.disconnect(this._wsId);
         this._wsId = 0;

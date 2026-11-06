@@ -72,8 +72,9 @@
 #panel.mk-islands .panel-button { border-radius: 10px; transition-duration: 180ms; }
 #panel.mk-islands .panel-button:hover { background-color: rgba(255, 255, 255, 0.10); }
 #panel.mk-islands .panel-button:active, #panel.mk-islands .panel-button:checked { background-color: st-transparentize(-st-accent-color, 0.7); }
-.mk-active-app-box { spacing: 7px; }
-.mk-active-app-name { font-weight: 700; min-width: 150px; max-width: 150px; }   /* fixed: the island never resizes */
+.mk-active-app-box { spacing: 8px; }
+.mk-active-app-name { font-weight: 700; max-width: 240px; }   /* its natural width, "…" past 240 px */
+#panel .panel-button.mk-active-app { padding: 3px 12px; -natural-hpadding: 0; -minimum-hpadding: 0; }
 .mk-clock { font-weight: 600; font-feature-settings: "tnum"; }
 
 /* Quick Settings (modules/controlCenter.js): quiet frosted glass. Every colour stays inside its
@@ -146,9 +147,21 @@
 .mk-cal #calendarArea .message:hover, .mk-cal .events-button:hover, .mk-cal .world-clocks-button:hover,
 .mk-cal .weather-button:hover { background-color: rgba(255, 255, 255, 0.12); }
 .mk-cal .calendar { background-color: rgba(255, 255, 255, 0.05); border-radius: 16px; }
-.mk-cal .calendar-today { background-color: -st-accent-color; color: #ffffff; }
-.mk-cal .calendar-day:selected, .mk-cal .calendar-day:focus { border: 2px solid -st-accent-color; border-radius: 99px; }
-.mk-cal #calendarArea .message { background-color: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.10); }
+/* a typographic grid: plain numbers, no discs or glows; a soft round hover; today and the chosen
+   day in the accent (".mk-cal .calendar ..." outranks mk-indicator's accent glow rules) */
+.mk-cal .calendar .calendar-day-base, .mk-cal .calendar .calendar-day-heading, .mk-cal .calendar .calendar-day,
+.mk-cal .calendar .calendar-weekday, .mk-cal .calendar .calendar-other-month {
+  background-color: transparent; border: none; box-shadow: none; }
+.mk-cal .calendar .calendar-day-base:hover, .mk-cal .calendar .calendar-day-base:focus,
+.mk-cal .calendar .calendar-day:hover { background-color: rgba(255, 255, 255, 0.08); border-radius: 999px; box-shadow: none; }
+.mk-cal .calendar .calendar-today, .mk-cal .calendar .calendar-today:hover, .mk-cal .calendar .calendar-today:selected,
+.mk-cal .calendar .calendar-day-base:selected, .mk-cal .calendar .calendar-day:selected {
+  background-color: -st-accent-color; color: #ffffff; font-weight: 700; border-radius: 999px; box-shadow: none; }
+/* the notification column's cards match the calendar's (GNOME's media player card too) */
+.mk-cal .message-list-section-list .message, .mk-cal #calendarArea .message, .mk-cal .message {
+  background-color: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; }
+.mk-cal .mk-cal-dnd { border-radius: 99px; padding: 4px 4px 4px 12px; font-weight: 600; color: rgba(255, 255, 255, 0.85); }
+.mk-cal .mk-cal-dnd:hover { background-color: rgba(255, 255, 255, 0.08); }
 .mk-cal .message-list-clear-button { border-radius: 99px; padding: 4px 14px; font-weight: 700;
   background-color: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.14); }
 .mk-cal .message-list-clear-button:hover { background-color: rgba(239, 68, 68, 0.22); border-color: rgba(239, 68, 68, 0.5); }
@@ -162,6 +175,16 @@
   background-color: st-transparentize(-st-accent-color, 0.75); border: 1px solid st-transparentize(-st-accent-color, 0.5); }
 .mk-cal-chip:hover { background-color: st-transparentize(-st-accent-color, 0.55); }
 .mk-cal-saved { font-size: 0.82em; color: rgba(242, 246, 255, 0.7); }
+.mk-cal-queue-scroll { max-height: 120px; margin-top: 2px; }
+.mk-cal-queue { spacing: 4px; }
+.mk-cal-queue-row { spacing: 8px; padding: 5px 4px 5px 10px; border-radius: 10px; background-color: rgba(255, 255, 255, 0.05); }
+.mk-cal-queue-title { font-size: 0.88em; color: #f2f6ff; }
+.mk-cal-queue-badge { font-size: 0.75em; font-weight: 700; padding: 1px 7px; border-radius: 99px;
+  background-color: st-transparentize(-st-accent-color, 0.7); color: #ffffff; }
+.mk-cal-queue-late { background-color: rgba(239, 68, 68, 0.35); }
+.mk-cal-queue-done { font-size: 0.75em; font-weight: 700; padding: 2px 8px; border-radius: 99px;
+  background-color: rgba(255, 255, 255, 0.08); }
+.mk-cal-queue-done:hover { background-color: rgba(16, 185, 129, 0.35); }
 
 /* The battery in four tiers (panel.js BatteryTint) */
 #panel .power-status.mk-batt-charging .system-status-icon, #panel .power-status.mk-batt-charging StLabel { color: #10b981; }

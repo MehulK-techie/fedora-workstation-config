@@ -1,7 +1,8 @@
 // MK Shell Engine: MK Workstation's own shell pieces, replacing third-party
 // extensions one at a time. Each module starts on its own, so one that fails
 // leaves the others (and GNOME Shell) running.
-//   modules/tiling.js  snap layouts (Super+Z) and the coder desktop (Super+Shift+Z)
+//   modules/tiling.js  snap layouts (Super+Z), Snap Assist, Super+Left / Right, the coder desktop (Super+Shift+Z)
+//   modules/screenshotActions.js  Annotate, OCR Text, Open Folder on the screenshot notification
 //   modules/dock.js    the glass dock (while Dash to Dock is off)
 //   modules/blur.js    native blur (GNOME's GPU blur) for the dock, islands and switcher (while Blur my Shell is off)
 //   modules/panel.js   the top bar as three glass islands, the active app, the clock
@@ -21,6 +22,7 @@ import { Snip } from './modules/snip.js';
 import { MediaKeys } from './modules/mediaKeys.js';
 import { WindowAnimations } from './modules/windowAnimations.js';
 import { CalendarDeck } from './modules/calendarDeck.js';
+import { ScreenshotActions } from './modules/screenshotActions.js';
 import { Panel } from './modules/panel.js';
 import { ControlCenter } from './modules/controlCenter.js';
 
@@ -47,7 +49,8 @@ export default class MKShellEngine extends Extension {
         this._start('snip', () => new Snip(this._settings));
         this._start('media keys', () => new MediaKeys(this._settings));
         this._start('window animations', () => new WindowAnimations());
-        this._start('calendar', () => new CalendarDeck());
+        this._start('calendar', () => new CalendarDeck(this._settings));
+        this._start('screenshot actions', () => new ScreenshotActions());
     }
 
     _start(name, make) {

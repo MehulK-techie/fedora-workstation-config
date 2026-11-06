@@ -12,6 +12,7 @@
 // focus, windows moving): nothing polls. Stands aside while Dash to Dock is on.
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Graphene from 'gi://Graphene';
 import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
@@ -121,7 +122,7 @@ export class Dock {
             this._queueDodge(600);
         });
         if (blurAllowed(this._settings))
-            this._unblur = addWallpaperGlass(this._actor, this._chrome, DOCK_GLASS, 20);
+            this._unblur = addWallpaperGlass(this._actor, this._chrome, DOCK_GLASS, 22);
         this._menus = new PopupMenu.PopupMenuManager(this._actor);
 
         const appSystem = Shell.AppSystem.get_default();
@@ -393,7 +394,7 @@ export class Dock {
         return {x, y: y - this._actor.translation_y, width: w, height: h};
     }
 
-    // ----- the bars under the icons -----
+    // ----- the dots under the icons (running apps) -----
 
     _paintBars() {
         if (!this._items || this._gone)
@@ -409,18 +410,25 @@ export class Dock {
                 continue;
             item.state = state;
             item.bars.destroy_all_children();
-            const bar = (width, colour) => {
-                const w = new St.Widget({style_class: 'mk-dock-bar', width: 0, style: `background-color: ${colour};`});
+            // a small glowing dot pops in under each running app (two for several windows);
+            // the app you're using gets its dot in your accent colour
+            const dot = colour => {
+                const w = new St.Widget({style_class: 'mk-dock-bar', style: `background-color: ${colour};`,
+                    pivot_point: new Graphene.Point({x: 0.5, y: 0.5}), scale_x: 0, scale_y: 0, opacity: 0});
                 item.bars.add_child(w);
-                w.ease({width, duration: 160, mode: Clutter.AnimationMode.EASE_OUT_QUAD});    // the bar morphs into shape
+                w.ease({scale_x: 1, scale_y: 1, opacity: 255, duration: 220, mode: Clutter.AnimationMode.EASE_OUT_BACK});
             };
+            const white = 'rgba(255,255,255,0.82)', accent = `rgb(${r},${g},${b})`;
             if (state === 'one')
-                bar(8, 'rgba(255,255,255,0.75)');
+                dot(white);
             else if (state === 'many') {
-                bar(7, 'rgba(255,255,255,0.75)');
-                bar(7, `rgba(${r},${g},${b},0.9)`);
-            } else if (state === 'focus')
-                bar(22, `rgb(${r},${g},${b})`);       // the accent: the app you're using
+                dot(white);
+                dot(white);
+            } else if (state === 'focus') {
+                dot(accent);
+                if (n > 1)
+                    dot(accent);
+            }
         }
     }
 
@@ -464,8 +472,9 @@ export class Dock {
             return;
         }
         if (!this._tip) {
-            this._tip = new St.Label({style_class: 'mk-dock-tooltip'});
+            this._tip = new St.Label({style_class: 'mk-dock-tooltip', opacity: 0});
             Main.uiGroup.add_child(this._tip);
+            this._tip.ease({opacity: 255, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
         }
         this._tip.text = item.name;
         const [x, y] = item.button.get_transformed_position();

@@ -4,7 +4,8 @@
 // rounded, blurred island. Plus two things GNOME's bar doesn't have:
 //   - the app you're using, in its own colours (never a grey symbolic icon),
 //     with its name; a click opens New Window, Snap Left / Right, Keep on Top,
-//     Quit. It slides in (150 ms) when you switch apps.
+//     Quit. Its pill glides to the new name's width (160 ms) as it crossfades.
+//   - the battery tinted by its state (green charging, red low).
 //   - a typographic clock in the centre: "Thu Nov 5 · 2:25 PM" (24-hour if
 //     GNOME is set to it).
 // top-bar-style: 'islands' or 'edge' (one seamless glass bar); show-active-app
@@ -36,8 +37,9 @@ class ActiveApp {
         this.button.add_style_class_name('mk-active-app');
         this._box = new St.BoxLayout({style_class: 'mk-active-app-box', y_align: Clutter.ActorAlign.CENTER});
         this._iconBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER, width: 18});   // (the same for an app icon and the dot)
-        // a fixed width (CSS: 160 px) with the name cut short by "…": switching between
-        // "WS 2" and "Visual Studio Code" never makes the island grow and shrink
+        // the name's width glides to its new size (160 ms) when the app changes, between
+        // 56 and 190 px (longer names are cut short by "…"), so the island morphs smoothly
+        // instead of jumping
         this._label = new St.Label({style_class: 'mk-active-app-name', y_align: Clutter.ActorAlign.CENTER,
             x_align: Clutter.ActorAlign.CENTER});
         this._label.clutter_text.ellipsize = 3;     // Pango.EllipsizeMode.END
@@ -53,10 +55,13 @@ class ActiveApp {
         ];
         this.button.menu.connect('open-state-changed', (_m, open) => open && this._fillMenu());
         this._key = null;
+        this.button.connect('destroy', () => (this._gone = true));    // (GNOME tears the bar down first at shutdown)
         this._sync(false);
     }
 
     _sync(animate) {
+        if (this._gone)
+            return;
         const app = this._tracker.focus_app;
         this.button.visible = !Main.overview.visible;
         this.onVisible?.(this.button.visible);
@@ -71,15 +76,21 @@ class ActiveApp {
             icon = app.create_icon_texture(18);
             icon.style = '-st-icon-style: requested;';           // the app's real colours
         } else {
-            icon = new St.Widget({style_class: 'mk-ws-dot', y_align: Clutter.ActorAlign.CENTER});   // a subtle dot
+            icon = new St.Icon({icon_name: 'user-desktop-symbolic', icon_size: 14});   // a desktop glyph
         }
         this._iconBin.set_child(icon);
         this._label.text = app ? app.get_name() : `WS ${ws}`;
+        const natural = Math.ceil(this._label.clutter_text.get_preferred_width(-1)[1]);
+        const width = Math.max(56, Math.min(190, natural));
+        this._label.remove_transition('width');
         if (animate && St.Settings.get().enable_animations) {
-            // the new name crossfades in place (the capsule's size doesn't move)
-            this._box.remove_all_transitions();
+            // the capsule glides to the new name's width while the name crossfades in
+            this._label.ease({width, duration: 160, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            this._box.remove_transition('opacity');
             this._box.opacity = 0;
             this._box.ease({opacity: 255, duration: 140, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        } else {
+            this._label.width = width;
         }
     }
 
@@ -126,43 +137,6 @@ class ActiveApp {
     destroy() {
         for (const [object, id] of this._ids)
             object.disconnect(id);
-        this.button.destroy();
-    }
-}
-
-// Finder: your folders in one click (they open in Files).
-class Finder {
-    constructor() {
-        this.button = new PanelMenu.Button(0.0, 'Finder', false);
-        this.button.add_style_class_name('mk-finder');
-        this.button.add_child(new St.Icon({icon_name: 'system-file-manager-symbolic', style_class: 'system-status-icon'}));
-        const home = GLib.get_home_dir();
-        const dir = d => GLib.get_user_special_dir(d);
-        const places = [
-            ['Home', 'user-home-symbolic', home],
-            ['Desktop', 'user-desktop-symbolic', dir(GLib.UserDirectory.DIRECTORY_DESKTOP)],
-            ['Downloads', 'folder-download-symbolic', dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD)],
-            ['Documents', 'folder-documents-symbolic', dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS)],
-            ['Pictures', 'folder-pictures-symbolic', dir(GLib.UserDirectory.DIRECTORY_PICTURES)],
-            ['Projects', 'folder-symbolic', GLib.build_filenamev([home, 'Projects'])],
-        ];
-        for (const [label, icon, path] of places) {
-            if (path && GLib.file_test(path, GLib.FileTest.IS_DIR))
-                this.button.menu.addAction(label, () => open(`file://${path}`), icon);
-        }
-        this.button.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        this.button.menu.addAction('Recent', () => open('recent:///'), 'document-open-recent-symbolic');
-        this.button.menu.addAction('Trash', () => open('trash:///'), 'user-trash-symbolic');
-        function open(uri) {
-            try {
-                Gio.AppInfo.launch_default_for_uri(uri, global.create_app_launch_context(0, -1));
-            } catch (e) {
-                Main.notify('Finder', e.message);
-            }
-        }
-    }
-
-    destroy() {
         this.button.destroy();
     }
 }
@@ -356,6 +330,56 @@ class AutoHide {
     }
 }
 
+// The battery in the bar, tinted by its state: green while charging, red under
+// 20 % on battery, plain glass otherwise. GNOME's own indicator, read from its
+// own UPower proxy (no polling). GNOME builds that indicator a moment after
+// startup, so this waits for it (up to 15 s; a desktop has none).
+class BatteryTint {
+    constructor() {
+        let tries = 30;
+        this._wait = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+            if (!this._attach() && --tries > 0)
+                return GLib.SOURCE_CONTINUE;
+            this._wait = 0;
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _attach() {
+        const system = Main.panel.statusArea.quickSettings?._system;
+        const proxy = system?._systemItem?._powerToggle?._proxy;
+        if (!system || !proxy?.IsPresent)
+            return false;
+        this._system = system;
+        this._proxy = proxy;
+        this._id = proxy.connect('g-properties-changed', () => this._sync());
+        this._sync();
+        return true;
+    }
+
+    _sync() {
+        const state = this._proxy.State, pct = this._proxy.Percentage ?? 100;
+        const charging = state === 1 || state === 5;          // charging, or plugged in and waiting
+        const low = !charging && state === 2 && pct < 20;      // discharging and low
+        for (const [name, on] of [['mk-batt-charging', charging], ['mk-batt-low', low]]) {
+            if (on)
+                this._system.add_style_class_name(name);
+            else
+                this._system.remove_style_class_name(name);
+        }
+    }
+
+    destroy() {
+        if (this._wait)
+            GLib.source_remove(this._wait);
+        if (!this._proxy)
+            return;
+        this._proxy.disconnect(this._id);
+        this._system.remove_style_class_name('mk-batt-charging');
+        this._system.remove_style_class_name('mk-batt-low');
+    }
+}
+
 // Status icons that only say a setting is on (Night Light, the power mode)
 // stay out of the bar; the toggles in Quick Settings show them. Wi-Fi, Do
 // Not Disturb, volume and battery stay.
@@ -415,18 +439,13 @@ export class Panel {
             }
         }
         try {
-            this._finder = new Finder();
-            panel.addToStatusArea('mk-finder', this._finder.button, 0, 'left');
-        } catch (e) {
-            console.error(`mk-shell-engine: finder: ${e.message}`);
-        }
-        try {
             this._tray = new TrayFold(this._settings);
         } catch (e) {
             console.error(`mk-shell-engine: tray fold: ${e.message}`);
         }
         this._orderLeft();
         this._quiet = new QuietIndicators();
+        this._battery = new BatteryTint();
         if (this._settings.get_boolean('autohide-top-bar')) {
             try {
                 this._autohide = new AutoHide();
@@ -441,19 +460,17 @@ export class Panel {
         }
     }
 
-    // The left island, flush to the corner (Fitts's law: the pointer stops at the
-    // screen's edge by itself): WACK Shell's menu or Finder, Places, the workspace
-    // dots, a divider, then the app you're in (or "WS 1" on an empty desktop).
-    // The MK emblem stays where mk-indicator puts it.
+    // The left island, near the corner (Fitts's law: the pointer stops at the
+    // screen's edge by itself): the emblem (WACK Shell's menu, when on), a divider,
+    // the app you're in (or "WS 1" on an empty desktop), the workspace dots, Places.
     _orderLeft() {
         const left = Main.panel._leftBox, area = Main.panel.statusArea;
         this._divider ??= new St.Widget({style_class: 'mk-island-divider', y_align: Clutter.ActorAlign.CENTER});
         if (!this._divider.get_parent())
             left.add_child(this._divider);
-        // WACK's menu (when on) or Finder at the very corner, Places, the workspace dots, a divider,
-        // the app you're in (Finder follows WACK's menu when both are there)
-        const order = [area['wack-logo-menu']?.container, area['mk-finder']?.container, area['places-menu']?.container,
-            area.activities?.container, this._divider, area['mk-active-app']?.container]
+        // the emblem (WACK Shell's menu), a divider, the app (or "WS 2"), the workspace dots, then Places
+        const order = [area['wack-logo-menu']?.container, this._divider, area['mk-active-app']?.container,
+            area.activities?.container, area['places-menu']?.container]
             .filter(a => a && a.get_parent() === left);
         order.forEach((actor, i) => left.set_child_at_index(actor, i));
         this._divider.visible = true;
@@ -462,10 +479,10 @@ export class Panel {
     _teardown() {
         this._divider?.destroy();
         this._divider = null;
-        this._finder?.destroy();
         this._tray?.destroy();
         this._quiet?.destroy();
-        this._finder = this._tray = this._quiet = null;
+        this._battery?.destroy();
+        this._tray = this._quiet = this._battery = null;
         Main.panel.remove_style_class_name('mk-islands');
         Main.panel.remove_style_class_name('mk-edge');
         for (const off of this._unblur ?? [])

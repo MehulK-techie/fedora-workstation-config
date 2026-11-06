@@ -11,18 +11,21 @@
 .mk-snap-name { color: rgba(242, 246, 255, 0.9); font-size: 0.85em; font-weight: 600; }
 .mk-snap-hint { color: rgba(242, 246, 255, 0.55); font-size: 0.78em; }
 
-/* The MK dock (modules/dock.js): obsidian glass */
-.mk-dock { background-color: rgba(16, 18, 24, 0.55); border: 1px solid rgba(255, 255, 255, 0.18);
-  border-top-color: rgba(255, 255, 255, 0.32); border-radius: 20px; padding: 4px 8px; spacing: 0;
-  box-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.5); }
-.mk-dock-item { padding: 4px 4px 2px; border-radius: 14px; }
-.mk-dock-item:focus { background-color: rgba(255, 255, 255, 0.08); }
-.mk-dock-bars { height: 3px; margin-top: 3px; spacing: 2px; }
-.mk-dock-bar { height: 3px; border-radius: 2px; }
-.mk-dock-separator { width: 1px; height: 24px; margin: 0 6px; border-radius: 1px; background-color: rgba(255, 255, 255, 0.22); }
-.mk-dock-grid { color: rgba(242, 246, 255, 0.85); }
-.mk-dock-tooltip { color: #f2f6ff; font-size: 0.85em; font-weight: 600; padding: 4px 10px; border-radius: 8px;
-  background-color: rgba(14, 15, 20, 0.88); border: 1px solid rgba(255, 255, 255, 0.12); }
+/* The MK dock (modules/dock.js): a frosted shelf, lit along its top edge like glass,
+   with dots under running apps */
+.mk-dock { background-color: rgba(30, 32, 40, 0.42); border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top-color: rgba(255, 255, 255, 0.36); border-bottom-color: rgba(255, 255, 255, 0.08);
+  border-radius: 22px; padding: 6px 10px 4px; spacing: 2px;
+  box-shadow: 0 18px 40px -6px rgba(0, 0, 0, 0.55); }
+.mk-dock-item { padding: 3px 5px 1px; border-radius: 14px; }
+.mk-dock-item:focus { background-color: rgba(255, 255, 255, 0.10); }
+.mk-dock-bars { height: 4px; margin-top: 3px; spacing: 3px; }
+.mk-dock-bar { width: 4px; height: 4px; border-radius: 2px; }
+.mk-dock-separator { width: 1px; height: 32px; margin: 0 8px; border-radius: 1px; background-color: rgba(255, 255, 255, 0.20); }
+.mk-dock-grid { color: rgba(242, 246, 255, 0.88); }
+.mk-dock-tooltip { color: #f5f7fb; font-size: 0.86em; font-weight: 600; padding: 5px 12px; border-radius: 10px;
+  background-color: rgba(28, 30, 38, 0.92); border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.35); }
 
 /* The Super+Tab app switcher (modules/appSwitcher.js) */
 .mk-appsw-panel { border-radius: 18px; background-color: rgba(16, 18, 24, 0.78); border: 1px solid rgba(255, 255, 255, 0.14);
@@ -47,7 +50,7 @@
 #panel.mk-islands .panel-button:hover { background-color: rgba(255, 255, 255, 0.10); }
 #panel.mk-islands .panel-button:active, #panel.mk-islands .panel-button:checked { background-color: st-transparentize(-st-accent-color, 0.7); }
 .mk-active-app-box { spacing: 7px; }
-.mk-active-app-name { font-weight: 700; min-width: 160px; max-width: 160px; text-align: center; }   /* fixed: the island never resizes */
+.mk-active-app-name { font-weight: 700; }   /* (its width glides in panel.js) */
 .mk-clock { font-weight: 600; font-feature-settings: "tnum"; }
 
 /* Quick Settings (modules/controlCenter.js): quiet frosted glass. Every colour stays inside its
@@ -100,11 +103,10 @@
 .mk-bento .quick-settings-system-item .power-item { background-color: rgba(255, 255, 255, 0.06); border-radius: 14px; }
 
 /* Left island: Finder, the divider before the app (panel.js); the tray chevron */
-.mk-finder-label { font-weight: 700; }
 .mk-island-divider { width: 1px; height: 16px; margin: 0 2px; background-color: rgba(255, 255, 255, 0.18); }
 .mk-tray-fold { padding: 0 6px; }
-#panel.mk-islands #panelLeft { margin-left: 2px; padding-left: 4px; spacing: 8px; }   /* flush to the corner (after the islands' margin, so it wins) */
-#panel.mk-islands #panelRight { margin-right: 2px; spacing: 2px; }
+#panel.mk-islands #panelLeft { margin-left: 4px; padding-left: 4px; spacing: 8px; }   /* snug to the bezel (after the islands' margin, so it wins) */
+#panel.mk-islands #panelRight { margin-right: 4px; spacing: 2px; }
 #panel.mk-islands #panelRight .panel-button { padding: 0 7px; }
 
 
@@ -114,19 +116,29 @@
 .mk-danger:hover { background-color: rgba(239, 68, 68, 0.22); }
 
 /* The calendar, as glass (modules/calendarDeck.js) */
-.mk-cal { background-color: rgba(18, 20, 28, 0.82); border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.10); }
+.mk-cal { background-color: rgba(18, 20, 28, 0.58); border-radius: 18px; border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 20px 48px -8px rgba(0, 0, 0, 0.6); }
 .mk-cal #calendarArea .message, .mk-cal .events-button, .mk-cal .world-clocks-button, .mk-cal .weather-button,
 .mk-cal .datemenu-today-button { background-color: rgba(255, 255, 255, 0.07); border-radius: 14px; }
 .mk-cal #calendarArea .message:hover, .mk-cal .events-button:hover, .mk-cal .world-clocks-button:hover,
 .mk-cal .weather-button:hover { background-color: rgba(255, 255, 255, 0.12); }
 .mk-cal .calendar { background-color: rgba(255, 255, 255, 0.05); border-radius: 16px; }
 .mk-cal .calendar-today { background-color: -st-accent-color; color: #ffffff; }
+.mk-cal .calendar-day:selected, .mk-cal .calendar-day:focus { border: 2px solid -st-accent-color; border-radius: 99px; }
+.mk-cal #calendarArea .message { background-color: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.10); }
+.mk-cal .message-list-clear-button { border-radius: 99px; padding: 4px 14px; font-weight: 700;
+  background-color: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.14); }
+.mk-cal .message-list-clear-button:hover { background-color: rgba(239, 68, 68, 0.22); border-color: rgba(239, 68, 68, 0.5); }
 .mk-cal-card { margin-top: 10px; padding: 10px 12px; spacing: 8px; border-radius: 16px;
   background-color: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.08); }
 .mk-cal-card-title { font-weight: 800; color: #f2f6ff; }
 .mk-cal-entry { border-radius: 10px; }
-.mk-cal-chips { spacing: 6px; }
-.mk-cal-chip { border-radius: 10px; padding: 4px 10px; font-size: 0.85em; font-weight: 700;
+.mk-cal-chips { spacing: 4px; }
+.mk-cal-chip { border-radius: 99px; padding: 3px 8px; font-size: 0.78em; font-weight: 700;
   background-color: st-transparentize(-st-accent-color, 0.75); border: 1px solid st-transparentize(-st-accent-color, 0.5); }
 .mk-cal-chip:hover { background-color: st-transparentize(-st-accent-color, 0.55); }
 .mk-cal-saved { font-size: 0.82em; color: rgba(242, 246, 255, 0.7); }
+
+/* The battery, tinted by state (panel.js BatteryTint): green charging, red low */
+#panel .power-status.mk-batt-charging .system-status-icon, #panel .power-status.mk-batt-charging StLabel { color: #10b981; }
+#panel .power-status.mk-batt-low .system-status-icon, #panel .power-status.mk-batt-low StLabel { color: #ef4444; }

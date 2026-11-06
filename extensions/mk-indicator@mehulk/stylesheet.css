@@ -293,3 +293,8 @@
   background-color: rgba(255, 255, 255, 0.10); }
 .mk-agenda-late { background-color: rgba(239, 68, 68, 0.30); color: #ffd4d4; }
 .mk-agenda-detail { font-size: 0.85em; color: rgba(255, 255, 255, 0.65); }
+.mk-agenda-check { width: 18px; height: 18px; border-radius: 99px; margin-right: 10px; color: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.45); }
+.mk-agenda-check:hover { border-color: #10b981; color: rgba(16, 185, 129, 0.8); }
+.mk-agenda-check.mk-agenda-checked { background-color: #10b981; border-color: #10b981; color: #ffffff; }
+.mk-task-badge.mk-task-done { background-color: rgba(16, 185, 129, 0.28); color: #d1fae5; }

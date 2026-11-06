@@ -1,10 +1,12 @@
 // A small pill in the top bar with the Companion's to-do list: a checklist
 // icon and "3 Left" (every unfinished task), then a calendar glyph and "2"
-// when some are for today (pinned, or a reminder due today or overdue). With
-// nothing left to do it's gone from the bar entirely. It follows
+// when some are for today (pinned, or a reminder due today or overdue). Tick
+// off the last one and it reads "All Done" for half an hour, then leaves the
+// bar (with nothing to do it isn't there at all). It follows
 // companion.json live. Click: a quick preview of every open task, those with
 // a time first in time order with a countdown ("in 25 mins", "Tomorrow 9:00
-// AM"), each opening to its date, Mark Done and Snooze. Right-click: hide it
+// AM"), a round checkmark on each (tap: struck through, fades away, done),
+// each opening to its date, Mark Done and Snooze. Right-click: hide it
 // (TASK_BADGE=off in ~/.config/mk-workstation/welcome.conf; mk tasks badge
 // on). Hidden on the lock screen.
 import Clutter from 'gi://Clutter';
@@ -136,12 +138,34 @@ export class TaskBadge {
         if (!this._button)
             return;
         const {remaining, scheduled} = taskMetrics();
-        this._left.text = `${remaining} Left`;
+        // the last one just ticked off: "All Done" for half an hour, then gone
+        if (remaining === 0 && this._lastRemaining > 0) {
+            this._allDoneUntil = Date.now() + 30 * 60 * 1000;
+            this._clearAllDone();
+            this._allDoneTimer = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 30 * 60 + 1, () => {
+                this._allDoneTimer = 0;
+                this._refresh();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        this._lastRemaining = remaining;
+        const allDone = remaining === 0 && Date.now() < (this._allDoneUntil ?? 0);
+        this._left.text = allDone ? 'All Done' : `${remaining} Left`;
         this._today.text = `${scheduled}`;
         this._todayIcon.visible = this._today.visible = scheduled > 0;
-        this._button.accessible_name = `${remaining} tasks left${scheduled ? `, ${scheduled} for today` : ''}`;
-        // nothing to do: not in the bar at all (no "All Done" pill)
-        this._button.visible = !this._locked && remaining > 0 && badgeOn();
+        this._button.accessible_name = allDone ? 'All tasks done'
+            : `${remaining} tasks left${scheduled ? `, ${scheduled} for today` : ''}`;
+        if (allDone)
+            this._button.add_style_class_name('mk-task-done');
+        else
+            this._button.remove_style_class_name('mk-task-done');
+        this._button.visible = !this._locked && (remaining > 0 || allDone) && badgeOn();
+    }
+
+    _clearAllDone() {
+        if (this._allDoneTimer)
+            GLib.source_remove(this._allDoneTimer);
+        this._allDoneTimer = 0;
     }
 
     _hide() {
@@ -187,6 +211,11 @@ export class TaskBadge {
         const item = new PopupMenu.PopupSubMenuMenuItem(task.text ?? '', false);
         item.add_style_class_name('mk-agenda-row');
         item.label.clutter_text.ellipsize = 3;   // END
+        // a round checkmark: tap it and the task is struck through, fades, and is done
+        const check = new St.Button({style_class: 'mk-agenda-check', can_focus: true, y_align: Clutter.ActorAlign.CENTER,
+            child: new St.Icon({icon_name: 'object-select-symbolic', icon_size: 12}), accessible_name: 'Mark done'});
+        check.connect('clicked', () => this._complete(item, check, task));
+        item.insert_child_at_index(check, item.get_children().indexOf(item.label));
         const when = task.remind_at ? countdown(task.remind_at) : task.pinned ? 'Pinned' : '';
         if (when) {
             item.insert_child_below(new St.Label({text: when, y_align: Clutter.ActorAlign.CENTER,
@@ -217,6 +246,29 @@ export class TaskBadge {
         }
         item.menu.addAction('Open in Companion', () => this._openTasks(), 'document-open-symbolic');
         return item;
+    }
+
+    _complete(item, check, task) {
+        if (item._mkDone)
+            return;
+        item._mkDone = true;
+        check.add_style_class_name('mk-agenda-checked');
+        item.label.clutter_text.set_markup(`<s>${GLib.markup_escape_text(task.text ?? '', -1)}</s>`);
+        const done = () => this._updateTask(task.id, t => {
+            t.done = true;
+            if ((t.repeat ?? 'none') === 'none')
+                t.remind_at = null;
+        });
+        if (!St.Settings.get().enable_animations) {
+            done();
+            item.destroy();
+            return;
+        }
+        item.ease({opacity: 0, delay: 260, duration: 240, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onStopped: () => {
+                done();
+                item.destroy();
+            }});
     }
 
     // change one task in companion.json (the Companion picks it up from the file)
@@ -252,6 +304,7 @@ export class TaskBadge {
         if (this._timer)
             GLib.source_remove(this._timer);
         this._timer = 0;
+        this._clearAllDone();
         this._monitors?.forEach(m => m.cancel());
         this._monitors = null;
         this._menu?.destroy();

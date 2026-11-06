@@ -3,7 +3,7 @@
 // is behind it, translucent cards, so the dates and notifications stay
 // readable over any wallpaper). Under the month, a small card schedules a
 // reminder on the day you pick: type what it is, then a time chip (today:
-// in 15 min, in 1 hour, tonight 8 PM, tomorrow 9 AM; a later day: 9 AM, noon,
+// in 30 min, tonight 8 PM, tomorrow 9 AM; a later day: 9 AM, noon,
 // 6 PM) or Enter (in 1 hour today, 9 AM on a later day). It's saved straight
 // into the Companion's tasks, so the agenda in the top bar and the reminder
 // notification pick it up at once.
@@ -13,7 +13,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
 
-const CAL_GLASS = {sigma: 44, brightness: 0.6};
+const CAL_GLASS = {sigma: 48, brightness: 0.58};
 
 const STORE = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'companion.json']);
 
@@ -68,18 +68,20 @@ export class CalendarDeck {
         this._card.visible = day >= 0;
         if (day < 0)
             return;
-        this._heading.text = day === 0 ? 'Today' : day === 1 ? 'Tomorrow' : datetime.format('%A %-e %B');
+        this._heading.text = `Add to Agenda · ${day === 0 ? 'Today' : day === 1 ? 'Tomorrow' : datetime.format('%A %-e %B')}`;
         this._chips.destroy_all_children();
         const at = (h, m = 0, base = datetime) => GLib.DateTime.new_local(base.get_year(), base.get_month(),
             base.get_day_of_month(), h, m, 0).to_unix();
         const now = Date.now() / 1000, tomorrow = today.add_days(1);
         const chips = day === 0
-            ? [['15m', now + 900], ['1h', now + 3600], ['Tonight 8 PM', at(20)], ['Tomorrow 9 AM', at(9, 0, tomorrow)]]
+            ? [['+30m', now + 1800], ['Tonight 8 PM', at(20)], ['Tomorrow 9 AM', at(9, 0, tomorrow)]]
                 .filter(([, t]) => t > now)
             : [['9 AM', at(9)], ['Noon', at(12)], ['6 PM', at(18)]];
         this._default = day === 0 ? now + 3600 : at(9);
         for (const [label, time] of chips) {
-            const chip = new St.Button({label, style_class: 'mk-cal-chip button', can_focus: true});
+            const text = new St.Label({text: label});
+            text.clutter_text.ellipsize = 0;                 // (Pango NONE: the whole label, always)
+            const chip = new St.Button({child: text, style_class: 'mk-cal-chip button', can_focus: true});
             chip.connect('clicked', () => this._save(time));
             this._chips.add_child(chip);
         }
@@ -106,9 +108,10 @@ export class CalendarDeck {
     _glass(open) {
         this._unglass?.();
         this._unglass = null;
-        if (open)
-            this._unglass = addWallpaperGlass(this._menu.box, this._menu.actor, CAL_GLASS, 24, desktopCopy);
-        else
+        if (open) {
+            this._unglass = addWallpaperGlass(this._menu.box, this._menu.actor, CAL_GLASS, 18, desktopCopy);
+            this._chosen(GLib.DateTime.new_now_local());     // (GNOME opens it on today: the card's chips for today)
+        } else
             this._saved.visible = false;     // (it opens on today again)
     }
 

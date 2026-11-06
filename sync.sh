@@ -891,6 +891,19 @@ $CSS_MARKER
 CSSEOF
 fi
 
+# 8b. Audio: only repaired when a service is down (a sync never cuts what's playing)
+if ! "$SCRIPT_DIR/scripts/repair-audio.sh" --check >/dev/null 2>&1; then
+    echo "==> Audio services were down: restarting them..."
+    "$SCRIPT_DIR/scripts/repair-audio.sh" || echo "    [!] Audio repair failed: run scripts/repair-audio.sh --force"
+fi
+
+# 8c. Terminal helpers (alert-when-done): ~/.bashrc sources the installed copy, added once
+install -Dm644 "$SCRIPT_DIR/config/bashrc_mk.sh" "$HOME/.config/mk-workstation/bashrc_mk.sh"
+BASHRC_LINE='[ -f "$HOME/.config/mk-workstation/bashrc_mk.sh" ] && . "$HOME/.config/mk-workstation/bashrc_mk.sh"'
+if ! grep -qF "mk-workstation/bashrc_mk.sh" "$HOME/.bashrc" 2>/dev/null; then
+    printf '\n# MK Workstation terminal helpers\n%s\n' "$BASHRC_LINE" >> "$HOME/.bashrc"
+fi
+
 # 9. Register Custom Hotkeys
 echo "==> Registering MK custom shortcuts..."
 remove_legacy_shortcuts

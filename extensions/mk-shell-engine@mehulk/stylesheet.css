@@ -50,32 +50,54 @@
 .mk-active-app-name { font-weight: 700; min-width: 160px; max-width: 160px; text-align: center; }   /* fixed: the island never resizes */
 .mk-clock { font-weight: 600; font-feature-settings: "tnum"; }
 
-/* Quick Settings as a bento grid (modules/controlCenter.js) */
-.quick-settings.mk-bento { border-radius: 26px; background-color: rgba(18, 20, 28, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.10); }
+/* Quick Settings (modules/controlCenter.js): quiet frosted glass. Every colour stays inside its
+   tile: no outer glow (it spilled past the tiles), the arrow is part of the same tile. On: a soft
+   accent tint, a hairline accent border, the icon lit and a thin accent line along the bottom. */
+.quick-settings.mk-bento { border-radius: 24px; padding: 16px; background-color: rgba(14, 16, 22, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.09); box-shadow: 0 18px 48px 0 rgba(0, 0, 0, 0.45); }
+.mk-bento .quick-settings-grid { spacing-rows: 10px; spacing-columns: 10px; }
 .mk-bento .quick-toggle, .mk-bento .quick-toggle-has-menu {
-  border-radius: 12px; min-width: 14.5em; max-width: 14.5em; min-height: 3.6em; }
+  border-radius: 14px; min-width: 14.5em; max-width: 14.5em; min-height: 3.5em; box-shadow: none; }
 .mk-bento .quick-toggle-has-menu .quick-toggle { min-width: auto; max-width: none; }
-.mk-bento .quick-toggle { background-color: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.08); }
-.mk-bento .quick-toggle:hover { background-color: rgba(255, 255, 255, 0.13); }
-.mk-bento .quick-toggle:checked { color: #ffffff; background-color: st-transparentize(-st-accent-color, 0.65);
-  background-gradient-direction: vertical; background-gradient-start: st-transparentize(st-lighten(-st-accent-color, 12%), 0.6);
-  background-gradient-end: st-transparentize(-st-accent-color, 0.7);
-  border: 1px solid st-transparentize(-st-accent-color, 0.3); box-shadow: 0 0 12px 0 st-transparentize(-st-accent-color, 0.7); }
-.mk-bento .quick-toggle:checked:hover { background-color: st-transparentize(-st-accent-color, 0.55); }
-.mk-bento .quick-toggle-has-menu .quick-toggle { border-radius: 12px 0 0 12px; }
-.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button { border-radius: 0 12px 12px 0;
-  background-color: rgba(255, 255, 255, 0.11); color: #f2f6ff; }
-.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button:hover { background-color: rgba(255, 255, 255, 0.17); }
+/* at rest */
+.mk-bento .quick-toggle { background-color: rgba(255, 255, 255, 0.06); color: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.06); box-shadow: none; }
+.mk-bento .quick-toggle:hover { background-color: rgba(255, 255, 255, 0.10); }
+.mk-bento .quick-toggle .quick-toggle-icon { color: rgba(255, 255, 255, 0.6); }
+/* on */
+.mk-bento .quick-toggle:checked, .mk-bento .quick-toggle:checked:hover, .mk-bento .quick-toggle:checked:focus {
+  color: #ffffff; background-color: st-transparentize(-st-accent-color, 0.80);
+  border: 1px solid st-transparentize(-st-accent-color, 0.45);
+  border-bottom: 2px solid -st-accent-color; box-shadow: none; }
+.mk-bento .quick-toggle:checked:hover { background-color: st-transparentize(-st-accent-color, 0.72); }
+.mk-bento .quick-toggle:checked .quick-toggle-icon { color: st-lighten(-st-accent-color, 18%); }
+.mk-bento .quick-toggle:checked .quick-toggle-subtitle { color: rgba(255, 255, 255, 0.7); }
+/* a toggle with a menu: one tile, the arrow a quiet part of it */
+.mk-bento .quick-toggle-has-menu { background-color: transparent; box-shadow: none; }
+.mk-bento .quick-toggle-has-menu .quick-toggle { border-radius: 14px 0 0 14px; border-right-width: 0; }
+.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button { border-radius: 0 14px 14px 0; box-shadow: none;
+  background-color: rgba(255, 255, 255, 0.06); color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06); border-left-width: 0; }
+.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button:hover { background-color: rgba(255, 255, 255, 0.12); color: #ffffff; }
 .mk-bento .quick-toggle-has-menu:checked .quick-toggle-menu-button,
-.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button:checked { background-color: st-transparentize(-st-accent-color, 0.55); color: #ffffff; }
-.mk-bento .quick-toggle-has-menu .quick-toggle-separator { background-color: rgba(255, 255, 255, 0.12); width: 1px; }
+.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button:checked {
+  background-color: st-transparentize(-st-accent-color, 0.80); color: #ffffff;
+  border: 1px solid st-transparentize(-st-accent-color, 0.45); border-left-width: 0;
+  border-bottom: 2px solid -st-accent-color; }
+.mk-bento .quick-toggle-has-menu .quick-toggle-separator { background-color: rgba(255, 255, 255, 0.10); width: 1px; }
+.mk-bento .quick-toggle-has-menu:checked .quick-toggle-separator { background-color: st-transparentize(-st-accent-color, 0.6); }
 .mk-bento .quick-toggle-title { font-weight: 700; }
-.mk-bento .quick-toggle-menu { border-radius: 18px; background-color: rgba(255, 255, 255, 0.07); }
-.mk-bento .quick-slider { background-color: rgba(255, 255, 255, 0.06); border-radius: 16px; padding: 4px 6px; }
-.mk-bento .slider { -barlevel-height: 8px; -slider-handle-radius: 0.65em;
-  -barlevel-background-color: rgba(255, 255, 255, 0.14); }
+.mk-bento .quick-toggle-menu { border-radius: 16px; background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07); }
+/* sliders: slim, the filled part in the accent */
+.mk-bento .quick-slider { background-color: transparent; border-radius: 14px; padding: 2px 4px; }
+.mk-bento .slider { -barlevel-height: 6px; -slider-handle-radius: 0.55em;
+  -barlevel-background-color: rgba(255, 255, 255, 0.10); -barlevel-active-background-color: -st-accent-color; color: #ffffff; }
+/* the round buttons along the top: quiet glass */
+.mk-bento .quick-settings-system-item .icon-button { background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.06); }
+.mk-bento .quick-settings-system-item .icon-button:hover { background-color: rgba(255, 255, 255, 0.12); }
+.mk-bento .quick-settings-system-item .power-item { background-color: rgba(255, 255, 255, 0.06); border-radius: 14px; }
 
 /* Left island: Finder, the divider before the app (panel.js); the tray chevron */
 .mk-finder-label { font-weight: 700; }

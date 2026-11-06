@@ -3,6 +3,9 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Quick Settings, redesigned:** quiet frosted glass where every colour stays inside its tile. The outer accent glow is gone (it bled past the tiles into the panel); a toggle that's on gets a soft accent tint, a hairline accent border, its icon lit in the accent and a thin accent line along the bottom, and a toggle with a menu is one tile with its arrow, not two blocks. Slim sliders filled in the accent, quiet round buttons along the top.
+- **Battery back in the top bar:** hiding the battery reading in Quick Settings also hid the top bar's battery icon (GNOME 51 shows it only while that tile is there); the battery stays in both now.
+- **Task pill preview:** every open task, not only those with a reminder: scheduled ones first (soonest on top, with a countdown), then the rest, pinned first. Each opens to its date (or "No date" and when it was added), Mark Done, Snooze when it has a time, and Open in Companion.
 - **Top bar:** the app pill has a fixed size (a 160 px name, cut short with "…", and an 18 px icon slot), so going from "WS 2" to "Visual Studio Code" no longer makes the left island grow and shrink and push its neighbours about; the new name crossfades in place (140 ms).
 - **Agenda:** each reminder opens in place: when exactly (and whether it repeats), **Mark Done**, **Snooze 15 min**, Open in Companion.
 - **MK Notes, tables in the text again (Google Docs style):** a table is part of the text, on its own line, so typing above it pushes it down and nothing you type can run under it (since tables were made free-floating, text passed beneath them). ⠿ Move table moves it by line: let go on the line it should come before. A table's place is saved as its position in the text; notes with floating tables from before move each onto the line it was over, once, when opened. Deleting a table takes its line with it; Esc puts the cursor on the line below it.

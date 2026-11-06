@@ -7,8 +7,8 @@
 // GNOME's at once.
 //
 // It also leaves out what you rarely need there (qs-hidden): by default Dark
-// Style and the Welcome light toggle, and the battery reading in the header
-// (the top bar already shows it), so the toggles are a clean 2 x 3: Wi-Fi,
+// Style and the Welcome light toggle (never the battery: GNOME shows the top
+// bar's battery icon only while that tile is there), so the toggles are a clean 2 x 3: Wi-Fi,
 // Bluetooth, Power Mode, Night Light, Do Not Disturb, Airplane Mode (plus
 // what other extensions add, Caffeine for one). Screenshots have their keys:
 // Super+Shift+S, Print, Super+Print.
@@ -22,7 +22,6 @@ const QS_GLASS = {sigma: 52, brightness: 0.56};
 const ITEMS = {
     'dark-style': qs => qs._darkMode?.quickSettingsItems?.[0],
     'airplane-mode': qs => qs._rfkill?.quickSettingsItems?.[0],
-    'battery': qs => qs._system?._systemItem?._powerToggle,
     'welcome-light': qs => qs.menu._grid?.get_children().find(c => c.constructor.name.includes('WelcomeToggle')),
 };
 

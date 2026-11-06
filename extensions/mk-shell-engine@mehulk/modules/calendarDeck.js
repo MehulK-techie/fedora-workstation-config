@@ -3,7 +3,7 @@
 // is behind it, translucent cards, so the dates and notifications stay
 // readable over any wallpaper). Under the month, a small card schedules a
 // reminder on the day you pick: type what it is, then a time chip (today:
-// in 30 min, tonight 8 PM, tomorrow 9 AM; a later day: 9 AM, noon,
+// in 15 min, in 1 hour, tonight 8 PM, tomorrow 9 AM, on two rows; a later day: 9 AM, noon,
 // 6 PM) or Enter (in 1 hour today, 9 AM on a later day). It's saved straight
 // into the Companion's tasks, so the agenda in the top bar and the reminder
 // notification pick it up at once.
@@ -47,7 +47,8 @@ export class CalendarDeck {
         this._entry = new St.Entry({hint_text: 'Add event / reminder…', can_focus: true, x_expand: true,
             style_class: 'mk-cal-entry'});
         this._entry.clutter_text.connect('activate', () => this._save(null));
-        this._chips = new St.BoxLayout({style_class: 'mk-cal-chips'});
+        // the chips, two rows of at most two (four don't fit across the card)
+        this._chips = new St.BoxLayout({style_class: 'mk-cal-chips', orientation: Clutter.Orientation.VERTICAL});
         this._saved = new St.Label({style_class: 'mk-cal-saved', visible: false});
         for (const actor of [this._heading, this._entry, this._chips, this._saved])
             this._card.add_child(actor);
@@ -74,16 +75,21 @@ export class CalendarDeck {
             base.get_day_of_month(), h, m, 0).to_unix();
         const now = Date.now() / 1000, tomorrow = today.add_days(1);
         const chips = day === 0
-            ? [['+30m', now + 1800], ['Tonight 8 PM', at(20)], ['Tomorrow 9 AM', at(9, 0, tomorrow)]]
+            ? [['15m', now + 900], ['1h', now + 3600], ['Tonight 8 PM', at(20)], ['Tomorrow 9 AM', at(9, 0, tomorrow)]]
                 .filter(([, t]) => t > now)
             : [['9 AM', at(9)], ['Noon', at(12)], ['6 PM', at(18)]];
         this._default = day === 0 ? now + 3600 : at(9);
-        for (const [label, time] of chips) {
+        let row = null;
+        for (const [i, [label, time]] of chips.entries()) {
+            if (i % 2 === 0) {
+                row = new St.BoxLayout({style_class: 'mk-cal-chip-row'});
+                this._chips.add_child(row);
+            }
             const text = new St.Label({text: label});
             text.clutter_text.ellipsize = 0;                 // (Pango NONE: the whole label, always)
             const chip = new St.Button({child: text, style_class: 'mk-cal-chip button', can_focus: true});
             chip.connect('clicked', () => this._save(time));
-            this._chips.add_child(chip);
+            row.add_child(chip);
         }
     }
 

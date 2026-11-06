@@ -17,6 +17,17 @@
   border-top-color: rgba(255, 255, 255, 0.36); border-bottom-color: rgba(255, 255, 255, 0.08);
   border-radius: 22px; padding: 6px 10px 4px; spacing: 2px;
   box-shadow: 0 18px 40px -6px rgba(0, 0, 0, 0.55); }
+/* dock-style: the default above is obsidian-glass; the others (all keep the 22 px corners
+   the blur behind is cut to) */
+.mk-dock.mk-dock-cupertino-frost { background-color: rgba(255, 255, 255, 0.22); border: 1px solid rgba(255, 255, 255, 0.42);
+  border-top-color: rgba(255, 255, 255, 0.65); border-bottom-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.35); }
+.mk-dock-cupertino-frost .mk-dock-separator { background-color: rgba(20, 22, 30, 0.25); }
+.mk-dock-cupertino-frost .mk-dock-grid { color: rgba(20, 22, 30, 0.8); }
+.mk-dock.mk-dock-spider-glow { background-color: rgba(10, 10, 14, 0.80); border: 1px solid rgba(200, 16, 46, 0.85);
+  box-shadow: 0 0 20px 1px rgba(200, 16, 46, 0.5); }
+.mk-dock-spider-glow .mk-dock-separator { background-color: rgba(200, 16, 46, 0.6); }
+.mk-dock.mk-dock-minimal-flat { background-color: rgb(24, 25, 30); border: none; box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5); }
 .mk-dock-item { padding: 3px 5px 1px; border-radius: 14px; }
 .mk-dock-item:focus { background-color: rgba(255, 255, 255, 0.10); }
 .mk-dock-bars { height: 4px; margin-top: 3px; spacing: 3px; }
@@ -60,33 +71,33 @@
   border: 1px solid rgba(255, 255, 255, 0.09); box-shadow: 0 18px 48px 0 rgba(0, 0, 0, 0.45); }
 .mk-bento .quick-settings-grid { spacing-rows: 10px; spacing-columns: 10px; }
 .mk-bento .quick-toggle, .mk-bento .quick-toggle-has-menu {
-  border-radius: 14px; min-width: 14.5em; max-width: 14.5em; min-height: 3.5em; box-shadow: none; }
+  border-radius: 12px; min-width: 14.5em; max-width: 14.5em; min-height: 3.5em; box-shadow: none; }
 .mk-bento .quick-toggle-has-menu .quick-toggle { min-width: auto; max-width: none; }
 /* at rest */
-.mk-bento .quick-toggle { background-color: rgba(255, 255, 255, 0.06); color: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.06); box-shadow: none; }
+.mk-bento .quick-toggle { background-color: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: none; }
 .mk-bento .quick-toggle:hover { background-color: rgba(255, 255, 255, 0.10); }
 .mk-bento .quick-toggle .quick-toggle-icon { color: rgba(255, 255, 255, 0.6); }
-/* on */
+/* on: translucent accent glass with a glow, the glow drawn inside the tile (inset) so
+   no colour spills past it into the panel */
 .mk-bento .quick-toggle:checked, .mk-bento .quick-toggle:checked:hover, .mk-bento .quick-toggle:checked:focus {
-  color: #ffffff; background-color: st-transparentize(-st-accent-color, 0.80);
-  border: 1px solid st-transparentize(-st-accent-color, 0.45);
-  border-bottom: 2px solid -st-accent-color; box-shadow: none; }
-.mk-bento .quick-toggle:checked:hover { background-color: st-transparentize(-st-accent-color, 0.72); }
+  color: #ffffff; background-color: st-transparentize(-st-accent-color, 0.68);
+  border: 1px solid st-transparentize(-st-accent-color, 0.30);
+  box-shadow: inset 0 0 14px 0 st-transparentize(-st-accent-color, 0.72); }
+.mk-bento .quick-toggle:checked:hover { background-color: st-transparentize(-st-accent-color, 0.60); }
 .mk-bento .quick-toggle:checked .quick-toggle-icon { color: st-lighten(-st-accent-color, 18%); }
 .mk-bento .quick-toggle:checked .quick-toggle-subtitle { color: rgba(255, 255, 255, 0.7); }
 /* a toggle with a menu: one tile, the arrow a quiet part of it */
 .mk-bento .quick-toggle-has-menu { background-color: transparent; box-shadow: none; }
-.mk-bento .quick-toggle-has-menu .quick-toggle { border-radius: 14px 0 0 14px; border-right-width: 0; }
-.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button { border-radius: 0 14px 14px 0; box-shadow: none;
-  background-color: rgba(255, 255, 255, 0.06); color: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.06); border-left-width: 0; }
+.mk-bento .quick-toggle-has-menu .quick-toggle { border-radius: 12px 0 0 12px; border-right-width: 0; }
+.mk-bento .quick-toggle-has-menu .quick-toggle-menu-button { border-radius: 0 12px 12px 0; box-shadow: none;
+  background-color: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08); border-left-width: 0; }
 .mk-bento .quick-toggle-has-menu .quick-toggle-menu-button:hover { background-color: rgba(255, 255, 255, 0.12); color: #ffffff; }
 .mk-bento .quick-toggle-has-menu:checked .quick-toggle-menu-button,
 .mk-bento .quick-toggle-has-menu .quick-toggle-menu-button:checked {
-  background-color: st-transparentize(-st-accent-color, 0.80); color: #ffffff;
-  border: 1px solid st-transparentize(-st-accent-color, 0.45); border-left-width: 0;
-  border-bottom: 2px solid -st-accent-color; }
+  background-color: st-transparentize(-st-accent-color, 0.68); color: #ffffff;
+  border: 1px solid st-transparentize(-st-accent-color, 0.30); border-left-width: 0; }
 .mk-bento .quick-toggle-has-menu .quick-toggle-separator { background-color: rgba(255, 255, 255, 0.10); width: 1px; }
 .mk-bento .quick-toggle-has-menu:checked .quick-toggle-separator { background-color: st-transparentize(-st-accent-color, 0.6); }
 .mk-bento .quick-toggle-title { font-weight: 700; }
@@ -133,7 +144,8 @@
   background-color: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.08); }
 .mk-cal-card-title { font-weight: 800; color: #f2f6ff; }
 .mk-cal-entry { border-radius: 10px; }
-.mk-cal-chips { spacing: 4px; }
+.mk-cal-chips { spacing: 5px; }
+.mk-cal-chip-row { spacing: 5px; }
 .mk-cal-chip { border-radius: 99px; padding: 3px 8px; font-size: 0.78em; font-weight: 700;
   background-color: st-transparentize(-st-accent-color, 0.75); border: 1px solid st-transparentize(-st-accent-color, 0.5); }
 .mk-cal-chip:hover { background-color: st-transparentize(-st-accent-color, 0.55); }

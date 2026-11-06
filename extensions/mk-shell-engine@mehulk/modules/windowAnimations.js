@@ -1,8 +1,8 @@
-// MK Shell Engine: windows opening and closing with a little spring.
-//   open  (200 ms): the window rises from 0.92x, swells just past its size
-//         (about 1.03x) and settles, fading in over the first 80 ms
-//   close (160 ms): a tiny lift (1.01x), then it sinks toward the dock as it
-//         shrinks to 0.92x and fades out
+// MK Shell Engine: windows opening and closing, quick and clean.
+//   open  (170 ms): the window grows from 0.94x to its size around its
+//         centre (ease-out cubic), fading in over the first 100 ms
+//   close (130 ms): straight away, no lift: it shrinks to 0.94x, glides
+//         12 px down and dissolves (ease-out quad)
 // Only scale, position and opacity change (GPU-cheap). Like the minimize
 // glide, GNOME's own handlers are set aside while this runs, every window is
 // handed back to GNOME exactly once whatever happens, and anything this
@@ -16,12 +16,11 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { BURN_MY_WINDOWS, isActive, watch } from './conflicts.js';
 
-const OPEN = 200, CLOSE = 160, FADE_IN = 80;
+const OPEN = 170, CLOSE = 130, FADE_IN = 100;
 const clamp = p => Math.min(1, Math.max(0, p));
 const lerp = (a, b, t) => a + (b - a) * t;
-// ease-out with overshoot: c = 4 peaks about 38 % past the end, so 0.92 -> 1.00 swells to ~1.03
-const springOut = (p, c = 4) => 1 + (c + 1) * (p - 1) ** 3 + c * (p - 1) ** 2;
-const easeIn = p => p * p;
+const easeOutCubic = p => 1 - (1 - p) ** 3;
+const easeOutQuad = p => 1 - (1 - p) ** 2;
 
 const TYPES = [Meta.WindowType.NORMAL, Meta.WindowType.DIALOG, Meta.WindowType.MODAL_DIALOG];
 
@@ -117,20 +116,18 @@ export class WindowAnimations {
         };
         this._running.set(actor, {finish});
         try {
-            actor.set_pivot_point(0.5, 1);           // grows up from its base, sinks toward the dock
+            actor.set_pivot_point(0.5, 0.5);         // around its centre
             const frame = opening
                 ? p => {
-                    const s = lerp(0.92, 1, springOut(p));
+                    const s = lerp(0.94, 1, easeOutCubic(p));
                     actor.set_scale(s, s);
-                    actor.translation_y = lerp(18, 0, clamp(p * 1.4));
-                    actor.opacity = Math.round(255 * clamp(p * OPEN / FADE_IN));
+                    actor.opacity = Math.round(255 * easeOutQuad(clamp(p * OPEN / FADE_IN)));
                 }
                 : p => {
-                    // a little lift for the first third, then down and away
-                    const s = p < 0.3 ? lerp(1, 1.01, p / 0.3) : lerp(1.01, 0.92, easeIn((p - 0.3) / 0.7));
-                    actor.set_scale(s, s);
-                    actor.translation_y = p < 0.3 ? 0 : lerp(0, 24, easeIn((p - 0.3) / 0.7));
-                    actor.opacity = Math.round(255 * (1 - easeIn(p)));
+                    const e = easeOutQuad(p);
+                    actor.set_scale(lerp(1, 0.94, e), lerp(1, 0.94, e));
+                    actor.translation_y = lerp(0, 12, e);
+                    actor.opacity = Math.round(255 * (1 - e));
                 };
             frame(0);
             if (opening)

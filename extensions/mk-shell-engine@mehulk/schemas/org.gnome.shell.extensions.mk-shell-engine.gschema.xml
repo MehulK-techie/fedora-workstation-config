@@ -16,6 +16,17 @@
       <summary>MK dock</summary>
       <description>The glass dock. It only shows while Dash to Dock is off.</description>
     </key>
+    <key name="dock-style" type="s">
+      <choices>
+        <choice value="obsidian-glass"/>
+        <choice value="cupertino-frost"/>
+        <choice value="spider-glow"/>
+        <choice value="minimal-flat"/>
+      </choices>
+      <default>'obsidian-glass'</default>
+      <summary>Dock style</summary>
+      <description>obsidian-glass: translucent dark smoke. cupertino-frost: bright diffused glass. spider-glow: a dark core with a red laser edge. minimal-flat: a solid dark shelf, no border or blur.</description>
+    </key>
     <key name="dock-icon-size" type="i">
       <range min="36" max="56"/>
       <default>40</default>
@@ -26,7 +37,7 @@
       <range min="1.00" max="1.50"/>
       <default>1.32</default>
       <summary>Dock magnification</summary>
-      <description>How much the icon right under the pointer grows (and it lifts 10 px); icons within 130 px grow on a smooth bell, and slide apart to make room. 1.00: none.</description>
+      <description>How much the icon right under the pointer grows (and it lifts 12 px); its two neighbours grow to 1.08x, the rest stay as they are. 1.00: none.</description>
     </key>
     <key name="dock-hide-ms" type="i">
       <range min="60" max="1500"/>

@@ -4,7 +4,7 @@
 // rounded, blurred island. Plus two things GNOME's bar doesn't have:
 //   - the app you're using, in its own colours (never a grey symbolic icon),
 //     with its name; a click opens New Window, Snap Left / Right, Keep on Top,
-//     Quit. Its pill glides to the new name's width (160 ms) as it crossfades.
+//     Quit. Its pill glides to the new name's width (140 ms) as it crossfades.
 //   - the battery tinted by its state (green charging, red low).
 //   - a typographic clock in the centre: "Thu Nov 5 · 2:25 PM" (24-hour if
 //     GNOME is set to it).
@@ -37,8 +37,8 @@ class ActiveApp {
         this.button.add_style_class_name('mk-active-app');
         this._box = new St.BoxLayout({style_class: 'mk-active-app-box', y_align: Clutter.ActorAlign.CENTER});
         this._iconBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER, width: 18});   // (the same for an app icon and the dot)
-        // the name's width glides to its new size (160 ms) when the app changes, between
-        // 56 and 190 px (longer names are cut short by "…"), so the island morphs smoothly
+        // the name's width glides to its new size (140 ms) when the app changes, between
+        // 56 and 170 px (longer names are cut short by "…"), so the island morphs smoothly
         // instead of jumping
         this._label = new St.Label({style_class: 'mk-active-app-name', y_align: Clutter.ActorAlign.CENTER,
             x_align: Clutter.ActorAlign.CENTER});
@@ -81,11 +81,11 @@ class ActiveApp {
         this._iconBin.set_child(icon);
         this._label.text = app ? app.get_name() : `WS ${ws}`;
         const natural = Math.ceil(this._label.clutter_text.get_preferred_width(-1)[1]);
-        const width = Math.max(56, Math.min(190, natural));
+        const width = Math.max(56, Math.min(170, natural));
         this._label.remove_transition('width');
         if (animate && St.Settings.get().enable_animations) {
             // the capsule glides to the new name's width while the name crossfades in
-            this._label.ease({width, duration: 160, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            this._label.ease({width, duration: 140, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
             this._box.remove_transition('opacity');
             this._box.opacity = 0;
             this._box.ease({opacity: 255, duration: 140, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});

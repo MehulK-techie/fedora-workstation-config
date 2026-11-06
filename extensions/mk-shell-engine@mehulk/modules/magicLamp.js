@@ -1,7 +1,7 @@
 // MK Shell Engine: minimize and restore as a glide. A window being
 // minimized slides and shrinks along an eased curve into its app's icon in
-// the dock (240 ms), dissolving over the last 60 ms; restoring launches it
-// back out of the icon to its place (220 ms), with a 2 % overshoot that
+// the dock (210 ms), dissolving over the last 60 ms; restoring launches it
+// back out of the icon to its place (210 ms), with a 2 % overshoot that
 // settles. Only the window's position, scale and opacity change (no mesh
 // bending), so it stays smooth on any GPU.
 //
@@ -20,7 +20,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { MAGIC_LAMP, isActive, watch } from './conflicts.js';
 
-const MINIMIZE = 240, UNMINIMIZE = 220, DISSOLVE = 60;
+const MINIMIZE = 210, UNMINIMIZE = 210, DISSOLVE = 60;
 
 const clamp = p => Math.min(1, Math.max(0, p));
 const lerp = (a, b, t) => a + (b - a) * t;

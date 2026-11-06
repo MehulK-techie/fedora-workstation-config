@@ -47,7 +47,7 @@ export class Dock {
         this._actor = null;
         this._unwatch = watch(() => this._sync());
         this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::dock-hide-ms',
-            'changed::dock-reveal-ms', 'changed::blur'].map(
+            'changed::dock-reveal-ms', 'changed::blur', 'changed::dock-style'].map(
             signal => settings.connect(signal, () => this._sync(true)));
         this._sync();
     }
@@ -86,7 +86,9 @@ export class Dock {
         this._ids = [];
         this._appIds = [];
         this._hidden = false;
-        this._actor = new St.BoxLayout({style_class: 'mk-dock', reactive: true, track_hover: true,
+        // its look (dock-style): obsidian-glass, cupertino-frost, spider-glow or minimal-flat
+        const style = this._settings.get_string('dock-style');
+        this._actor = new St.BoxLayout({style_class: `mk-dock mk-dock-${style}`, reactive: true, track_hover: true,
             y_align: Clutter.ActorAlign.END});
         this._actor.set_pivot_point(0.5, 1);
         this._actor.connect('destroy', () => (this._gone = true));     // (GNOME Shell quitting takes it down first)
@@ -121,7 +123,7 @@ export class Dock {
             this._settle();
             this._queueDodge(600);
         });
-        if (blurAllowed(this._settings))
+        if (blurAllowed(this._settings) && style !== 'minimal-flat')    // (flat: solid, nothing to see through)
             this._unblur = addWallpaperGlass(this._actor, this._chrome, DOCK_GLASS, 22);
         this._menus = new PopupMenu.PopupMenuManager(this._actor);
 

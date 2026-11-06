@@ -3,6 +3,13 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Windows, snappier:** closing no longer lifts first: a window shrinks to 0.94x, glides 12 px down and dissolves in 130 ms; opening grows from 0.94x around its centre in 170 ms (fading in over the first 100 ms), with no rubber band. Minimize and restore glide to and from the dock icon in 210 ms.
+- **Dock styles:** `dock-style` picks the look: obsidian-glass (the default, dark smoke), cupertino-frost (bright diffused glass), spider-glow (a dark core with a red laser edge) or minimal-flat (a solid dark shelf, no border or blur).
+- **Quick Settings tiles:** at rest faint glass (12 px corners); on, translucent glass in your accent colour with a fine accent border and a glow inside the tile's own edge (an outer glow spilled into the panel before).
+- **Top bar:** the app pill glides in 140 ms and stops at 170 px.
+- **Calendar:** the chips are 15m, 1h, Tonight 8 PM and Tomorrow 9 AM, on two rows.
+- **MK Notes, sticky notes:** a tool of their own (Sticky Note, next to Ink / Type / Insert). They live on the desk around the page, so you can drag one out into the dark margin beside it (a narrower window keeps it in reach); drag by the ⠿ header (a click still edits the title), resize by the corner grip, and the note grows as you write. Papers: Canary Yellow, Mint Green, Sky Blue, Rose Pink, Lavender. New ones are called Quick Note.
+- **MK Notes, no more jumping:** clicking out of a table (or into a sticky note) scrolled the page: GTK scrolled to whatever took the focus. The page now moves only with the caret while you type, or when you scroll. The cell you're typing in has an accent ring.
 - **Dock, Mac-style:** a lighter frosted shelf lit along its top edge, with a deeper soft shadow and rounder corners (22 px); a small dot under each running app (two for several windows; your accent colour for the app you're using) that pops in, in place of the bars; a tooltip pill that fades in.
 - **Top bar:** the square file-manager icon between the MK emblem and the app is gone; the left island reads MK emblem, divider, the app (or "WS 2" with a desktop glyph), the workspace dots, Places, 4 px from the screen's edges. The app pill sizes itself to the name (56 to 190 px, longer names cut short by "…") and glides to the new width in 160 ms as the name crossfades in (140 ms).
 - **Battery capsule:** green while charging, red under 20 % on battery, plain otherwise (read from GNOME's own battery reading, no polling).

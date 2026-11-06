@@ -74,16 +74,17 @@ HIGHLIGHTER_COLOURS = (("Solar yellow", "#fde047"), ("Mint green", "#86efac"), (
 INK_COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#ffffff", "#1e293b"]
 
 STICKY_PALETTES = [
-    ("Yellow", "#fff3a8", "#854d0e"),
-    ("Mint", "#c8f7dc", "#166534"),
+    ("Canary Yellow", "#fef08a", "#854d0e"),
+    ("Mint Green", "#bbf7d0", "#166534"),
     ("Sky Blue", "#bae6fd", "#075985"),
-    ("Rose Pink", "#fbcfe8", "#9d174d"),
-    ("Lavender", "#e8d5ff", "#5b21b6"),
+    ("Rose Pink", "#fecdd3", "#9d174d"),
+    ("Lavender", "#e9d5ff", "#5b21b6"),
     ("Coral", "#ffc4b8", "#9f1239"),
     ("Charcoal", "#2c2e33", "#e6e6e6"),
     ("Clear (text box)", "transparent", "#ffffff"),
 ]
 TEXT_BOX = len(STICKY_PALETTES) - 1  # a sticky without paper: text on a printout or picture
+PAD_COLOURS = 5  # a sticky note's picker: the first five papers
 # a text box's font colours: (name, hex)
 TEXT_COLOURS = (("White", "#ffffff"), ("Slate Gray", "#9a9996"), ("Crimson Red", "#ed333b"),
                 ("Amber Orange", "#ff7800"), ("Emerald Green", "#33d17a"), ("Sky Blue", "#3584e4"),
@@ -268,6 +269,7 @@ BASE_CSS = """
 .mk-table-bar { opacity: 0; transition: opacity 150ms ease; }
 .mk-table-bar.shown { opacity: 1; }
 .mk-table-divider:hover { background: alpha(@accent_color, 0.5); }
+textview.mk-table-cell:focus { box-shadow: inset 0 0 0 2px @accent_color; }
 .mk-table-pill { font-size: 0.82em; padding: 2px 10px; min-height: 0; border-radius: 99px;
                  background: alpha(@window_fg_color, 0.08); }
 .mk-sheet { border-radius: 12px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45); }
@@ -285,6 +287,8 @@ popover.mk-sel-card button:hover { background: rgba(255, 255, 255, 0.1); }
 .mk-island dropdown > button { color: #e5e7eb; }
 .mk-modes button { padding: 4px 10px; font-weight: 600; }
 .mk-modes button:checked { background: alpha(@accent_bg_color, 0.85); color: white; }
+.mk-sticky-tool { padding: 4px 12px; border-radius: 8px; font-weight: 600; background: alpha(#fef08a, 0.22); }
+.mk-sticky-tool:hover { background: alpha(#fef08a, 0.36); }
 .mk-tool:checked { background: rgba(255, 255, 255, 0.10);
                    box-shadow: inset 0 -3px 0 @accent_bg_color; }  /* the pill under the tool in use */
 .mk-zoom-pill { background: alpha(black, 0.55); color: white; border-radius: 99px; padding: 1px 6px; }
@@ -326,6 +330,10 @@ popover.mk-sel-card button:hover { background: rgba(255, 255, 255, 0.1); }
           transition: box-shadow 160ms cubic-bezier(0.25, 1, 0.5, 1); }
 .mk-pad-head { border-bottom: 1px solid alpha(currentColor, 0.18); }
 entry.mk-pad-title { font-weight: 700; box-shadow: none; min-height: 24px; padding: 0 2px; }
+.mk-pad-grab { font-size: 1.1em; opacity: 0.55; }
+.mk-pad.mk-pad-lifted { box-shadow: 0 14px 32px rgba(0,0,0,0.38); }
+.mk-pad-grip { min-width: 14px; min-height: 14px; margin: 0 2px 2px 0; border-radius: 3px;
+               background: linear-gradient(135deg, transparent 50%, alpha(currentColor, 0.35) 50%); }
 .mk-textbox-frame { padding: 7px; border: 1px solid rgba(0,0,0,0); background: rgba(0,0,0,0);
                     transition: border-color 160ms cubic-bezier(0.25, 1, 0.5, 1); }
 .mk-textbox.selected .mk-textbox-frame { border-color: #3584e4; }
@@ -938,12 +946,14 @@ class StickyNoteWidget(Gtk.Box):
 
 
 class StickyPad(Gtk.Box):
-    """A sticky note (Sticky in the ribbon): translucent pastel paper with
-    a pinned header (drag it to move; the title is editable), a colour
-    picker, layer order and ×, and room to write. Unlike a text box it
-    stays a note on top of the page; a PDF export lists it in a footnote
-    box (Include sticky notes, next to Export). Its bottom-right corner
-    resizes it."""
+    """A sticky note (Sticky, next to Ink / Type / Insert): pastel paper
+    with a header (drag it to move it anywhere, onto the page or out into
+    the dark margin around it; the title is editable), a five-colour
+    picker, layer order and ×, and room to write that grows as you type.
+    It lives on the desk around the page (NotesWindow.desk_fixed), placed
+    by x / y in page units from the page's top-left corner (negative: in
+    the left margin). A PDF export lists it in a footnote box (Include
+    sticky notes, next to Export). Its bottom-right grip resizes it."""
     GRIP_H = 34   # the header's height, the part that drags
 
     def __init__(self, item_data, note_win):
@@ -951,11 +961,11 @@ class StickyPad(Gtk.Box):
                          valign=Gtk.Align.START, css_classes=["mk-pad"])
         self.data = item_data
         self.win = note_win
-        for k, v in (("x", 420.0), ("y", 120.0), ("w", 220.0), ("h", 180.0), ("color_idx", 0), ("text", ""),
-                     ("title", "Sticky note")):
+        for k, v in (("x", 420.0), ("y", 120.0), ("w", 240.0), ("h", 180.0), ("color_idx", 0), ("text", ""),
+                     ("title", "Quick Note")):
             self.data.setdefault(k, v)
         head = Gtk.Box(spacing=4, height_request=self.GRIP_H - 6, css_classes=["mk-pad-head"])
-        head.append(Gtk.Image(icon_name="view-pin-symbolic", margin_start=4, can_target=False))
+        head.append(Gtk.Label(label="⠿", margin_start=4, can_target=False, css_classes=["mk-pad-grab"]))
         title = Gtk.Entry(text=self.data["title"], hexpand=True, has_frame=False, max_length=40,
                           css_classes=["mk-pad-title"])
         title.connect("changed", lambda e: (self.data.__setitem__("title", e.get_text()), self.win.save_note_meta()))
@@ -963,7 +973,7 @@ class StickyPad(Gtk.Box):
         head.append(title)
         palette = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
         pop = Gtk.Popover(child=palette)
-        for i, (name, bg, _fg) in enumerate(STICKY_PALETTES[:TEXT_BOX]):
+        for i, (name, bg, _fg) in enumerate(STICKY_PALETTES[:PAD_COLOURS]):
             sw = Gtk.Button(tooltip_text=name, css_classes=["mk-swatch"])
             prov = Gtk.CssProvider()
             prov.load_from_string(f"button {{ background: {bg}; border: 1px solid alpha(black, 0.25); }}")
@@ -988,13 +998,29 @@ class StickyPad(Gtk.Box):
         close.connect("clicked", lambda *_: self.win.remove_pinned_sticky(self))
         head.append(close)
         head.set_cursor(Gdk.Cursor.new_from_name("move"))
+        # the header drags the note (a press that doesn't move still reaches the title and buttons)
+        grab = Gtk.GestureDrag(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        grab.connect("drag-begin", self._grab_begin, False)
+        grab.connect("drag-update", self._grab_update)
+        grab.connect("drag-end", self._grab_end)
+        head.add_controller(grab)
         self.append(head)
         self.text_view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, hexpand=True, vexpand=True,
                                       left_margin=8, right_margin=8, top_margin=4, bottom_margin=4)
         self.text_view.get_buffer().set_text(self.data["text"])
         self.text_view.get_buffer().connect("changed", self._on_text)
+        # the note grows as you write (no inner scrolling): its height is the text's, at least h
         self.append(Gtk.ScrolledWindow(child=self.text_view, hexpand=True, vexpand=True,
-                                       hscrollbar_policy=Gtk.PolicyType.NEVER))
+                                       hscrollbar_policy=Gtk.PolicyType.EXTERNAL,
+                                       vscrollbar_policy=Gtk.PolicyType.NEVER))
+        grip = Gtk.Box(css_classes=["mk-pad-grip"], halign=Gtk.Align.END, cursor=Gdk.Cursor.new_from_name("se-resize"),
+                       tooltip_text="Drag to resize")
+        size = Gtk.GestureDrag()
+        size.connect("drag-begin", self._grab_begin, True)
+        size.connect("drag-update", self._grab_update)
+        size.connect("drag-end", self._grab_end)
+        grip.add_controller(size)
+        self.append(grip)
         self._css = Gtk.CssProvider()
         for w in (self, self.text_view, title):
             w.get_style_context().add_provider(self._css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
@@ -1017,11 +1043,62 @@ class StickyPad(Gtk.Box):
         self.data["text"] = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
         self.win.save_note_meta()
 
+    def place(self):
+        """Where it goes on the desk: the page's corner plus x / y at this zoom,
+        kept on the desk (a note left in the margin of a wider window stays in
+        reach when the window is narrower; its saved place doesn't change)."""
+        ox, oy = self.win.page_origin()
+        z = self.win.zoom
+        x, y = ox + self.data["x"] * z, oy + self.data["y"] * z
+        desk_w = self.win.desk.get_width()
+        if desk_w > 0:
+            x = min(x, desk_w - round(self.data["w"] * z) - 4)
+        return round(max(4, x)), round(max(4, y))
+
     def sync_zoom_geometry(self):
         z = self.win.zoom
         self.set_size_request(round(self.data["w"] * z), round(self.data["h"] * z))
-        if self.get_parent() is self.win.canvas_fixed:
-            self.win.canvas_fixed.move(self, max(8, round(self.data["x"] * z)), max(8, round(self.data["y"] * z)))
+        if self.get_parent() is self.win.desk_fixed:
+            self.win.desk_fixed.move(self, *self.place())
+
+    # dragging: the header moves it, the grip resizes it (measured in the window, which doesn't move)
+    def _grab_begin(self, gesture, _x, _y, resize):
+        self._grab = (TableItem._window_point(gesture), resize, dict(self.data), False)
+        if resize:
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+
+    def _grab_update(self, gesture, _dx, _dy):
+        origin, resize, start, moving = getattr(self, "_grab", (None, False, {}, False))
+        here = TableItem._window_point(gesture)
+        if not (origin and here):
+            return
+        dx, dy = here[0] - origin[0], here[1] - origin[1]
+        if not moving:
+            if not resize and abs(dx) < 4 and abs(dy) < 4:
+                return                               # (a click: the title or a button takes it)
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            self._grab = (origin, resize, start, True)
+            self.add_css_class("mk-pad-lifted")
+        z = max(0.5, self.win.zoom)
+        if resize:
+            self.data["w"] = round(max(140.0, start["w"] + dx / z))
+            self.data["h"] = round(max(90.0, start["h"] + dy / z))
+        else:
+            # anywhere on the desk: over the page or out in the margin around it
+            ox, oy = self.win.page_origin()
+            desk_w = self.win.desk.get_width()
+            x = start["x"] + dx / z
+            y = start["y"] + dy / z
+            x = max((4 - ox) / z, min(x, (desk_w - ox - self.get_width() - 4) / z))
+            self.data["x"], self.data["y"] = round(x), round(max((4 - oy) / z, y))
+        self.sync_zoom_geometry()
+
+    def _grab_end(self, *_a):
+        if getattr(self, "_grab", (None, False, {}, False))[3]:
+            self.win.dirty = True
+            self.win.save_note_meta()
+        self._grab = None
+        self.remove_css_class("mk-pad-lifted")
 
 
 class TableItem(Gtk.Box):
@@ -2489,6 +2566,18 @@ class PassThroughFixed(Gtk.Fixed):
         return False
 
 
+class DeskOverlay(Gtk.Overlay):
+    """The dark desk the page lies on (what scrolls). Sticky notes sit on
+    it, over the page or in the margin beside it, so they're re-placed
+    whenever the page moves on it (the window resized, zoom)."""
+    note_win = None
+
+    def do_size_allocate(self, width, height, baseline):
+        Gtk.Overlay.do_size_allocate(self, width, height, baseline)
+        if self.note_win is not None:
+            self.note_win._queue_place_pads()
+
+
 class SheetOverlay(Gtk.Overlay):
     """The page: exactly as wide as the sheet (sheet_w, set by _update_pages).
 
@@ -3220,27 +3309,9 @@ class NotesWindow(Adw.ApplicationWindow):
                 self._ov_start = tuple(float(st.data[k]) for k in ("x", "y", "w", "h"))
                 gesture.set_state(Gtk.EventSequenceState.CLAIMED)
                 return
-        # a sticky note: its bottom-right corner resizes it, its header moves it
-        for pad in reversed(self.pinned_stickies):
-            px, py = pad.data["x"] * z, pad.data["y"] * z
-            pw, ph = pad.get_width(), pad.get_height()
-            if px + pw - 18 <= x <= px + pw and py + ph - 18 <= y <= py + ph:
-                self._ov_drag_target = ("sticky-size", pad)
-                self._ov_corner = (1, 1)
-                self._ov_start = tuple(float(pad.data[k]) for k in ("x", "y", "w", "h"))
-                gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-                return
         if self._is_control_at(x, y):
             gesture.set_state(Gtk.EventSequenceState.DENIED)
             return
-        for pad in reversed(self.pinned_stickies):
-            px, py = pad.data["x"] * z, pad.data["y"] * z
-            if px <= x <= px + pad.get_width() and py <= y <= py + pad.GRIP_H:
-                self._ov_drag_target = ("sticky", pad)
-                self._ov_start_x, self._ov_start_y = float(pad.data["x"]), float(pad.data["y"])
-                gesture.set_state(Gtk.EventSequenceState.CLAIMED)
-                return
-
         # a text box's border (the text itself is a control, above) moves it
         for st in reversed(self.sticky_notes):
             sx, sy = st.data["x"] * z, st.data["y"] * z
@@ -3785,7 +3856,7 @@ class NotesWindow(Adw.ApplicationWindow):
                              tooltip_text="Sticky note: pastel paper with a pinned header, on top of the page")
         pad_btn.set_child(Adw.ButtonContent(icon_name="mail-attachment-symbolic", label="Sticky"))
         pad_btn.connect("clicked", lambda *_: self.add_pinned_sticky())
-        ribbon.append(pad_btn)
+        self._sticky_tool = pad_btn            # (a tool of its own, next to Ink / Type / Insert)
         colour_pop = Gtk.Popover()
         colour_pop.set_child(self.text_colour_swatches(lambda c: (colour_pop.popdown(), self._colour_text_box(c))))
         ribbon.append(Gtk.MenuButton(child=_colour_a_label(), css_classes=["flat"],
@@ -3847,7 +3918,7 @@ class NotesWindow(Adw.ApplicationWindow):
             "type": kids[at(self.style_drop):at(div_btn) + 1],
             "ink": [self.ink_bar, Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), self.shapes_toggle,
                     self.laser_toggle],
-            "insert": [table_btn, text_btn, pad_btn, kids[at(pad_btn) + 1],
+            "insert": [table_btn, text_btn, kids[at(text_btn) + 1],   # (text colour; Sticky Note is a tool of its own)
                        Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), img_btn, shot_btn, comment_btn,
                        link_btn, map_btn, Gtk.Separator(orientation=Gtk.Orientation.VERTICAL),
                        self.grid_toggle, scratch],
@@ -3866,7 +3937,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.mode_btns, group = {}, None
         for name, label, icon, tip in (("ink", "Ink", "input-tablet-symbolic", "Pen, highlighter, eraser, lasso, shapes (P H E L)"),
                                        ("type", "Type", "text-editor-symbolic", "Paragraph styles, bold, italic, lists"),
-                                       ("insert", "Insert", "list-add-symbolic", "Table, text box, sticky note, picture, PDF")):
+                                       ("insert", "Insert", "list-add-symbolic", "Table, text box, picture, PDF")):
             b = Gtk.ToggleButton(child=Adw.ButtonContent(icon_name=icon, label=label), tooltip_text=tip,
                                  group=group, active=name == "type")
             group = group or b
@@ -3876,8 +3947,12 @@ class NotesWindow(Adw.ApplicationWindow):
         # the modes above, the deck below: each fits a 1366 px screen with the sidebars open
         island = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER,
                          css_classes=["mk-island"])
-        switch.set_halign(Gtk.Align.CENTER)
-        island.append(switch)
+        top = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
+        top.append(switch)
+        self._sticky_tool.set_child(Adw.ButtonContent(icon_name="mail-attachment-symbolic", label="Sticky Note"))
+        self._sticky_tool.set_css_classes(["mk-sticky-tool"])
+        top.append(self._sticky_tool)
+        island.append(top)
         island.append(self.deck_stack)
         self.deck_stack.set_visible_child_name("type")
         ribbon_outer.append(island)
@@ -3927,10 +4002,11 @@ class NotesWindow(Adw.ApplicationWindow):
         self.buffer.connect_after("insert-text", self._on_after_insert_text)
         self.buffer.connect("changed", lambda *_: self._queue_table_style())
         self.buffer.connect("mark-set", self._on_cursor_moved)
-        # follow the caret (Google Docs style): typing keeps it clear of the window's edges
-        self.buffer.connect_after("changed", lambda *_: self._follow_caret(typing=True))
+        # follow the caret (Google Docs style): typing keeps it clear of the window's edges.
+        # Only after a key: a click, leaving a table or clearing a selection never scrolls.
+        self.buffer.connect_after("changed", lambda *_: self._keyed() and self._follow_caret(typing=True))
         self.buffer.connect_after("mark-set", lambda _b, _i, mark: mark == self.buffer.get_insert()
-                                  and self._follow_caret(typing=False))
+                                  and self._keyed() and self._follow_caret(typing=False))
 
         self.view = Gtk.TextView(
             buffer=self.buffer,
@@ -3946,6 +4022,9 @@ class NotesWindow(Adw.ApplicationWindow):
         )
         self.view.connect("paste-clipboard", self._on_paste)
 
+        keyed = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        keyed.connect("key-pressed", lambda *_a: (setattr(self, "_key_at", GLib.get_monotonic_time()), False)[1])
+        self.view.add_controller(keyed)
         ed_keys = Gtk.EventControllerKey()
         ed_keys.connect("key-pressed", self._on_editor_key)
         self.view.add_controller(ed_keys)
@@ -3981,7 +4060,16 @@ class NotesWindow(Adw.ApplicationWindow):
         self.ink_canvas = StudioInkCanvas(self)
         self.page_overlay.add_overlay(self.ink_canvas)
 
-        self.page_scroll = Gtk.ScrolledWindow(child=self.page_overlay, hexpand=True, vexpand=True)
+        # the desk around the page: sticky notes live here, so they can sit in the margin too
+        self.desk = DeskOverlay(child=self.page_overlay, hexpand=True, vexpand=True)
+        self.desk.note_win = self
+        self.desk_fixed = PassThroughFixed()
+        self.desk.add_overlay(self.desk_fixed)
+        self.page_scroll = Gtk.ScrolledWindow(child=self.desk, hexpand=True, vexpand=True)
+        # GTK's viewport scrolls to whatever takes the focus: clicking out of a table (the text
+        # takes it back) or a sticky note jumped the page. The page moves only with the caret
+        # as you type (_follow_caret) or when you scroll.
+        self.page_scroll.get_child().set_scroll_to_focus(False)
         # "Page X of Y" by the scrollbar, as in Google Docs
         self.page_badge = Gtk.Label(css_classes=["mk-page-badge"], can_target=False)
         # zoom and the page count: one small floating pill, bottom right
@@ -5068,6 +5156,10 @@ class NotesWindow(Adw.ApplicationWindow):
     # there in 120 ms; arrow keys and clicks scroll only when the caret leaves the view.
     CARET_BOTTOM, CARET_TOP = 160, 80
 
+    def _keyed(self):
+        """Was a key pressed in the text just now (what moved the caret was typing)?"""
+        return GLib.get_monotonic_time() - getattr(self, "_key_at", 0) < 400_000
+
     def _follow_caret(self, typing):
         if not self.view.has_focus() or getattr(self, "_follow_id", 0):
             return
@@ -5213,6 +5305,11 @@ class NotesWindow(Adw.ApplicationWindow):
     def _apply_z_order(self):
         """Re-add the items in z order: a Gtk.Fixed draws its last child on top."""
         for w in self._layers():
+            if isinstance(w, StickyPad):             # (on the desk, above the page)
+                if w.get_parent() is self.desk_fixed:
+                    self.desk_fixed.remove(w)
+                self.desk_fixed.put(w, *w.place())
+                continue
             if w.get_parent() is self.canvas_fixed:
                 self.canvas_fixed.remove(w)
             self.canvas_fixed.put(w, *(w.place() if hasattr(w, "place") else
@@ -5238,9 +5335,9 @@ class NotesWindow(Adw.ApplicationWindow):
         z = max(0.5, self.zoom)
         data = {"x": float(max(16, self.page_width() / z - 260 - 24 * (len(self.pinned_stickies) % 5))),
                 "y": float(max(60, round(scroll_y + 80 + 24 * (len(self.pinned_stickies) % 5)))),
-                "z": self._next_z(), "color_idx": len(self.pinned_stickies) % TEXT_BOX}
+                "z": self._next_z(), "color_idx": len(self.pinned_stickies) % PAD_COLOURS}
         pad = StickyPad(data, self)
-        self.canvas_fixed.put(pad, round(data["x"] * self.zoom), round(data["y"] * self.zoom))
+        self.desk_fixed.put(pad, *pad.place())
         self.pinned_stickies.append(pad)
         self.dirty = True
         self.save_note_meta()
@@ -5250,11 +5347,30 @@ class NotesWindow(Adw.ApplicationWindow):
     def remove_pinned_sticky(self, pad):
         if pad in self.pinned_stickies:
             self.pinned_stickies.remove(pad)
-            if pad.get_parent() is self.canvas_fixed:
-                self.canvas_fixed.remove(pad)
+            if pad.get_parent() is self.desk_fixed:
+                self.desk_fixed.remove(pad)
             self.dirty = True
             self.save_note_meta()
             self._sync_export_toggle()
+
+    def page_origin(self):
+        """The page's top-left corner on the desk (where x 0, y 0 of a sticky note is)."""
+        ok, p = self.page_overlay.compute_point(self.desk, Graphene.Point().init(0, 0))
+        return (p.x, p.y) if ok else (0.0, 0.0)
+
+    def _queue_place_pads(self):
+        if getattr(self, "_place_pads_id", 0) or not self.pinned_stickies:
+            return
+
+        def run():
+            self._place_pads_id = 0
+            origin = self.page_origin()
+            if origin != getattr(self, "_pads_origin", None):
+                self._pads_origin = origin
+                for pad in self.pinned_stickies:
+                    pad.sync_zoom_geometry()
+            return False
+        self._place_pads_id = GLib.idle_add(run)
 
     def has_sticky_notes(self):
         return bool(self.pinned_stickies)
@@ -5844,7 +5960,7 @@ class NotesWindow(Adw.ApplicationWindow):
     def _rebuild_canvas_objects(self, images_list, stickies_list, pads_list=()):
         for w in self.canvas_images + self.sticky_notes + self.pinned_stickies:
             try:
-                self.canvas_fixed.remove(w)
+                w.get_parent().remove(w)
             except Exception:
                 pass
         self.canvas_images = []
@@ -5852,7 +5968,7 @@ class NotesWindow(Adw.ApplicationWindow):
         self.pinned_stickies = []
         for item in pads_list:
             pad = StickyPad(dict(item), self)
-            self.canvas_fixed.put(pad, round(pad.data["x"] * self.zoom), round(pad.data["y"] * self.zoom))
+            self.desk_fixed.put(pad, *pad.place())
             self.pinned_stickies.append(pad)
         self._sync_export_toggle()
         self.selected_img = None

@@ -334,6 +334,7 @@ entry.mk-pad-title { font-weight: 700; box-shadow: none; min-height: 24px; paddi
 .mk-pad.mk-pad-lifted { box-shadow: 0 14px 32px rgba(0,0,0,0.38); }
 .mk-pad-grip { min-width: 14px; min-height: 14px; margin: 0 2px 2px 0; border-radius: 3px;
                background: linear-gradient(135deg, transparent 50%, alpha(currentColor, 0.35) 50%); }
+.mk-pad-grip-sw { margin: 0 0 2px 2px; background: linear-gradient(225deg, transparent 50%, alpha(currentColor, 0.35) 50%); }
 .mk-textbox-frame { padding: 7px; border: 1px solid rgba(0,0,0,0); background: rgba(0,0,0,0);
                     transition: border-color 160ms cubic-bezier(0.25, 1, 0.5, 1); }
 .mk-textbox.selected .mk-textbox-frame { border-color: #3584e4; }
@@ -1013,14 +1014,18 @@ class StickyPad(Gtk.Box):
         self.append(Gtk.ScrolledWindow(child=self.text_view, hexpand=True, vexpand=True,
                                        hscrollbar_policy=Gtk.PolicyType.EXTERNAL,
                                        vscrollbar_policy=Gtk.PolicyType.NEVER))
-        grip = Gtk.Box(css_classes=["mk-pad-grip"], halign=Gtk.Align.END, cursor=Gdk.Cursor.new_from_name("se-resize"),
-                       tooltip_text="Drag to resize")
-        size = Gtk.GestureDrag()
-        size.connect("drag-begin", self._grab_begin, True)
-        size.connect("drag-update", self._grab_update)
-        size.connect("drag-end", self._grab_end)
-        grip.add_controller(size)
-        self.append(grip)
+        # resize grips at both bottom corners
+        foot = Gtk.CenterBox()
+        for side, cursor in (("sw", "sw-resize"), ("se", "se-resize")):
+            grip = Gtk.Box(css_classes=["mk-pad-grip", f"mk-pad-grip-{side}"], cursor=Gdk.Cursor.new_from_name(cursor),
+                           tooltip_text="Drag to resize")
+            size = Gtk.GestureDrag()
+            size.connect("drag-begin", self._grab_begin, side)
+            size.connect("drag-update", self._grab_update)
+            size.connect("drag-end", self._grab_end)
+            grip.add_controller(size)
+            (foot.set_start_widget if side == "sw" else foot.set_end_widget)(grip)
+        self.append(foot)
         self._css = Gtk.CssProvider()
         for w in (self, self.text_view, title):
             w.get_style_context().add_provider(self._css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
@@ -1080,7 +1085,12 @@ class StickyPad(Gtk.Box):
             self._grab = (origin, resize, start, True)
             self.add_css_class("mk-pad-lifted")
         z = max(0.5, self.win.zoom)
-        if resize:
+        if resize == "sw":          # the left corner: the right edge stays put
+            w = max(140.0, start["w"] - dx / z)
+            self.data["x"] = round(start["x"] + start["w"] - w)
+            self.data["w"] = round(w)
+            self.data["h"] = round(max(90.0, start["h"] + dy / z))
+        elif resize:
             self.data["w"] = round(max(140.0, start["w"] + dx / z))
             self.data["h"] = round(max(90.0, start["h"] + dy / z))
         else:
@@ -1177,6 +1187,11 @@ class TableItem(Gtk.Box):
                                        tooltip_text="Rows and columns (for the cell you're in)")
         self.menu_btn.connect("notify::active", lambda *_: self._show_bar())
         bar.append(self.menu_btn)
+        for label, what, tip in (("+ Row", "row-end", "Add a row at the bottom"),
+                                 ("+ Column", "col-end", "Add a column on the right")):
+            add = Gtk.Button(label=label, css_classes=["mk-table-pill"], tooltip_text=tip)
+            add.connect("clicked", lambda _b, w=what: self.edit(w))
+            bar.append(add)
         self.append(bar)
         hover = Gtk.EventControllerMotion()
         hover.connect("enter", lambda *_: (setattr(self, "_hover", True), self._show_bar()))
@@ -1291,6 +1306,14 @@ class TableItem(Gtk.Box):
         elif what == "row-below":
             rows.insert(r + 1, [""] * len(rows[0]))
             focus = (r + 1, 0)
+        elif what == "row-end":
+            rows.append([""] * len(rows[0]))
+            focus = (len(rows) - 1, 0)
+        elif what == "col-end":
+            for i, row in enumerate(rows):
+                row.append(f"Column {len(row) + 1}" if i == 0 else "")
+            widths.append(120)
+            focus = (0, len(rows[0]) - 1)
         elif what == "row-del" and len(rows) > 1:
             rows.pop(r)
             focus = (min(r, len(rows) - 1), c)
@@ -3781,9 +3804,9 @@ class NotesWindow(Adw.ApplicationWindow):
         # Insert Table: one click drops a 3 x 3 table in the middle of the
         # view; the arrow opens the grid to pick another size
         table_btn = Adw.SplitButton(child=Adw.ButtonContent(icon_name="mk-table-symbolic", label="Insert Table"),
-                                    tooltip_text="Insert a 3 x 3 table", dropdown_tooltip="Pick the table's size",
+                                    tooltip_text="Insert a 2 x 2 table", dropdown_tooltip="Pick the table's size",
                                     css_classes=["flat"], popover=self._table_picker())
-        table_btn.connect("clicked", lambda *_: self.insert_table(3, 3, centre=True))
+        table_btn.connect("clicked", lambda *_: self.insert_table(2, 2, centre=True))
 
         ribbon.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=2, margin_end=2))
 
@@ -3918,7 +3941,7 @@ class NotesWindow(Adw.ApplicationWindow):
             "type": kids[at(self.style_drop):at(div_btn) + 1],
             "ink": [self.ink_bar, Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), self.shapes_toggle,
                     self.laser_toggle],
-            "insert": [table_btn, text_btn, kids[at(text_btn) + 1],   # (text colour; Sticky Note is a tool of its own)
+            "insert": [table_btn, text_btn, self._insert_sticky_btn(), kids[at(text_btn) + 1],   # (then text colour)
                        Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), img_btn, shot_btn, comment_btn,
                        link_btn, map_btn, Gtk.Separator(orientation=Gtk.Orientation.VERTICAL),
                        self.grid_toggle, scratch],
@@ -5155,6 +5178,14 @@ class NotesWindow(Adw.ApplicationWindow):
     # CARET_BOTTOM px above the bottom edge and CARET_TOP px below the top, gliding
     # there in 120 ms; arrow keys and clicks scroll only when the caret leaves the view.
     CARET_BOTTOM, CARET_TOP = 160, 80
+
+    def _insert_sticky_btn(self):
+        """Sticky Note in the Insert deck (it's also a tool of its own beside the modes)."""
+        btn = Gtk.Button(child=Adw.ButtonContent(icon_name="mail-attachment-symbolic", label="Sticky Note"),
+                         css_classes=["flat"], tooltip_text="Sticky note: pastel paper you can put anywhere, "
+                                                            "margins too")
+        btn.connect("clicked", lambda *_: self.add_pinned_sticky())
+        return btn
 
     def _keyed(self):
         """Was a key pressed in the text just now (what moved the caret was typing)?"""

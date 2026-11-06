@@ -3,6 +3,13 @@
 ## 2.0.0 (unreleased, branch `fix/dbus-pam-dnf`)
 
 ### Added
+- **Snap Assist (Super+Z):** after you pick a layout, your other windows go straight into its other parts when they fit (two windows and a 50 / 50 split). With more windows than empty parts, each empty part shows a frosted picker over it: live thumbnails of the windows left, with their app icons and numbers; 1-9 or a click puts one there, Esc stops (what's placed stays).
+- **Super+Left / Right swap:** with two windows side by side, Super+Right on the left one (or Super+Left on the right one) swaps them in a 120 ms glide. Otherwise the keys snap a window to that half, with the same gaps as Super+Z, and again puts it back where it was.
+- **Top bar, steady:** the left island reads MK emblem, Places, divider, the workspace dots, the app. The dots sit in a fixed 58 px anchor, so swiping between workspaces never moves the bar; the app pill has a fixed width again (150 px, longer names cut short) and only its name crossfades (120 ms), since a width animation under the blurred island re-rendered the glass every frame.
+- **Island glass, exact:** the glass behind an island could stay a few pixels wider than the island (a lighter sliver at its end) after the bar re-laid itself out; it now follows the island's actual size.
+- **Battery in four tiers:** charging green, above 50 % soft white, 20-50 % amber, under 20 % red with a slowly pulsing border.
+- **Quick Settings:** opening it again while it's still closing no longer leaves a blank, see-through panel. **Super+Tab:** the highlight glides between cards in 90 ms (ease-out cubic) with Tab or the arrows.
+- **MK Notes:** Insert Table makes a 2 x 2 (Column 1, Column 2); **+ Row** and **+ Column** on the table's bar. Sticky Note is in the Insert toolbar too, and a sticky note resizes from either bottom corner.
 - **Windows, snappier:** closing no longer lifts first: a window shrinks to 0.94x, glides 12 px down and dissolves in 130 ms; opening grows from 0.94x around its centre in 170 ms (fading in over the first 100 ms), with no rubber band. Minimize and restore glide to and from the dock icon in 210 ms.
 - **Dock styles:** `dock-style` picks the look: obsidian-glass (the default, dark smoke), cupertino-frost (bright diffused glass), spider-glow (a dark core with a red laser edge) or minimal-flat (a solid dark shelf, no border or blur).
 - **Quick Settings tiles:** at rest faint glass (12 px corners); on, translucent glass in your accent colour with a fine accent border and a glow inside the tile's own edge (an outer glow spilled into the panel before).

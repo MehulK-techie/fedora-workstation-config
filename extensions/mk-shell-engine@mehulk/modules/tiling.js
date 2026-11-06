@@ -1,9 +1,19 @@
 // MK Shell Engine: snap layouts (Super+Z): a frosted card of five layouts, up at once.
-// 1-5 (or the arrows and Enter, or a click) tiles the focused window into the
-// layout's main part and your other windows on this desktop, most recent
-// first, into the rest. Hover or arrow onto a layout and its parts show on
-// the desktop behind, so you see where everything lands before you choose.
-// Esc, Super+Z again or a click outside closes it.
+// 1-5 (or the arrows and Enter, or a click) puts the focused window into the
+// layout's main part. Hover or arrow onto a layout and its parts show on the
+// desktop behind, so you see where everything lands before you choose. Esc,
+// Super+Z again or a click outside closes it.
+//
+// Snap Assist, as in Windows 11: when your other windows on this desktop fit
+// the layout's other parts exactly (two windows and a 50 / 50 split), they go
+// straight in. With more windows than empty parts, each empty part in turn
+// shows a picker over it: a thumbnail of each window left, with its app's
+// icon and a number; 1-9 or a click puts that one there. Esc stops (what's
+// placed stays placed).
+//
+// Super+Left / Right: a window snaps to that half (again: back to where it
+// was). With two windows side by side, Super+Right on the left one swaps
+// them (Super+Left on the right one too), both gliding in 120 ms.
 //
 // Super+Shift+Z gathers a coder's windows (VS Code or another editor, a
 // terminal, a browser on localhost) onto a fresh desktop, side by side.
@@ -16,10 +26,14 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { accentRGB } from './colour.js';
+import { addWallpaperGlass, desktopCopy } from './blur.js';
 
 const GAP = 8;               // between tiles, and to the screen's edge
 const FADE = 90;             // the card's fade in, ms
 const GLIDE = 140;           // a window gliding to its place, ms
+const SWAP_GLIDE = 120;      // two halves trading places, ms
+const ASSIST_GLASS = {sigma: 40, brightness: 0.6};
+const LEFT_HALF = [0, 0, 0.5, 1], RIGHT_HALF = [0.5, 0, 0.5, 1];
 
 // [name, parts]: a part is [x, y, width, height] in fractions of the work
 // area. The first part is the main one: the focused window goes there.
@@ -88,22 +102,22 @@ function unmaximize(win) {
     }
 }
 
-const SETTLE = 45;           // ms for an app to answer "you're not maximized any more" (Wayland)
+const SETTLE = 40;           // ms for an app to answer "you're not maximized any more" (Wayland)
 
 // Put WIN at RECT; it glides there from where it was (unless animations are off).
 // A maximized window is let go first and moved a moment later: on Wayland the
 // app confirms un-maximizing after a frame or two, and that confirmation used
 // to put back its old size over a move made at once (Super+Z then only worked
 // the second time). It's checked once more after, in case the app was slow.
-export function place(win, rect) {
+export function place(win, rect, glide = GLIDE) {
     if (!held(win)) {
-        moveTo(win, rect);
+        moveTo(win, rect, glide);
         return;
     }
     unmaximize(win);
     GLib.timeout_add(GLib.PRIORITY_DEFAULT, SETTLE, () => {
         if (win.get_compositor_private()) {
-            moveTo(win, rect);
+            moveTo(win, rect, glide);
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
                 const f = win.get_compositor_private() ? win.get_frame_rect() : null;
                 if (f && (Math.abs(f.x - rect.x) > 2 || Math.abs(f.y - rect.y) > 2 ||
@@ -119,7 +133,7 @@ export function place(win, rect) {
     });
 }
 
-function moveTo(win, rect) {
+function moveTo(win, rect, glide = GLIDE) {
     const before = win.get_frame_rect();
     win.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
     const actor = win.get_compositor_private();
@@ -129,7 +143,7 @@ function moveTo(win, rect) {
     actor.remove_transition('translation-y');
     actor.translation_x = before.x - rect.x;
     actor.translation_y = before.y - rect.y;
-    actor.ease({translation_x: 0, translation_y: 0, duration: GLIDE, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+    actor.ease({translation_x: 0, translation_y: 0, duration: glide, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
 }
 
 // Tile WINDOWS (main first) into LAYOUT's parts on the work area of the first one's monitor.
@@ -275,12 +289,19 @@ export class SnapLayouts {
     }
 
     _apply(index) {
-        const focus = this._focus;
+        const focus = this._focus, layout = this._layouts[index], area = this._area;
         this.close();
         if (!focus || focus.unmanaging)
             return;
         const others = windowsHere().filter(w => w !== focus && w.get_monitor() === focus.get_monitor());
-        tile(this._layouts[index], [focus, ...others]);
+        const empty = layout[1].slice(1);
+        if (others.length <= empty.length) {
+            tile(layout, [focus, ...others]);         // they fit: straight in
+            return;
+        }
+        place(focus, partRect(area, layout[1][0]));
+        focus.activate(global.get_current_time());
+        this._assist = new SnapAssist(area, empty, others, () => (this._assist = null));
     }
 
     close() {
@@ -334,6 +355,212 @@ export class SnapLayouts {
 
     destroy() {
         this.close();
+        this._assist?.destroy();
+    }
+}
+
+// Snap Assist: for each empty PART of the layout, a picker over it of the
+// windows not placed yet. Fills the rest without asking once they fit.
+class SnapAssist {
+    constructor(area, parts, candidates, onDone) {
+        this._area = area;
+        this._parts = [...parts];
+        this._left = [...candidates];
+        this._onDone = onDone;
+        this._next();
+    }
+
+    _next() {
+        this._hide();
+        this._left = this._left.filter(w => !w.unmanaging && w.get_compositor_private());
+        if (!this._parts.length || !this._left.length) {
+            this.destroy();
+            return;
+        }
+        if (this._left.length <= this._parts.length) {
+            // the rest fit: in they go, no question
+            this._left.forEach((w, i) => place(w, partRect(this._area, this._parts[i])));
+            this.destroy();
+            return;
+        }
+        this._show(partRect(this._area, this._parts[0]));
+    }
+
+    _show(rect) {
+        const [r, g, b] = accentRGB();
+        this._rect = rect;
+        this._actor = new St.Widget({reactive: true, can_focus: true, opacity: 0,
+            x: 0, y: 0, width: global.stage.width, height: global.stage.height,
+            layout_manager: new Clutter.FixedLayout()});
+        const zone = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-assist-zone',
+            x: rect.x, y: rect.y, width: rect.width, height: rect.height, reactive: true,
+            style: `border-color: rgba(${r},${g},${b},0.75);`});
+        zone.add_child(new St.Label({text: 'Choose a window for this side', style_class: 'mk-assist-heading',
+            x_align: Clutter.ActorAlign.CENTER}));
+        const grid = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-assist-grid',
+            x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, y_expand: true});
+        const perRow = rect.width > 900 ? 3 : 2;
+        const cardW = Math.min(240, Math.floor((rect.width - 80) / perRow) - 16);
+        let row = null;
+        this._cards = this._left.slice(0, 9).map((win, i) => {
+            if (i % perRow === 0) {
+                row = new St.BoxLayout({style_class: 'mk-assist-row'});
+                grid.add_child(row);
+            }
+            const card = this._card(win, i, cardW);
+            row.add_child(card);
+            return card;
+        });
+        zone.add_child(grid);
+        zone.add_child(new St.Label({text: '1-9 or click to place  ·  Esc to stop', style_class: 'mk-assist-hint',
+            x_align: Clutter.ActorAlign.CENTER}));
+        this._actor.add_child(zone);
+        Main.uiGroup.add_child(this._actor);
+        this._unglass = addWallpaperGlass(zone, this._actor, ASSIST_GLASS, 18, desktopCopy);
+        this._grab = Main.pushModal(this._actor, {actionMode: Shell.ActionMode.POPUP});
+        this._actor.grab_key_focus();
+        this._actor.connect('key-press-event', (_a, event) => this._key(event));
+        this._actor.connect('button-release-event', () => {
+            this.destroy();                  // a click outside the zone stops
+            return Clutter.EVENT_STOP;
+        });
+        zone.connect('button-release-event', () => Clutter.EVENT_STOP);
+        this._actor.ease({opacity: 255, duration: FADE, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+    }
+
+    // a window: its live thumbnail, its app's icon and title, and its number
+    _card(win, i, width) {
+        const card = new St.Button({style_class: 'mk-assist-card', can_focus: true, reactive: true, track_hover: true});
+        const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style: 'spacing: 8px;'});
+        const thumbH = Math.round(width * 0.62);
+        const frame = new St.Widget({width, height: thumbH, layout_manager: new Clutter.BinLayout(),
+            style_class: 'mk-assist-thumb'});
+        const actor = win.get_compositor_private();
+        const f = win.get_frame_rect(), buf = win.get_buffer_rect();
+        if (actor && f.width > 0 && f.height > 0) {
+            const k = Math.min(width / f.width, thumbH / f.height);
+            // the window's frame (its shadow's margin left out), scaled to fit
+            const clone = new Clutter.Clone({source: actor, x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER, width: Math.round(f.width * k), height: Math.round(f.height * k)});
+            clone.set_size(Math.round(buf.width * k), Math.round(buf.height * k));
+            const holder = new St.Widget({width: Math.round(f.width * k), height: Math.round(f.height * k),
+                clip_to_allocation: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+            clone.set_position(Math.round((buf.x - f.x) * k), Math.round((buf.y - f.y) * k));
+            holder.add_child(clone);
+            frame.add_child(holder);
+        }
+        box.add_child(frame);
+        const line = new St.BoxLayout({style: 'spacing: 8px;'});
+        line.add_child(new St.Label({text: `${i + 1}`, style_class: 'mk-snap-key', y_align: Clutter.ActorAlign.CENTER}));
+        const app = Shell.WindowTracker.get_default().get_window_app(win);
+        if (app)
+            line.add_child(app.create_icon_texture(20));
+        const title = new St.Label({text: win.get_title() ?? app?.get_name() ?? '', style_class: 'mk-assist-title',
+            y_align: Clutter.ActorAlign.CENTER, x_expand: true});
+        title.clutter_text.ellipsize = 3;          // END
+        title.set_width(width - 64);
+        line.add_child(title);
+        box.add_child(line);
+        card.set_child(box);
+        card.connect('clicked', () => this._pick(i));
+        return card;
+    }
+
+    _key(event) {
+        const key = event.get_key_symbol();
+        let n = key - Clutter.KEY_1;
+        if (key >= Clutter.KEY_KP_1 && key <= Clutter.KEY_KP_9)
+            n = key - Clutter.KEY_KP_1;
+        if (n >= 0 && n < (this._cards?.length ?? 0))
+            this._pick(n);
+        else if (key === Clutter.KEY_Escape)
+            this.destroy();
+        return Clutter.EVENT_STOP;
+    }
+
+    _pick(i) {
+        const win = this._left[i], rect = this._rect;
+        if (!win)
+            return;
+        this._left.splice(i, 1);
+        this._parts.shift();
+        if (win.minimized)
+            win.unminimize();
+        place(win, rect);
+        win.activate(global.get_current_time());
+        this._next();
+    }
+
+    _hide() {
+        this._unglass?.();
+        this._unglass = null;
+        if (this._grab)
+            Main.popModal(this._grab);
+        this._grab = null;
+        this._actor?.destroy();
+        this._actor = this._cards = null;
+    }
+
+    destroy() {
+        this._hide();
+        this._parts = [];
+        this._onDone?.();
+        this._onDone = null;
+    }
+}
+
+// Which half WIN fills, if it's snapped to one (by its shape: about half the
+// width, nearly the full height): 'left', 'right' or null.
+function halfOf(win) {
+    const a = win.get_work_area_current_monitor(), f = win.get_frame_rect();
+    if (f.height < a.height * 0.8 || f.width < a.width * 0.35 || f.width > a.width * 0.65)
+        return null;
+    return f.x + f.width / 2 < a.x + a.width / 2 ? 'left' : 'right';
+}
+
+// Super+Left / Right (GNOME's own snap keys, handled here while the engine
+// runs): swap two side-by-side windows, or snap one to a half and back.
+export class HalfSwap {
+    constructor() {
+        this._before = new WeakMap();        // where a window was before it was snapped
+        for (const [name, side] of [['toggle-tiled-left', 'left'], ['toggle-tiled-right', 'right']])
+            Main.wm.setCustomKeybindingHandler(name, Shell.ActionMode.NORMAL, (_d, win) => this._key(win, side));
+    }
+
+    _key(win, side) {
+        win ??= global.display.focus_window;
+        if (!win || win.window_type !== Meta.WindowType.NORMAL || !win.allows_resize?.())
+            return;
+        const area = win.get_work_area_current_monitor();
+        const here = halfOf(win);
+        const target = partRect(area, side === 'left' ? LEFT_HALF : RIGHT_HALF);
+        if (here && here !== side) {
+            // the other half taken: the two trade places
+            const partner = windowsHere().find(w => w !== win && w.get_monitor() === win.get_monitor() &&
+                halfOf(w) === side);
+            if (partner) {
+                place(partner, partRect(area, side === 'left' ? RIGHT_HALF : LEFT_HALF), SWAP_GLIDE);
+                place(win, target, SWAP_GLIDE);
+                return;
+            }
+        }
+        if (here === side) {
+            // already there: back to where it was (as GNOME's own keys do)
+            const before = this._before.get(win);
+            if (before) {
+                this._before.delete(win);
+                place(win, before);
+            }
+            return;
+        }
+        if (!here)
+            this._before.set(win, win.get_frame_rect());
+        place(win, target);
+    }
+
+    destroy() {
+        for (const name of ['toggle-tiled-left', 'toggle-tiled-right'])
+            Meta.keybindings_set_custom_handler(name, null);     // GNOME's own again
     }
 }
 

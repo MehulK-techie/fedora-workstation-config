@@ -4,8 +4,9 @@
 // rounded, blurred island. Plus two things GNOME's bar doesn't have:
 //   - the app you're using, in its own colours (never a grey symbolic icon),
 //     with its name; a click opens New Window, Snap Left / Right, Keep on Top,
-//     Quit. Its pill glides to the new name's width (140 ms) as it crossfades.
-//   - the battery tinted by its state (green charging, red low).
+//     Quit. The pill keeps one width; the name crossfades (120 ms).
+//   - the battery tinted by its state (charging, high, mid, low).
+//   - the workspace dots in a fixed 58 px anchor, so they never push the bar about.
 //   - a typographic clock in the centre: "Thu Nov 5 · 2:25 PM" (24-hour if
 //     GNOME is set to it).
 // top-bar-style: 'islands' or 'edge' (one seamless glass bar); show-active-app
@@ -37,9 +38,8 @@ class ActiveApp {
         this.button.add_style_class_name('mk-active-app');
         this._box = new St.BoxLayout({style_class: 'mk-active-app-box', y_align: Clutter.ActorAlign.CENTER});
         this._iconBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER, width: 18});   // (the same for an app icon and the dot)
-        // the name's width glides to its new size (140 ms) when the app changes, between
-        // 56 and 170 px (longer names are cut short by "…"), so the island morphs smoothly
-        // instead of jumping
+        // a fixed width (CSS: 150 px, longer names cut short by "…"): the blurred island
+        // behind it never resizes, so switching apps never shifts or re-renders the bar
         this._label = new St.Label({style_class: 'mk-active-app-name', y_align: Clutter.ActorAlign.CENTER,
             x_align: Clutter.ActorAlign.CENTER});
         this._label.clutter_text.ellipsize = 3;     // Pango.EllipsizeMode.END
@@ -80,17 +80,11 @@ class ActiveApp {
         }
         this._iconBin.set_child(icon);
         this._label.text = app ? app.get_name() : `WS ${ws}`;
-        const natural = Math.ceil(this._label.clutter_text.get_preferred_width(-1)[1]);
-        const width = Math.max(56, Math.min(170, natural));
-        this._label.remove_transition('width');
         if (animate && St.Settings.get().enable_animations) {
-            // the capsule glides to the new name's width while the name crossfades in
-            this._label.ease({width, duration: 140, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            // only the name and icon crossfade: the capsule (glass behind it) never changes size
             this._box.remove_transition('opacity');
             this._box.opacity = 0;
-            this._box.ease({opacity: 255, duration: 140, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
-        } else {
-            this._label.width = width;
+            this._box.ease({opacity: 255, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         }
     }
 
@@ -330,8 +324,10 @@ class AutoHide {
     }
 }
 
-// The battery in the bar, tinted by its state: green while charging, red under
-// 20 % on battery, plain glass otherwise. GNOME's own indicator, read from its
+const TIERS = ['charging', 'high', 'mid', 'low'];
+
+// The battery in the bar, tinted by its state: green while charging, soft
+// white above 50 %, amber from 20 to 50 %, red under 20 % with a pulsing border. GNOME's own indicator, read from its
 // own UPower proxy (no polling). GNOME builds that indicator a moment after
 // startup, so this waits for it (up to 15 s; a desktop has none).
 class BatteryTint {
@@ -360,13 +356,31 @@ class BatteryTint {
     _sync() {
         const state = this._proxy.State, pct = this._proxy.Percentage ?? 100;
         const charging = state === 1 || state === 5;          // charging, or plugged in and waiting
-        const low = !charging && state === 2 && pct < 20;      // discharging and low
-        for (const [name, on] of [['mk-batt-charging', charging], ['mk-batt-low', low]]) {
-            if (on)
-                this._system.add_style_class_name(name);
-            else
-                this._system.remove_style_class_name(name);
+        // four tiers: charging, above 50 %, 20-50 %, under 20 % (which pulses its border)
+        const tier = charging ? 'charging' : pct > 50 ? 'high' : pct >= 20 ? 'mid' : 'low';
+        for (const name of TIERS)
+            this._system.remove_style_class_name(`mk-batt-${name}`);
+        this._system.add_style_class_name(`mk-batt-${tier}`);
+        this._pulse(tier === 'low');
+    }
+
+    // under 20 %: the border breathes (CSS transition between two classes, 900 ms each way)
+    _pulse(on) {
+        if (on === !!this._pulseId)
+            return;
+        if (!on) {
+            GLib.source_remove(this._pulseId);
+            this._pulseId = 0;
+            this._system.remove_style_class_name('mk-batt-dim');
+            return;
         }
+        this._pulseId = GLib.timeout_add(GLib.PRIORITY_LOW, 900, () => {
+            if (this._system.has_style_class_name('mk-batt-dim'))
+                this._system.remove_style_class_name('mk-batt-dim');
+            else
+                this._system.add_style_class_name('mk-batt-dim');
+            return GLib.SOURCE_CONTINUE;
+        });
     }
 
     destroy() {
@@ -375,8 +389,10 @@ class BatteryTint {
         if (!this._proxy)
             return;
         this._proxy.disconnect(this._id);
-        this._system.remove_style_class_name('mk-batt-charging');
-        this._system.remove_style_class_name('mk-batt-low');
+        if (this._pulseId)
+            GLib.source_remove(this._pulseId);
+        for (const name of [...TIERS, 'dim'])
+            this._system.remove_style_class_name(`mk-batt-${name}`);
     }
 }
 
@@ -468,17 +484,31 @@ export class Panel {
         this._divider ??= new St.Widget({style_class: 'mk-island-divider', y_align: Clutter.ActorAlign.CENTER});
         if (!this._divider.get_parent())
             left.add_child(this._divider);
-        // the emblem (WACK Shell's menu), a divider, the app (or "WS 2"), the workspace dots, then Places
-        const order = [area['wack-logo-menu']?.container, this._divider, area['mk-active-app']?.container,
-            area.activities?.container, area['places-menu']?.container]
+        // the emblem (WACK Shell's menu), Places, a divider, the workspace dots, then the app (or "WS 2")
+        const order = [area['wack-logo-menu']?.container, area['places-menu']?.container, this._divider,
+            area.activities?.container, area['mk-active-app']?.container]
             .filter(a => a && a.get_parent() === left);
         order.forEach((actor, i) => left.set_child_at_index(actor, i));
         this._divider.visible = true;
+        // the dots sit in a fixed 58 px anchor: the active dot morphs inside it, the
+        // capsule never moves (it shifted while swiping between workspaces)
+        const dots = area.activities;
+        if (dots && !dots.has_style_class_name('mk-ws-anchor')) {
+            dots.add_style_class_name('mk-ws-anchor');
+            dots.clip_to_allocation = true;
+            dots.set_width(58);                 // (a panel button sizes itself, CSS min-width aside)
+        }
     }
 
     _teardown() {
         this._divider?.destroy();
         this._divider = null;
+        const dots = Main.panel.statusArea.activities;
+        if (dots?.has_style_class_name('mk-ws-anchor')) {
+            dots.remove_style_class_name('mk-ws-anchor');
+            dots.clip_to_allocation = false;
+            dots.set_width(-1);
+        }
         this._tray?.destroy();
         this._quiet?.destroy();
         this._battery?.destroy();

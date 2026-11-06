@@ -13,7 +13,7 @@
 //   modules/windowAnimations.js  windows open and close with a little spring (while Burn My Windows is off)
 //   modules/calendarDeck.js      the calendar as glass, and a reminder for any day ahead
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
-import { SnapLayouts, bindSnapLayouts, unbindSnapLayouts } from './modules/tiling.js';
+import { HalfSwap, SnapLayouts, bindSnapLayouts, unbindSnapLayouts } from './modules/tiling.js';
 import { Dock } from './modules/dock.js';
 import { MagicLamp } from './modules/magicLamp.js';
 import { AppSwitcher } from './modules/appSwitcher.js';
@@ -31,7 +31,9 @@ export default class MKShellEngine extends Extension {
         this._start('snap layouts', () => {
             const snap = new SnapLayouts();
             bindSnapLayouts(this, snap);
+            const swap = new HalfSwap();          // Super+Left / Right
             return {destroy: () => {
+                swap.destroy();
                 unbindSnapLayouts();
                 snap.destroy();
             }};

@@ -35,6 +35,18 @@ export class ControlCenter {
         this._box.add_style_class_name('mk-bento');
         this._hidden = [];
         this._original = new Map();     // each item's own visibility, from before the engine hid it
+        // Rapid open / close: GNOME's close() stops the animation under way before it
+        // reverses, its open() doesn't, so reopening mid-close could leave two eases
+        // fighting (a blank, see-through panel). This menu's open() stops it first.
+        const pointer = this._qs.menu._boxPointer;
+        if (pointer && !pointer._mkOpen) {
+            pointer._mkOpen = pointer.open;
+            pointer.open = function (...args) {
+                this.remove_all_transitions();
+                return this._mkOpen(...args);
+            };
+            this._pointer = pointer;
+        }
         this._ids = [
             [settings, settings.connect('changed::qs-hidden', () => this._prune())],
             [this._qs.menu, this._qs.menu.connect('open-state-changed', (_m, open) => this._glass(open))],
@@ -94,6 +106,10 @@ export class ControlCenter {
         for (const [object, id] of this._ids)
             object.disconnect(id);
         this._unglass?.();
+        if (this._pointer) {
+            this._pointer.open = this._pointer._mkOpen;
+            delete this._pointer._mkOpen;
+        }
         this._restore();
         this._original.clear();
         this._box.remove_style_class_name('mk-bento');

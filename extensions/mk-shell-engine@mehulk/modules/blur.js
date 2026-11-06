@@ -192,8 +192,12 @@ export function addWallpaperGlass(target, anchor, glass, radius = 0, source = Ma
             pane.hide();
             return;
         }
-        const [x, y] = target.get_transformed_position();
-        const [w, h] = target.get_transformed_size();
+        // its last allocation, on screen: with a relayout pending, width / height (and
+        // get_transformed_size) report the preferred size instead, and when the parent
+        // then gives the same allocation as before no signal follows: the glass kept the
+        // preferred size (a sliver past the island's end)
+        const extents = target.get_transformed_extents();
+        const {x, y} = extents.origin, {width: w, height: h} = extents.size;
         if (![x, y, w, h].every(Number.isFinite)) {       // (not laid out yet: the next allocation brings it)
             pane.hide();
             return;

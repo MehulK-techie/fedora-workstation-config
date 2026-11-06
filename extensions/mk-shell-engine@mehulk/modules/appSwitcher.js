@@ -5,7 +5,7 @@
 // Why it no longer stutters when Tab is held: GNOME's strip builds and tears
 // down a row of window thumbnails as the selection moves, and the old ring
 // ran its own animation every frame. Here a selection change only updates an
-// index and retargets one ease() on the highlight (110 ms): a move already
+// index and retargets one ease() on the highlight (90 ms): a move already
 // under way carries on from where it is toward the new card, so key repeat
 // never restarts anything. Nothing is created or destroyed while you cycle.
 //
@@ -27,10 +27,11 @@ import { addWallpaperGlass, desktopCopy } from './blur.js';
 import { accentRGB } from './colour.js';
 
 const ICON = 56, CARD_W = 136, GAP = 8, MARGIN = 16, MAX_COLS = 8;
-// the highlight: a 70 ms glide for a single step; steps closer together than
+// the highlight: a 90 ms glide (ease-out cubic) for a single step, Tab or the
+// arrows; steps closer together than
 // HELD (Tab held down, or tapped fast) snap straight to the card, so a quick
 // run through four apps never queues up animations or trails behind the keys
-const GLIDE = 70, HELD = 110, PAD = 4;
+const GLIDE = 90, HELD = 110, PAD = 4;
 const SWITCHER_GLASS = {sigma: 28, brightness: 0.65};
 
 const proto = AppSwitcherPopup.prototype;
@@ -137,7 +138,7 @@ class AppGrid {
             this._ring.set_size(target.width, target.height);
             return;
         }
-        this._ring.ease({...target, duration: GLIDE, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        this._ring.ease({...target, duration: GLIDE, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
     }
 
     refresh(index) {

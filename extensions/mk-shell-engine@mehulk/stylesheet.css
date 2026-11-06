@@ -10,6 +10,18 @@
   background-color: rgba(255, 255, 255, 0.16); }
 .mk-snap-name { color: rgba(242, 246, 255, 0.9); font-size: 0.85em; font-weight: 600; }
 .mk-snap-hint { color: rgba(242, 246, 255, 0.55); font-size: 0.78em; }
+/* Snap Assist: the picker over an empty part */
+.mk-assist-zone { border-radius: 18px; border: 2px solid; background-color: rgba(16, 18, 24, 0.5);
+  padding: 22px; spacing: 14px; }
+.mk-assist-heading { color: #f2f6ff; font-weight: 700; font-size: 1.05em; }
+.mk-assist-grid { spacing: 14px; }
+.mk-assist-row { spacing: 14px; }
+.mk-assist-card { border-radius: 14px; padding: 10px; background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10); }
+.mk-assist-card:hover, .mk-assist-card:focus { background-color: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.28); }
+.mk-assist-thumb { border-radius: 8px; background-color: rgba(0, 0, 0, 0.25); }
+.mk-assist-title { color: rgba(242, 246, 255, 0.92); font-size: 0.88em; font-weight: 600; }
+.mk-assist-hint { color: rgba(242, 246, 255, 0.55); font-size: 0.8em; }
 
 /* The MK dock (modules/dock.js): a frosted shelf, lit along its top edge like glass,
    with dots under running apps */
@@ -61,7 +73,7 @@
 #panel.mk-islands .panel-button:hover { background-color: rgba(255, 255, 255, 0.10); }
 #panel.mk-islands .panel-button:active, #panel.mk-islands .panel-button:checked { background-color: st-transparentize(-st-accent-color, 0.7); }
 .mk-active-app-box { spacing: 7px; }
-.mk-active-app-name { font-weight: 700; }   /* (its width glides in panel.js) */
+.mk-active-app-name { font-weight: 700; min-width: 150px; max-width: 150px; }   /* fixed: the island never resizes */
 .mk-clock { font-weight: 600; font-feature-settings: "tnum"; }
 
 /* Quick Settings (modules/controlCenter.js): quiet frosted glass. Every colour stays inside its
@@ -151,6 +163,14 @@
 .mk-cal-chip:hover { background-color: st-transparentize(-st-accent-color, 0.55); }
 .mk-cal-saved { font-size: 0.82em; color: rgba(242, 246, 255, 0.7); }
 
-/* The battery, tinted by state (panel.js BatteryTint): green charging, red low */
+/* The battery in four tiers (panel.js BatteryTint) */
 #panel .power-status.mk-batt-charging .system-status-icon, #panel .power-status.mk-batt-charging StLabel { color: #10b981; }
+#panel .power-status.mk-batt-high .system-status-icon, #panel .power-status.mk-batt-high StLabel { color: rgba(255, 255, 255, 0.90); }
+#panel .power-status.mk-batt-mid .system-status-icon, #panel .power-status.mk-batt-mid StLabel { color: #f59e0b; }
 #panel .power-status.mk-batt-low .system-status-icon, #panel .power-status.mk-batt-low StLabel { color: #ef4444; }
+#panel .power-status.mk-batt-low { border: 1px solid rgba(239, 68, 68, 0.9); border-radius: 99px; padding: 0 4px;
+  transition-duration: 900ms; }
+#panel .power-status.mk-batt-low.mk-batt-dim { border-color: rgba(239, 68, 68, 0.2); }
+/* the workspace dots: a fixed anchor (panel.js _orderLeft) */
+#panel .panel-button.mk-ws-anchor { min-width: 58px; max-width: 58px; height: 26px; padding: 0;
+  -natural-hpadding: 0; -minimum-hpadding: 0; }

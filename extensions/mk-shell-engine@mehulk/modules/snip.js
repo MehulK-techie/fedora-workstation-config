@@ -19,7 +19,8 @@ export class Snip {
             throw new Error('GNOME\'s screenshot tool has changed shape: left as it is');
         this._ui = ui;
         this._sel = sel;
-        this._saved = {open: ui.open, stopDrag: sel.stopDrag, capture: ui._onCaptureButtonClicked};
+        this._saved = {open: ui.open, stopDrag: sel.stopDrag, capture: ui._onCaptureButtonClicked,
+            panBegin: sel._onPanBegin};
         const saved = this._saved, self = this;
 
         ui.open = function (...args) {
@@ -35,15 +36,24 @@ export class Snip {
             return saved.capture.apply(this, args);
         };
 
+        // the box's handles come back as soon as a drag starts
+        if (saved.panBegin) {
+            sel._onPanBegin = function (...args) {
+                self._handles(true);
+                return saved.panBegin.apply(this, args);
+            };
+        }
+
         // A drag that drew a new box ends here. (GNOME 51 drags with a pan gesture: the
         // _dragButton this used to check is gone, so no drag ever counted, nothing was
         // taken on release and Capture stayed blocked: area shots failed altogether.)
         sel.stopDrag = function (...args) {
-            const fresh = this._dragCursor === Clutter.CursorType.CROSSHAIR && (this._dragGrab || this._panGesture ||
-                this._dragButton);
-            const moved = this._startX >= 0 && (this._lastX !== this._startX || this._lastY !== this._startY);
+            // (a drag is under way only while it holds the pointer: GNOME's own reset() calls
+            // stopDrag() as the tool opens, with no drag at all)
+            const fresh = this._dragCursor === Clutter.CursorType.CROSSHAIR && !!(this._dragGrab || this._dragButton);
+            const moved = this._lastX !== this._startX || this._lastY !== this._startY;
             const result = saved.stopDrag.apply(this, args);
-            if (fresh && this._startX >= 0)
+            if (fresh)
                 this._mkBlank = false;            // a box exists now (a click makes a small one)
             if (fresh && moved && self._settings.get_boolean('snip-auto-capture') &&
                 ui._selectionButton.checked && ui._shotButton.checked)
@@ -52,23 +62,36 @@ export class Snip {
         };
     }
 
-    // no box: the selection sits off-screen until you drag one
+    // No box: a 1 x 1 selection in the screen's top-left corner, its handles hidden, until
+    // you drag one. (It used to sit off-screen at -1, -1: with fractional scaling, 125 % on
+    // a laptop, that broke the tool's sizing, and the box you dragged landed at the top edge.)
     _blank() {
         const sel = this._sel;
-        sel._startX = sel._startY = sel._lastX = sel._lastY = -1;
+        sel._startX = sel._startY = sel._lastX = sel._lastY = 0;
         sel._mkBlank = true;
         sel._updateSelectionRect?.();
+        this._handles(false);
+    }
+
+    _handles(show) {
+        const sel = this._sel;
+        for (const handle of [sel._topLeftHandle, sel._topRightHandle, sel._bottomLeftHandle, sel._bottomRightHandle])
+            handle?.set_opacity(show ? 255 : 0);
     }
 
     destroy() {
         this._ui.open = this._saved.open;
         this._ui._onCaptureButtonClicked = this._saved.capture;
         this._sel.stopDrag = this._saved.stopDrag;
+        if (this._saved.panBegin)
+            this._sel._onPanBegin = this._saved.panBegin;
         // (instance copies of the prototype methods: drop them so the class's own apply again)
-        for (const [object, name] of [[this._ui, 'open'], [this._ui, '_onCaptureButtonClicked'], [this._sel, 'stopDrag']]) {
+        for (const [object, name] of [[this._ui, 'open'], [this._ui, '_onCaptureButtonClicked'], [this._sel, 'stopDrag'],
+            [this._sel, '_onPanBegin']]) {
             if (Object.getPrototypeOf(object)[name] === object[name])
                 delete object[name];
         }
         delete this._sel._mkBlank;
+        this._handles(true);
     }
 }

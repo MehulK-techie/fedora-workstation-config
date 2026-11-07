@@ -26,6 +26,11 @@ import { PANEL_GLASS, addWallpaperGlass, blurAllowed } from './blur.js';
 import { partRect, place } from './tiling.js';
 import * as Actions from './appActions.js';
 import { watch } from './conflicts.js';
+import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
+
+const ICONS = GLib.build_filenamev([GLib.path_get_dirname(GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0])),
+    'icons']);
+const LOGO_KEYS = ['show-logo-button', 'logo-icon-name', 'logo-custom-path', 'show-logo-label', 'logo-label-text'];
 
 const ISLAND_RADIUS = 12;            // (the islands' CSS corners; the glass is cut to match)
 
@@ -131,6 +136,95 @@ class ActiveApp {
     destroy() {
         for (const [object, id] of this._ids)
             object.disconnect(id);
+        this.button.destroy();
+    }
+}
+
+// The logo button at the far left: the system menu, as on a Mac. Fedora's own
+// emblem by default (its fedora-logo-icon, shown in monochrome), or an apple,
+// the distribution's os-release logo, an image of your own, or none; then a
+// label (Finder by default). All five settings apply as you change them.
+class LogoButton {
+    constructor(settings) {
+        this._settings = settings;
+        this.button = new PanelMenu.Button(0.0, 'System menu', false);
+        this.button.add_style_class_name('mk-logo-button');
+        const box = new St.BoxLayout({style_class: 'mk-logo-box', y_align: Clutter.ActorAlign.CENTER});
+        this._iconBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
+        this._label = new St.Label({style_class: 'mk-logo-label', y_align: Clutter.ActorAlign.CENTER});
+        box.add_child(this._iconBin);
+        box.add_child(this._label);
+        this.button.add_child(box);
+        this._ids = LOGO_KEYS.map(k => settings.connect(`changed::${k}`, () => this._sync()));
+        this._fillMenu();
+        this._sync();
+    }
+
+    _logo() {
+        const kind = this._settings.get_string('logo-icon-name');
+        const size = 16;
+        const themed = name => new St.Icon({icon_name: name, icon_size: size, style_class: 'mk-logo-icon'});
+        const file = path => new St.Icon({gicon: Gio.FileIcon.new(Gio.File.new_for_path(path)), icon_size: size,
+            style_class: 'mk-logo-icon'});
+        const mono = icon => {
+            // a colour logo as a white glyph: no colour, then lifted toward the bar's text
+            icon.add_effect(new Clutter.DesaturateEffect({factor: 1.0}));
+            const lift = new Clutter.BrightnessContrastEffect();
+            lift.set_brightness(0.45);
+            icon.add_effect(lift);
+            return icon;
+        };
+        if (kind === 'none')
+            return null;
+        if (kind === 'apple')
+            return file(GLib.build_filenamev([ICONS, 'mk-apple-symbolic.svg']));
+        if (kind === 'custom') {
+            const path = this._settings.get_string('logo-custom-path');
+            return path && GLib.file_test(path, GLib.FileTest.EXISTS) ? file(path) : themed('image-missing-symbolic');
+        }
+        if (kind === 'distro')
+            return mono(themed(GLib.get_os_info('LOGO') || 'start-here-symbolic'));
+        return mono(themed('fedora-logo-icon'));
+    }
+
+    _sync() {
+        this._iconBin.set_child(this._logo());
+        const text = this._settings.get_string('logo-label-text');
+        this._label.text = text;
+        this._label.visible = this._settings.get_boolean('show-logo-label') && text !== '';
+        this.button.accessible_name = text || 'System menu';
+    }
+
+    _fillMenu() {
+        const menu = this.button.menu;
+        const actions = SystemActions.getDefault();
+        const app = (...ids) => {
+            const found = ids.map(id => Shell.AppSystem.get_default().lookup_app(id)).find(Boolean);
+            return () => found?.activate();
+        };
+        const run = argv => () => {
+            try {
+                Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+            } catch (e) {
+                Main.notify('System menu', e.message);
+            }
+        };
+        menu.addAction('About This System', run(['gnome-control-center', 'system']));
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        menu.addAction('System Settings…', app('org.gnome.Settings.desktop'));
+        menu.addAction('App Store…', app('org.gnome.Software.desktop'));
+        menu.addAction('Extensions…', app('com.mattjakeman.ExtensionManager.desktop', 'org.gnome.Extensions.desktop'));
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        menu.addAction('Sleep', () => actions.activateSuspend());
+        menu.addAction('Restart…', () => actions.activateRestart());
+        menu.addAction('Shut Down…', () => actions.activatePowerOff());
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        menu.addAction('Lock Screen', () => actions.activateLockScreen());
+        menu.addAction('Log Out…', () => actions.activateLogout());
+    }
+
+    destroy() {
+        this._ids.forEach(id => this._settings.disconnect(id));
         this.button.destroy();
     }
 }
@@ -431,7 +525,8 @@ export class Panel {
     constructor(settings) {
         this._settings = settings;
         this._parts = [];
-        this._ids = ['changed::top-bar-style', 'changed::show-active-app', 'changed::blur', 'changed::autohide-top-bar'].map(
+        this._ids = ['changed::top-bar-style', 'changed::show-active-app', 'changed::blur', 'changed::autohide-top-bar',
+            'changed::show-logo-button'].map(
             signal => settings.connect(signal, () => this._rebuild()));
         this._unwatch = watch(() => this._rebuild());        // Blur my Shell on or off
         this._build();
@@ -445,6 +540,14 @@ export class Panel {
             const glass = style === 'edge' ? [panel] : [panel._leftBox, panel._centerBox, panel._rightBox];
             this._unblur = glass.map(actor => addWallpaperGlass(actor, Main.layoutManager.panelBox, PANEL_GLASS,
                 style === 'edge' ? 0 : ISLAND_RADIUS));
+        }
+        if (this._settings.get_boolean('show-logo-button')) {
+            try {
+                this._logo = new LogoButton(this._settings);
+                panel.addToStatusArea('mk-logo', this._logo.button, 0, 'left');
+            } catch (e) {
+                console.error(`mk-shell-engine: logo button: ${e.message}`);
+            }
         }
         if (this._settings.get_boolean('show-active-app')) {
             try {
@@ -482,7 +585,45 @@ export class Panel {
     // The left island, near the corner (Fitts's law: the pointer stops at the
     // screen's edge by itself): the emblem (WACK Shell's menu, when on), a divider,
     // the app you're in (or "WS 1" on an empty desktop), the workspace dots, Places.
+    // GNOME's own dots (WorkspaceDot): the active one (it grows into a pill as you switch)
+    // in the accent, the others faint white (stylesheet: .mk-ws-active); followed as
+    // workspaces come and go
+    _tintDots(dots) {
+        const find = actor => actor.constructor.name === 'WorkspaceIndicators' ? actor
+            : actor.get_children().map(find).find(Boolean);
+        const box = find(dots);
+        if (!box)
+            return;                          // (WACK's workspace button draws its own)
+        const hook = dot => {
+            if (dot._mkTint || !dot._dot)
+                return;
+            const paint = () => (dot.expansion > 0.5 ? dot._dot.add_style_class_name('mk-ws-active')
+                : dot._dot.remove_style_class_name('mk-ws-active'));
+            dot._mkTint = dot.connect('notify::expansion', paint);
+            paint();
+        };
+        box.get_children().forEach(hook);
+        this._dotsBox = box;
+        this._dotsId = box.connect('child-added', (_b, dot) => hook(dot));
+    }
+
+    _untintDots() {
+        if (!this._dotsBox)
+            return;
+        try {
+            this._dotsBox.disconnect(this._dotsId);
+            for (const dot of this._dotsBox.get_children()) {
+                if (dot._mkTint)
+                    dot.disconnect(dot._mkTint);
+                delete dot._mkTint;
+                dot._dot?.remove_style_class_name('mk-ws-active');
+            }
+        } catch {}
+        this._dotsBox = null;
+    }
+
     _unanchor(dots) {
+        this._untintDots();
         try {
             dots.remove_style_class_name('mk-ws-anchor');
             dots.clip_to_allocation = false;
@@ -508,12 +649,16 @@ export class Panel {
         // the emblem (WACK Shell's menu), Places, a divider, the workspace dots, then the app (or "WS 2")
         // (the dots: WACK Shell's workspace button when it's on, GNOME's own otherwise)
         const dotsItem = area['wack-workspace-button'] ?? area.activities;
-        const order = [area['wack-logo-menu']?.container, area['places-menu']?.container, this._divider,
+        // the logo: WACK Shell's when it shows one, MK's otherwise (never both)
+        const wack = area['wack-logo-menu'];
+        if (area['mk-logo'])
+            area['mk-logo'].container.visible = !(wack && wack.container.get_parent() === left && wack.visible);
+        const order = [area['mk-logo']?.container, area['wack-logo-menu']?.container, area['places-menu']?.container, this._divider,
             area['wack-workspace-button']?.container, area.activities?.container, area['mk-active-app']?.container]
             .filter(a => a && a.get_parent() === left);
         order.forEach((actor, i) => left.set_child_at_index(actor, i));
         this._divider.visible = true;
-        // the dots sit in a fixed 58 px anchor: the active dot morphs inside it, the
+        // the dots sit in a fixed 64 px anchor: the active dot morphs inside it, the
         // capsule never moves (it shifted while swiping between workspaces)
         const dots = dotsItem;
         if (this._dots && this._dots !== dots)
@@ -522,7 +667,8 @@ export class Panel {
         if (dots && !dots.has_style_class_name('mk-ws-anchor')) {
             dots.add_style_class_name('mk-ws-anchor');
             dots.clip_to_allocation = true;
-            dots.set_width(58);                 // (a panel button sizes itself, CSS min-width aside)
+            this._tintDots(dots);
+            dots.set_width(64);                 // (a panel button sizes itself, CSS min-width aside)
         }
     }
 
@@ -541,7 +687,8 @@ export class Panel {
         this._tray?.destroy();
         this._quiet?.destroy();
         this._battery?.destroy();
-        this._tray = this._quiet = this._battery = null;
+        this._logo?.destroy();
+        this._tray = this._quiet = this._battery = this._logo = null;
         Main.panel.remove_style_class_name('mk-islands');
         Main.panel.remove_style_class_name('mk-edge');
         for (const off of this._unblur ?? [])

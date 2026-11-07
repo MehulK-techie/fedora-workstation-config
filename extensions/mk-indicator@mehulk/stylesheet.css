@@ -267,9 +267,9 @@
     background-color: rgba(255, 255, 255, 0.08); }
 
 /* Task badge (taskBadge.js) */
-.mk-task-badge { font-size: 0.85em; font-weight: 700; padding: 1px 10px; margin: 5px 4px; border-radius: 99px;
+#panel .panel-button.mk-task-badge { -natural-hpadding: 0; -minimum-hpadding: 0; font-size: 0.85em; font-weight: 700; padding: 0 10px; margin: 4px 3px; border-radius: 99px; border-width: 0; box-shadow: none;
   color: #ffffff; background-color: rgba(255, 255, 255, 0.14); }
-.mk-task-badge:hover { background-color: rgba(255, 255, 255, 0.24); }
+#panel .panel-button.mk-task-badge:hover, #panel .panel-button.mk-task-badge:active, #panel .panel-button.mk-task-badge:checked { background-color: rgba(255, 255, 255, 0.24); }
 
 /* Track change pill (mediaTile.js) */
 .mk-track-pill { background-color: rgba(18, 20, 28, 0.88); border-radius: 99px; padding: 6px 16px 6px 6px;
@@ -297,4 +297,4 @@
   border: 1.5px solid rgba(255, 255, 255, 0.45); }
 .mk-agenda-check:hover { border-color: #10b981; color: rgba(16, 185, 129, 0.8); }
 .mk-agenda-check.mk-agenda-checked { background-color: #10b981; border-color: #10b981; color: #ffffff; }
-.mk-task-badge.mk-task-done { background-color: rgba(16, 185, 129, 0.28); color: #d1fae5; }
+#panel .panel-button.mk-task-badge.mk-task-done { background-color: rgba(16, 185, 129, 0.28); color: #d1fae5; }

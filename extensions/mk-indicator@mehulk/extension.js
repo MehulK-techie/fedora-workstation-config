@@ -280,16 +280,20 @@ export default class MKIndicatorExtension extends Extension {
     // 8 s), and whenever the focused window changes; then leave it be.
     _settleDocksAfterLogin() {
         this._stopDockSettle();
-        this._dockSettleIds = [1500, 4000, 8000].map(ms => GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
-            this._recheckDocks();
+        // each timer leaves the list as it fires (removing a finished one logs a GLib warning)
+        const once = (id, fn) => {
+            this._dockSettleIds = this._dockSettleIds.filter(i => i !== id);
+            fn();
             return GLib.SOURCE_REMOVE;
-        }));
+        };
+        for (const ms of [1500, 4000, 8000]) {
+            const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => once(id, () => this._recheckDocks()));
+            this._dockSettleIds.push(id);
+        }
         this._dockSettle = {};                     // (what the focus watch is tracked by)
         global.display.connectObject('notify::focus-window', () => this._hideDocksSoon(250), this._dockSettle);
-        this._dockSettleIds.push(GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 30, () => {
-            this._stopDockSettle();
-            return GLib.SOURCE_REMOVE;
-        }));
+        const last = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 30, () => once(last, () => this._stopDockSettle()));
+        this._dockSettleIds.push(last);
     }
 
     _stopDockSettle() {

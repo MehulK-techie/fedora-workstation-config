@@ -10,8 +10,9 @@
 //
 // Typed times: Enter reads "Review code in 25m", "Call Sam in 2h",
 // "Standup @ 11:30", "Dinner at 7pm" (the time leaves the title). Under the
-// chips, the next three reminders, each with a countdown ("in 14m",
-// "at 18:30") and Done. Super+Alt+A opens it with the box ready to type in.
+// chips, the chosen day's tasks in time order, each with a countdown
+// ("in 14m", "at 18:30") and Done; click one for its notes, when it was added,
+// Edit Time, Delete and Complete. Super+Alt+A opens it with the box ready to type in.
 //
 // The calendar itself: a clean typographic grid (no discs on the days),
 // today and the chosen day in your accent; World Clocks and Weather only when
@@ -93,16 +94,28 @@ function addReminder(text, at) {
     GLib.file_set_contents(STORE, JSON.stringify(data, null, 2));
 }
 
-// Mark task ID done (a one-off's reminder cleared, as the Companion does).
-function completeTask(id) {
+// Change task ID in the Companion's store with CHANGE(task) (false: leave the file alone).
+function updateTask(id, change) {
     const data = readStore();
     const task = data.tasks.find(t => t.id === id);
-    if (!task)
+    if (!task || change(task, data) === false)
         return;
-    task.done = true;
-    if ((task.repeat ?? 'none') === 'none')
-        task.remind_at = null;
     GLib.file_set_contents(STORE, JSON.stringify(data, null, 2));
+}
+
+// Mark task ID done (a one-off's reminder cleared, as the Companion does).
+function completeTask(id) {
+    updateTask(id, task => {
+        task.done = true;
+        if ((task.repeat ?? 'none') === 'none')
+            task.remind_at = null;
+    });
+}
+
+function deleteTask(id) {
+    updateTask(id, (_t, data) => {
+        data.tasks = data.tasks.filter(t => t.id !== id);
+    });
 }
 
 export class CalendarDeck {
@@ -189,39 +202,116 @@ export class CalendarDeck {
         }
     }
 
-    // the next three open reminders (soonest first), from companion.json
+    // The chosen day's tasks (open ones with a time that day), in time order: a card each
+    // with its countdown and Done; a click opens its preview (notes, when it was added,
+    // Edit Time, Delete, Complete). An empty day says so.
     _fillQueue() {
         this._queue.destroy_all_children();
         const h24 = this._iface.get_string('clock-format') === '24h';
-        const next = readStore().tasks.filter(t => !t.done && t.remind_at)
-            .sort((a, b) => a.remind_at - b.remind_at).slice(0, 3);
-        this._queueScroll.visible = next.length > 0;
-        for (const task of next) {
-            const row = new St.BoxLayout({style_class: 'mk-cal-queue-row'});
-            const title = new St.Label({text: task.text ?? '', x_expand: true, y_align: Clutter.ActorAlign.CENTER,
-                style_class: 'mk-cal-queue-title'});
-            title.clutter_text.ellipsize = 3;      // END
-            const when = countdown(task.remind_at, h24);
-            const badge = new St.Label({text: when, y_align: Clutter.ActorAlign.CENTER,
-                style_class: when === 'Overdue' ? 'mk-cal-queue-badge mk-cal-queue-late' : 'mk-cal-queue-badge'});
-            const done = new St.Button({style_class: 'mk-cal-queue-done button', can_focus: true,
-                accessible_name: `Mark ${task.text} done`});
-            const doneRow = new St.BoxLayout({style: 'spacing: 4px;'});
-            doneRow.add_child(new St.Icon({icon_name: 'object-select-symbolic', icon_size: 12}));
-            doneRow.add_child(new St.Label({text: 'Done', y_align: Clutter.ActorAlign.CENTER}));
-            done.set_child(doneRow);
-            done.connect('clicked', () => {
-                try {
-                    completeTask(task.id);
-                } catch (e) {
-                    console.warn(`mk-shell-engine: calendar: ${e.message}`);
-                }
-                this._fillQueue();
-            });
-            for (const a of [title, badge, done])
-                row.add_child(a);
-            this._queue.add_child(row);
+        const day = this._day ?? GLib.DateTime.new_now_local();
+        const start = GLib.DateTime.new_local(day.get_year(), day.get_month(), day.get_day_of_month(), 0, 0, 0).to_unix();
+        const end = start + 86400;
+        const tasks = readStore().tasks.filter(t => !t.done && t.remind_at >= start && t.remind_at < end)
+            .sort((a, b) => a.remind_at - b.remind_at);
+        this._queueScroll.visible = true;
+        if (!tasks.length) {
+            this._queue.add_child(new St.Label({text: 'No tasks scheduled for this day', style_class: 'mk-cal-queue-empty'}));
+            return;
         }
+        for (const task of tasks)
+            this._queue.add_child(this._taskCard(task, h24));
+    }
+
+    _taskCard(task, h24) {
+        const card = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-cal-queue-card'});
+        const row = new St.BoxLayout({style_class: 'mk-cal-queue-row'});
+        const head = new St.Button({x_expand: true, can_focus: true, style_class: 'mk-cal-queue-head',
+            accessible_name: `${task.text}: details`});
+        const headBox = new St.BoxLayout({style: 'spacing: 8px;'});
+        const time = GLib.DateTime.new_from_unix_local(task.remind_at).format(h24 ? '%H:%M' : '%-l:%M %p');
+        headBox.add_child(new St.Label({text: time, style_class: 'mk-cal-queue-time', y_align: Clutter.ActorAlign.CENTER}));
+        const title = new St.Label({text: task.text ?? '', x_expand: true, y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'mk-cal-queue-title'});
+        title.clutter_text.ellipsize = 3;      // END
+        headBox.add_child(title);
+        head.set_child(headBox);
+        const when = countdown(task.remind_at, h24);
+        const badge = new St.Label({text: when, y_align: Clutter.ActorAlign.CENTER,
+            style_class: when === 'Overdue' ? 'mk-cal-queue-badge mk-cal-queue-late' : 'mk-cal-queue-badge'});
+        const done = this._pill('object-select-symbolic', 'Done', () => this._act(() => completeTask(task.id)));
+        for (const a of [head, badge, done])
+            row.add_child(a);
+        card.add_child(row);
+        // the preview, folded until the card is clicked
+        const preview = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-cal-queue-preview',
+            visible: false});
+        const lines = [];
+        if (task.notes)
+            lines.push(task.notes);
+        lines.push(GLib.DateTime.new_from_unix_local(task.remind_at).format('%A %-e %B, ') + time +
+            (task.repeat && task.repeat !== 'none' ? ` · repeats ${task.repeat}` : ''));
+        if (task.created)
+            lines.push(`Added ${GLib.DateTime.new_from_unix_local(Math.round(task.created)).format('%a %-e %b, %H:%M')}`);
+        for (const line of lines) {
+            const l = new St.Label({text: line, style_class: 'mk-cal-queue-detail'});
+            l.clutter_text.line_wrap = true;
+            preview.add_child(l);
+        }
+        const edit = new St.Entry({hint_text: 'New time: in 30m, @ 18:00, 7pm…', can_focus: true, visible: false,
+            style_class: 'mk-cal-entry'});
+        edit.clutter_text.connect('activate', () => {
+            const typed = edit.get_text().trim();                 // ("7pm" or "18:00" alone: at that time)
+            const [, at] = parseWhen(`x ${/^\d/.test(typed) ? `at ${typed}` : typed}`,
+                GLib.DateTime.new_from_unix_local(task.remind_at));
+            if (!at) {
+                edit.set_text('');
+                edit.hint_text = 'Try: in 30m, @ 18:00, at 7pm';
+                return;
+            }
+            this._act(() => updateTask(task.id, t => (t.remind_at = Math.round(at))));
+        });
+        const actions = new St.BoxLayout({style_class: 'mk-cal-queue-actions'});
+        actions.add_child(this._pill('document-edit-symbolic', 'Edit Time', () => {
+            edit.visible = !edit.visible;
+            if (edit.visible)
+                edit.grab_key_focus();
+        }));
+        actions.add_child(this._pill('user-trash-symbolic', 'Delete', () => this._act(() => deleteTask(task.id)), true));
+        actions.add_child(this._pill('object-select-symbolic', 'Complete', () => this._act(() => completeTask(task.id))));
+        preview.add_child(actions);
+        preview.add_child(edit);
+        card.add_child(preview);
+        head.connect('clicked', () => {
+            preview.visible = !preview.visible;
+            if (preview.visible)
+                card.add_style_pseudo_class('checked');
+            else
+                card.remove_style_pseudo_class('checked');
+        });
+        return card;
+    }
+
+    _pill(icon, label, callback, danger = false) {
+        const b = new St.Button({style_class: `mk-cal-queue-done button${danger ? ' mk-cal-queue-danger' : ''}`,
+            can_focus: true, accessible_name: label});
+        const box = new St.BoxLayout({style: 'spacing: 4px;'});
+        box.add_child(new St.Icon({icon_name: icon, icon_size: 12}));
+        const text = new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER});
+        text.clutter_text.ellipsize = 0;           // (the whole word: Complete, not Compl…)
+        box.add_child(text);
+        b.set_child(box);
+        b.connect('clicked', callback);
+        return b;
+    }
+
+    // change the store, then show the day again (the agenda pill follows the file by itself)
+    _act(change) {
+        try {
+            change();
+        } catch (e) {
+            console.warn(`mk-shell-engine: calendar: ${e.message}`);
+        }
+        this._fillQueue();
     }
 
     _chosen(datetime) {
@@ -229,6 +319,8 @@ export class CalendarDeck {
         const midnight = d => GLib.DateTime.new_local(d.get_year(), d.get_month(), d.get_day_of_month(), 0, 0, 0);
         const day = Math.round(midnight(datetime).difference(midnight(today)) / GLib.TIME_SPAN_DAY);   // 0 today, 1 tomorrow
         this._day = day >= 0 ? datetime : null;
+        if (day >= 0)
+            this._fillQueue();
         this._card.visible = day >= 0;
         if (day < 0)
             return;

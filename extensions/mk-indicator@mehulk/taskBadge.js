@@ -14,6 +14,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 const COMPANION = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'companion.json']);
@@ -57,19 +58,25 @@ export function upcomingReminders() {
     }
 }
 
-// "Overdue", "in 25 mins", "in 2 hours", "Tomorrow 9:00 AM", "Thu 12 Nov, 9:00 AM"
+const h24 = () => {
+    try {
+        return new Gio.Settings({schema_id: 'org.gnome.desktop.interface'}).get_string('clock-format') === '24h';
+    } catch {
+        return false;
+    }
+};
+
+// "Overdue", "in 25m", "at 23:00" (today), "Tomorrow 9:00 AM", "Thu 12 Nov, 9:00 AM"
 export function countdown(at, now = Date.now() / 1000) {
     const d = at - now;
     if (d < 0)
         return 'Overdue';
     if (d < 3600)
-        return `in ${Math.max(1, Math.round(d / 60))} min${Math.round(d / 60) === 1 ? '' : 's'}`;
+        return `in ${Math.max(1, Math.round(d / 60))}m`;
     const when = GLib.DateTime.new_from_unix_local(at), today = GLib.DateTime.new_now_local();
-    const clock = when.format('%-l:%M %p');
-    if (when.get_day_of_year() === today.get_day_of_year() && when.get_year() === today.get_year()) {
-        const h = Math.round(d / 3600);
-        return `in ${h} hour${h === 1 ? '' : 's'}`;
-    }
+    const clock = when.format(h24() ? '%H:%M' : '%-l:%M %p');
+    if (when.get_day_of_year() === today.get_day_of_year() && when.get_year() === today.get_year())
+        return `at ${clock}`;
     const tomorrow = today.add_days(1);
     if (when.get_day_of_year() === tomorrow.get_day_of_year() && when.get_year() === tomorrow.get_year())
         return `Tomorrow ${clock}`;
@@ -92,8 +99,10 @@ function badgeOn() {
 
 export class TaskBadge {
     enable() {
-        this._button = new St.Button({style_class: 'mk-task-badge', y_align: Clutter.ActorAlign.CENTER,
-            reactive: true, can_focus: true, visible: false});
+        // a panel menu button: GNOME 51 opens panel menus from a click gesture (a plain
+        // St.Button's button-release-event never came, so a click did nothing)
+        this._button = new PanelMenu.Button(0.5, 'Tasks', false);
+        this._button.add_style_class_name('mk-task-badge');
         // a checklist icon and "3 Left"; a calendar glyph and "2" for today's (no emoji)
         const row = new St.BoxLayout({style: 'spacing: 5px;', y_align: Clutter.ActorAlign.CENTER});
         row.add_child(new St.Icon({icon_name: 'checkbox-checked-symbolic', icon_size: 13}));
@@ -103,24 +112,24 @@ export class TaskBadge {
         this._today = new St.Label({y_align: Clutter.ActorAlign.CENTER});
         row.add_child(this._todayIcon);
         row.add_child(this._today);
-        this._button.set_child(row);
-        // the agenda: every reminder ahead, in time order, with a countdown
-        this._menu = new PopupMenu.PopupMenu(this._button, 0.5, St.Side.TOP);
+        this._button.add_child(row);
+        // the agenda: today's tasks in time order with countdowns, then later ones, then the rest
+        this._menu = this._button.menu;
         this._menu.box.add_style_class_name('mk-agenda');
-        Main.uiGroup.add_child(this._menu.actor);
-        this._menu.actor.hide();
-        Main.panel.menuManager.addMenu(this._menu);
-        this._button.connect('button-release-event', (_b, event) => {
-            if (event.get_button() === 3) {
+        this._menu.connect('open-state-changed', (_m, open) => open && this._fillAgenda());
+        // right-click: hide the pill (also in its menu)
+        try {
+            const right = new Clutter.ClickGesture({required_button: Clutter.BUTTON_SECONDARY});
+            right.connect('recognize', () => {
+                this._menu.close();
                 this._hide();
-                return Clutter.EVENT_STOP;
-            }
-            if (!this._menu.isOpen)
-                this._fillAgenda();
-            this._menu.toggle();
-            return Clutter.EVENT_STOP;
-        });
-        Main.panel._rightBox.insert_child_at_index(this._button, 0);
+            });
+            this._button.add_action(right);
+        } catch (e) {
+            // (the menu's Hide item does the same)
+        }
+        Main.panel.addToStatusArea('mk-task-badge', this._button, 0, 'right');
+        this._fillAgenda();
         for (const path of [COMPANION, USER_CONF]) {
             const monitor = Gio.File.new_for_path(path).monitor_file(Gio.FileMonitorFlags.NONE, null);
             monitor.connect('changed', () => this._refresh());
@@ -159,7 +168,9 @@ export class TaskBadge {
             this._button.add_style_class_name('mk-task-done');
         else
             this._button.remove_style_class_name('mk-task-done');
-        this._button.visible = !this._locked && (remaining > 0 || allDone) && badgeOn();
+        this._button.container.visible = !this._locked && (remaining > 0 || allDone) && badgeOn();
+        if (!this._menu.isOpen)
+            this._fillAgenda();       // (ready before it opens)
     }
 
     _clearAllDone() {
@@ -193,18 +204,24 @@ export class TaskBadge {
         const open = openTasks();
         const timed = open.filter(t => t.remind_at).sort((a, b) => a.remind_at - b.remind_at);
         const rest = open.filter(t => !t.remind_at).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+        const midnight = new Date().setHours(24, 0, 0, 0) / 1000;
+        const today = timed.filter(t => t.remind_at < midnight), later = timed.filter(t => t.remind_at >= midnight);
         if (!open.length)
             menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Nothing to do'));
-        if (timed.length)
-            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Scheduled'));
-        for (const task of timed.slice(0, 10))
-            menu.addMenuItem(this._agendaRow(task));
+        for (const [title, list, max] of [['Today', today, 12], ['Later', later, 8]]) {
+            if (!list.length)
+                continue;
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem(title));
+            for (const task of list.slice(0, max))
+                menu.addMenuItem(this._agendaRow(task));
+        }
         if (rest.length)
             menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Tasks'));
         for (const task of rest.slice(0, 8))
             menu.addMenuItem(this._agendaRow(task));
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         menu.addAction('Open Tasks', () => this._openTasks());
+        menu.addAction('Hide this pill', () => this._hide());
     }
 
     _agendaRow(task) {
@@ -259,16 +276,22 @@ export class TaskBadge {
             if ((t.repeat ?? 'none') === 'none')
                 t.remind_at = null;
         });
-        if (!St.Settings.get().enable_animations) {
+        // the row goes first, then the file changes (the change rebuilds a closed agenda,
+        // which would take the row with it)
+        const finish = () => {
+            if (!item._mkGone) {
+                item._mkGone = true;
+                item.destroy();
+            }
             done();
-            item.destroy();
+        };
+        item.connect('destroy', () => (item._mkGone = true));
+        if (!St.Settings.get().enable_animations) {
+            finish();
             return;
         }
         item.ease({opacity: 0, delay: 260, duration: 240, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            onStopped: () => {
-                done();
-                item.destroy();
-            }});
+            onStopped: finish});
     }
 
     // change one task in companion.json (the Companion picks it up from the file)
@@ -307,8 +330,7 @@ export class TaskBadge {
         this._clearAllDone();
         this._monitors?.forEach(m => m.cancel());
         this._monitors = null;
-        this._menu?.destroy();
-        this._button?.destroy();
+        this._button?.destroy();               // (its menu goes with it)
         this._button = this._menu = null;
     }
 }

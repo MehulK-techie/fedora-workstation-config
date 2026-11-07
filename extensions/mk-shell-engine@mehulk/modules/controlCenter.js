@@ -8,13 +8,60 @@
 //
 // It also leaves out what you rarely need there (qs-hidden): by default Dark
 // Style and the Welcome light toggle (never the battery: GNOME shows the top
-// bar's battery icon only while that tile is there), so the toggles are a clean 2 x 3: Wi-Fi,
-// Bluetooth, Power Mode, Night Light, Do Not Disturb, Airplane Mode (plus
-// what other extensions add, Caffeine for one). Screenshots have their keys:
+// bar's battery icon only while that tile is there), so the toggles are a clean 2 x 4: Wi-Fi,
+// Bluetooth, Power Mode, Night Light, Do Not Disturb, Airplane Mode, Microphone
+// (the engine's own) and Caffeine (when installed), in that order. Screenshots have their keys:
 // Super+Shift+S, Print, Super+Print.
 import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { QuickToggle, SystemIndicator } from 'resource:///org/gnome/shell/ui/quickSettings.js';
+import { getMixerControl } from 'resource:///org/gnome/shell/ui/status/volume.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
+
+// The grid's order, two by two: Wi-Fi, Bluetooth / Power Mode, Night Light /
+// Do Not Disturb, Airplane Mode / Microphone, Caffeine. (What else is there
+// follows; whatever isn't there is skipped.)
+const ORDER = ['NMWirelessToggle', 'BluetoothToggle', 'PowerProfilesToggle', 'NightLightToggle',
+    'DoNotDisturbToggle', 'RfkillToggle', 'MkMicToggle', 'CaffeineToggle'];
+
+// Microphone: on = listening; off mutes the default input (the same mute as Settings).
+const MicToggle = GObject.registerClass({GTypeName: 'MkMicToggle'}, class MicToggle extends QuickToggle {
+    constructor() {
+        super({title: 'Microphone', iconName: 'audio-input-microphone-symbolic', toggleMode: true});
+        this._control = getMixerControl();
+        this._controlId = this._control.connect('default-source-changed', () => this._follow());
+        this._stateId = this._control.connect('state-changed', () => this._follow());
+        this.connect('clicked', () => this._stream?.change_is_muted(!this.checked));
+        this._follow();
+    }
+
+    _follow() {
+        if (this._muteId)
+            this._stream.disconnect(this._muteId);
+        this._muteId = 0;
+        this._stream = this._control.get_default_source();
+        this.reactive = !!this._stream;
+        if (this._stream)
+            this._muteId = this._stream.connect('notify::is-muted', () => this._sync());
+        this._sync();
+    }
+
+    _sync() {
+        const on = !!this._stream && !this._stream.is_muted;
+        this.checked = on;
+        this.subtitle = !this._stream ? 'None' : on ? 'On' : 'Muted';
+        this.iconName = on ? 'audio-input-microphone-symbolic' : 'microphone-disabled-symbolic';
+    }
+
+    destroy() {
+        if (this._muteId)
+            this._stream.disconnect(this._muteId);
+        this._control.disconnect(this._controlId);
+        this._control.disconnect(this._stateId);
+        super.destroy();
+    }
+});
 
 const QS_GLASS = {sigma: 52, brightness: 0.56};
 
@@ -56,7 +103,34 @@ export class ControlCenter {
         const grid = this._qs.menu._grid;
         if (grid)
             this._ids.push([grid, grid.connect('child-added', () => this._queuePrune())]);
+        // the microphone toggle (a quick-settings indicator of its own, no top bar icon)
+        try {
+            this._mic = new SystemIndicator();
+            this._mic.quickSettingsItems.push(new MicToggle());
+            this._qs.addExternalIndicator(this._mic);
+        } catch (e) {
+            console.warn(`mk-shell-engine: microphone toggle: ${e.message}`);
+            this._mic = null;
+        }
         this._prune();
+    }
+
+    // the toggles in ORDER, where the first of them was (sliders and the rest stay put)
+    _order() {
+        const grid = this._qs.menu._grid;
+        if (!grid)
+            return;
+        const kids = grid.get_children();
+        const named = ORDER.map(name => kids.find(c => c.constructor.name === name ||
+            c.constructor.$gtype?.name === name || c.get_children?.().some(k => k.constructor.name === name)))
+            .filter(Boolean);
+        if (!named.length)
+            return;
+        const start = Math.min(...named.map(c => kids.indexOf(c)));
+        named.forEach((child, i) => {
+            if (grid.get_child_at_index(start + i) !== child)
+                grid.set_child_at_index(child, start + i);
+        });
     }
 
     _prune() {
@@ -80,6 +154,7 @@ export class ControlCenter {
         this._idle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
             this._idle = 0;
             this._prune();
+            this._order();
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -106,6 +181,10 @@ export class ControlCenter {
         for (const [object, id] of this._ids)
             object.disconnect(id);
         this._unglass?.();
+        if (this._mic) {
+            this._mic.quickSettingsItems.forEach(item => item.destroy());
+            this._mic.destroy();
+        }
         if (this._pointer) {
             this._pointer.open = this._pointer._mkOpen;
             delete this._pointer._mkOpen;

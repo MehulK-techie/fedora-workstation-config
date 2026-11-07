@@ -25,8 +25,8 @@
 
 /* The MK dock (modules/dock.js): a frosted shelf, lit along its top edge like glass,
    with dots under running apps */
-.mk-dock { background-color: rgba(30, 32, 40, 0.42); border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top-color: rgba(255, 255, 255, 0.36); border-bottom-color: rgba(255, 255, 255, 0.08);
+.mk-dock { background-color: rgba(16, 18, 24, 0.58); border: 1px solid rgba(255, 255, 255, 0.14);
+  border-top-color: rgba(255, 255, 255, 0.40); border-bottom-color: rgba(255, 255, 255, 0.06);
   border-radius: 22px; padding: 6px 10px 4px; spacing: 2px;
   box-shadow: 0 18px 40px -6px rgba(0, 0, 0, 0.55); }
 /* dock-style: the default above is obsidian-glass; the others (all keep the 22 px corners
@@ -74,7 +74,7 @@
 #panel.mk-islands .panel-button:active, #panel.mk-islands .panel-button:checked { background-color: st-transparentize(-st-accent-color, 0.7); }
 .mk-active-app-box { spacing: 8px; }
 .mk-active-app-name { font-weight: 700; max-width: 240px; }   /* its natural width, "…" past 240 px */
-#panel .panel-button.mk-active-app { padding: 3px 12px; -natural-hpadding: 0; -minimum-hpadding: 0; }
+#panel .panel-button.mk-active-app { padding: 3px 10px 3px 6px; -natural-hpadding: 0; -minimum-hpadding: 0; }
 .mk-clock { font-weight: 600; font-feature-settings: "tnum"; }
 
 /* Quick Settings (modules/controlCenter.js): quiet frosted glass. Every colour stays inside its
@@ -85,7 +85,7 @@
 .mk-bento .quick-settings-grid { spacing-rows: 10px; spacing-columns: 10px; }
 .mk-bento .quick-toggle, .mk-bento .quick-toggle-has-menu {
   border-radius: 12px; min-width: 14.5em; max-width: 14.5em; min-height: 3.5em; box-shadow: none; }
-.mk-bento .quick-toggle-has-menu .quick-toggle { min-width: auto; max-width: none; }
+.mk-bento .quick-toggle-has-menu .quick-toggle { min-width: 0; max-width: 10000px; }
 /* at rest */
 .mk-bento .quick-toggle { background-color: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.65);
   border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: none; }
@@ -118,8 +118,14 @@
   border: 1px solid rgba(255, 255, 255, 0.07); }
 /* sliders: slim, the filled part in the accent */
 .mk-bento .quick-slider { background-color: transparent; border-radius: 14px; padding: 2px 4px; }
-.mk-bento .slider { -barlevel-height: 6px; -slider-handle-radius: 0.55em;
-  -barlevel-background-color: rgba(255, 255, 255, 0.10); -barlevel-active-background-color: -st-accent-color; color: #ffffff; }
+/* volume and brightness: matching 16 px pills, frosted white fill (above 100 % too: no red),
+   the handle a small white dot inside the pill; the icon on the left follows the level */
+.mk-bento .slider { -barlevel-height: 16px; -slider-handle-radius: 6px; -barlevel-border-width: 0;
+  -barlevel-background-color: rgba(255, 255, 255, 0.12); -barlevel-active-background-color: rgba(255, 255, 255, 0.88);
+  -barlevel-overdrive-color: rgba(255, 255, 255, 0.95); -barlevel-overdrive-separator-width: 1px;
+  -slider-handle-border-width: 0; color: #ffffff; }
+.mk-bento .quick-slider .slider-bin { border-radius: 999px; }
+.mk-bento .quick-slider StIcon, .mk-bento .quick-slider .icon-button { color: rgba(255, 255, 255, 0.85); }
 /* the round buttons along the top: quiet glass */
 .mk-bento .quick-settings-system-item .icon-button { background-color: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.06); }
@@ -129,7 +135,7 @@
 /* Left island: Finder, the divider before the app (panel.js); the tray chevron */
 .mk-island-divider { width: 1px; height: 16px; margin: 0 2px; background-color: rgba(255, 255, 255, 0.18); }
 .mk-tray-fold { padding: 0 6px; }
-#panel.mk-islands #panelLeft { margin-left: 4px; padding-left: 4px; spacing: 8px; }   /* snug to the bezel (after the islands' margin, so it wins) */
+#panel.mk-islands #panelLeft { margin-left: 4px; padding-left: 4px; spacing: 4px; }   /* snug to the bezel (after the islands' margin, so it wins) */
 #panel.mk-islands #panelRight { margin-right: 4px; spacing: 2px; }
 #panel.mk-islands #panelRight .panel-button { padding: 0 7px; }
 
@@ -160,8 +166,6 @@
 /* the notification column's cards match the calendar's (GNOME's media player card too) */
 .mk-cal .message-list-section-list .message, .mk-cal #calendarArea .message, .mk-cal .message {
   background-color: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; }
-.mk-cal .mk-cal-dnd { border-radius: 99px; padding: 4px 4px 4px 12px; font-weight: 600; color: rgba(255, 255, 255, 0.85); }
-.mk-cal .mk-cal-dnd:hover { background-color: rgba(255, 255, 255, 0.08); }
 .mk-cal .message-list-clear-button { border-radius: 99px; padding: 4px 14px; font-weight: 700;
   background-color: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.14); }
 .mk-cal .message-list-clear-button:hover { background-color: rgba(239, 68, 68, 0.22); border-color: rgba(239, 68, 68, 0.5); }

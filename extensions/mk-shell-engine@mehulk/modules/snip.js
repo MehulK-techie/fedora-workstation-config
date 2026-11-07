@@ -35,12 +35,16 @@ export class Snip {
             return saved.capture.apply(this, args);
         };
 
+        // A drag that drew a new box ends here. (GNOME 51 drags with a pan gesture: the
+        // _dragButton this used to check is gone, so no drag ever counted, nothing was
+        // taken on release and Capture stayed blocked: area shots failed altogether.)
         sel.stopDrag = function (...args) {
-            const fresh = this._dragButton && this._dragCursor === Clutter.CursorType.CROSSHAIR;
-            const moved = this._lastX !== this._startX || this._lastY !== this._startY;
+            const fresh = this._dragCursor === Clutter.CursorType.CROSSHAIR && (this._dragGrab || this._panGesture ||
+                this._dragButton);
+            const moved = this._startX >= 0 && (this._lastX !== this._startX || this._lastY !== this._startY);
             const result = saved.stopDrag.apply(this, args);
-            if (fresh)
-                this._mkBlank = false;
+            if (fresh && this._startX >= 0)
+                this._mkBlank = false;            // a box exists now (a click makes a small one)
             if (fresh && moved && self._settings.get_boolean('snip-auto-capture') &&
                 ui._selectionButton.checked && ui._shotButton.checked)
                 ui._onCaptureButtonClicked().catch(logError);       // let go, and it's taken

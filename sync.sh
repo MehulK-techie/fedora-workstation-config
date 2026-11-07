@@ -286,10 +286,10 @@ ExecStart=%h/.local/bin/mk-reminders
 UNIT
 cat > "$UNIT_DIR/mk-reminders.timer" << 'UNIT'
 [Unit]
-Description=Check Companion reminders every minute
+Description=Check Companion reminders every 30 seconds
 
 [Timer]
-OnCalendar=*:*:00
+OnCalendar=*:*:00,30
 AccuracySec=5s
 Persistent=true
 

@@ -1,11 +1,13 @@
 // MK Shell Engine: the MK dock. A floating glass shelf at the bottom of the
 // primary monitor: your favourite apps, then running ones, then Show Apps.
-//   - icons grow under the pointer (1.22x, neighbours 1.10x), smoothly
-//   - a bar under each running app: 8 px for one window, two segments for
-//     more, 22 px in the accent colour for the app you're using
+//   - icons swell on a smooth bell under the pointer: 1.32x and a 12 px lift
+//     right under it, easing off with distance to nothing at 120 px (a
+//     cosine curve, so there are no steps); Show Apps never grows
+//   - a dot under each running app (two for several windows), in the accent
+//     colour for the app you're using
 //   - click: open, focus, or (the app you're in) minimize; middle-click: a new
 //     window; scroll: cycle the app's windows; right-click: New Window,
-//     Pin / Unpin, Quit
+//     Keep in Dock, Quit, Force Quit
 //   - it steps down out of the way when a window covers its spot, and comes
 //     back when the pointer touches the bottom edge
 // Everything follows GNOME's signals (apps starting and stopping, favourites,
@@ -39,7 +41,7 @@ const EDGE_DELAY = 70;         // the pointer rests on the bottom edge this long
 // a little (1.08x); every other icon stays as it is. Each icon glides to its
 // size in 120 ms (ease-out cubic) as the pointer sweeps across, and only
 // when its own size changes, so a sweep never restarts anyone else's glide.
-const NEIGHBOUR = 1.08, LIFT = 12, GLIDE = 120;
+const LIFT = 12, GLIDE = 120, RADIUS = 120;     // the bell's reach, px from the pointer
 
 export class Dock {
     constructor(settings) {
@@ -439,22 +441,17 @@ export class Dock {
 
     _magnify(pointerX) {
         const items = this._items ?? [];
-        // which icon the pointer is over (by where each button sits at rest)
+        // each icon by how far its centre (at rest) is from the pointer: a cosine bell,
+        // 1 right under it, 0 from RADIUS on
         const [dockX] = this._actor.get_transformed_position();
-        let under = -1;
-        items.forEach((it, i) => {
-            const x = dockX + it.button.x;
-            if (pointerX >= x && pointerX < x + it.button.width)
-                under = i;
-        });
-        items.forEach((it, i) => {
-            const d = under < 0 ? 99 : Math.abs(i - under);
-            // Show Apps stays as it is: a fixed target at the end of the shelf
-            const scale = it.isAppGrid ? 1 : d === 0 ? this._hover : d === 1 ? NEIGHBOUR : 1;
+        items.forEach(it => {
+            const d = Math.abs(pointerX - (dockX + it.button.x + it.button.width / 2));
+            const bell = it.isAppGrid || d >= RADIUS ? 0 : 0.5 * (1 + Math.cos(Math.PI * d / RADIUS));
+            const scale = Math.round((1 + (this._hover - 1) * bell) * 100) / 100;      // (steps of 0.01)
             if (it.target === scale)
                 return;
             it.target = scale;
-            it.icon.ease({scale_x: scale, scale_y: scale, translation_y: d === 0 && !it.isAppGrid ? -LIFT : 0,
+            it.icon.ease({scale_x: scale, scale_y: scale, translation_y: -Math.round(LIFT * bell),
                 duration: GLIDE, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         });
         return Clutter.EVENT_PROPAGATE;

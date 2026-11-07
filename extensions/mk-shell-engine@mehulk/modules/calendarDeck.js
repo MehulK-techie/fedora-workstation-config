@@ -15,8 +15,8 @@
 //
 // The calendar itself: a clean typographic grid (no discs on the days),
 // today and the chosen day in your accent; World Clocks and Weather only when
-// you've set a place up; Do Not Disturb beside Clear under the
-// notifications. GNOME's own media player sits at the top of that list.
+// you've set a place up; under the notifications only Clear (Do Not Disturb
+// lives in Quick Settings). GNOME's own media player sits at the top of that list.
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -24,7 +24,6 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
 
 const CAL_GLASS = {sigma: 48, brightness: 0.58};
@@ -138,7 +137,6 @@ export class CalendarDeck {
             [this._menu, this._menu.connect('open-state-changed', (_m, open) => this._glass(open))],
         ];
         this._placeholders();
-        this._dndSwitch();
         // Super+Alt+A: the calendar, ready to type a reminder
         this._settings = settings;
         if (settings) {
@@ -189,27 +187,6 @@ export class CalendarDeck {
             hold();
             this._hidden.push({item, ids, s, sid});
         }
-    }
-
-    // Do Not Disturb under the notifications, beside Clear (GNOME 51 keeps it only in
-    // Quick Settings): the same setting, org.gnome.desktop.notifications show-banners
-    _dndSwitch() {
-        const footer = this._dateMenu._messageList?._clearButton?.get_parent();
-        if (!footer)
-            return;
-        this._notif = new Gio.Settings({schema_id: 'org.gnome.desktop.notifications'});
-        const toggle = new PopupMenu.Switch(!this._notif.get_boolean('show-banners'));
-        const button = new St.Button({style_class: 'mk-cal-dnd', can_focus: true, toggle_mode: true,
-            x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.CENTER, accessible_name: 'Do Not Disturb'});
-        const row = new St.BoxLayout({style: 'spacing: 8px;'});
-        row.add_child(new St.Label({text: 'Do Not Disturb', y_align: Clutter.ActorAlign.CENTER}));
-        row.add_child(toggle);
-        button.set_child(row);
-        button.connect('clicked', () => this._notif.set_boolean('show-banners', !this._notif.get_boolean('show-banners')));
-        this._notifId = this._notif.connect('changed::show-banners',
-            () => (toggle.state = !this._notif.get_boolean('show-banners')));
-        footer.add_child(button);
-        this._dnd = button;
     }
 
     // the next three open reminders (soonest first), from companion.json
@@ -325,9 +302,6 @@ export class CalendarDeck {
             s.disconnect(sid);
             item._sync?.();
         }
-        if (this._notif)
-            this._notif.disconnect(this._notifId);
-        this._dnd?.destroy();
         for (const [object, id] of this._ids)
             object.disconnect(id);
         this._unglass?.();

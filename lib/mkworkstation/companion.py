@@ -132,9 +132,24 @@ def latest_occurrence(item, now):
 
 
 # ---------------------------------------------------------------- checking
+ALARM_SOUND = Path("/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga")
+
+
+def _alarm_sound():
+    """The alarm clock chime (freedesktop sound theme), through PipeWire; the
+    sound theme's player when pw-play isn't there. Never waits for it."""
+    if ALARM_SOUND.exists() and shutil.which("pw-play"):
+        argv = ["pw-play", str(ALARM_SOUND)]
+    elif shutil.which("canberra-gtk-play"):
+        argv = ["canberra-gtk-play", "-i", "alarm-clock-elapsed", "-d", "MK reminder"]
+    else:
+        return
+    subprocess.Popen(argv, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def _notify(kind, item):
-    """Show a notification with Done / Snooze 15 min / Open buttons; act on the
-    click. Critical urgency: GNOME keeps it on screen until you answer it.
+    """Ring the alarm chime and show a notification with Done / Snooze 15 min /
+    Open buttons; act on the click. Critical urgency: GNOME keeps it on screen until you answer it.
     Runs detached so the checker can finish while the notification waits."""
     title = "Reminder: " + (item.get("title") or item.get("text") or "Reminder").strip().splitlines()[0][:80]
     body = "Task" if kind == "tasks" else (item.get("body", "").strip()[:160] or "Note")
@@ -146,6 +161,7 @@ def _notify(kind, item):
         'done) "$3/mk-reminders" done "$5";; '
         'snooze) "$3/mk-reminders" snooze "$5" 900;; esac'
     )
+    _alarm_sound()
     if shutil.which("notify-send"):
         subprocess.Popen(["sh", "-c", script, "sh", title, body, str(bin_dir),
                           "note" if kind == "notes" else "tasks", item["id"]],

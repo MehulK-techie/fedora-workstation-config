@@ -1,8 +1,9 @@
 #%PAM-1.0
-# MK in-app Face ID (mk-face-auth, installed by setup.sh): the face only.
+# MK in-app Face ID (mk-face-auth, installed by scripts/setup-face-auth.sh): the face only,
+# through MK's OpenCV engine (mk-face; Howdy is gone on Fedora 45).
 # Passwords are never checked through this service: its helper answers any
 # local caller, so a password stack here would be a root guessing oracle.
 # PINs stay in the apps, fingerprints go through fprintd, passwords through
 # polkit's own prompt.
-auth       required     pam_howdy.so
+auth       required     pam_exec.so quiet /usr/local/libexec/mk-face --pam
 account    required     pam_permit.so

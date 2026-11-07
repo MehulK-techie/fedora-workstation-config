@@ -150,8 +150,9 @@ install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-security-scan" /usr/local/libex
 install -m 644 "$SCRIPT_DIR/assets/polkit/io.github.mehulk.mk-security.policy" /usr/share/polkit-1/actions/
 # In-app Face ID (MK Notes' lock, the MK unlock dialog): a socket-activated
 # root helper that checks the calling user's own face through the face-only
-# PAM service mk-auth. Only when Howdy's PAM module is installed.
-if [[ -e /usr/lib64/security/pam_howdy.so || -e /usr/lib/security/pam_howdy.so ]]; then
+# PAM service mk-auth (MK's OpenCV engine). Only once face unlock is set up
+# (sudo ./scripts/setup-face-auth.sh installs the engine, its models and this).
+if [[ -x /usr/local/libexec/mk-face ]]; then
     install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-face-auth" /usr/local/libexec/mk-face-auth
     install -m 644 "$SCRIPT_DIR/assets/pam/mk-auth" /etc/pam.d/mk-auth
     install -m 644 "$SCRIPT_DIR/assets/systemd/mk-face-auth.socket" "$SCRIPT_DIR/assets/systemd/mk-face-auth@.service" /etc/systemd/system/

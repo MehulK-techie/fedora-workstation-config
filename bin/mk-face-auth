@@ -1,0 +1,28 @@
+#!/bin/bash
+# mk-face-auth: your face for sudo, the lock screen and MK's apps (OpenCV
+# YuNet + SFace; Howdy's replacement on Fedora 45). The engine is root-only
+# (/usr/local/libexec/mk-face, installed by scripts/setup-face-auth.sh); this
+# asks sudo for it.
+#   mk-face-auth --enroll    look at the camera: saves your face
+#   mk-face-auth --verify    check it now (a match, or why not)
+#   mk-face-auth --status    installed? enrolled? where is it used?
+#   mk-face-auth --forget    delete your face
+set -uo pipefail
+ENGINE=/usr/local/libexec/mk-face
+me=$(id -un)
+if [[ ! -x "$ENGINE" ]]; then
+    echo "Face unlock isn't installed: sudo ./scripts/setup-face-auth.sh (in the MK repo)" >&2
+    exit 4
+fi
+case "${1:---status}" in
+    --enroll) exec sudo "$ENGINE" enroll "$me" ;;
+    --verify) exec sudo "$ENGINE" verify "$me" ;;
+    --forget) exec sudo "$ENGINE" forget "$me" ;;
+    --status)
+        echo "Engine:   $ENGINE"
+        echo "Face:     $(sudo "$ENGINE" status "$me")"
+        for f in /etc/pam.d/sudo /etc/pam.d/gdm-password /etc/pam.d/mk-auth; do
+            if grep -qs "mk-face --pam" "$f"; then echo "Used by:  $f"; fi
+        done ;;
+    *) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

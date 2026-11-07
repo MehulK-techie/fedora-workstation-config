@@ -6,7 +6,8 @@ ID, installed by setup.sh to /usr/local/libexec.
 systemd starts one copy per connection on /run/mk-face-auth.sock
 (mk-face-auth.socket, Accept=yes). It asks the kernel who connected
 (SO_PEERCRED), so an app can only check its own user's face, then runs the
-PAM service mk-auth (/etc/pam.d/mk-auth: pam_howdy only) for that user.
+PAM service mk-auth (/etc/pam.d/mk-auth: the face only: MK's mk-face, or
+pam_howdy on older installs) for that user.
 Clients may send "CHECK" first (anything else is refused). It answers one
 line:
   OK                     the face matched
@@ -35,7 +36,8 @@ import sys
 import time
 
 SERVICE = "mk-auth"
-MODELS = "/etc/howdy/models"
+MODELS = "/etc/howdy/models"          # Howdy's (older installs)
+FACES = "/var/lib/mk-face"              # MK's own engine (mk-face)
 STATE = "/run/mk-face-auth"
 MIN_GAP = 3.0       # seconds between two checks for one user
 TIME_LIMIT = 20     # seconds for the whole check
@@ -162,8 +164,8 @@ def main():
     if not at_the_seat(uid):
         answer(conn, "NO not the active session")
         return 0
-    if not os.path.exists(os.path.join(MODELS, f"{user}.dat")):
-        answer(conn, "NO no face enrolled (mk face)")
+    if not (os.path.exists(os.path.join(FACES, f"{user}.npy")) or os.path.exists(os.path.join(MODELS, f"{user}.dat"))):
+        answer(conn, "NO no face enrolled (mk-face-auth --enroll)")
         return 0
     os.makedirs(STATE, mode=0o700, exist_ok=True)
     lock = open(os.path.join(STATE, "lock"), "w")

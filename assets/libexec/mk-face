@@ -1,0 +1,228 @@
+#!/usr/bin/python3 -I
+"""mk-face: is the person at the camera this user? MK Workstation's own face
+check (Howdy's replacement: Howdy and dlib don't build on Fedora 45). OpenCV
+only (python3-opencv): YuNet finds the face, SFace turns it into 128 numbers,
+and those are compared with the ones saved when you enrolled.
+
+Root only (installed to /usr/local/libexec by scripts/setup-face-auth.sh):
+  mk-face enroll USER        look at the camera ~6 s: saves /var/lib/mk-face/USER.npy
+  mk-face verify USER [S]    exit 0 when USER's face is seen within S seconds (default 4)
+  mk-face forget USER        delete USER's face
+  mk-face status USER        enrolled or not
+  mk-face --pam              for pam_exec: PAM_USER's face, 3.5 s, silent; exit 0 = match
+
+Limits, plainly: an ordinary webcam can't tell a face from a good photo of
+it (no depth or infrared check here), so face is a convenience, never the
+only way in: the password always works, and the PAM line is "sufficient".
+--pam refuses unless the user's session is the one at the computer (seat0,
+local), so nobody signed in remotely can use the camera to get in.
+"""
+import os
+import pwd
+import subprocess
+import sys
+import time
+
+MODELS = "/usr/local/share/mk-face"
+DETECTOR = os.path.join(MODELS, "face_detection_yunet_2023mar.onnx")
+RECOGNIZER = os.path.join(MODELS, "face_recognition_sface_2021dec.onnx")
+DATA = "/var/lib/mk-face"
+CONF = "/etc/mk-face.conf"          # DEVICE=/dev/video0, THRESHOLD=0.45 (optional)
+THRESHOLD = 0.45                    # SFace cosine similarity; OpenCV suggests 0.363, this is stricter
+SAMPLES = 12
+
+
+def conf():
+    out = {}
+    try:
+        with open(CONF) as f:
+            for line in f:
+                if "=" in line and not line.lstrip().startswith("#"):
+                    k, v = line.split("=", 1)
+                    out[k.strip().upper()] = v.strip()
+    except OSError:
+        pass
+    return out
+
+
+def models():
+    import cv2
+    det = cv2.FaceDetectorYN.create(DETECTOR, "", (320, 240), 0.9, 0.3, 5000)
+    rec = cv2.FaceRecognizerSF.create(RECOGNIZER, "")
+    return det, rec
+
+
+def camera():
+    import cv2
+    dev = conf().get("DEVICE", "/dev/video0")
+    cap = cv2.VideoCapture(dev, cv2.CAP_V4L2)
+    if not cap.isOpened():
+        return None
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    return cap
+
+
+def largest_face(det, frame):
+    h, w = frame.shape[:2]
+    det.setInputSize((w, h))
+    _ok, found = det.detect(frame)
+    if found is None or len(found) == 0:
+        return None
+    return max(found, key=lambda f: f[2] * f[3])
+
+
+def feature(rec, frame, face):
+    return rec.feature(rec.alignCrop(frame, face))
+
+
+def model_path(user):
+    return os.path.join(DATA, f"{user}.npy")
+
+
+def enroll(user, seconds=8.0):
+    import numpy as np
+    det, rec = models()
+    cap = camera()
+    if cap is None:
+        print("No camera found (set DEVICE= in /etc/mk-face.conf).", file=sys.stderr)
+        return 3
+    feats, end, last = [], time.monotonic() + seconds, 0.0
+    print("Look at the camera; turn your head a little now and then...")
+    while time.monotonic() < end and len(feats) < SAMPLES:
+        ok, frame = cap.read()
+        if not ok:
+            continue
+        face = largest_face(det, frame)
+        if face is None or time.monotonic() - last < 0.4:
+            continue
+        last = time.monotonic()
+        feats.append(feature(rec, frame, face)[0])
+        print(f"  {len(feats)}/{SAMPLES}")
+    cap.release()
+    if len(feats) < 5:
+        print("Not enough clear looks at a face: more light, face the camera, try again.", file=sys.stderr)
+        return 1
+    os.makedirs(DATA, mode=0o700, exist_ok=True)
+    os.chmod(DATA, 0o700)
+    path = model_path(user)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        np.save(f, np.array(feats, dtype=np.float32))
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+    print(f"Saved {len(feats)} looks for {user}.")
+    return 0
+
+
+def verify(user, seconds=4.0, quiet=False):
+    """0: a match (two frames in a row over the threshold), 1: no match, 2: not enrolled, 3: no camera."""
+    import cv2
+    import numpy as np
+    path = model_path(user)
+    if not os.path.exists(path):
+        return 2
+    known = np.load(path)
+    threshold = float(conf().get("THRESHOLD", THRESHOLD))
+    det, rec = models()
+    cap = camera()
+    if cap is None:
+        return 3
+    end, streak, best = time.monotonic() + seconds, 0, -1.0
+    try:
+        while time.monotonic() < end:
+            ok, frame = cap.read()
+            if not ok:
+                continue
+            face = largest_face(det, frame)
+            if face is None:
+                streak = 0
+                continue
+            f = feature(rec, frame, face)
+            score = max(rec.match(f, k.reshape(1, -1), cv2.FaceRecognizerSF_FR_COSINE) for k in known)
+            best = max(best, score)
+            streak = streak + 1 if score >= threshold else 0
+            if streak >= 2:
+                if not quiet:
+                    print(f"Match ({score:.2f} >= {threshold}).")
+                return 0
+    finally:
+        cap.release()
+    if not quiet:
+        print(f"No match (best {best:.2f}, needs {threshold})." if best >= 0 else "No face seen.")
+    return 1
+
+
+def at_the_seat(user):
+    """True when seat0's active session is a local one of USER (who alone can be facing the camera)."""
+    def loginctl(*args):
+        try:
+            return subprocess.run(["loginctl", *args], capture_output=True, text=True, timeout=3).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return ""
+    session = loginctl("show-seat", "seat0", "--property=ActiveSession", "--value")
+    if not session:
+        return False
+    props = dict(line.split("=", 1) for line in
+                 loginctl("show-session", "--", session, "--property=Name", "--property=Remote").splitlines()
+                 if "=" in line)
+    return props.get("Name") == user and props.get("Remote") == "no"
+
+
+def pam():
+    user = os.environ.get("PAM_USER", "")
+    if os.environ.get("PAM_TYPE") != "auth" or not user or os.environ.get("PAM_RHOST"):
+        return 1
+    if not os.path.exists(model_path(user)):
+        return 1                                # not enrolled: straight on to the password
+    service = os.environ.get("PAM_SERVICE", "")
+    # the lock screen and login run before / outside the session; anything else (sudo,
+    # polkit) only for the person at the computer
+    if not service.startswith("gdm") and not at_the_seat(user):
+        return 1
+    return 0 if verify(user, 3.5, quiet=True) == 0 else 1
+
+
+def main(argv):
+    if os.geteuid() != 0:
+        print("mk-face runs as root (use mk-face-auth).", file=sys.stderr)
+        return 1
+    if argv[:1] == ["--pam"]:
+        try:
+            return pam()
+        except Exception:                       # never in the way of the password
+            return 1
+    if len(argv) < 2 or argv[0] not in ("enroll", "verify", "forget", "status"):
+        print(__doc__.strip())
+        return 2
+    cmd, user = argv[0], argv[1]
+    try:
+        pwd.getpwnam(user)
+    except KeyError:
+        print(f"No user {user}.", file=sys.stderr)
+        return 2
+    if not all(os.path.exists(p) for p in (DETECTOR, RECOGNIZER)) and cmd in ("enroll", "verify"):
+        print("The face models aren't installed: sudo ./scripts/setup-face-auth.sh", file=sys.stderr)
+        return 4
+    if cmd == "enroll":
+        return enroll(user)
+    if cmd == "verify":
+        rc = verify(user, float(argv[2]) if len(argv) > 2 else 4.0)
+        if rc == 2:
+            print(f"{user} has no face enrolled (mk-face-auth --enroll).")
+        elif rc == 3:
+            print("No camera found (set DEVICE= in /etc/mk-face.conf).")
+        return rc
+    if cmd == "forget":
+        try:
+            os.remove(model_path(user))
+            print(f"Forgot {user}'s face.")
+        except FileNotFoundError:
+            print(f"{user} had no face enrolled.")
+        return 0
+    print("enrolled" if os.path.exists(model_path(user)) else "not enrolled")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

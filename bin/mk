@@ -230,8 +230,22 @@ case "${1:-help}" in
         ;;
 
     face)
+        # Howdy where it still exists (Fedora 44 and older); MK's own OpenCV engine
+        # (mk-face-auth) on Fedora 45, set up once with scripts/setup-face-auth.sh.
         shift
-        sudo "$REPO_DIR/register-face.sh" "$@"
+        if command -v howdy &> /dev/null; then
+            sudo "$REPO_DIR/register-face.sh" "$@"
+        elif [[ ! -x /usr/local/libexec/mk-face || "${1:-}" == --setup ]]; then
+            echo "Face unlock: MK's own engine (Howdy isn't available on this Fedora). Setting it up..."
+            sudo "$REPO_DIR/scripts/setup-face-auth.sh"
+        else
+            case "${1:-}" in
+                --verify|--status|--forget) "$HOME/.local/bin/mk-face-auth" "$1" ;;
+                --list) "$HOME/.local/bin/mk-face-auth" --status ;;
+                --remove) sudo "$REPO_DIR/scripts/setup-face-auth.sh" --remove ;;
+                *) "$HOME/.local/bin/mk-face-auth" --enroll ;;       # (also --tune-only: record it again)
+            esac
+        fi
         ;;
 
     shortcuts|hud)
@@ -327,7 +341,14 @@ case "${1:-help}" in
         # mk biometrics list-faces | list-fingers: what's enrolled, one kind at a time
         case "${2:-}" in
             list-faces)
-                command -v howdy &> /dev/null || { echo "[-] Howdy (Face ID) isn't installed. Run: mk face" >&2; exit 1; }
+                if ! command -v howdy &> /dev/null; then
+                    if [[ -x /usr/local/libexec/mk-face ]]; then
+                        "$HOME/.local/bin/mk-face-auth" --status
+                        exit 0
+                    fi
+                    echo "[-] Face unlock isn't set up. Run: mk face" >&2
+                    exit 1
+                fi
                 echo "Face models for $USER (Howdy keeps them where only root can read: sudo asks once)"
                 list=$(sudo howdy -U "$USER" --plain list 2> /dev/null | grep -E '^[0-9]+,' || true)
                 if [[ -z "$list" ]]; then

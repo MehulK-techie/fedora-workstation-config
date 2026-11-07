@@ -81,6 +81,9 @@ PINS = CONFIG / "hub-pins"
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
+MK_FACE = "/usr/local/libexec/mk-face"   # MK's own face engine (scripts/setup-face-auth.sh)
+
+
 def tool(name):
     """An MK tool: installed copy first, then the one next to this file."""
     for candidate in (BIN / name, Path(__file__).resolve().parent / name):
@@ -144,7 +147,7 @@ ACTIONS = [
     ("face-list", "Biometrics & Security", "view-list-bullet-symbolic", "List Registered Faces", "ID, date and label of each face model (sudo once)", ("term", "mk biometrics list-faces")),
     ("finger-list", "Biometrics & Security", "view-list-bullet-symbolic", "List Enrolled Fingers", "The fingers your reader knows", ("show", mk("biometrics", "list-fingers"))),
     ("face-try", "Biometrics & Security", "security-high-symbolic", "Test Face ID", "The unlock window MK's apps use", ("dialog", "tryface")),
-    ("face-models", "Biometrics & Security", "user-trash-symbolic", "Delete a face model", "Pick one from the list (sudo once)", ("term", f"{shlex.quote(tool('mk-face-add'))} --list")),
+    ("face-models", "Biometrics & Security", "user-trash-symbolic", "Delete a face model", "Pick one from the list (sudo once)", ("term", "mk face --forget" if not shutil.which("howdy") else f"{shlex.quote(tool('mk-face-add'))} --list")),
     ("face", "Biometrics & Security", "camera-web-symbolic", "Full face setup", "Guided: camera, light, several looks", ("term", "mk face")),
     ("face-tune", "Biometrics & Security", "camera-web-symbolic", "Re-tune the camera", "After a new webcam; faces kept", ("term", "mk face --tune-only")),
     ("finger-check", "Biometrics & Security", "auth-fingerprint-symbolic", "Fingerprint check", "Is it set up everywhere?", ("show", mk("fingerprint", "check"))),
@@ -747,12 +750,33 @@ class Center(Adw.ApplicationWindow):
 
     # ---------------------------------------------------------------- face and fingerprint
     def _try_face(self):
+        if not os.path.exists("/run/mk-face-auth.sock"):
+            # no in-app Face ID yet: MK's engine checks in a terminal, or it gets set up first
+            if os.path.exists(MK_FACE):
+                run_bg(terminal(f"{shlex.quote(tool('mk-face-auth'))} --verify", "Test Face ID"))
+                self.say("Look at the camera: the result is in the terminal window")
+            else:
+                self._face_setup()
+            return
         dialog = auth.UnlockDialog("Try Face ID", None, lambda: self.say("Face ID: it's you ✓"))
         dialog.present(self)
 
+    def _face_setup(self):
+        """Face unlock without Howdy (Fedora 45): MK's own engine, set up once (sudo)."""
+        run_bg(terminal("mk face --setup", "Face unlock setup"))
+        self.say("Face unlock setup is in the terminal window (it asks for your password)")
+
     def _face_dialog(self):
         """Record one face model for this account: yours (primary) or a
-        guest's (a judge at a demo), named so it's never recorded twice."""
+        guest's (a judge at a demo), named so it's never recorded twice.
+        Without Howdy (Fedora 45): MK's own engine, one face per account."""
+        if not shutil.which("howdy"):
+            if not os.path.exists(MK_FACE):
+                self._face_setup()
+                return
+            run_bg(terminal(f"{shlex.quote(tool('mk-face-auth'))} --enroll", "Face Enrollment"))
+            self.say("Look at the camera: recording is in the terminal window; then use Test Face ID")
+            return
         dlg = Adw.AlertDialog(heading="Add a face",
                               body="Sit about an arm's length from the camera, facing the light.")
         box = Adw.PreferencesGroup()
@@ -778,9 +802,6 @@ class Center(Adw.ApplicationWindow):
         def answered(_d, response):
             label = name.get_text().strip()
             if response not in ("record", "remove") or not label:
-                return
-            if not shutil.which("howdy"):
-                self.say("Face unlock needs Howdy: run ./setup.sh (it installs it)")
                 return
             # Howdy itself (sudo howdy add) in a terminal: you see what it
             # does and answer its questions (replace? close the camera app?).

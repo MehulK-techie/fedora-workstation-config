@@ -1,6 +1,30 @@
 # Face Unlock
 
-Unlock the login screen (and optionally `sudo`) by looking at your camera. It uses [Howdy](https://github.com/boltgolt/howdy) and runs entirely on your computer; nothing is uploaded. **Your password always keeps working.**
+Unlock the login screen (and optionally `sudo`) by looking at your camera. It runs entirely on your computer; nothing is uploaded. **Your password always keeps working.**
+
+## Fedora 45 and later: MK's own engine
+
+Fedora 45 removed Howdy (it needs dlib, which doesn't build there), so MK has its own face check, made only of what Fedora ships: OpenCV (`python3-opencv`) with two of its models, **YuNet** to find a face and **SFace** to recognise it.
+
+```bash
+sudo ./scripts/setup-face-auth.sh     # from the repo folder
+```
+
+It installs the engine (`/usr/local/libexec/mk-face`), downloads the two models from OpenCV's model zoo into `/usr/local/share/mk-face` (each checked against a pinned SHA-256; a mismatch stops the install), records your face (about 6 seconds at the camera), turns MK's in-app Face ID back on (MK Notes' lock, the unlock dialog), and then **asks** before adding face to `sudo` and to the lock screen. Every PAM file is backed up first. The PAM line is `auth sufficient pam_exec.so quiet /usr/local/libexec/mk-face --pam`: a match lets you in, anything else falls through to the password.
+
+| Command | What it does |
+| :--- | :--- |
+| `mk-face-auth --verify` | Look at the camera: a match, or how close it got |
+| `mk-face-auth --enroll` | Record your face again (new glasses, new light) |
+| `mk-face-auth --status` | Installed? Enrolled? Which PAM files use it? |
+| `mk-face-auth --forget` | Delete your saved face (`/var/lib/mk-face/USER.npy`, root only) |
+| `sudo ./scripts/setup-face-auth.sh --remove` | Take face out of every PAM file |
+
+Settings, optional, in `/etc/mk-face.conf`: `DEVICE=/dev/video0` (another camera), `THRESHOLD=0.45` (higher is stricter; OpenCV suggests 0.363).
+
+**Know the limit.** An ordinary webcam can't tell your face from a good photo of it: MK's engine has no depth or infrared check. Face is a convenience, never the only way in; keep a strong password. For `sudo`, it only answers when your session is the one at the computer (never for a remote login). On the lock screen, the password field waits up to about 4 seconds for a face before it asks.
+
+The rest of this page is about Howdy, on Fedora 44 and earlier.
 
 ---
 

@@ -309,7 +309,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 
 **Will it delete my settings?** No. Lists such as enabled extensions and custom shortcuts are added to, not replaced. System files get a `.bak` copy before their first change, every sync saves a snapshot (`mk restore`), and your pre-MK desktop is kept for good. `mk uninstall` removes MK from your account. See [Undo and uninstall](docs/GUIDE.md#undo-and-uninstall).
 
-**Is face unlock safe?** With an IR camera (the Windows Hello kind), it's much harder to fool than a webcam, though Howdy itself warns it is less secure than a password. With a regular webcam a printed photo may pass, so the wizard keeps matching strict and only adds face unlock to `sudo` if you say yes. Your password always works.
+**Is face unlock safe?** On Fedora 45 (MK's OpenCV engine, `scripts/setup-face-auth.sh`) a regular webcam has no depth or infrared check, so a good photo may pass: it's a convenience, your password always works, and the setup asks before adding face to `sudo` or the lock screen. With Howdy and an IR camera (the Windows Hello kind), it's much harder to fool than a webcam, though Howdy itself warns it is less secure than a password. With a regular webcam a printed photo may pass, so the wizard keeps matching strict and only adds face unlock to `sudo` if you say yes. Your password always works.
 
 **How do I keep my own tweaks?** Change anything in GNOME or Extension Manager, then run `mk export` and commit. `mk sync` restores it on any machine.
 
@@ -330,7 +330,7 @@ Fork, change, run `just check`, open a pull request. See [CONTRIBUTING.md](CONTR
 
 ## Credits
 
-Ideas adopted from [fedorable](https://github.com/chetripley/fedorable), [PYFO](https://github.com/d4rklynk/PYFO), [Linutil](https://github.com/ChrisTitusTech/linutil), [Universal Blue Bluefin](https://projectbluefin.io/) and the [RPM Fusion](https://rpmfusion.org/) howtos. Face unlock is powered by [Howdy](https://github.com/boltgolt/howdy). Extensions belong to their authors on [extensions.gnome.org](https://extensions.gnome.org/). The Stan Lee photo in the Web Hang screensaver is by Gage Skidmore, [CC BY-SA 3.0](assets/screensaver/CREDITS.md).
+Ideas adopted from [fedorable](https://github.com/chetripley/fedorable), [PYFO](https://github.com/d4rklynk/PYFO), [Linutil](https://github.com/ChrisTitusTech/linutil), [Universal Blue Bluefin](https://projectbluefin.io/) and the [RPM Fusion](https://rpmfusion.org/) howtos. Face unlock is powered by [Howdy](https://github.com/boltgolt/howdy) up to Fedora 44, and on Fedora 45 by MK's own engine on OpenCV's YuNet and SFace models ([OpenCV Zoo](https://github.com/opencv/opencv_zoo)). Extensions belong to their authors on [extensions.gnome.org](https://extensions.gnome.org/). The Stan Lee photo in the Web Hang screensaver is by Gage Skidmore, [CC BY-SA 3.0](assets/screensaver/CREDITS.md).
 
 ## License
 

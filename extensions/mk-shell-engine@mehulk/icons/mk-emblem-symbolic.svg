@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- MK emblem: a hexagon with an M-shaped bolt; symbolic (one colour, follows the panel text) -->
+  <path fill="#2e3436" fill-rule="evenodd" d="M8 0.6 14.6 4.3v7.4L8 15.4 1.4 11.7V4.3Zm0 1.6L2.9 5.1v5.8L8 13.8l5.1-2.9V5.1Z"/>
+  <path fill="#2e3436" d="M4.6 11V5.2h1.5L8 8.1l1.9-2.9h1.5V11H9.9V7.9L8.6 10H7.4L6.1 7.9V11Z"/>
+</svg>

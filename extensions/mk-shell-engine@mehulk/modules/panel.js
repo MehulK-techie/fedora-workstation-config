@@ -30,7 +30,8 @@ import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.j
 
 const ICONS = GLib.build_filenamev([GLib.path_get_dirname(GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0])),
     'icons']);
-const LOGO_KEYS = ['show-logo-button', 'logo-icon-name', 'logo-custom-path', 'show-logo-label', 'logo-label-text'];
+const LOGO_KEYS = ['finder-logo-mode', 'finder-custom-logo-path', 'finder-icon-size', 'finder-show-label',
+    'finder-label-text'];
 
 const ISLAND_RADIUS = 12;            // (the islands' CSS corners; the glass is cut to match)
 
@@ -140,16 +141,18 @@ class ActiveApp {
     }
 }
 
-// The logo button at the far left: the system menu, as on a Mac. Fedora's own
-// emblem by default (its fedora-logo-icon, shown in monochrome), or an apple,
-// the distribution's os-release logo, an image of your own, or none; then a
-// label (Finder by default). All five settings apply as you change them.
+// The Finder button at the far left: the system menu, as on a Mac. Fedora's own
+// emblem by default (its fedora-logo-icon, shown in monochrome), or the MK
+// emblem, an apple, the distribution's os-release logo, an image of your own,
+// or none; its size; then a label (Finder by default). The finder-* settings
+// apply as you change them.
 class LogoButton {
     constructor(settings) {
         this._settings = settings;
         this.button = new PanelMenu.Button(0.0, 'System menu', false);
         this.button.add_style_class_name('mk-logo-button');
         const box = new St.BoxLayout({style_class: 'mk-logo-box', y_align: Clutter.ActorAlign.CENTER});
+        // (the files are symbolic, drawn in the bar's text colour)
         this._iconBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
         this._label = new St.Label({style_class: 'mk-logo-label', y_align: Clutter.ActorAlign.CENTER});
         box.add_child(this._iconBin);
@@ -161,8 +164,8 @@ class LogoButton {
     }
 
     _logo() {
-        const kind = this._settings.get_string('logo-icon-name');
-        const size = 16;
+        const kind = this._settings.get_string('finder-logo-mode');
+        const size = this._settings.get_int('finder-icon-size');
         const themed = name => new St.Icon({icon_name: name, icon_size: size, style_class: 'mk-logo-icon'});
         const file = path => new St.Icon({gicon: Gio.FileIcon.new(Gio.File.new_for_path(path)), icon_size: size,
             style_class: 'mk-logo-icon'});
@@ -178,8 +181,10 @@ class LogoButton {
             return null;
         if (kind === 'apple')
             return file(GLib.build_filenamev([ICONS, 'mk-apple-symbolic.svg']));
+        if (kind === 'mk')
+            return file(GLib.build_filenamev([ICONS, 'mk-emblem-symbolic.svg']));
         if (kind === 'custom') {
-            const path = this._settings.get_string('logo-custom-path');
+            const path = this._settings.get_string('finder-custom-logo-path').replace(/^~(?=\/)/, GLib.get_home_dir());
             return path && GLib.file_test(path, GLib.FileTest.EXISTS) ? file(path) : themed('image-missing-symbolic');
         }
         if (kind === 'distro')
@@ -189,9 +194,9 @@ class LogoButton {
 
     _sync() {
         this._iconBin.set_child(this._logo());
-        const text = this._settings.get_string('logo-label-text');
+        const text = this._settings.get_string('finder-label-text');
         this._label.text = text;
-        this._label.visible = this._settings.get_boolean('show-logo-label') && text !== '';
+        this._label.visible = this._settings.get_boolean('finder-show-label') && text !== '';
         this.button.accessible_name = text || 'System menu';
     }
 
@@ -526,7 +531,7 @@ export class Panel {
         this._settings = settings;
         this._parts = [];
         this._ids = ['changed::top-bar-style', 'changed::show-active-app', 'changed::blur', 'changed::autohide-top-bar',
-            'changed::show-logo-button'].map(
+            'changed::finder-show-button'].map(
             signal => settings.connect(signal, () => this._rebuild()));
         this._unwatch = watch(() => this._rebuild());        // Blur my Shell on or off
         this._build();
@@ -541,7 +546,7 @@ export class Panel {
             this._unblur = glass.map(actor => addWallpaperGlass(actor, Main.layoutManager.panelBox, PANEL_GLASS,
                 style === 'edge' ? 0 : ISLAND_RADIUS));
         }
-        if (this._settings.get_boolean('show-logo-button')) {
+        if (this._settings.get_boolean('finder-show-button')) {
             try {
                 this._logo = new LogoButton(this._settings);
                 panel.addToStatusArea('mk-logo', this._logo.button, 0, 'left');
@@ -585,41 +590,89 @@ export class Panel {
     // The left island, near the corner (Fitts's law: the pointer stops at the
     // screen's edge by itself): the emblem (WACK Shell's menu, when on), a divider,
     // the app you're in (or "WS 1" on an empty desktop), the workspace dots, Places.
-    // GNOME's own dots (WorkspaceDot): the active one (it grows into a pill as you switch)
-    // in the accent, the others faint white (stylesheet: .mk-ws-active); followed as
-    // workspaces come and go
+    // GNOME's own dots (WorkspaceIndicators of WorkspaceDots), dressed after each of
+    // GNOME's own updates: up to 4 desktops 6 px dots 5 px apart and an 18 px pill for the
+    // current one, from 5 on 5 px / 4 px / 16 px; the others at full size, faint (45 %);
+    // the current one in the accent (stylesheet: .mk-ws-active). The pill glides between
+    // dots as GNOME's own expansion follows your swipe. The slot fits the dots, eased
+    // (120 ms) only when desktops come or go: switching never moves the bar.
     _tintDots(dots) {
         const find = actor => actor.constructor.name === 'WorkspaceIndicators' ? actor
             : actor.get_children().map(find).find(Boolean);
         const box = find(dots);
         if (!box)
             return;                          // (WACK's workspace button draws its own)
-        const hook = dot => {
-            if (dot._mkTint || !dot._dot)
-                return;
-            const paint = () => (dot.expansion > 0.5 ? dot._dot.add_style_class_name('mk-ws-active')
-                : dot._dot.remove_style_class_name('mk-ws-active'));
-            dot._mkTint = dot.connect('notify::expansion', paint);
-            paint();
+        const self = this;
+        const update = box._updateExpansion;
+        box._updateExpansion = function (...args) {
+            const result = update.apply(this, args);
+            self._dressDots(box, dots);
+            return result;
         };
-        box.get_children().forEach(hook);
         this._dotsBox = box;
-        this._dotsId = box.connect('child-added', (_b, dot) => hook(dot));
+        this._dressN = -1;
+        this._dressDots(box, dots);
+    }
+
+    _dressDots(box, slot) {
+        const live = box.get_children().filter(d => !d.destroying);
+        const n = live.length, few = n <= 4;
+        const size = few ? 6 : 5, gap = few ? 5 : 4, pill = few ? 18 : 16;
+        for (const dot of box.get_children()) {
+            if (!dot._dot)
+                continue;
+            if (!dot._mkVisuals) {
+                // full-size dots, faint when not current (GNOME shrinks them to 0.75 and 50 %)
+                dot._mkVisuals = true;
+                dot._updateVisuals = function () {
+                    this._dot.set({opacity: Math.round((0.45 + 0.55 * this.expansion) * 255), scale_x: 1, scale_y: 1});
+                };
+                dot._updateVisuals();
+            }
+            if (dot.width_multiplier !== pill / size)
+                dot.width_multiplier = pill / size;
+            if (dot.expansion > 0.5)
+                dot._dot.add_style_class_name('mk-ws-active');
+            else
+                dot._dot.remove_style_class_name('mk-ws-active');
+        }
+        if (n === this._dressN)
+            return;                          // (sizes only change with the number of desktops)
+        this._dressN = n;
+        box.style = `spacing: ${gap}px;`;
+        for (const dot of box.get_children())
+            dot._dot?.set_style(`min-width: ${size}px; min-height: ${size}px; width: ${size}px; height: ${size}px; ` +
+                `border-radius: ${size / 2}px;`);           // (GNOME's theme sets a min-width of 0.5455 em)
+        const width = Math.max(1, n - 1) * size + pill + Math.max(0, n - 1) * gap + 16;
+        if (this._dotsWidth === undefined || !St.Settings.get().enable_animations) {
+            slot.set_width(width);
+        } else {
+            slot.remove_transition('width');
+            slot.ease({width, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        }
+        this._dotsWidth = width;
     }
 
     _untintDots() {
-        if (!this._dotsBox)
+        const box = this._dotsBox;
+        if (!box)
             return;
+        this._dotsBox = null;
+        this._dotsWidth = undefined;
         try {
-            this._dotsBox.disconnect(this._dotsId);
-            for (const dot of this._dotsBox.get_children()) {
-                if (dot._mkTint)
-                    dot.disconnect(dot._mkTint);
-                delete dot._mkTint;
+            delete box._updateExpansion;     // (the class's own again)
+            box.style = null;
+            for (const dot of box.get_children()) {
+                if (dot._mkVisuals) {
+                    delete dot._updateVisuals;
+                    delete dot._mkVisuals;
+                    dot._updateVisuals();
+                }
+                dot._dot?.set_style(null);
                 dot._dot?.remove_style_class_name('mk-ws-active');
             }
-        } catch {}
-        this._dotsBox = null;
+            box._updateExpansion();
+        } catch {}                           // (already gone with the bar)
     }
 
     _unanchor(dots) {
@@ -658,7 +711,7 @@ export class Panel {
             .filter(a => a && a.get_parent() === left);
         order.forEach((actor, i) => left.set_child_at_index(actor, i));
         this._divider.visible = true;
-        // the dots sit in a fixed 64 px anchor: the active dot morphs inside it, the
+        // the dots sit in a slot of their own size (64 px for WACK's button): the active dot morphs inside it, the
         // capsule never moves (it shifted while swiping between workspaces)
         const dots = dotsItem;
         if (this._dots && this._dots !== dots)
@@ -667,8 +720,8 @@ export class Panel {
         if (dots && !dots.has_style_class_name('mk-ws-anchor')) {
             dots.add_style_class_name('mk-ws-anchor');
             dots.clip_to_allocation = true;
+            dots.set_width(64);                 // (a panel button sizes itself; GNOME's dots resize it to fit)
             this._tintDots(dots);
-            dots.set_width(64);                 // (a panel button sizes itself, CSS min-width aside)
         }
     }
 

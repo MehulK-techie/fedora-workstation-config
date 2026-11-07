@@ -135,7 +135,7 @@
 /* Left island: Finder, the divider before the app (panel.js); the tray chevron */
 .mk-island-divider { width: 1px; height: 16px; margin: 0 2px; background-color: rgba(255, 255, 255, 0.18); }
 .mk-tray-fold { padding: 0 6px; }
-#panel.mk-islands #panelLeft { margin-left: 4px; padding-left: 4px; spacing: 4px; }   /* snug to the bezel (after the islands' margin, so it wins) */
+#panel.mk-islands #panelLeft { margin-left: 0; padding-left: 6px; spacing: 6px; }   /* snug to the bezel (after the islands' margin, so it wins) */
 #panel.mk-islands #panelRight { margin-right: 4px; spacing: 2px; }
 #panel.mk-islands #panelRight .panel-button { padding: 0 7px; }
 
@@ -210,13 +210,16 @@
   transition-duration: 900ms; }
 #panel .power-status.mk-batt-low.mk-batt-dim { border-color: rgba(239, 68, 68, 0.2); }
 /* the workspace dots: a fixed anchor (panel.js _orderLeft) */
-#panel .panel-button.mk-ws-anchor { min-width: 64px; max-width: 64px; height: 26px; padding: 0;
+#panel .panel-button.mk-ws-anchor { height: 26px; padding: 0;
   -natural-hpadding: 0; -minimum-hpadding: 0; }
 
 /* the workspace dots, inside their fixed anchor: 6 px, faint; the active one a pill in the accent */
-#panel .mk-ws-anchor .workspace-dot { width: 6px; height: 6px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.9); }
+#panel .mk-ws-anchor .workspace-dot { background-color: rgba(255, 255, 255, 0.9); }   /* (sizes: panel.js) */
 #panel .mk-ws-anchor .workspace-dot.mk-ws-active { background-color: -st-accent-color; }
 /* the logo button (panel.js LogoButton) */
-#panel .panel-button.mk-logo-button { padding: 0 8px 0 6px; -natural-hpadding: 0; -minimum-hpadding: 0; }
+#panel .panel-button.mk-logo-button { padding: 3px 8px; border-radius: 8px; -natural-hpadding: 0; -minimum-hpadding: 0;
+  transition-duration: 100ms; }
+#panel .panel-button.mk-logo-button:hover, #panel .panel-button.mk-logo-button:active,
+#panel .panel-button.mk-logo-button:checked { background-color: rgba(255, 255, 255, 0.08); box-shadow: none; }
 .mk-logo-box { spacing: 6px; }
 .mk-logo-label { font-weight: 800; }

@@ -6,37 +6,44 @@
       <summary>Live wallpaper</summary>
       <description>A video (mp4, webm, mkv...) shown as the desktop background, looping and muted; empty: the still wallpaper. mk-live-wallpaper set FILE / off.</description>
     </key>
-    <key name="show-logo-button" type="b">
+    <key name="finder-show-button" type="b">
       <default>true</default>
-      <summary>Logo button</summary>
+      <summary>Finder button</summary>
       <description>A logo at the top bar's far left with the system menu (About This System, Settings, App Store, Extensions, Sleep, Restart, Shut Down). Stands aside while WACK Shell shows its own logo.</description>
     </key>
-    <key name="logo-icon-name" type="s">
+    <key name="finder-logo-mode" type="s">
       <choices>
         <choice value="fedora"/>
+        <choice value="mk"/>
         <choice value="apple"/>
         <choice value="distro"/>
         <choice value="custom"/>
         <choice value="none"/>
       </choices>
       <default>'fedora'</default>
-      <summary>Logo</summary>
-      <description>fedora: Fedora's emblem, in monochrome. apple: an apple. distro: your distribution's own logo (os-release). custom: the image in logo-custom-path. none: the label only.</description>
+      <summary>Finder logo</summary>
+      <description>fedora: Fedora's emblem, in monochrome. mk: the MK emblem. apple: an apple. distro: your distribution's own logo (os-release). custom: the image in finder-custom-logo-path. none: the label only.</description>
     </key>
-    <key name="logo-custom-path" type="s">
+    <key name="finder-custom-logo-path" type="s">
       <default>''</default>
-      <summary>Custom logo image</summary>
-      <description>An SVG or PNG, used when logo-icon-name is custom.</description>
+      <summary>Finder custom logo</summary>
+      <description>An SVG or PNG (for example ~/.config/mk/logo.svg), used when finder-logo-mode is custom.</description>
     </key>
-    <key name="show-logo-label" type="b">
+    <key name="finder-icon-size" type="i">
+      <range min="12" max="22"/>
+      <default>16</default>
+      <summary>Finder logo size (px)</summary>
+      <description>The logo's size in the top bar.</description>
+    </key>
+    <key name="finder-show-label" type="b">
       <default>true</default>
-      <summary>Logo label</summary>
-      <description>Text beside the logo (logo-label-text).</description>
+      <summary>Finder label</summary>
+      <description>Text beside the logo (finder-label-text).</description>
     </key>
-    <key name="logo-label-text" type="s">
+    <key name="finder-label-text" type="s">
       <default>'Finder'</default>
-      <summary>Logo label text</summary>
-      <description>Finder, MK, your name... Empty: the logo only.</description>
+      <summary>Finder label text</summary>
+      <description>Finder, MK, Workspace, your name... Empty: the logo only.</description>
     </key>
     <key name="calendar-quick-add" type="as">
       <default><![CDATA[['<Super><Alt>a']]]></default>

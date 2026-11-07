@@ -1,8 +1,9 @@
 // A small pill in the top bar with the Companion's to-do list: a checklist
 // icon and "3 Left" (every unfinished task), then a calendar glyph and "2"
 // when some are for today (pinned, or a reminder due today or overdue). Tick
-// off the last one and it reads "All Done" for half an hour, then leaves the
-// bar (with nothing to do it isn't there at all). It follows
+// off the last one and it reads "All Done" in green for 4.5 s, then fades out
+// and leaves the bar (with nothing to do it isn't there at all; a new task
+// brings it straight back). It follows
 // companion.json live. Click: a quick preview of every open task, those with
 // a time first in time order with a countdown ("in 25 mins", "Tomorrow 9:00
 // AM"), a round checkmark on each (tap: struck through, fades away, done),
@@ -147,18 +148,33 @@ export class TaskBadge {
         if (!this._button)
             return;
         const {remaining, scheduled} = taskMetrics();
-        // the last one just ticked off: "All Done" for half an hour, then gone
+        const pill = this._button.container;
+        // the last one just ticked off: "All Done" in green for 4.5 s, then it fades out
+        // (400 ms) and leaves the bar; a new task brings it straight back
         if (remaining === 0 && this._lastRemaining > 0) {
-            this._allDoneUntil = Date.now() + 30 * 60 * 1000;
+            this._allDone = true;
             this._clearAllDone();
-            this._allDoneTimer = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 30 * 60 + 1, () => {
+            this._allDoneTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 4500, () => {
                 this._allDoneTimer = 0;
-                this._refresh();
+                pill.ease({opacity: 0, duration: 400, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                    onStopped: finished => {
+                        if (!finished || !this._button)
+                            return;
+                        this._allDone = false;
+                        this._refresh();
+                    }});
                 return GLib.SOURCE_REMOVE;
             });
+        } else if (remaining > 0 && this._allDone) {
+            this._allDone = false;
+            this._clearAllDone();
+        }
+        if (remaining > 0) {
+            pill.remove_transition('opacity');
+            pill.opacity = 255;
         }
         this._lastRemaining = remaining;
-        const allDone = remaining === 0 && Date.now() < (this._allDoneUntil ?? 0);
+        const allDone = remaining === 0 && this._allDone;
         this._left.text = allDone ? 'All Done' : `${remaining} Left`;
         this._today.text = `${scheduled}`;
         this._todayIcon.visible = this._today.visible = scheduled > 0;
@@ -168,7 +184,9 @@ export class TaskBadge {
             this._button.add_style_class_name('mk-task-done');
         else
             this._button.remove_style_class_name('mk-task-done');
-        this._button.container.visible = !this._locked && (remaining > 0 || allDone) && badgeOn();
+        pill.visible = !this._locked && (remaining > 0 || allDone) && badgeOn();
+        if (pill.visible && !allDone)
+            pill.opacity = 255;
         if (!this._menu.isOpen)
             this._fillAgenda();       // (ready before it opens)
     }

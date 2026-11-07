@@ -22,7 +22,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import { PANEL_GLASS, addWallpaperGlass, blurAllowed } from './blur.js';
+import { PANEL_GLASS, addWallpaperGlass, blurAllowed, desktopCopy } from './blur.js';
 import { partRect, place } from './tiling.js';
 import * as Actions from './appActions.js';
 import { watch } from './conflicts.js';
@@ -149,7 +149,7 @@ class ActiveApp {
 class LogoButton {
     constructor(settings) {
         this._settings = settings;
-        this.button = new PanelMenu.Button(0.0, 'System menu', false);
+        this.button = new PanelMenu.Button(0.5, 'System menu', false);   // (centred under it, 6 px from the edge)
         this.button.add_style_class_name('mk-logo-button');
         const box = new St.BoxLayout({style_class: 'mk-logo-box', y_align: Clutter.ActorAlign.CENTER});
         // (the files are symbolic, drawn in the bar's text colour)
@@ -231,6 +231,67 @@ class LogoButton {
     destroy() {
         this._ids.forEach(id => this._settings.disconnect(id));
         this.button.destroy();
+    }
+}
+
+// The top bar's menus as floating glass (Finder, Places, the app's menu, and what
+// other extensions add): 8 px below the bar, at least 6 px from the screen's edge,
+// centred under their button where there's room, frosted over what's behind while
+// open, rounded items with a faint hover (stylesheet: .mk-glass-menu). Quick
+// Settings, the calendar and the media tile have glass of their own.
+const MENU_GLASS = {sigma: 48, brightness: 0.6};
+const OWN_GLASS = new Set(['quickSettings', 'dateMenu', 'mk-media']);
+
+class GlassMenus {
+    constructor() {
+        this._done = new Map();          // menu -> its open-state id
+        this._ids = [Main.panel._leftBox, Main.panel._centerBox, Main.panel._rightBox].map(box =>
+            [box, box.connect('child-added', () => this._queue())]);
+        this._apply();
+    }
+
+    _queue() {
+        if (this._idle)
+            return;
+        this._idle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._idle = 0;
+            this._apply();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _apply() {
+        for (const [name, item] of Object.entries(Main.panel.statusArea)) {
+            const menu = item?.menu;
+            if (OWN_GLASS.has(name) || !menu?.box || !menu.actor || this._done.has(menu))
+                continue;
+            menu.box.add_style_class_name('mk-glass-menu');
+            menu.actor.add_style_class_name('mk-glass-pointer');
+            if (name === 'places-menu' || name === 'mk-logo')
+                menu._arrowAlignment = 0.5;
+            const id = menu.connect('open-state-changed', (_m, open) => {
+                menu._mkUnglass?.();
+                menu._mkUnglass = open ? addWallpaperGlass(menu.box, menu.actor, MENU_GLASS, 16, desktopCopy) : null;
+            });
+            this._done.set(menu, id);
+        }
+    }
+
+    destroy() {
+        if (this._idle)
+            GLib.source_remove(this._idle);
+        for (const [box, id] of this._ids)
+            box.disconnect(id);
+        for (const [menu, id] of this._done) {
+            try {
+                menu.disconnect(id);
+                menu._mkUnglass?.();
+                delete menu._mkUnglass;
+                menu.box.remove_style_class_name('mk-glass-menu');
+                menu.actor.remove_style_class_name('mk-glass-pointer');
+            } catch {}                   // (its button is already gone)
+        }
+        this._done.clear();
     }
 }
 
@@ -572,6 +633,7 @@ export class Panel {
         // Places switched on): put the island back in order
         this._leftId = Main.panel._leftBox.connect('child-added', () => this._queueOrder());
         this._quiet = new QuietIndicators();
+        this._glassMenus = new GlassMenus();
         this._battery = new BatteryTint();
         if (this._settings.get_boolean('autohide-top-bar')) {
             try {
@@ -740,6 +802,8 @@ export class Panel {
         this._tray?.destroy();
         this._quiet?.destroy();
         this._battery?.destroy();
+        this._glassMenus?.destroy();
+        this._glassMenus = null;
         this._logo?.destroy();
         this._tray = this._quiet = this._battery = this._logo = null;
         Main.panel.remove_style_class_name('mk-islands');

@@ -38,7 +38,12 @@ export class MediaKeys {
                     return;
                 }
                 const players = names.filter(n => n.startsWith(PREFIX));
-                const send = name => bus.call(name, PATH, PLAYER, method, null, null, Gio.DBusCallFlags.NONE, 1000, null, null);
+                const send = name => {
+            // (mk-indicator's media tile reads this: the title change that follows is a skip,
+            // shown at once, not a browser's hover preview)
+            Main.panel._mkMediaSkipAt = GLib.get_monotonic_time() / 1000;
+            bus.call(name, PATH, PLAYER, method, null, null, Gio.DBusCallFlags.NONE, 1000, null, null);
+        };
                 if (players.includes(`${PREFIX}playerctld`)) {
                     send(`${PREFIX}playerctld`);
                     return;

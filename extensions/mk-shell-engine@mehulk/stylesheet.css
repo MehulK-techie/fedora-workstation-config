@@ -223,3 +223,12 @@
 #panel .panel-button.mk-logo-button:checked { background-color: rgba(255, 255, 255, 0.08); box-shadow: none; }
 .mk-logo-box { spacing: 6px; }
 .mk-logo-label { font-weight: 800; }
+
+/* the top bar's menus as floating glass (panel.js GlassMenus): 8 px below the bar, 6 px from the edge */
+.popup-menu-boxpointer.mk-glass-pointer { -arrow-rise: 6px; -boxpointer-gap: 8px; }
+.popup-menu-content.mk-glass-menu { border-radius: 16px; padding: 6px 0; background-color: rgba(16, 18, 24, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: 0 16px 40px 0 rgba(0, 0, 0, 0.65); }
+.mk-glass-menu .popup-menu-item { padding: 8px 14px; margin: 2px 6px; border-radius: 10px; transition-duration: 80ms; }
+.mk-glass-menu .popup-menu-item:hover, .mk-glass-menu .popup-menu-item:focus,
+.mk-glass-menu .popup-menu-item.selected { background-color: rgba(255, 255, 255, 0.08); }
+.mk-glass-menu .popup-separator-menu-item { margin: 4px 14px; }

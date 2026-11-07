@@ -4,7 +4,12 @@
 // glow in the art's own colour, title and artist, a seek bar, controls, and
 // More: album, player, which speakers or headphones to use, Open player.
 // The tile fades out when playback stops (or stays paused for 20 s, or the
-// player quits) and fades back in when it starts. With no album art (many
+// player quits) and fades back in when it starts. The record turns once every
+// 3.2 s while it plays; on pause it coasts on 45 degrees and stops (like a
+// turntable), on play it spins back up in 0.45 s, and when the player goes it
+// turns back upright. The song-changed pill never shows over a full-screen
+// window (a video's own controls). A skip in a browser shows the new song at
+// once (Next / Previous, from the media keys or the tile). With no album art (many
 // browser videos) it shows a YouTube page's thumbnail, else the player's icon.
 //
 // config/media.conf, yours in ~/.config/mk-workstation/media.conf:
@@ -72,6 +77,8 @@ function youtubeThumb(url) {
 }
 
 const BROWSER_STEADY_MS = 4000;
+const SKIP_GRACE_MS = 6000;      // a title change this soon after a skip is the skip, not a preview
+const SPIN_MS = 3200, SPIN_UP_MS = 450, COAST_MS = 600, COAST_DEG = 45;
 // A paused player stays on the tile this long, then the tile fades away (a
 // tab or app left paused in the background isn't "playing" any more).
 const PAUSED_LINGER_MS = 20000;
@@ -154,9 +161,16 @@ export class MediaTile {
         // The panel can go before we're disabled (logout): stop listening then.
         this._button.connect('destroy', () => this._teardown());
 
-        this._spin = new Clutter.Timeline({actor: this._disc, duration: 4000, repeat_count: -1});
+        this._spin = new Clutter.Timeline({actor: this._disc, duration: SPIN_MS, repeat_count: -1});
+        this._spinBase = 0;
+        this._spinState = 'stopped';
         this._spin.connect('new-frame', (t, ms) => {
-            this._disc.rotation_angle_z = (ms / 4000) * 360;
+            this._disc.rotation_angle_z = this._spinBase + (ms / SPIN_MS) * 360;
+        });
+        // the song-changed pill: never over a full-screen window
+        this._fullId = global.display.connect('in-fullscreen-changed', () => {
+            if (this._fullscreen())
+                this._dropPill();
         });
 
         this._nameId = this._bus.signal_subscribe('org.freedesktop.DBus', 'org.freedesktop.DBus',
@@ -181,8 +195,9 @@ export class MediaTile {
                 }
                 this._choose();
             });
+        // (browsers send PropertiesChanged in bursts: one look 40 ms after the last of them)
         this._propsId = this._bus.signal_subscribe(null, 'org.freedesktop.DBus.Properties', 'PropertiesChanged',
-            PATH, null, Gio.DBusSignalFlags.NONE, () => this._choose());
+            PATH, null, Gio.DBusSignalFlags.NONE, () => this._queueChoose());
         this._bus.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListNames',
             null, null, Gio.DBusCallFlags.NONE, -1, null, (c, res) => {
                 try {
@@ -264,6 +279,16 @@ export class MediaTile {
     // same title has played for BROWSER_STEADY_MS (not a hover preview), and
     // a paused browser only if it's the one already shown. PLAYERS=spotify
     // leaves only Spotify.
+    _queueChoose() {
+        if (this._chooseId)
+            GLib.source_remove(this._chooseId);
+        this._chooseId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 40, () => {
+            this._chooseId = 0;
+            this._choose();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
     _choose() {
         if (!this._button)
             return;
@@ -302,8 +327,12 @@ export class MediaTile {
         }
         const browser = n => BROWSERS.test(n.slice(PREFIX.length));
         const title = n => info[n].Metadata?.['xesam:title'] ?? '';
+        // a skip (Next / Previous, from the tile or the media keys: MK Shell Engine marks
+        // Main.panel._mkMediaSkipAt) changes the title too: the playing browser keeps the
+        // tile, the new song shows at once, instead of waiting out a preview's 4 s
+        const skipped = now - Math.max(this._skipAt ?? 0, Main.panel._mkMediaSkipAt ?? 0) < SKIP_GRACE_MS;
         const steady = n => !browser(n) || now - this._seen.get(n).since >= BROWSER_STEADY_MS ||
-            (n === this._current && title(n) === this._meta.title);
+            (n === this._current && (title(n) === this._meta.title || skipped));
         const playing = names.filter(n => info[n].PlaybackStatus === 'Playing' && steady(n));
         const pausedFor = n => now - this._seen.get(n).since;
         const paused = names.filter(n => info[n].PlaybackStatus === 'Paused' && pausedFor(n) < PAUSED_LINGER_MS &&
@@ -345,7 +374,71 @@ export class MediaTile {
     _noPlayer() {
         this._current = null;
         this._showTile(false);
+        this._spinStop();
+    }
+
+    // ----- the record: a turntable's inertia
+    _spinPlay() {
+        if (this._spinState === 'playing')
+            return;
+        this._spinState = 'playing';
+        const disc = this._disc, from = disc.rotation_angle_z % 360;
+        disc.remove_transition('rotation-angle-z');
+        const run = angle => {
+            this._spinBase = angle % 360;
+            this._spin.rewind();
+            this._spin.start();
+        };
+        if (!St.Settings.get().enable_animations) {
+            run(from);
+            return;
+        }
+        // speeding up from rest (ease-in): over 0.45 s it covers half the distance a full-speed
+        // turn would, and ends at exactly full speed, so the hand-over to the timeline is seamless
+        const ramp = 360 * SPIN_UP_MS / SPIN_MS / 2;
+        disc.rotation_angle_z = from;
+        disc.ease({rotation_angle_z: from + ramp, duration: SPIN_UP_MS, mode: Clutter.AnimationMode.EASE_IN_QUAD,
+            onStopped: finished => finished && this._spinState === 'playing' && run(disc.rotation_angle_z)});
+    }
+
+    _spinPause() {
+        const was = this._spinState;
+        this._spinState = 'paused';
+        if (was !== 'playing')
+            return;
+        const disc = this._disc;
         this._spin.stop();
+        disc.remove_transition('rotation-angle-z');
+        if (!St.Settings.get().enable_animations)
+            return;
+        // the platter coasts on: another 45 degrees, slowing to a stop
+        disc.ease({rotation_angle_z: disc.rotation_angle_z + COAST_DEG, duration: COAST_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+    }
+
+    _spinStop() {
+        this._spinState = 'stopped';
+        this._spin.stop();
+        const disc = this._disc;
+        disc.remove_transition('rotation-angle-z');
+        const angle = disc.rotation_angle_z % 360;
+        disc.rotation_angle_z = angle;
+        // back to upright, the short way round
+        disc.ease({rotation_angle_z: angle > 180 ? 360 : 0, duration: 500, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+    }
+
+    _fullscreen() {
+        const m = Main.layoutManager.primaryIndex;
+        return (m >= 0 && global.display.get_monitor_in_fullscreen(m)) ||
+            Boolean(global.display.focus_window?.is_fullscreen());
+    }
+
+    _dropPill() {
+        if (this._pillHideId)
+            GLib.source_remove(this._pillHideId);
+        this._pillHideId = 0;
+        this._pill?.remove_all_transitions();
+        this._pill?.hide();
     }
 
     _getAll(name, cb) {
@@ -398,9 +491,9 @@ export class MediaTile {
             ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
         this._ticker.text = title;
         if (this._status === 'Playing')
-            this._spin.start();
+            this._spinPlay();
         else
-            this._spin.stop();
+            this._spinPause();
         this._loadArt(this._meta.art);
     }
 
@@ -571,7 +664,7 @@ export class MediaTile {
     // The song changed: a pill under the top bar (art, title, artist) fades
     // in, stays a moment and fades out. One at a time; never on the lock screen.
     _showPill(title, artist) {
-        if (this._conf.TRACK_PILL === 'off' || this._locked)
+        if (this._conf.TRACK_PILL === 'off' || this._locked || this._fullscreen())
             return;
         if (!this._pill) {
             this._pill = new St.BoxLayout({style_class: 'mk-track-pill', opacity: 0, reactive: false});
@@ -652,6 +745,8 @@ export class MediaTile {
         if (!this._current || this._locked)
             return;
         const name = this._current;
+        if (method === 'Next' || method === 'Previous')
+            this._skipAt = GLib.get_monotonic_time() / 1000;
         // Show the new state at once; the player's own update follows.
         if (method === 'PlayPause') {
             this._playButton.child.icon_name = this._status === 'Playing'
@@ -811,7 +906,10 @@ export class MediaTile {
                 this._bus.signal_unsubscribe(this[id]);
             this[id] = 0;
         }
-        for (const id of ['_posId', '_recheckId', '_lingerId', '_raiseCheckId', '_pillHideId', '_goneId']) {
+        if (this._fullId)
+            global.display.disconnect(this._fullId);
+        this._fullId = 0;
+        for (const id of ['_posId', '_recheckId', '_lingerId', '_raiseCheckId', '_pillHideId', '_goneId', '_chooseId']) {
             if (this[id])
                 GLib.source_remove(this[id]);
             this[id] = 0;

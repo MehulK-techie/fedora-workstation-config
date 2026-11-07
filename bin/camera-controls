@@ -3,9 +3,10 @@
 
   camera-controls            open the booth (app grid: Photo Booth, Super+C)
 
-Camera page: a live, mirrored preview; looks (Polaroid, Thermal, Pop Art,
-Noir, Comic, Neon...) applied as you watch, sorted into Vintage, Artistic and
-Fun with a search box; Adjust opens the webcam's own
+Camera page: a live, mirrored preview; looks applied as you watch, in a strip
+of live thumbnails sorted into Distort / Fun (fish-eye bulge, pinch, twirl,
+stretch & squeeze, kaleidoscope...), Vintage Film and Artistic, with a search
+box; Open Photo decorates a picture from disk instead of the camera; Adjust opens the webcam's own
 hardware controls (brightness, contrast, saturation, gamma, sharpness, white
 balance) with Reset to hardware defaults. Space or the shutter button takes
 the photo, after an optional 3-2-1 countdown.
@@ -13,9 +14,10 @@ the photo, after an optional 3-2-1 countdown.
 G shows nine looks at once, live (3 x 3); click one to use it.
 
 Decorate page (the camera and its light are off here; Retake turns them
-back on): type text or pick a vector badge or stamp (MK crest, Stick Havoc
-shield, 1st place crown; GG, CLUTCH, MVP, SQUAD), then click the photo to
-place it. A placed layer can be selected and moved, resized from its
+back on): pick a look for the photo, type text or pick a vector badge or
+stamp (MK crest, MK WORKSTATION plate, Stick Havoc shield, 1st place crown;
+GG, CLUTCH, MVP, SQUAD) or an emoji (Faces, Gestures, Reactions, Symbols),
+then click the photo, or the frame's border and chin, to place it. A placed layer can be selected and moved, resized from its
 corners and turned from the knob on top (the angle shows as you turn);
 bring it forward or send it back, or delete it. With a Polaroid frame,
 write a caption on it; add a date stamp (90s digital, typewriter or
@@ -25,7 +27,9 @@ for big groups. Save PNG: ~/Pictures/MK Booth/, with an MK footer (switchable);
 Copy puts it on the clipboard.
 
 The looks come from lib/mkworkstation/photo.py; text is drawn with Pango and
-cairo, the badges and stamps by lib/mkworkstation/decals.py (vector, no emoji). Hardware controls use v4l2-ctl.
+cairo, the badges and stamps by lib/mkworkstation/decals.py (vector). An emoji
+is drawn upright on a canvas of its own and that canvas turned, so no angle
+clips its corners. Hardware controls use v4l2-ctl.
 """
 import datetime
 import glob
@@ -61,7 +65,7 @@ def _add_lib_path():
 
 
 _add_lib_path()
-from PIL import Image  # noqa: E402
+from PIL import Image, ImageOps  # noqa: E402
 
 from mkworkstation import decals, photo  # noqa: E402
 
@@ -71,14 +75,21 @@ PREVIEW_W = 640
 GRID_W = 240  # each of the nine looks: small enough for all nine at 24 fps
 # The looks tray's kinds (photo.py's names); a look missing here shows under All only.
 LOOK_CATEGORIES = {
-    "Vintage": ("polaroid", "instant", "portra", "film", "noir", "retro"),
+    "Distort / Fun": ("distort", "pinch", "twirl", "squeeze", "kaleido", "stretch", "mirror", "comic", "vhs",
+                      "pixel", "thermal"),
+    "Vintage Film": ("polaroid", "instant", "portra", "film", "noir", "retro"),
     "Artistic": ("cyberpunk", "popart", "flash", "vignette", "duotone", "neon", "hue", "glow"),
-    "Fun": ("distort", "comic", "vhs", "pixel", "stretch", "thermal", "mirror"),
 }
 # The 3 x 3 grid: one row per kind.
-GRID_ROWS = (("🎞️ Vintage", ("polaroid", "portra", "noir")),
-             ("🎨 Artistic", ("cyberpunk", "popart", "duotone")),
-             ("🤪 Fun", ("distort", "vhs", "pixel")))
+GRID_ROWS = (("Vintage", ("polaroid", "portra", "noir")),
+             ("Artistic", ("cyberpunk", "popart", "duotone")),
+             ("Distort", ("distort", "twirl", "kaleido")))
+# The emoji board in the sticker drawer, by kind.
+EMOJI = {"Faces": "😀😂🤣😍🥰😎🤩😜🤪😇🥳😏😴🤯🥺😭😡🤠👻🤖",
+         "Gestures": "👍👎👌✌️🤞🤘🤙👋🙌👏🙏💪🫶🤝✍️👀",
+         "Reactions": "🔥💯✨🎉🎊💥💫⭐🌟💖💔😱🙈🤡👑🏆",
+         "Symbols": "❤️🧡💛💚💙💜🖤🤍✅❌⚡☀️🌙🌈🎵🎈🍕🌸🦄"}
+THUMB_W = 112  # the looks strip's live thumbnails
 GRID_LOOKS = [key for _name, row in GRID_ROWS for key in row]
 STICKERS = "😀😂😍🥳😎🤩😜🥰🤪😇👻🤖👑🎉🎈🎂🌈⭐✨🔥💖💯👍✌️🙌🍕🍿🌸🦄🐶🐱"
 COLORS = [("White", (1, 1, 1)), ("Black", (0.08, 0.08, 0.1)), ("Pink", (1, 0.35, 0.65)),
@@ -99,6 +110,10 @@ CSS = b"""
 .mk-booth-shutter { min-width: 64px; min-height: 64px; border-radius: 32px; padding: 0;
                     background: #ff4757; color: white; border: 4px solid alpha(white, 0.85); }
 .mk-booth-sticker { font-size: 22px; padding: 2px 6px; min-width: 36px; }
+.mk-booth-look { padding: 4px; border-radius: 12px; }
+.mk-booth-look picture { border-radius: 8px; }
+.mk-booth-look label { font-size: 0.8em; font-weight: 600; }
+.mk-booth-look:checked { background: alpha(@accent_bg_color, 0.35); box-shadow: inset 0 0 0 2px @accent_color; }
 .mk-booth-photo { border-radius: 12px; }
 .mk-booth-cell-label { background: alpha(black, 0.55); color: white; border-radius: 99px; padding: 2px 10px;
                        font-weight: 700; font-size: 0.9em; }
@@ -220,8 +235,34 @@ def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=
         px = round(item["size"] * w)
         angle = item.get("angle", 0.0)
         if item["kind"] == "sticker":
-            tw, th = text_at(item["text"], item["x"] * w, item["y"] * h, px, (1, 1, 1), "Noto Color Emoji",
-                             outline=False, angle=angle)
+            # A colour emoji is a bitmap glyph, and cairo clips a turned bitmap glyph to its
+            # unturned box (the corners went missing). Draw it upright on a canvas of its own,
+            # big enough for any angle (w|cos| + h|sin| by w|sin| + h|cos|), then turn that.
+            layout = PangoCairo.create_layout(cr)
+            layout.set_font_description(Pango.FontDescription.from_string(f"Noto Color Emoji {max(6, px)}px"))
+            layout.set_text(item["text"], -1)
+            tw, th = layout.get_pixel_size()
+            a = math.radians(angle)
+            rw = math.ceil(tw * abs(math.cos(a)) + th * abs(math.sin(a))) + 4
+            rh = math.ceil(tw * abs(math.sin(a)) + th * abs(math.cos(a))) + 4
+            glyph = cairo.ImageSurface(cairo.FORMAT_ARGB32, tw + 4, th + 4)
+            gcr = cairo.Context(glyph)
+            glayout = PangoCairo.create_layout(gcr)
+            glayout.set_font_description(layout.get_font_description())
+            glayout.set_text(item["text"], -1)
+            gcr.move_to(2, 2)
+            PangoCairo.show_layout(gcr, glayout)
+            glyph.flush()
+            turned = cairo.ImageSurface(cairo.FORMAT_ARGB32, rw, rh)
+            tcr = cairo.Context(turned)
+            tcr.translate(rw / 2, rh / 2)
+            tcr.rotate(a)
+            tcr.set_source_surface(glyph, -(tw + 4) / 2, -(th + 4) / 2)
+            tcr.get_source().set_filter(cairo.FILTER_GOOD)
+            tcr.paint()
+            turned.flush()
+            cr.set_source_surface(turned, item["x"] * w - rw / 2, item["y"] * h - rh / 2)
+            cr.paint()
         elif item["kind"] == "decal":    # a vector badge or stamp: SIZE is its height, its width follows its shape
             th = px
             tw = round(px * decals.DECALS[item["key"]][2])
@@ -376,8 +417,18 @@ class Booth(Adw.ApplicationWindow):
         looks = Gtk.Box(spacing=8, margin_start=16, margin_end=16, margin_top=8, margin_bottom=16)
         group = None
         self.look_buttons = {}
+        self.look_thumbs = {}
         for key, label in [(None, "Original")] + [(k, f.label) for k, f in photo.FILTERS.items()]:
-            b = Gtk.ToggleButton(label=label, css_classes=["pill"], active=key is None)
+            # a card: the look live on a small copy of the camera, and its name
+            card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            thumb = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, width_request=THUMB_W,
+                                height_request=round(THUMB_W * 0.66), can_shrink=True)
+            card.append(thumb)
+            card.append(Gtk.Label(label=label, ellipsize=3, max_width_chars=14))
+            self.look_thumbs[key] = thumb
+            b = Gtk.ToggleButton(child=card, css_classes=["flat", "mk-booth-look"], active=key is None,
+                                 tooltip_text=label)
+            b.label_text = label
             if group:
                 b.set_group(group)
             group = group or b
@@ -405,7 +456,14 @@ class Booth(Adw.ApplicationWindow):
         folder = Gtk.Button(icon_name="folder-pictures-symbolic", tooltip_text="Your photos",
                             css_classes=["circular"], valign=Gtk.Align.CENTER)
         folder.connect("clicked", lambda *_: self._open_folder())
-        bottom.set_end_widget(folder)
+        open_photo = Gtk.Button(child=Adw.ButtonContent(icon_name="document-open-symbolic", label="Open Photo"),
+                                css_classes=["pill"], valign=Gtk.Align.CENTER,
+                                tooltip_text="Decorate a picture from disk: looks, frames, light leaks, stickers")
+        open_photo.connect("clicked", lambda *_: self.import_photo())
+        right = Gtk.Box(spacing=12)
+        right.append(open_photo)
+        right.append(folder)
+        bottom.set_end_widget(right)
 
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         page.append(top)
@@ -418,7 +476,7 @@ class Booth(Adw.ApplicationWindow):
         query = self.look_search.get_text().strip().lower()
         for key, b in self.look_buttons.items():
             in_cat = key is None or self.look_cat == "All" or key in LOOK_CATEGORIES.get(self.look_cat, ())
-            b.set_visible(in_cat and (not query or query in b.get_label().lower()))
+            b.set_visible(in_cat and (not query or query in b.label_text.lower()))
 
     def _adjust_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, width_request=280,
@@ -539,6 +597,14 @@ class Booth(Adw.ApplicationWindow):
             return GLib.SOURCE_REMOVE
         small = img.resize((PREVIEW_W, round(PREVIEW_W * img.height / img.width)), Image.Resampling.BILINEAR)
         self.preview.set_paintable(to_texture(photo.apply(small, self.look) if self.look else small))
+        if now - getattr(self, "last_thumbs", 0) > 0.5:     # the looks strip, twice a second
+            self.last_thumbs = now
+            tiny = img.resize((THUMB_W, round(THUMB_W * img.height / img.width)), Image.Resampling.BILINEAR)
+            for key, pic in self.look_thumbs.items():
+                if not self.look_buttons[key].get_visible():
+                    continue
+                look = photo.polaroid_photo(tiny) if key == "polaroid" else photo.apply(tiny, key) if key else tiny
+                pic.set_paintable(to_texture(look))
         return GLib.SOURCE_REMOVE
 
     def _set_grid(self, on):
@@ -583,14 +649,17 @@ class Booth(Adw.ApplicationWindow):
             self.flash.set_opacity(max(0.0, 1 - k))
             return k < 1
         self.flash.add_tick_callback(fade)
-        if self.look == "polaroid":
-            # The look without its frame: the frame (with room for a caption)
-            # is added on the decorate page, where it can be switched off.
-            self.shot = photo.polaroid_photo(img)
-            self.frame_on = True
-        else:
-            self.shot = photo.apply(img, self.look) if self.look else img
-            self.frame_on = False
+        self._begin_decorating(img, self.look)
+
+    def _begin_decorating(self, img, look):
+        """The decorate page for IMG (straight from the camera, or opened from
+        disk), with LOOK on it (the Look menu there changes it)."""
+        self.original = img
+        self._set_look(look, compose=False)
+        self.frame_on = look == "polaroid"
+        self._syncing_look = True
+        self.edit_look.set_selected(self.look_keys.index(look))
+        self._syncing_look = False
         self.crop_offset = (0.5, 0.5)
         self.items = []
         self.selected = None
@@ -605,6 +674,50 @@ class Booth(Adw.ApplicationWindow):
         self._stop_camera()
         with self.frame_lock:
             self.frame = None
+
+    def _set_look(self, look, compose=True):
+        """The photo on the decorate page with LOOK (None: as taken). The Polaroid
+        look is the film without its card: the card is the frame, switched on."""
+        img = self.original
+        self.shot = photo.polaroid_photo(img) if look == "polaroid" else photo.apply(img, look) if look else img
+        if compose:
+            if look == "polaroid" and not self.frame_on:
+                self.frame_switch.set_active(True)
+            self._compose()
+
+    def import_photo(self):
+        """Open Photo: a PNG / JPEG / WebP from disk, onto the decorate page."""
+        dialog = Gtk.FileDialog(title="Open a photo to decorate")
+        filt = Gtk.FileFilter(name="Pictures")
+        for mime in ("image/png", "image/jpeg", "image/webp", "image/bmp", "image/tiff"):
+            filt.add_mime_type(mime)
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(filt)
+        dialog.set_filters(filters)
+        pictures = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES)
+        if pictures:
+            dialog.set_initial_folder(Gio.File.new_for_path(pictures))
+
+        def done(d, res):
+            try:
+                file = d.open_finish(res)
+            except GLib.Error:
+                return                      # cancelled
+            self.open_path(file.get_path())
+        dialog.open(self, None, done)
+
+    def open_path(self, path):
+        try:
+            img = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+        except (OSError, ValueError) as e:
+            self.toast.add_toast(Adw.Toast(title=f"Couldn't open it: {e}", timeout=4))
+            return
+        img.thumbnail((2400, 2400))
+        self._stop_camera()
+        with self.frame_lock:
+            self.frame = None
+        self._begin_decorating(img, None)
+        self.taken_at = time.localtime(os.path.getmtime(path))      # (a date stamp shows when it was taken)
 
     def _develop(self):
         """The print develops: the slate over it clears over 3 s, slowly at
@@ -644,8 +757,17 @@ class Booth(Adw.ApplicationWindow):
 
         tools = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, width_request=320,
                         margin_start=16, margin_end=16, margin_top=12, margin_bottom=16)
-        tools.append(Gtk.Label(label="Add text or a stamp, then click the photo", css_classes=["heading"],
-                               xalign=0, wrap=True))
+        look_row = Gtk.Box(spacing=8)
+        look_row.append(Gtk.Label(label="Look", xalign=0, hexpand=True, css_classes=["heading"]))
+        self.look_keys = [None] + list(photo.FILTERS)
+        self.edit_look = Gtk.DropDown.new_from_strings(["Original"] + [f.label for f in photo.FILTERS.values()])
+        self.edit_look.set_tooltip_text("The look on this photo: change it as often as you like")
+        self.edit_look.connect("notify::selected", lambda dd, _p: getattr(self, "_syncing_look", False) or
+                               self._set_look(self.look_keys[dd.get_selected()]))
+        look_row.append(self.edit_look)
+        tools.append(look_row)
+        tools.append(Gtk.Label(label="Add text, a stamp or an emoji, then click the photo (or its frame)",
+                               css_classes=["heading"], xalign=0, wrap=True))
         self.text_entry = Gtk.Entry(placeholder_text="Your text")
         tools.append(self.text_entry)
         colours = Gtk.Box(spacing=6)
@@ -681,12 +803,16 @@ class Booth(Adw.ApplicationWindow):
         self.shadow.connect("notify::active", lambda sw, _p: self._style_selected("shadow", sw.get_active()))
         size_row.append(self.shadow)
         tools.append(size_row)
-        # The decal tray: vector badges and stamps (no emoji), drawn live by decals.py
+        # The sticker drawer: vector badges, stamps (decals.py) and an emoji board, as tabs
         self.sticker = None
-        for group, title in (("badges", "Badges & crests"), ("stamps", "Stamps")):
-            tools.append(Gtk.Label(label=title, css_classes=["caption", "dim-label"], xalign=0))
+        self.emoji = None
+        drawer = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, vhomogeneous=False)
+        tools.append(Gtk.StackSwitcher(stack=drawer, halign=Gtk.Align.START))
+        tools.append(drawer)
+        for group, title in (("badges", "Badges"), ("stamps", "Stamps")):
             flow = Gtk.FlowBox(max_children_per_line=4, selection_mode=Gtk.SelectionMode.NONE, column_spacing=4,
                                row_spacing=4)
+            drawer.add_titled(flow, group, title)
             for key, (label, g, aspect, _fn) in decals.DECALS.items():
                 if g != group:
                     continue
@@ -695,7 +821,19 @@ class Booth(Adw.ApplicationWindow):
                 b = Gtk.Button(child=area, tooltip_text=label, css_classes=["flat"])
                 b.connect("clicked", lambda _b, k=key: self._pick_decal(k))
                 flow.append(b)
-            tools.append(flow)
+        emoji_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        kinds = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, vhomogeneous=False)
+        emoji_page.append(Gtk.StackSwitcher(stack=kinds, halign=Gtk.Align.START, css_classes=["caption"]))
+        emoji_page.append(kinds)
+        for kind, chars in EMOJI.items():
+            flow = Gtk.FlowBox(max_children_per_line=7, selection_mode=Gtk.SelectionMode.NONE, column_spacing=2,
+                               row_spacing=2)
+            for ch in self._split_emoji(chars):
+                b = Gtk.Button(label=ch, css_classes=["flat", "mk-booth-sticker"], tooltip_text="Stamp this emoji")
+                b.connect("clicked", lambda _b, c=ch: self._pick_emoji(c))
+                flow.append(b)
+            kinds.add_titled(flow, kind.lower(), kind)
+        drawer.add_titled(emoji_page, "emoji", "Emoji")
         layer = Gtk.Box(spacing=6, css_classes=["linked"])
         for icon, tip, cb in (("go-up-symbolic", "Bring forward", lambda: self._restack(1)),
                               ("go-down-symbolic", "Send backward", lambda: self._restack(-1)),
@@ -809,8 +947,13 @@ class Booth(Adw.ApplicationWindow):
                 out.append(ch)
         return out
 
+    def _pick_emoji(self, ch):
+        self.emoji, self.sticker = ch, None
+        self.text_entry.set_text("")
+        self.toast.add_toast(Adw.Toast(title=f"{ch} picked: click the photo (or its frame) to stamp it", timeout=2))
+
     def _pick_decal(self, key):
-        self.sticker = key
+        self.sticker, self.emoji = key, None
         self.text_entry.set_text("")
         self.toast.add_toast(Adw.Toast(title=f"{decals.DECALS[key][0]} picked: click the photo to place it", timeout=2))
 
@@ -978,11 +1121,11 @@ class Booth(Adw.ApplicationWindow):
             return
         it, start = self.items[self.selected], self.drag_item
         x, y = self.drag_start[0] + dx, self.drag_start[1] + dy
-        base, (_px, _py, pw, ph), _cap = self._composed_parts(self.view_photo_size())
+        base, (px, py, pw, ph), _cap = self._composed_parts(self.view_photo_size())
         k, _ox, _oy = self._to_view()
-        if self.drag_mode == "move":
-            it["x"] = min(1.0, max(0.0, start["x"] + dx / k / pw))
-            it["y"] = min(1.0, max(0.0, start["y"] + dy / k / ph))
+        if self.drag_mode == "move":            # (anywhere on the print: the frame's margins too)
+            it["x"] = min((base.width - px) / pw, max(-px / pw, start["x"] + dx / k / pw))
+            it["y"] = min((base.height - py) / ph, max(-py / ph, start["y"] + dy / k / ph))
         elif self.drag_mode == "scale":
             it["size"] = min(0.9, max(0.02, start["size"] * math.dist((x, y), self.drag_centre) / self.drag_dist))
         else:
@@ -1033,7 +1176,8 @@ class Booth(Adw.ApplicationWindow):
         base, (px, py, pw, ph), _cap = self._composed_parts(self.view_photo_size())
         k, ox, oy = self._to_view()
         bx, by = (x - ox) / k, (y - oy) / k
-        if not (px <= bx <= px + pw and py <= by <= py + ph):
+        # anywhere on the print: the photo, or the frame's border and caption chin
+        if not (0 <= bx <= base.width and 0 <= by <= base.height):
             self.selected = None
             self.handles.queue_draw()
             return
@@ -1043,13 +1187,15 @@ class Booth(Adw.ApplicationWindow):
             self.items.append({"kind": "text", "text": text, "colour": self.colour, "size": self.size.get_value() / 100,
                                "font": self._font_key(), "shadow": self.shadow.get_active(), **rel})
             self.text_entry.set_text("")
+        elif self.emoji:
+            self.items.append({"kind": "sticker", "text": self.emoji, "size": 0.1, **rel})
         elif self.sticker:
             self.items.append({"kind": "decal", "key": self.sticker, "size": 0.12 if decals.DECALS[self.sticker][2] < 1.2
                                else 0.08, **rel})
         else:
             self.selected = None
             self.handles.queue_draw()
-            self.toast.add_toast(Adw.Toast(title="Type some text or pick a stamp first", timeout=2))
+            self.toast.add_toast(Adw.Toast(title="Type some text, or pick a stamp or an emoji first", timeout=2))
             return
         self.selected = len(self.items) - 1
         self._compose()

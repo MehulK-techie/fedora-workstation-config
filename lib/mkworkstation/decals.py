@@ -6,7 +6,9 @@ and draw(cr, w, h) paints the decal into a w x h box with its top left at the
 origin. Badges and crests are shields and a crown; the stamps are the short
 words people shout at a photo.
 """
+import getpass
 import math
+import socket
 
 import gi
 
@@ -178,8 +180,72 @@ def _word_stamp(word, rgb):
     return draw
 
 
+def station_name():
+    """Whose workstation: the computer's name ("MK" -> "MK"), or the user's when
+    the computer has a generic one; MK when neither will do."""
+    host = socket.gethostname().split(".")[0].strip().upper()
+    if host and host not in ("LOCALHOST", "FEDORA", "LOCALHOST-LIVE") and len(host) <= 12:
+        return host
+    user = (getpass.getuser() or "").strip().upper()
+    return user if user and len(user) <= 12 else "MK"
+
+
+def _plate_path(cr, x, y, w, h, cut):
+    """A plate with its corners cut at 45 degrees."""
+    cr.new_path()
+    cr.move_to(x + cut, y)
+    cr.line_to(x + w - cut, y)
+    cr.line_to(x + w, y + cut)
+    cr.line_to(x + w, y + h - cut)
+    cr.line_to(x + w - cut, y + h)
+    cr.line_to(x + cut, y + h)
+    cr.line_to(x, y + h - cut)
+    cr.line_to(x, y + cut)
+    cr.close_path()
+
+
+def workstation_plate(cr, w, h):
+    """"{NAME} WORKSTATION" on a cut-corner plate, laser-etched: a dark core,
+    the edge printed twice off-register (red one way, cyan the other, the
+    comic-book misprint), a crisp white rule, fine scanlines."""
+    pad, cut = h * 0.08, h * 0.22
+    x, y, pw, ph = pad, pad, w - 2 * pad, h - 2 * pad
+    _plate_path(cr, x, y, pw, ph, cut)
+    cr.set_source(cairo_linear(cr, 0, y, 0, y + ph, (0.08, 0.06, 0.12), (0.02, 0.02, 0.05)))
+    cr.fill()
+    cr.save()                                   # scanlines, inside the plate only
+    _plate_path(cr, x, y, pw, ph, cut)
+    cr.clip()
+    cr.set_source_rgba(1, 1, 1, 0.05)
+    step = max(2.0, h * 0.045)
+    yy = y
+    while yy < y + ph:
+        cr.rectangle(x, yy, pw, step * 0.4)
+        yy += step
+    cr.fill()
+    cr.restore()
+    line = max(1.0, h * 0.035)
+    off = max(1.0, h * 0.03)
+    cr.set_line_join(0)
+    for dx, rgb in ((-off, (0.96, 0.16, 0.3)), (off, CYAN)):
+        _plate_path(cr, x + dx, y - dx * 0.4, pw, ph, cut)
+        cr.set_source_rgba(*rgb, 0.9)
+        cr.set_line_width(line)
+        cr.stroke()
+    _plate_path(cr, x, y, pw, ph, cut)
+    cr.set_source_rgb(0.97, 0.98, 1.0)
+    cr.set_line_width(line * 0.6)
+    cr.stroke()
+    name = station_name()
+    for dx, rgb, alpha in ((-off, (0.96, 0.16, 0.3), 0.85), (off, CYAN, 0.85), (0, (0.97, 0.98, 1.0), 1.0)):
+        _text(cr, name, w / 2 + dx, h * 0.42, h * 0.36, rgb, "Heavy", pw * 0.8, alpha, spacing=h * 0.03)
+    _text(cr, "WORKSTATION", w / 2, h * 0.72, h * 0.13, (0.97, 0.98, 1.0), "Bold", pw * 0.72, 0.95,
+          spacing=h * 0.045)
+
+
 DECALS = {
     "mk_crest": ("MK Crest", "badges", 0.84, mk_crest),
+    "workstation": ("Workstation plate", "badges", 2.6, workstation_plate),
     "havoc_shield": ("Stick Havoc Shield", "badges", 0.84, havoc_shield),
     "crown_1st": ("1st Place Crown", "badges", 1.0, crown_1st),
     "gg": ("GG", "stamps", 1.7, _word_stamp("GG", (0.13, 0.83, 0.93))),

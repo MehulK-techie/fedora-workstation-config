@@ -4,13 +4,15 @@ resize, and a few Photo Booth style looks.
   thermal   a heat-camera palette: cold blues to hot yellows
   vignette, hue (shift), noir, retro (sepia), comic, neon, mirror, glow (dreamy)
   popart    four posterised copies in bright duotones, 2 x 2
-  distort   a fisheye bulge from the middle
+  warps     fish-eye bulge (distort), pinch, twirl, stretch & squeeze,
+            kaleidoscope: real optical distortions (a mesh transform)
   polaroid  a warm, faded vintage print (lifted blacks, grain in the
             shadows, a slightly soft plastic lens) on an instant-photo card:
             3:4, a square photo recessed in the card, a thick bottom edge;
             white, cream or noir card stock (FRAME_COLOURS)
-  light_leak(img, kind)  warm streak, corner flare, red burn, or dust and
-            scratches (LEAKS)
+  light_leak(img, kind)  layered film light: warm amber streak, 35mm red
+            edge burn, prism flare, anamorphic streak (screen / add blends,
+            with fine grain), or dust and scratches (LEAKS)
 
 Every function takes a PIL image and returns a new one; nothing is written
 to disk here.
@@ -101,29 +103,90 @@ def popart(img):
     return out
 
 
-@look("distort", "Funhouse Warp")
-def distort(img, strength=0.55, grid=24):
-    """Fisheye bulge: each output point looks closer to the middle of the source."""
+def _warp(img, source, grid=32):
+    """IMG remapped: each output point (x, y) shows the source at
+    source(x, y, w, h). A mesh of GRID x GRID quads (Pillow interpolates
+    inside each), so smooth warps stay smooth at any size."""
     src = rgb(img)
     w, h = src.size
-    cx, cy, radius = w / 2, h / 2, min(w, h) / 2
-
-    def source(x, y):
-        dx, dy = x - cx, y - cy
-        d = math.hypot(dx, dy) / radius
-        if d >= 1 or d == 0:
-            return x, y
-        k = d ** (1 + strength) / d  # < 1 near the middle: magnified
-        return cx + dx * k, cy + dy * k
-
     mesh = []
     for gy in range(grid):
         for gx in range(grid):
             x0, x1 = w * gx / grid, w * (gx + 1) / grid
             y0, y1 = h * gy / grid, h * (gy + 1) / grid
-            quad = (*source(x0, y0), *source(x0, y1), *source(x1, y1), *source(x1, y0))
+            quad = (*source(x0, y0, w, h), *source(x0, y1, w, h), *source(x1, y1, w, h), *source(x1, y0, w, h))
             mesh.append(((round(x0), round(y0), round(x1), round(y1)), quad))
     return src.transform((w, h), Image.Transform.MESH, mesh, Image.Resampling.BICUBIC)
+
+
+def _radial(power):
+    """A radial remap inside the circle around the middle: d ** POWER (with d
+    the distance over the radius). POWER > 1 magnifies the middle (bulge),
+    < 1 squeezes it (pinch)."""
+    def source(x, y, w, h):
+        cx, cy, radius = w / 2, h / 2, min(w, h) / 2
+        dx, dy = x - cx, y - cy
+        d = math.hypot(dx, dy) / radius
+        if d >= 1 or d == 0:
+            return x, y
+        k = d ** power / d
+        return cx + dx * k, cy + dy * k
+    return source
+
+
+@look("distort", "Fish-Eye Bulge")
+def distort(img, strength=0.55, grid=32):
+    """Fisheye bulge: each output point looks closer to the middle of the source."""
+    return _warp(img, _radial(1 + strength), grid)
+
+
+@look("pinch", "Pinch")
+def pinch(img, strength=0.45):
+    """The middle pulled in, as if sucked toward a point."""
+    return _warp(img, _radial(1 - strength))
+
+
+@look("twirl", "Twirl")
+def twirl(img, turns=0.45):
+    """A vortex: points near the middle turned furthest (TURNS of a full turn), none at the edge."""
+    def source(x, y, w, h):
+        cx, cy, radius = w / 2, h / 2, min(w, h) / 2
+        dx, dy = x - cx, y - cy
+        d = math.hypot(dx, dy) / radius
+        if d >= 1:
+            return x, y
+        a = 2 * math.pi * turns * (1 - d) ** 2
+        c, s_ = math.cos(a), math.sin(a)
+        return cx + dx * c - dy * s_, cy + dx * s_ + dy * c
+    return _warp(img, source, 40)
+
+
+@look("squeeze", "Stretch & Squeeze")
+def squeeze(img):
+    """A funhouse mirror: wide through the middle, narrow at the top and bottom,
+    with a gentle wave down the sides."""
+    def source(x, y, w, h):
+        cx = w / 2
+        widen = 1 + 0.38 * math.sin(math.pi * y / h)          # 1.38x in the middle row
+        sx = cx + (x - cx) / widen
+        sy = y + 0.035 * h * math.sin(2 * math.pi * x / w)
+        return min(w - 1, max(0, sx)), min(h - 1, max(0, sy))
+    return _warp(img, source)
+
+
+@look("kaleido", "Kaleidoscope")
+def kaleidoscope(img):
+    """The top-left quarter, reflected into all four: a mirrored-quadrant pattern."""
+    photo = rgb(img)
+    w, h = photo.size
+    qw, qh = w // 2, h // 2
+    q = photo.crop((w // 4, h // 4, w // 4 + qw, h // 4 + qh))    # the middle, where faces are
+    out = Image.new("RGB", (2 * qw, 2 * qh))
+    out.paste(q, (0, 0))
+    out.paste(ImageOps.mirror(q), (qw, 0))
+    out.paste(ImageOps.flip(q), (0, qh))
+    out.paste(ImageOps.flip(ImageOps.mirror(q)), (qw, qh))
+    return out.resize((w, h))
 
 
 _CACHE = {}
@@ -143,7 +206,7 @@ def _vignette_mask(w, h, start=0.45, strength=0.55):
 
 
 # Card stock: (paper, its grain) colours.
-FRAME_COLOURS = {"white": ("Classic white", (244, 241, 233), (222, 217, 205)),
+FRAME_COLOURS = {"white": ("Polaroid Classic 600", (244, 241, 233), (222, 217, 205)),
                  "aged": ("Aged paper", (226, 211, 178), (196, 176, 136)),
                  "noir": ("Matte noir", (30, 29, 32), (46, 44, 48)),
                  "cream": ("Pastel cream", (246, 236, 210), (226, 214, 184)),
@@ -309,7 +372,8 @@ def polaroid_frame(photo, colour="white", offset=(0.5, 0.5), ratio=None, contain
 
 
 # Frames beyond the instant-photo card: (label, function)
-FRAME_STYLES_EXTRA = {"dual": "Dual border", "film": "35mm film strip", "postcard": "Postcard stamp"}
+FRAME_STYLES_EXTRA = {"instax": "Polaroid Wide / Instax Wide", "film": "35mm film strip",
+                      "matte": "Studio matte", "dual": "Dual border", "postcard": "Postcard stamp"}
 
 
 def frame(photo, style, offset=(0.5, 0.5), ratio=None, contain=False):
@@ -325,6 +389,10 @@ def frame(photo, style, offset=(0.5, 0.5), ratio=None, contain=False):
         return film_frame(photo, offset, ratio, contain)
     if style == "postcard":
         return postcard_frame(photo, offset, ratio, contain)
+    if style == "instax":
+        return instax_wide_frame(photo, offset, ratio, contain)
+    if style == "matte":
+        return matte_frame(photo, offset, ratio, contain)
     return polaroid_frame(photo, style, offset, ratio, contain)
 
 
@@ -367,6 +435,40 @@ def film_frame(photo, offset=(0.5, 0.5), ratio=None, contain=False):
         font = ImageFont.load_default()
     d.text((side, card.height - round(band * 0.24)), "MK 400   ▸ 24A", fill=(232, 160, 60), font=font, anchor="ls")
     return card, (side, band, w, h), None
+
+
+def instax_wide_frame(photo, offset=(0.5, 0.5), ratio=None, contain=False):
+    """A wide instant print: the photo 16:9 (unless a RATIO is picked), set into
+    white card stock with narrow sides and top and a deep chin for a caption."""
+    photo = shape(photo, ratio or 16 / 9, offset, contain)
+    pw, ph = photo.size
+    side = top = round(ph * 0.09)
+    chin = round(ph * 0.34)
+    card = _paper(pw + 2 * side, top + ph + chin).copy()
+    card.paste(Image.composite(Image.new("RGB", photo.size, (0, 0, 0)), photo, _recess(pw, ph)), (side, top))
+    lip = max(1, round(ph * 0.003))
+    card.paste(Image.new("RGB", (pw + lip, lip), (255, 255, 255)), (side, top + ph))
+    return card, (side, top, pw, ph), (side, top + ph, pw, chin)
+
+
+def matte_frame(photo, offset=(0.5, 0.5), ratio=None, contain=False):
+    """A gallery mount: a wide off-white matte (a touch deeper below), a fine
+    bevel line around the opening; the photo in its own shape or RATIO."""
+    from PIL import ImageDraw
+    if ratio:
+        photo = shape(photo, ratio, offset, contain)
+    pw, ph = photo.size
+    m = min(pw, ph)
+    side = round(m * 0.13)
+    bottom = round(m * 0.17)
+    card = Image.new("RGB", (pw + 2 * side, side + ph + bottom), (246, 244, 239))
+    d = ImageDraw.Draw(card)
+    bevel = max(2, round(m * 0.008))
+    d.rectangle((side - bevel, side - bevel, side + pw + bevel - 1, side + ph + bevel - 1), fill=(255, 254, 250))
+    d.rectangle((side - bevel, side - bevel, side + pw + bevel - 1, side + ph + bevel - 1),
+                outline=(214, 210, 200), width=1)
+    card.paste(photo, (side, side))
+    return card, (side, side, pw, ph), (side, side + ph + bevel, pw, bottom - bevel)
 
 
 def postcard_frame(photo, offset=(0.5, 0.5), ratio=None, contain=False):
@@ -441,28 +543,54 @@ def polaroid(img):
 
 # ---------------------------------------------------------------- light leaks
 
-LEAKS = {"warm": "Warm streak", "flare": "Corner flare", "burn": "Red burn", "dust": "Dust & scratches"}
+LEAKS = {"amber": "Warm amber streak", "redburn": "35mm red edge burn", "prism": "Prism flare",
+         "anamorphic": "Anamorphic streak", "dust": "Dust & scratches"}
+LEAK_RES = (192, 128)       # light is built small (it's all soft) and scaled up
 
 
-def _leak_mask(kind, w, h):
-    key = ("leak", kind, w, h)
+def _light(kind, w, h):
+    """The light of leak KIND as an RGB layer (black: no light), w x h; cached.
+    Several soft layers each, like light through a camera's seams."""
+    key = ("light", kind, w, h)
     if key in _CACHE:
         return _CACHE[key]
-    if kind == "warm":  # a soft band down the left third, leaning
-        band = Image.linear_gradient("L").rotate(90).resize((64, 64))
-        band = band.point(lambda v: round(255 * max(0, 1 - abs(v - 200) / 70) ** 1.5))
-        mask = band.rotate(-14, resample=Image.Resampling.BICUBIC, expand=False).resize((w, h), Image.Resampling.BICUBIC)
-    elif kind == "flare":  # a glow from the top-right corner
-        glow = ImageOps.invert(Image.radial_gradient("L")).resize((128, 128))
-        mask = Image.new("L", (128, 128))
-        mask.paste(glow.point(lambda v: min(255, round(v * 1.25))), (40, -40))
-        mask = mask.resize((w, h), Image.Resampling.BICUBIC)
-    else:  # burn: the bottom edge and a corner, burned red
-        ramp = Image.linear_gradient("L").resize((64, 64))
-        mask = ramp.point(lambda v: round(255 * max(0, (v - 150) / 105) ** 1.6)).resize((w, h), Image.Resampling.BICUBIC)
-    mask = mask.filter(ImageFilter.GaussianBlur(max(1, w / 60)))
-    _CACHE[key] = mask
-    return mask
+    lw, lh = LEAK_RES
+    px = []
+    for y in range(lh):
+        v = y / (lh - 1)
+        for x in range(lw):
+            u = x / (lw - 1)
+            if kind == "amber":       # two leaning bands from the left edge: amber, then a paler gold
+                a = math.exp(-((u + 0.35 * v - 0.28) / 0.11) ** 2)
+                b = 0.55 * math.exp(-((u + 0.35 * v - 0.5) / 0.07) ** 2)
+                edge = max(0.0, 1 - u / 0.22) ** 2
+                px.append((min(255, round(255 * (a + b * 0.9 + edge * 0.7))), round(150 * a + 210 * b + 90 * edge),
+                           round(40 * a + 120 * b + 20 * edge)))
+            elif kind == "redburn":   # the film's edge burned: red at the very edge, orange inside it
+                d = min(u, 1 - u)
+                burn = max(0.0, 1 - d / 0.16) ** 2.2 * (0.75 + 0.25 * math.sin(v * 9 + u * 3))
+                halo = max(0.0, 1 - d / 0.3) ** 3
+                px.append((min(255, round(240 * burn + 200 * halo)), round(30 * burn + 90 * halo), round(10 * burn)))
+            elif kind == "prism":     # a rainbow arc off the top-right corner, and its glow
+                r = math.hypot((u - 0.92) * 1.5, v + 0.1)
+                ring = math.exp(-((r - 0.62) / 0.09) ** 2)
+                hue = (r - 0.5) * 2.4
+                rr, gg, bb = (0.5 + 0.5 * math.cos(2 * math.pi * (hue + k)) for k in (0, -1 / 3, 1 / 3))
+                glow = 0.5 * math.exp(-(r / 0.35) ** 2)
+                px.append((round(255 * min(1, ring * rr + glow)), round(255 * min(1, ring * gg + glow * 0.85)),
+                           round(255 * min(1, ring * bb + glow * 0.6))))
+            else:                     # anamorphic: a long, thin, blue streak with a hot core
+                band = math.exp(-((v - 0.42) / 0.025) ** 2)
+                along = 0.35 + 0.65 * math.exp(-((u - 0.55) / 0.3) ** 2)
+                core = math.exp(-((u - 0.55) / 0.04) ** 2 - ((v - 0.42) / 0.05) ** 2)
+                i_ = band * along
+                px.append((min(255, round(90 * i_ + 255 * core)), min(255, round(180 * i_ + 245 * core)),
+                           min(255, round(255 * i_ + 235 * core))))
+    small = Image.new("RGB", LEAK_RES)
+    small.putdata(px)
+    layer = small.resize((w, h), Image.Resampling.BICUBIC).filter(ImageFilter.GaussianBlur(max(1, w / 300)))
+    _CACHE[key] = layer
+    return layer
 
 
 def _dust(w, h, seed=11):
@@ -486,18 +614,20 @@ def _dust(w, h, seed=11):
 
 
 def light_leak(img, kind):
-    """IMG with a light leak (warm, flare, burn) or dust and scratches."""
+    """IMG with a light leak (LEAKS): the light screened over the photo (the
+    edge burn added, so it scorches), then fine analog grain over it all;
+    or dust and scratches."""
     photo = rgb(img)
     w, h = photo.size
     if kind == "dust":
         light, dark = _dust(w, h)
         photo = Image.composite(Image.new("RGB", (w, h), (250, 246, 236)), photo, light)
         return Image.composite(Image.new("RGB", (w, h), (20, 16, 14)), photo, dark)
-    colour = {"warm": (255, 150, 60), "flare": (255, 214, 140), "burn": (235, 40, 25)}.get(kind)
-    if not colour:
+    if kind not in LEAKS:
         return photo
-    lit = ImageChops.screen(photo, Image.new("RGB", (w, h), colour))
-    return Image.composite(lit, photo, _leak_mask(kind, w, h).point(lambda v: round(v * 0.85)))
+    light = _light(kind, w, h)
+    lit = ImageChops.add(photo, light) if kind == "redburn" else ImageChops.screen(photo, light)
+    return ImageChops.overlay(lit, Image.merge("RGB", [_grain((w, h), seed=9)] * 3).point(lambda v: 128 + (v - 128) // 2))
 
 
 @look("flash", "High-Contrast Flash")

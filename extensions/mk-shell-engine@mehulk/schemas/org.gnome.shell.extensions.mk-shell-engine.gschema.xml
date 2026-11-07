@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.mk-shell-engine" path="/org/gnome/shell/extensions/mk-shell-engine/">
+    <key name="live-wallpaper" type="s">
+      <default>''</default>
+      <summary>Live wallpaper</summary>
+      <description>A video (mp4, webm, mkv...) shown as the desktop background, looping and muted; empty: the still wallpaper. mk-live-wallpaper set FILE / off.</description>
+    </key>
     <key name="show-logo-button" type="b">
       <default>true</default>
       <summary>Logo button</summary>

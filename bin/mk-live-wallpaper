@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""MK live wallpaper: a video as the desktop background (GNOME-native).
+
+  mk-live-wallpaper set FILE     use FILE (mp4, webm, mkv...) as the wallpaper
+  mk-live-wallpaper off          back to the still wallpaper
+  mk-live-wallpaper status       what's set
+  mk-live-wallpaper run FILE     the player itself (MK Shell Engine starts it)
+
+How it works: this player shows the video, looping and muted, in a plain
+borderless window; MK Shell Engine (modules/liveWallpaper.js) turns that
+window into the desktop itself (a "desktop" window: below every other
+window, on every workspace, never in Alt+Tab, the overview or the dock, and
+clicks go through it). Workspaces slide over it without it moving or being
+rescaled, so it never turns blocky as you switch. Decoding goes through
+GStreamer, which uses the graphics card's video decoder (VA-API) when there
+is one. The engine pauses it while a window is full screen or the screen is
+locked (signals: USR1 pause, USR2 play, TERM stop).
+
+(mpvpaper and similar players need the wlroots layer-shell protocol, which
+GNOME doesn't have; this is GNOME's way.)
+"""
+import os
+import signal
+import subprocess
+import sys
+from pathlib import Path
+
+EXT = Path.home() / ".local/share/gnome-shell/extensions/mk-shell-engine@mehulk"
+SCHEMA = "org.gnome.shell.extensions.mk-shell-engine"
+KEY = "live-wallpaper"
+TITLE = "MK Live Wallpaper"
+
+
+def gsettings(*args):
+    return subprocess.run(["gsettings", "--schemadir", str(EXT / "schemas"), *args],
+                          capture_output=True, text=True)
+
+
+def player(path):
+    # pause / play / stop from MK Shell Engine; set first thing (USR1 and USR2 would
+    # otherwise end the process if they came while GTK is still loading)
+    state = {"pending": None}
+
+    def on_signal(signum, _frame):
+        media = state.get("media")
+        if signum in (signal.SIGTERM, signal.SIGINT):
+            state["app"].quit() if state.get("app") else sys.exit(0)
+        elif media is None:
+            state["pending"] = signum
+        else:
+            (media.pause if signum == signal.SIGUSR1 else media.play)()
+    for sig in (signal.SIGUSR1, signal.SIGUSR2, signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, on_signal)
+
+    import gi
+    gi.require_version("Gtk", "4.0")
+    from gi.repository import GLib, Gtk
+
+    app = Gtk.Application(application_id=None)
+    state["app"] = app
+    # (Python runs signal handlers between bytecodes: a short tick keeps them prompt
+    # while GTK's main loop is waiting)
+    GLib.timeout_add(250, lambda: True)
+
+    def activate(a):
+        media = Gtk.MediaFile.new_for_filename(path)
+        media.set_loop(True)
+        media.set_muted(True)
+        picture = Gtk.Picture(paintable=media, content_fit=Gtk.ContentFit.COVER, can_shrink=True)
+        win = Gtk.ApplicationWindow(application=a, title=TITLE, decorated=False, child=picture,
+                                    default_width=1280, default_height=720)
+        win.set_css_classes(["mk-live-wallpaper"])
+        win.present()
+        state["media"] = media
+        media.pause() if state["pending"] == signal.SIGUSR1 else media.play()
+
+    app.connect("activate", activate)
+    return app.run([sys.argv[0]])
+
+
+def main(argv):
+    cmd = argv[0] if argv else "status"
+    if cmd == "run" and len(argv) > 1:
+        return player(argv[1])
+    if cmd == "set" and len(argv) > 1:
+        path = Path(argv[1]).expanduser().resolve()
+        if not path.is_file():
+            print(f"No such video: {path}", file=sys.stderr)
+            return 1
+        r = gsettings("set", SCHEMA, KEY, str(path))
+        if r.returncode:
+            print(r.stderr.strip() or "Couldn't set it (is MK Shell Engine installed?)", file=sys.stderr)
+            return 1
+        print(f"Live wallpaper: {path.name}")
+        return 0
+    if cmd == "off":
+        gsettings("set", SCHEMA, KEY, "")
+        print("Live wallpaper off: the still wallpaper is back.")
+        return 0
+    if cmd == "status":
+        value = gsettings("get", SCHEMA, KEY).stdout.strip().strip("'")
+        print(f"Live wallpaper: {value}" if value else "Live wallpaper: off")
+        return 0
+    print(__doc__.strip())
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

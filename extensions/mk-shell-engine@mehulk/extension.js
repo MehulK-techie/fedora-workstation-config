@@ -14,6 +14,7 @@
 //   modules/mediaKeys.js   Previous / Next track: one press, one skip
 //   modules/windowAnimations.js  windows open and close with a little spring (while Burn My Windows is off)
 //   modules/calendarDeck.js      the calendar as glass, and a reminder for any day ahead
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { HalfSwap, SnapLayouts, bindSnapLayouts, unbindSnapLayouts } from './modules/tiling.js';
 import { Dock } from './modules/dock.js';
@@ -29,8 +30,32 @@ import { Panel } from './modules/panel.js';
 import { ControlCenter } from './modules/controlCenter.js';
 
 export default class MKShellEngine extends Extension {
+    // The engine also runs on the lock screen (metadata: session-modes), but there only the
+    // live wallpaper: everything else stops as the screen locks and starts again after
+    // unlocking, as GNOME does with other extensions. (The wallpaper's lock-screen video,
+    // and its slow-down as you unlock, need the engine there.)
     enable() {
         this._settings = this.getSettings();
+        this._parts = [];
+        try {
+            this._wallpaper = new LiveWallpaper();
+        } catch (e) {
+            console.error(`mk-shell-engine: live wallpaper didn't start: ${e.message}\n${e.stack}`);
+        }
+        this._sessionId = Main.sessionMode.connect('updated', () => this._syncSession());
+        this._syncSession();
+    }
+
+    _syncSession() {
+        const locked = Main.sessionMode.isLocked;
+        if (locked && this._running)
+            this._stopParts();
+        else if (!locked && !this._running)
+            this._startParts();
+    }
+
+    _startParts() {
+        this._running = true;
         this._parts = [];
         this._start('snap layouts', () => {
             const snap = new SnapLayouts();
@@ -53,7 +78,19 @@ export default class MKShellEngine extends Extension {
         this._start('window animations', () => new WindowAnimations());
         this._start('calendar', () => new CalendarDeck(this._settings));
         this._start('screenshot actions', () => new ScreenshotActions());
-        this._start('live wallpaper', () => new LiveWallpaper(this._settings));
+    }
+
+    _stopParts() {
+        this._running = false;
+        for (const part of this._parts.reverse()) {
+            try {
+                part.destroy();
+            } catch (e) {
+                console.error(`mk-shell-engine: ${e.message}`);
+            }
+        }
+        this._parts = [];
+        this._dock = null;
     }
 
     _start(name, make) {
@@ -65,15 +102,16 @@ export default class MKShellEngine extends Extension {
     }
 
     disable() {
-        for (const part of this._parts.reverse()) {
-            try {
-                part.destroy();
-            } catch (e) {
-                console.error(`mk-shell-engine: ${e.message}`);
-            }
+        if (this._sessionId)
+            Main.sessionMode.disconnect(this._sessionId);
+        this._sessionId = 0;
+        this._stopParts();
+        try {
+            this._wallpaper?.destroy();
+        } catch (e) {
+            console.error(`mk-shell-engine: ${e.message}`);
         }
-        this._parts = [];
-        this._dock = null;
+        this._wallpaper = null;
         this._settings = null;
     }
 }

@@ -1,105 +1,228 @@
 #!/usr/bin/env python3
-"""MK live wallpaper: a video as the desktop background (GNOME-native).
+"""MK live wallpaper: a video (or picture) on the desktop and on the lock screen.
 
-  mk-live-wallpaper set FILE     use FILE (mp4, webm, mkv...) as the wallpaper
-  mk-live-wallpaper off          back to the still wallpaper
-  mk-live-wallpaper status       what's set
-  mk-live-wallpaper run FILE     the player itself (MK Shell Engine starts it)
+  mk-live-wallpaper set-desktop FILE      the desktop's video (mp4, webm, mkv...) or picture
+  mk-live-wallpaper set-lockscreen FILE   the lock screen's (behind the clock)
+  mk-live-wallpaper off [desktop|lockscreen|all]   back to GNOME's own (default: all)
+  mk-live-wallpaper loop on|off           the lock screen's video loops, or plays once and holds
+  mk-live-wallpaper hwaccel vaapi|none    the graphics card decodes (default), or the processor
+  mk-live-wallpaper list                  what's set
+  mk-live-wallpaper set FILE              (the same as set-desktop)
 
-How it works: this player shows the video, looping and muted, in a plain
-borderless window; MK Shell Engine (modules/liveWallpaper.js) turns that
-window into the desktop itself (a "desktop" window: below every other
-window, on every workspace, never in Alt+Tab, the overview or the dock, and
-clicks go through it). Workspaces slide over it without it moving or being
-rescaled, so it never turns blocky as you switch. Decoding goes through
-GStreamer, which uses the graphics card's video decoder (VA-API) when there
-is one. The engine pauses it while a window is full screen or the screen is
-locked (signals: USR1 pause, USR2 play, TERM stop).
+Settings: ~/.config/mk/wallpaper.json
+  {"desktop": "...", "lockscreen": "...", "lockscreen_loop": true, "hwaccel": "vaapi"}
+MK Shell Engine follows it as it changes.
 
-(mpvpaper and similar players need the wlroots layer-shell protocol, which
-GNOME doesn't have; this is GNOME's way.)
+How it works (GNOME's way: mpvpaper and its kind need wlroots' layer-shell,
+which GNOME doesn't have): this player shows the video, muted, in a plain
+window, through GStreamer (the graphics card's VA-API decoder, onto a GL
+surface); MK Shell Engine makes that window the desktop itself (below every
+window, on every workspace, never in Alt+Tab or the overview), and on the
+lock screen shows a live copy of it behind the clock. When you unlock, the
+lock screen's video slows to a stop and dissolves into the desktop.
+
+  mk-live-wallpaper run FILE [--once]     the player (the engine starts it);
+                                          stdin: play, pause, decelerate MS, quit
 """
+import json
 import os
-import signal
-import subprocess
 import sys
 from pathlib import Path
 
-EXT = Path.home() / ".local/share/gnome-shell/extensions/mk-shell-engine@mehulk"
-SCHEMA = "org.gnome.shell.extensions.mk-shell-engine"
-KEY = "live-wallpaper"
+CONF = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mk" / "wallpaper.json"
 TITLE = "MK Live Wallpaper"
+IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".avif", ".heic", ".svg", ".bmp", ".gif", ".tif", ".tiff"}
+VA_DECODERS = ("vah264dec", "vah265dec", "vavp8dec", "vavp9dec", "vaav1dec", "vampeg2dec",
+               "vaapih264dec", "vaapih265dec", "vaapivp9dec", "vaapiav1dec")
 
 
-def gsettings(*args):
-    return subprocess.run(["gsettings", "--schemadir", str(EXT / "schemas"), *args],
-                          capture_output=True, text=True)
+def read_conf():
+    try:
+        conf = json.loads(CONF.read_text())
+    except (OSError, ValueError):
+        conf = {}
+    conf.setdefault("desktop", "")
+    conf.setdefault("lockscreen", "")
+    conf.setdefault("lockscreen_loop", True)
+    conf.setdefault("hwaccel", "vaapi")
+    return conf
 
 
-def player(path):
-    # pause / play / stop from MK Shell Engine; set first thing (USR1 and USR2 would
-    # otherwise end the process if they came while GTK is still loading)
-    state = {"pending": None}
+def write_conf(conf):
+    CONF.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONF.with_suffix(".tmp")
+    tmp.write_text(json.dumps(conf, indent=2) + "\n")
+    tmp.replace(CONF)
 
-    def on_signal(signum, _frame):
-        media = state.get("media")
-        if signum in (signal.SIGTERM, signal.SIGINT):
-            state["app"].quit() if state.get("app") else sys.exit(0)
-        elif media is None:
-            state["pending"] = signum
-        else:
-            (media.pause if signum == signal.SIGUSR1 else media.play)()
-    for sig in (signal.SIGUSR1, signal.SIGUSR2, signal.SIGTERM, signal.SIGINT):
-        signal.signal(sig, on_signal)
 
+# ---------------------------------------------------------------- the player
+def player(path, once=False):
     import gi
     gi.require_version("Gtk", "4.0")
-    from gi.repository import GLib, Gtk
+    gi.require_version("Gst", "1.0")
+    from gi.repository import GLib, Gst, Gtk
 
     app = Gtk.Application(application_id=None)
-    state["app"] = app
-    # (Python runs signal handlers between bytecodes: a short tick keeps them prompt
-    # while GTK's main loop is waiting)
-    GLib.timeout_add(250, lambda: True)
+    state = {"pipeline": None, "loop": not once, "rate": 1.0, "decel": 0}
+    is_image = Path(path).suffix.lower() in IMAGE_EXT
+
+    def video_widget():
+        Gst.init(None)
+        if read_conf().get("hwaccel") == "none":
+            registry = Gst.Registry.get()
+            for name in VA_DECODERS:
+                feature = registry.lookup_feature(name)
+                if feature:
+                    feature.set_rank(Gst.Rank.NONE)
+        playbin = Gst.ElementFactory.make("playbin", None)
+        gtksink = Gst.ElementFactory.make("gtk4paintablesink", None)
+        if not playbin or not gtksink:
+            raise RuntimeError("GStreamer's playbin or gtk4paintablesink is missing (gstreamer1-plugin-gtk4)")
+        paintable = gtksink.get_property("paintable")
+        sink = gtksink
+        if paintable.props.gl_context:            # straight onto a GL surface: no copies on the CPU
+            sink = Gst.ElementFactory.make("glsinkbin", None)
+            sink.set_property("sink", gtksink)
+        playbin.set_property("uri", Gst.filename_to_uri(path))
+        playbin.set_property("video-sink", sink)
+        playbin.set_property("audio-sink", Gst.ElementFactory.make("fakesink", None))
+        playbin.set_property("mute", True)
+        state["pipeline"] = playbin
+        bus = playbin.get_bus()
+        bus.add_signal_watch()
+
+        def segment_seek(flush):
+            flags = Gst.SeekFlags.SEGMENT | (Gst.SeekFlags.FLUSH if flush else Gst.SeekFlags.NONE)
+            playbin.seek(state["rate"], Gst.Format.TIME, flags, Gst.SeekType.SET, 0, Gst.SeekType.NONE, -1)
+
+        def on_message(_bus, msg):
+            t = msg.type
+            if t == Gst.MessageType.ASYNC_DONE and state["loop"] and not state.get("segmented"):
+                state["segmented"] = True             # (gapless looping: segment seeks, no flush between)
+                segment_seek(True)
+            elif t == Gst.MessageType.SEGMENT_DONE and state["loop"]:
+                segment_seek(False)
+            elif t == Gst.MessageType.ERROR:
+                err, _dbg = msg.parse_error()
+                print(f"mk-live-wallpaper: {err.message}", file=sys.stderr, flush=True)
+                app.quit()
+        bus.connect("message", on_message)
+        playbin.set_state(Gst.State.PLAYING)
+        return Gtk.Picture(paintable=paintable, content_fit=Gtk.ContentFit.COVER, can_shrink=True)
+
+    def control(cmd):
+        pipeline = state["pipeline"]
+        words = cmd.split()
+        if not words:
+            return
+        if words[0] == "quit":
+            app.quit()
+        elif pipeline is None:
+            return                                # (a picture: nothing plays)
+        elif words[0] == "pause":
+            pipeline.set_state(Gst.State.PAUSED)
+        elif words[0] == "play":
+            state["decel"] += 1                   # (cancels a slow-down under way)
+            set_rate(1.0)
+            pipeline.set_state(Gst.State.PLAYING)
+        elif words[0] == "decelerate":
+            decelerate(int(words[1]) if len(words) > 1 else 600)
+
+    def set_rate(rate):
+        state["rate"] = rate
+        state["pipeline"].seek(rate, Gst.Format.TIME, Gst.SeekFlags.INSTANT_RATE_CHANGE,
+                               Gst.SeekType.NONE, 0, Gst.SeekType.NONE, 0)
+
+    def decelerate(ms):
+        # slow to a stop over MS (1 -> 0.6 -> 0.35 -> 0.15 -> held on the frame)
+        token = state["decel"] = state["decel"] + 1
+        steps = [0.6, 0.35, 0.15, 0.0]
+
+        def step():
+            if token != state["decel"] or not steps:
+                return False
+            rate = steps.pop(0)
+            if rate == 0.0:
+                state["pipeline"].set_state(Gst.State.PAUSED)
+                return False
+            set_rate(rate)
+            return True
+        GLib.timeout_add(max(30, ms // len(steps)), step)
+
+    def on_stdin(channel, condition):
+        if condition & (GLib.IOCondition.HUP | GLib.IOCondition.ERR):
+            app.quit()                            # (the engine has gone)
+            return False
+        line = channel.readline()
+        if not line:
+            app.quit()
+            return False
+        control(line.strip())
+        return True
 
     def activate(a):
-        media = Gtk.MediaFile.new_for_filename(path)
-        media.set_loop(True)
-        media.set_muted(True)
-        picture = Gtk.Picture(paintable=media, content_fit=Gtk.ContentFit.COVER, can_shrink=True)
-        win = Gtk.ApplicationWindow(application=a, title=TITLE, decorated=False, child=picture,
+        try:
+            child = Gtk.Picture.new_for_filename(path) if is_image else video_widget()
+        except Exception as e:                    # noqa: BLE001 (any failure: say why, then stop)
+            print(f"mk-live-wallpaper: {e}", file=sys.stderr, flush=True)
+            a.quit()
+            return
+        if is_image:
+            child.set_content_fit(Gtk.ContentFit.COVER)
+        win = Gtk.ApplicationWindow(application=a, title=TITLE, decorated=False, child=child,
                                     default_width=1280, default_height=720)
-        win.set_css_classes(["mk-live-wallpaper"])
         win.present()
-        state["media"] = media
-        media.pause() if state["pending"] == signal.SIGUSR1 else media.play()
+        if not sys.stdin.isatty():
+            channel = GLib.IOChannel.unix_new(sys.stdin.fileno())
+            GLib.io_add_watch(channel, GLib.PRIORITY_DEFAULT,
+                              GLib.IOCondition.IN | GLib.IOCondition.HUP | GLib.IOCondition.ERR, on_stdin)
 
     app.connect("activate", activate)
+    app.connect("shutdown", lambda *_: state["pipeline"] and state["pipeline"].set_state(Gst.State.NULL))
     return app.run([sys.argv[0]])
 
 
+# ---------------------------------------------------------------- the command
 def main(argv):
-    cmd = argv[0] if argv else "status"
+    cmd = argv[0] if argv else "list"
     if cmd == "run" and len(argv) > 1:
-        return player(argv[1])
-    if cmd == "set" and len(argv) > 1:
+        return player(argv[1], once="--once" in argv[2:])
+    conf = read_conf()
+    if cmd in ("set", "set-desktop", "set-lockscreen") and len(argv) > 1:
         path = Path(argv[1]).expanduser().resolve()
         if not path.is_file():
-            print(f"No such video: {path}", file=sys.stderr)
+            print(f"No such file: {path}", file=sys.stderr)
             return 1
-        r = gsettings("set", SCHEMA, KEY, str(path))
-        if r.returncode:
-            print(r.stderr.strip() or "Couldn't set it (is MK Shell Engine installed?)", file=sys.stderr)
-            return 1
-        print(f"Live wallpaper: {path.name}")
+        where = "lockscreen" if cmd == "set-lockscreen" else "desktop"
+        conf[where] = str(path)
+        write_conf(conf)
+        print(f"{'Lock screen' if where == 'lockscreen' else 'Desktop'}: {path.name}")
         return 0
     if cmd == "off":
-        gsettings("set", SCHEMA, KEY, "")
-        print("Live wallpaper off: the still wallpaper is back.")
+        which = argv[1] if len(argv) > 1 else "all"
+        for where in (("desktop", "lockscreen") if which == "all" else (which,)):
+            if where not in ("desktop", "lockscreen"):
+                print("off desktop | lockscreen | all", file=sys.stderr)
+                return 2
+            conf[where] = ""
+        write_conf(conf)
+        print("Live wallpaper off" + ("" if which == "all" else f" ({which})") + ": GNOME's own wallpaper is back.")
         return 0
-    if cmd == "status":
-        value = gsettings("get", SCHEMA, KEY).stdout.strip().strip("'")
-        print(f"Live wallpaper: {value}" if value else "Live wallpaper: off")
+    if cmd == "loop" and len(argv) > 1 and argv[1] in ("on", "off"):
+        conf["lockscreen_loop"] = argv[1] == "on"
+        write_conf(conf)
+        print(f"Lock screen video: {'loops' if conf['lockscreen_loop'] else 'plays once and holds its last frame'}")
+        return 0
+    if cmd == "hwaccel" and len(argv) > 1 and argv[1] in ("vaapi", "none"):
+        conf["hwaccel"] = argv[1]
+        write_conf(conf)
+        print(f"Decoding: {'the graphics card (VA-API)' if argv[1] == 'vaapi' else 'the processor'}")
+        return 0
+    if cmd in ("list", "status"):
+        print(f"Desktop:     {conf['desktop'] or 'off'}")
+        print(f"Lock screen: {conf['lockscreen'] or 'off'}" +
+              (f" ({'loops' if conf['lockscreen_loop'] else 'plays once'})" if conf["lockscreen"] else ""))
+        print(f"Decoding:    {'graphics card (VA-API)' if conf['hwaccel'] != 'none' else 'processor'}")
         return 0
     print(__doc__.strip())
     return 2

@@ -1,168 +1,323 @@
-// MK Shell Engine: a video as the desktop background (GNOME's way; mpvpaper and
-// its kind need wlroots' layer-shell, which GNOME doesn't have).
+// MK Shell Engine: a video (or picture) as the desktop background and on the
+// lock screen, GNOME's way (mpvpaper and its kind need wlroots' layer-shell,
+// which GNOME doesn't have).
 //
-// live-wallpaper (a video's path; '' = off) starts bin/mk-live-wallpaper, a
-// small GTK player that shows the video looping and muted in a plain window.
-// This module recognises that window (by its process) and makes it the
-// desktop itself: a DESKTOP-type window, which GNOME keeps below every other
-// window, on every workspace, out of Alt+Tab, the overview, the dock and the
-// window lists; sized to the primary monitor; clicks pass through it to the
-// desktop. Workspaces slide over it, so it never moves or gets rescaled (no
-// blocky frames as you switch). It pauses while a window is full screen or the
-// screen is locked, and the player is restarted (up to three times) if it
-// stops on its own. The lock screen's own playback comes later.
+// ~/.config/mk/wallpaper.json (bin/mk-live-wallpaper writes it; followed as it
+// changes): {"desktop": path, "lockscreen": path, "lockscreen_loop": bool,
+// "hwaccel": "vaapi" | "none"}.
+//
+// Desktop: bin/mk-live-wallpaper plays the file in a plain window; this module
+// recognises that window (by its process) and makes it the desktop itself: a
+// DESKTOP-type window (below every window, on every workspace, out of Alt+Tab,
+// the overview and the dock), clicks passing through, covering the primary
+// monitor. Workspaces slide over it, so it never moves or gets rescaled. Paused
+// under a full-screen window and while the screen is locked.
+//
+// Lock screen: a second player for its own file; windows aren't drawn on the
+// lock screen, so a live copy of its window (a Clutter.Clone, as the overview
+// shows windows) sits above GNOME's blurred wallpaper and below the clock,
+// a little dimmed. Unlocking (fingerprint, face, password) slows it to a stop
+// and dissolves it as the lock screen slides away; the desktop's video plays
+// on. The engine stays loaded on the lock screen only for this (extension.js).
+//
+// The players take commands on stdin (play, pause, decelerate MS, quit) and
+// quit when it closes; one that stops on its own is restarted up to 3 times.
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const PLAYER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-live-wallpaper']);
-const SIGUSR1 = 10, SIGUSR2 = 12, SIGTERM = 15;
+const CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk', 'wallpaper.json']);
+const LOG = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-live-wallpaper.log']);
+const UNLOCK_MS = 700;      // the lock screen's video slowing and dissolving as you unlock
 
-export class LiveWallpaper {
-    constructor(settings) {
-        this._settings = settings;
-        this._proc = null;
-        this._win = null;
+function readConf() {
+    try {
+        const [ok, bytes] = GLib.file_get_contents(CONF);
+        if (ok)
+            return JSON.parse(new TextDecoder().decode(bytes));
+    } catch {}
+    return {};
+}
+
+const usable = path => typeof path === 'string' && path !== '' && GLib.file_test(path, GLib.FileTest.IS_REGULAR);
+
+// One player process and its window. onWindow(win) once the window is shown.
+class Player {
+    constructor(name, onWindow) {
+        this._name = name;
+        this._onWindow = onWindow;
+        this.win = null;
         this._restarts = 0;
-        this._ids = [
-            [settings, settings.connect('changed::live-wallpaper', () => this._restart())],
-            [global.display, global.display.connect('window-created', (_d, win) => this._claim(win))],
-            [global.display, global.display.connect('in-fullscreen-changed', () => this._syncPlaying())],
-            [Main.layoutManager, Main.layoutManager.connect('monitors-changed', () => this._fit())],
-            [Main.sessionMode, Main.sessionMode.connect('updated', () => this._syncPlaying())],
-        ];
-        this._restart();
+        this._createdId = global.display.connect('window-created', (_d, win) => this._claim(win));
     }
 
-    _path() {
-        const path = this._settings.get_string('live-wallpaper');
-        return path && GLib.file_test(path, GLib.FileTest.IS_REGULAR) ? path : null;
-    }
-
-    _restart() {
-        this._stop();
+    start(path, args = []) {
+        this.stop();
+        this._path = path;
+        this._args = args;
         this._restarts = 0;
-        this._start();
+        this._spawn();
     }
 
-    _start() {
-        const path = this._path();
-        if (!path || !GLib.file_test(PLAYER, GLib.FileTest.IS_EXECUTABLE))
-            return;
+    _spawn() {
         try {
-            // its output goes to ~/.cache/mk-live-wallpaper.log (what went wrong, if it stops)
-            const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.NONE});
-            const log = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-live-wallpaper.log']);
-            launcher.set_stdout_file_path(log);
-            launcher.set_stderr_file_path(log);
-            this._proc = launcher.spawnv([PLAYER, 'run', path]);
+            const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.STDIN_PIPE});
+            launcher.set_stdout_file_path(LOG);
+            launcher.set_stderr_file_path(LOG);
+            this._proc = launcher.spawnv([PLAYER, 'run', this._path, ...this._args]);
         } catch (e) {
-            console.warn(`mk-shell-engine: live wallpaper: ${e.message}`);
+            console.warn(`mk-shell-engine: live wallpaper (${this._name}): ${e.message}`);
             return;
         }
         const proc = this._proc;
         proc.wait_async(null, () => {
             if (proc !== this._proc)
-                return;                         // (stopped on purpose)
-            this._proc = this._win = null;
-            if (this._restarts++ < 3)
+                return;                             // (stopped on purpose)
+            this._proc = this.win = null;
+            if (this._restarts++ < 3) {
                 this._retry = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
                     this._retry = 0;
-                    this._start();
+                    this._spawn();
                     return GLib.SOURCE_REMOVE;
                 });
-            else
-                console.warn('mk-shell-engine: live wallpaper: the player keeps stopping; left off');
+            } else {
+                console.warn(`mk-shell-engine: live wallpaper (${this._name}) keeps stopping: see ${LOG}`);
+            }
         });
     }
 
-    _stop() {
-        if (this._retry)
-            GLib.source_remove(this._retry);
-        this._retry = 0;
-        if (this._setupIdle)
-            GLib.source_remove(this._setupIdle);
-        this._setupIdle = 0;
-        const proc = this._proc;
-        if (this._win && this._sizeId)
-            this._win.disconnect(this._sizeId);
-        this._sizeId = 0;
-        this._proc = null;
-        this._win = null;
-        proc?.send_signal(SIGTERM);
+    get running() {
+        return Boolean(this._proc);
     }
 
-    // the player's window: made the desktop
+    send(command) {
+        try {
+            this._proc?.get_stdin_pipe()?.write_all(new TextEncoder().encode(`${command}\n`), null);
+        } catch {}                                 // (it has just gone: the restart follows)
+    }
+
     _claim(win) {
         if (!this._proc || win.get_pid() !== Number(this._proc.get_identifier()))
             return;
-        this._win = win;
-        const setUp = () => {
-            if (this._win !== win)
-                return;
-            win.set_type(Meta.WindowType.DESKTOP);
-            win.stick();
-            const actor = win.get_compositor_private();
-            if (actor) {
-                actor.reactive = false;                     // clicks go through, to the desktop
-                for (const child of actor.get_children())
-                    child.reactive = false;
-            }
-            this._fit();
-            this._refit();
-            this._syncPlaying();
-        };
-        // once it's shown (stacked and with a frame): changing its type any earlier trips
-        // Mutter's stacking. If GNOME trims it to the work area later, it's put back.
+        this.win = win;
         const id = win.connect('shown', () => {
             win.disconnect(id);
-            this._setupIdle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-                this._setupIdle = 0;
-                setUp();
-                this._sizeId = win.connect('size-changed', () => this._refit());
+            // a moment later: changing its type while Mutter is still stacking it trips Mutter
+            this._idle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                this._idle = 0;
+                if (this.win !== win)
+                    return GLib.SOURCE_REMOVE;
+                win.set_type(Meta.WindowType.DESKTOP);   // below everything, out of every window list
+                win.stick();
+                const actor = win.get_compositor_private();
+                if (actor) {
+                    actor.reactive = false;              // clicks go through
+                    for (const child of actor.get_children())
+                        child.reactive = false;
+                }
+                this._onWindow(win);
                 return GLib.SOURCE_REMOVE;
             });
         });
     }
 
-    // the whole primary monitor, under the top bar too (a user operation: the work-area
-    // rule that keeps windows clear of the bar would otherwise cut off its bottom)
-    _fit() {
-        const win = this._win, m = Main.layoutManager.primaryMonitor;
+    stop() {
+        for (const id of ['_retry', '_idle']) {
+            if (this[id])
+                GLib.source_remove(this[id]);
+            this[id] = 0;
+        }
+        const proc = this._proc;
+        this._proc = this.win = null;
+        if (proc) {
+            this._send(proc, 'quit');
+            try {
+                proc.get_stdin_pipe()?.close(null);      // (it quits when its stdin closes, too)
+            } catch {}
+        }
+    }
+
+    _send(proc, command) {
+        try {
+            proc.get_stdin_pipe()?.write_all(new TextEncoder().encode(`${command}\n`), null);
+        } catch {}
+    }
+
+    destroy() {
+        this.stop();
+        global.display.disconnect(this._createdId);
+    }
+}
+
+export class LiveWallpaper {
+    constructor() {
+        this._conf = readConf();
+        this._desktop = new Player('desktop', win => this._placeDesktop(win));
+        this._lock = new Player('lock screen', win => this._showOnLockScreen(win));
+        this._monitor = Gio.File.new_for_path(CONF).monitor_file(Gio.FileMonitorFlags.NONE, null);
+        this._monitor.connect('changed', (_m, _f, _o, event) => {
+            if (event === Gio.FileMonitorEvent.CHANGES_DONE_HINT || event === Gio.FileMonitorEvent.CREATED ||
+                event === Gio.FileMonitorEvent.DELETED)
+                this._reload();
+        });
+        this._ids = [
+            [global.display, global.display.connect('in-fullscreen-changed', () => this._syncDesktop())],
+            [Main.layoutManager, Main.layoutManager.connect('monitors-changed', () => this._fitDesktop())],
+            [Main.sessionMode, Main.sessionMode.connect('updated', () => this._sessionChanged())],
+        ];
+        // unlocking: the lock screen's video slows and dissolves as the curtain lifts
+        const shield = Main.screenShield, self = this;
+        if (shield?.deactivate && !shield._mkDeactivate) {
+            shield._mkDeactivate = shield.deactivate;
+            shield.deactivate = function (...args) {
+                self._unlocking();
+                return this._mkDeactivate(...args);
+            };
+            this._shield = shield;
+        }
+        this._startDesktop();
+        this._sessionChanged();
+    }
+
+    _reload() {
+        const old = this._conf;
+        this._conf = readConf();
+        if (old.desktop !== this._conf.desktop || old.hwaccel !== this._conf.hwaccel)
+            this._startDesktop();
+        if (Main.sessionMode.isLocked && (old.lockscreen !== this._conf.lockscreen ||
+            old.lockscreen_loop !== this._conf.lockscreen_loop))
+            this._startLock();
+    }
+
+    // ----- the desktop
+    _startDesktop() {
+        if (usable(this._conf.desktop))
+            this._desktop.start(this._conf.desktop);
+        else
+            this._desktop.stop();
+    }
+
+    _placeDesktop(win) {
+        this._sizeId = win.connect('size-changed', () => this._scaleDesktop());
+        this._fitDesktop();
+        this._syncDesktop();
+    }
+
+    // the whole primary monitor, under the top bar too; GNOME holds windows to the work area's
+    // height, so the picture is scaled the rest of the way from the top-left corner (a few
+    // percent of a picture already drawn to cover; full screen would hide the top bar)
+    _fitDesktop() {
+        const win = this._desktop.win, m = Main.layoutManager.primaryMonitor;
         if (!win || !m)
             return;
         win.move_resize_frame(true, m.x, m.y, m.width, m.height);
-        this._refit();
+        this._scaleDesktop();
     }
 
-    // GNOME keeps windows to the work area's height (the screen less the top bar): the
-    // picture is scaled from the top-left corner to the whole monitor instead (a few
-    // percent, of a video already drawn to cover). (Full screen would hide the top bar.)
-    _refit() {
-        const win = this._win, m = Main.layoutManager.primaryMonitor;
-        const actor = win?.get_compositor_private();
-        const f = win?.get_frame_rect();
+    _scaleDesktop() {
+        const win = this._desktop.win, m = Main.layoutManager.primaryMonitor;
+        const actor = win?.get_compositor_private(), f = win?.get_frame_rect();
         if (!actor || !m || !f || f.width <= 0 || f.height <= 0)
             return;
         actor.set_pivot_point(0, 0);
         actor.set_scale(m.width / f.width, m.height / f.height);
     }
 
-    // paused under a full-screen window and on the lock screen (nothing sees it there)
-    _syncPlaying() {
-        // only once its window is up: before that it hasn't set up its signal handlers, and
-        // USR1 / USR2 would end it
-        if (!this._proc || !this._win)
-            return;
+    // paused under a full-screen window and on the lock screen
+    _syncDesktop() {
+        if (!this._desktop.win)
+            return;                                  // (not set up yet: no commands before its window)
         const m = Main.layoutManager.primaryIndex;
         const hidden = Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m));
-        this._proc.send_signal(hidden ? SIGUSR1 : SIGUSR2);
+        this._desktop.send(hidden ? 'pause' : 'play');
+    }
+
+    // ----- the lock screen
+    _sessionChanged() {
+        const locked = Main.sessionMode.isLocked;
+        if (locked && !this._wasLocked)
+            this._startLock();
+        else if (!locked && this._wasLocked)
+            this._endLock();
+        this._wasLocked = locked;
+        this._syncDesktop();
+    }
+
+    _startLock() {
+        this._dropClone();
+        if (usable(this._conf.lockscreen))
+            this._lock.start(this._conf.lockscreen, this._conf.lockscreen_loop === false ? ['--once'] : []);
+        else
+            this._lock.stop();
+    }
+
+    _showOnLockScreen(win) {
+        const dialog = Main.screenShield?._dialog, actor = win.get_compositor_private();
+        const m = Main.layoutManager.primaryMonitor;
+        if (!dialog || !actor || !m)
+            return;
+        this._dropClone();
+        // above GNOME's blurred wallpaper (dialog._backgroundGroup), below the clock and prompt
+        const clone = new Clutter.Clone({source: actor, x: m.x, y: m.y, width: m.width, height: m.height, opacity: 0});
+        const dim = new Clutter.BrightnessContrastEffect();
+        dim.set_brightness(-0.12);                   // (the clock stays easy to read)
+        clone.add_effect(dim);
+        if (dialog._backgroundGroup?.get_parent() === dialog)
+            dialog.insert_child_above(clone, dialog._backgroundGroup);
+        else
+            dialog.insert_child_at_index(clone, 0);
+        clone.ease({opacity: 255, duration: 400, delay: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        this._clone = clone;
+        this._clone.connect('destroy', () => {
+            if (this._clone === clone)
+                this._clone = null;
+        });
+    }
+
+    _unlocking() {
+        if (!this._lock.running)
+            return;
+        this._lock.send(`decelerate ${UNLOCK_MS}`);
+        this._clone?.ease({opacity: 0, duration: UNLOCK_MS, mode: Clutter.AnimationMode.EASE_IN_QUAD});
+    }
+
+    _endLock() {
+        // (after the dissolve: the curtain is up by now)
+        this._endId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, UNLOCK_MS + 100, () => {
+            this._endId = 0;
+            if (!Main.sessionMode.isLocked) {
+                this._dropClone();
+                this._lock.stop();
+            }
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _dropClone() {
+        const clone = this._clone;
+        this._clone = null;
+        clone?.destroy();
     }
 
     destroy() {
+        if (this._endId)
+            GLib.source_remove(this._endId);
         for (const [object, id] of this._ids)
             object.disconnect(id);
-        this._stop();
+        this._monitor.cancel();
+        if (this._shield) {
+            this._shield.deactivate = this._shield._mkDeactivate;
+            delete this._shield._mkDeactivate;
+            if (Object.getPrototypeOf(this._shield).deactivate === this._shield.deactivate)
+                delete this._shield.deactivate;
+        }
+        if (this._desktop.win && this._sizeId)
+            this._desktop.win.disconnect(this._sizeId);
+        this._dropClone();
+        this._desktop.destroy();
+        this._lock.destroy();
     }
 }

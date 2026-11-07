@@ -1,7 +1,7 @@
 {
   "uuid": "mk-shell-engine@mehulk",
   "name": "MK Shell Engine",
-  "description": "MK Workstation's own shell pieces in one place: the glass dock, native blur, and snap layouts (Super+Z). The dock and blur stand aside while Dash to Dock or Blur my Shell is on.",
+  "description": "MK Workstation's own shell pieces in one place: the glass dock, native blur, snap layouts (Super+Z), the top bar, a live wallpaper and more. On the lock screen only the live wallpaper runs.",
   "shell-version": [
     "48",
     "49",
@@ -9,5 +9,9 @@
     "51"
   ],
   "settings-schema": "org.gnome.shell.extensions.mk-shell-engine",
-  "url": "https://github.com/MehulK-techie/fedora-workstation-config"
+  "url": "https://github.com/MehulK-techie/fedora-workstation-config",
+  "session-modes": [
+    "user",
+    "unlock-dialog"
+  ]
 }

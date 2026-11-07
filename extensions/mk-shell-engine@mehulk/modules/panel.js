@@ -460,6 +460,9 @@ export class Panel {
             console.error(`mk-shell-engine: tray fold: ${e.message}`);
         }
         this._orderLeft();
+        // something added to the left later (WACK Shell's logo button after a settings change,
+        // Places switched on): put the island back in order
+        this._leftId = Main.panel._leftBox.connect('child-added', () => this._queueOrder());
         this._quiet = new QuietIndicators();
         this._battery = new BatteryTint();
         if (this._settings.get_boolean('autohide-top-bar')) {
@@ -479,20 +482,43 @@ export class Panel {
     // The left island, near the corner (Fitts's law: the pointer stops at the
     // screen's edge by itself): the emblem (WACK Shell's menu, when on), a divider,
     // the app you're in (or "WS 1" on an empty desktop), the workspace dots, Places.
+    _unanchor(dots) {
+        try {
+            dots.remove_style_class_name('mk-ws-anchor');
+            dots.clip_to_allocation = false;
+            dots.set_width(-1);
+        } catch {}                 // (already gone with its extension)
+    }
+
+    _queueOrder() {
+        if (this._orderIdle)
+            return;
+        this._orderIdle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._orderIdle = 0;
+            this._orderLeft();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
     _orderLeft() {
         const left = Main.panel._leftBox, area = Main.panel.statusArea;
         this._divider ??= new St.Widget({style_class: 'mk-island-divider', y_align: Clutter.ActorAlign.CENTER});
         if (!this._divider.get_parent())
             left.add_child(this._divider);
         // the emblem (WACK Shell's menu), Places, a divider, the workspace dots, then the app (or "WS 2")
+        // (the dots: WACK Shell's workspace button when it's on, GNOME's own otherwise)
+        const dotsItem = area['wack-workspace-button'] ?? area.activities;
         const order = [area['wack-logo-menu']?.container, area['places-menu']?.container, this._divider,
-            area.activities?.container, area['mk-active-app']?.container]
+            area['wack-workspace-button']?.container, area.activities?.container, area['mk-active-app']?.container]
             .filter(a => a && a.get_parent() === left);
         order.forEach((actor, i) => left.set_child_at_index(actor, i));
         this._divider.visible = true;
         // the dots sit in a fixed 58 px anchor: the active dot morphs inside it, the
         // capsule never moves (it shifted while swiping between workspaces)
-        const dots = area.activities;
+        const dots = dotsItem;
+        if (this._dots && this._dots !== dots)
+            this._unanchor(this._dots);
+        this._dots = dots;
         if (dots && !dots.has_style_class_name('mk-ws-anchor')) {
             dots.add_style_class_name('mk-ws-anchor');
             dots.clip_to_allocation = true;
@@ -501,14 +527,17 @@ export class Panel {
     }
 
     _teardown() {
+        if (this._leftId)
+            Main.panel._leftBox.disconnect(this._leftId);
+        this._leftId = 0;
+        if (this._orderIdle)
+            GLib.source_remove(this._orderIdle);
+        this._orderIdle = 0;
         this._divider?.destroy();
         this._divider = null;
-        const dots = Main.panel.statusArea.activities;
-        if (dots?.has_style_class_name('mk-ws-anchor')) {
-            dots.remove_style_class_name('mk-ws-anchor');
-            dots.clip_to_allocation = false;
-            dots.set_width(-1);
-        }
+        if (this._dots)
+            this._unanchor(this._dots);
+        this._dots = null;
         this._tray?.destroy();
         this._quiet?.destroy();
         this._battery?.destroy();

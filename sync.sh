@@ -643,6 +643,39 @@ if (( $(gnome_version 2> /dev/null || echo 0) >= 48 )) && [[ -d "$WACK_CLOCK" ]]
         fi
     done
 fi
+# WACK Shell and its lock-screen clock list GNOME 46-50 in their metadata, so
+# Extension Manager calls them "Unsupported" on newer GNOME (they run: the
+# patches above cover GNOME 50 / 51). Add this GNOME's version to the installed
+# copies, once, and make sure their schemas are compiled.
+for uuid in wack-shell@rinzler69-wastaken.github.com wack-lockscreen-clock@rinzler69-wastaken.github.com; do
+    meta="$USER_EXT_DIR/$uuid/metadata.json"
+    [[ -f "$meta" ]] || continue
+    python3 - "$meta" "$(gnome_version 2>/dev/null || echo)" << 'PY'
+import json, sys
+path, version = sys.argv[1], sys.argv[2]
+meta = json.load(open(path))
+versions = meta.setdefault("shell-version", [])
+if version and version not in versions:
+    versions.append(version)
+    with open(path, "w") as f:
+        json.dump(meta, f, indent=2)
+    print(f"    [+] {meta.get('uuid', path)}: marked as made for GNOME {version}")
+PY
+    if [[ -d "$USER_EXT_DIR/$uuid/schemas" ]]; then
+        glib-compile-schemas "$USER_EXT_DIR/$uuid/schemas" 2>/dev/null || true
+    fi
+done
+# WACK Shell's logo: the MK emblem (with its "MK" label), set only while no
+# custom logo is chosen, so a logo you pick in WACK's settings stays yours.
+install -Dm644 "$SCRIPT_DIR/assets/icons/mk-emblem-symbolic.svg" "$MK_SHARE/mk-emblem-symbolic.svg"
+WACK_SCHEMAS="$USER_EXT_DIR/wack-shell@rinzler69-wastaken.github.com/schemas"
+if [[ -f "$WACK_SCHEMAS/gschemas.compiled" ]] &&
+    [[ "$(gsettings --schemadir "$WACK_SCHEMAS" get org.gnome.shell.extensions.wack-shell custom-logo-path 2>/dev/null)" == "''" ]]; then
+    ext_set wack-shell@rinzler69-wastaken.github.com org.gnome.shell.extensions.wack-shell custom-logo-path "$MK_SHARE/mk-emblem-symbolic.svg"
+    ext_set wack-shell@rinzler69-wastaken.github.com org.gnome.shell.extensions.wack-shell use-custom-logo true
+    ext_set wack-shell@rinzler69-wastaken.github.com org.gnome.shell.extensions.wack-shell symbolic-logo true
+    echo "    [+] WACK Shell's logo: the MK emblem"
+fi
 # Effects profile (`mk effects full|lite|auto`, default auto): lite keeps the
 # heaviest effects (config/effects.conf) installed but switched off, so older
 # or low-power machines stay smooth. auto picks lite on weak hardware.

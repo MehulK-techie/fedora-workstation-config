@@ -924,6 +924,29 @@ $CSS_MARKER
 CSSEOF
 fi
 
+# 8a. Audio routing: apps follow the default output (WirePlumber stops pinning them
+# to a remembered one, e.g. Easy Effects' sink, which left Spotify and browsers
+# silent), and mk-audio-init checks the stack and the output at every login.
+# The drop-in takes effect when WirePlumber next starts (login, or
+# ./scripts/setup-audio.sh now); a sync never restarts audio for it.
+install -Dm644 "$SCRIPT_DIR/config/wireplumber/51-mk-follow-default.conf" \
+    "$HOME/.config/wireplumber/wireplumber.conf.d/51-mk-follow-default.conf"
+cat > "$HOME/.config/systemd/user/mk-audio-init.service" << 'UNIT'
+[Unit]
+Description=MK Workstation: sound for every app at login (bin/mk-audio-init)
+After=pipewire.service pipewire-pulse.service wireplumber.service
+Wants=pipewire-pulse.service wireplumber.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/mk-audio-init
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target
+UNIT
+systemctl --user daemon-reload 2> /dev/null && systemctl --user enable mk-audio-init.service &> /dev/null || true
+
 # 8b. Audio: only repaired when a service is down (a sync never cuts what's playing)
 if ! "$SCRIPT_DIR/scripts/repair-audio.sh" --check >/dev/null 2>&1; then
     echo "==> Audio services were down: restarting them..."

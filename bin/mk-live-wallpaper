@@ -85,6 +85,9 @@ def player(path, once=False):
             sink.set_property("sink", gtksink)
         playbin.set_property("uri", Gst.filename_to_uri(path))
         playbin.set_property("video-sink", sink)
+        # no audio at all: the audio stream isn't decoded, and nothing ever connects to
+        # PipeWire / PulseAudio (a fakesink stands in should a file force one)
+        Gst.util_set_object_arg(playbin, "flags", "video+deinterlace+soft-colorbalance")
         playbin.set_property("audio-sink", Gst.ElementFactory.make("fakesink", None))
         playbin.set_property("mute", True)
         state["pipeline"] = playbin

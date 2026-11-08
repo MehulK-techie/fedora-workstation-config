@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# mk-audio-init: sound that works at login (mk-audio-init.service runs it).
+#
+#   mk-audio-init            check the audio stack, pick the right output, send apps to it
+#   mk-audio-init --clean    also forget the outputs WirePlumber had pinned apps to
+#                            (restarts the audio stack once; scripts/setup-audio.sh uses it)
+#
+# What it does:
+#   1. waits for the sound card (up to 10 s after boot)
+#   2. PipeWire, pipewire-pulse and WirePlumber: when one is down, all three are
+#      restarted together. Never WirePlumber alone: the PulseAudio bridge
+#      (pipewire-pulse), which browsers and Spotify play through, would lose its
+#      links and those apps would go quiet while system sounds still worked.
+#   3. the default output: kept when it's real hardware; else the built-in
+#      speakers / analog output (never a dummy, an HDMI port with nothing on it,
+#      or Easy Effects' virtual sink)
+#   4. every app playing now moves to the default output, unmuted
+# The volume is left where you set it.
+set -uo pipefail
+UNITS=(pipewire.socket pipewire-pulse.socket pipewire.service pipewire-pulse.service wireplumber.service)
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/wireplumber/stream-properties"
+
+for _ in {1..20}; do
+    [[ -d /dev/snd ]] && break
+    sleep 0.5
+done
+
+restart_all() {
+    systemctl --user daemon-reload
+    systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service &> /dev/null
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+    sleep 1.5
+}
+
+if [[ "${1:-}" == --clean ]]; then
+    # WirePlumber writes its memory back on exit: stop it, forget the pinned
+    # outputs ("target"), start the stack again in lockstep
+    systemctl --user stop wireplumber.service
+    if [[ -f "$STATE" ]]; then
+        cp -n "$STATE" "$STATE.bak" 2> /dev/null || true
+        sed -i -E 's/"target":"[^"]*", ?//g; s/, ?"target":"[^"]*"//g; s/"mute":true/"mute":false/g' "$STATE"
+    fi
+    restart_all
+else
+    for unit in "${UNITS[@]}"; do
+        if ! systemctl --user is-active --quiet "$unit"; then
+            restart_all
+            break
+        fi
+    done
+fi
+
+# the default output: real hardware, built-in first
+default=$(pactl get-default-sink 2> /dev/null || true)
+real() { [[ -n "$1" && "$1" == alsa_output.* ]] && ! grep -qiE 'hdmi|displayport' <<< "$1"; }
+if ! real "$default"; then
+    pick=$(pactl list short sinks 2> /dev/null | awk '{print $2}' |
+        grep -E '^alsa_output\.' | grep -viE 'hdmi|displayport' |
+        grep -iE 'speaker|analog' | head -n 1)
+    [[ -z "$pick" ]] && pick=$(pactl list short sinks 2> /dev/null | awk '{print $2}' | grep -E '^alsa_output\.' | head -n 1)
+    if [[ -n "$pick" ]]; then
+        pactl set-default-sink "$pick"
+        default=$pick
+    fi
+fi
+
+# apps playing now: onto it, unmuted
+if [[ -n "$default" ]]; then
+    pactl list short sink-inputs 2> /dev/null | awk '{print $1}' | while read -r id; do
+        pactl move-sink-input "$id" "$default" 2> /dev/null || true
+        pactl set-sink-input-mute "$id" 0 2> /dev/null || true
+    done
+fi
+wpctl set-mute @DEFAULT_AUDIO_SINK@ 0 2> /dev/null || true
+echo "Audio: $(pactl get-default-sink 2> /dev/null || echo 'no output found')"

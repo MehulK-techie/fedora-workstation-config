@@ -95,16 +95,9 @@ export default class WackLockscreenClockExtension extends Extension {
         // <GDM_EXCLUDE>
         this._gdmManager = null;
         this._crossSessionManager = null;
-        if (Main.sessionMode.currentMode === 'gdm') {
-            import('./src/pro/pro.js').then(module => {
-                if (!this._isActive) return;
-                this._gdmManager = new module.GdmManager(this);
-                this._gdmManager.enable();
-            }).catch(err => {
-                _logError(`[WACK/GDM] Failed to dynamically load GDM DLC: ${err.message}`);
-            });
-        }
-        this._syncCrossSessionManager();
+        // (MK: no GDM login-screen part in this merge: upstream's src/pro and
+        // crossSessionManager.js, which shared files through a world-writable
+        // /var/tmp/wack, are left out)
 
         if (Main.sessionMode.currentMode === 'gdm') return;
         // </GDM_EXCLUDE>
@@ -835,24 +828,7 @@ export default class WackLockscreenClockExtension extends Extension {
 
     // <GDM_EXCLUDE>
     _syncCrossSessionManager() {
-        if (Main.sessionMode.currentMode === 'gdm') {
-            if (this._crossSessionManager) {
-                this._crossSessionManager.disable();
-                this._crossSessionManager = null;
-            }
-            return;
-        }
-
-        if (!this._crossSessionManager) {
-            import('./crossSessionManager.js').then(module => {
-                if (!this._isActive) return;
-                if (this._crossSessionManager) return;
-                this._crossSessionManager = new module.CrossSessionManager(this.getSettings());
-                this._crossSessionManager.enable();
-            }).catch(err => {
-                _logError(`[WACK/GDM] Failed to dynamically load CrossSessionManager: ${err.message}`);
-            });
-        }
+        // MK: nothing to share with GDM's login screen in this merge (see enable()).
     }
     // </GDM_EXCLUDE>
 

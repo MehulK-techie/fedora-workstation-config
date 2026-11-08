@@ -21,5 +21,8 @@ One GNOME Shell extension made by MK Workstation from two others:
 
 GPL-3.0 section 13 allows combining GPL-3.0 code with AGPL-3.0 code; the
 combined work is conveyed under AGPL-3.0, each part keeping its own notice.
-Upstream WACK's GDM (login screen) features and its own settings pages are
-not used here; its uuid (wack-lockscreen-clock@...) is a separate extension.
+Left out of WACK: its GDM (login screen) part (src/pro/, crossSessionManager.js)
+and its own settings pages. Changed in WACK: its wallpaper-colour cache lives in
+~/.cache/wack-sonoma-lockscreen (0700) instead of a world-writable /var/tmp/wack
+shared with GDM, and it no longer sweeps /var/tmp (src/main/cacheDir.js). Its uuid
+(wack-lockscreen-clock@...) is a separate extension.

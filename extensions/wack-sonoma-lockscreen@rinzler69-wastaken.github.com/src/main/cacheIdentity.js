@@ -1,4 +1,5 @@
 import GLib from 'gi://GLib';
+import { WACK_BASE } from './cacheDir.js';
 import {
     PROMPT_VISUAL_ALGORITHM_VERSION,
 } from './colorUtils.js';
@@ -178,7 +179,7 @@ export function computeSliceHash(cacheKey) {
  * @returns {{targetDir: string, filePath: string}}
  */
 export function resolveSlicePath(userName, sliceHash, isXml = false, xmlName = null) {
-    const BASE_VIBRANCY_DIR = '/var/tmp/wack/vibrancy';
+    const BASE_VIBRANCY_DIR = `${WACK_BASE}/vibrancy`;
     const GENERAL_DIR = `${BASE_VIBRANCY_DIR}/general`;
 
     let targetDir = GENERAL_DIR;

@@ -107,7 +107,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Daily background check that tells you when a new version of this repo is available
 - **Shortcuts window (Super+/):** every shortcut and gesture, live, each marked working, clashing, unset or broken; click to change keys, + to add your own commands, Reset to go back
 - **MK Notes (Super+N):** notes on A4 pages that grow as you write (Page X of Y), real tables (resize columns, add rows with Tab, move them), rich text, comments in the margin, sticky notes with colours and layer order, pictures with Word-style rotation and resizing, shapes and graphs, drawing, PDFs attached or laid out as printouts, notebooks, links and a mind map, PDF and Word export, locks with auto-lock, and encrypted phone sync. Saved as Markdown files. See [docs/NOTES.md](docs/NOTES.md)
-- **A private lock screen:** only the clock and your scene; no notifications, media player or screenshots while locked
+- **A private lock screen:** no notifications (GNOME's lock-screen notifications stay off; switch them on in Settings and they show as compact pills) and no screenshots while locked. With WACK Sonoma Live Lockscreen switched on: the Sonoma clock, a live video behind it (silent unless you turn its sound on), battery and weather under the date, a Now Playing card with Previous / Play / Next (Sonoma Lock Screen › Now Playing switches it off), and a power button with Hibernate
 - **MK Control Center and tour:** quick actions, every `mk` command as a card, MK Lock, face and fingerprint enrollment in windows, the security check; a six-slide tour (from the Control Center)
 - **Companion (Super+Shift+N):** notes you can pin, reorder and fold away; a task list you tick off and pin; one click to MK Notes or the focus timer
 - **Reminders:** on any note or task, in 10 min, at 18:00, or every day; they fire even with the Companion closed, with Open and Snooze
@@ -168,7 +168,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | Terminal | btop, fastfetch, fzf, ripgrep, zoxide, ncdu, just, chezmoi, 7-Zip, unrar |
 | Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, Loupe (images), Kamoso, Media Writer |
 
-**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Magic Lamp (genie minimize), Impatience (25% faster animations), AppIndicator (tray icons), Caffeine (keep awake), and MK's own top-bar extension (system monitor, welcome light, focus timer, Alt+Tab glide, wallpaper accent).
+**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Magic Lamp (genie minimize), Impatience (25% faster animations), AppIndicator (tray icons), Caffeine (keep awake), and MK's own top-bar extension (system monitor, welcome light, focus timer, Alt+Tab glide, wallpaper accent). MK also ships **WACK Sonoma Live Lockscreen** (off until you switch it on): the lock screen above, the desktop's live wallpaper with optional sound, Finder (Fedora logo), an icon-only Places menu and the app indicator in the top bar, and Hibernate in the Finder menu, Quick Settings and on the lock screen (hibernation needs a one-time `sudo scripts/setup-hibernate.sh`, and doesn't work while Secure Boot is on).
 
 ---
 

@@ -630,14 +630,30 @@ cp -r "$SCRIPT_DIR/extensions/$MK_ENGINE" "$USER_EXT_DIR/"
 glib-compile-schemas "$USER_EXT_DIR/$MK_ENGINE/schemas" || true
 
 # WACK Sonoma Live Lockscreen: MK's merge of WACK Sonoma Lockscreen and Live Lock
-# Screen (the Sonoma clock and prompt, a silent video / GIF / picture behind it,
-# unlock animations; settings behind its gear in Extension Manager). Refreshed
-# from the repo like the engine; switched on or off by you in Extension Manager.
+# Screen (the Sonoma clock and prompt, a video / GIF / picture behind it, unlock
+# animations, Now Playing, the power button), plus MK's top bar pieces (Finder,
+# Places, the app indicator), Hibernate and the desktop's live wallpaper; settings
+# behind its gear in Extension Manager. Refreshed from the repo like the engine;
+# switched on or off by you in Extension Manager.
 MK_LOCK="wack-sonoma-lockscreen@rinzler69-wastaken.github.com"
 [[ -d "$USER_EXT_DIR/$MK_LOCK" ]] || NEW_EXTENSIONS=1
 rm -rf "${USER_EXT_DIR:?}/$MK_LOCK"
 cp -r "$SCRIPT_DIR/extensions/$MK_LOCK" "$USER_EXT_DIR/"
 glib-compile-schemas "$USER_EXT_DIR/$MK_LOCK/schemas" || true
+# It now plays the desktop's live wallpaper too (MK Shell Engine's stands aside while
+# it's on): the desktop file chosen before (~/.config/mk/wallpaper.json) carries over
+# to its desktop-wallpaper-path, once, while that is still empty.
+LOCK_SCHEMA="org.gnome.shell.extensions.wack-sonoma-lockscreen"
+old_desktop=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("desktop",""))' \
+    "$HOME/.config/mk/wallpaper.json" 2>/dev/null || true)
+if [[ -n "$old_desktop" ]] &&
+    [[ "$(gsettings --schemadir "$USER_EXT_DIR/$MK_LOCK/schemas" get "$LOCK_SCHEMA" desktop-wallpaper-path 2>/dev/null)" == "''" ]]; then
+    ext_set "$MK_LOCK" "$LOCK_SCHEMA" desktop-wallpaper-path "$old_desktop"
+    echo "    [+] Desktop live wallpaper: now played by WACK Sonoma Live Lockscreen"
+fi
+# Its "Sync Refresh Rate to GDM" button runs this (through pkexec, which asks for
+# your password): your display settings copied to the login screen's.
+install -Dm755 "$SCRIPT_DIR/scripts/setup-system-optimizations.sh" "$HOME/.local/libexec/mk/setup-system-optimizations.sh"
 
 gsettings set org.gnome.shell disable-user-extensions false
 # GNOME 51 removed St.BoxLayout's `vertical` property; extensions that still set

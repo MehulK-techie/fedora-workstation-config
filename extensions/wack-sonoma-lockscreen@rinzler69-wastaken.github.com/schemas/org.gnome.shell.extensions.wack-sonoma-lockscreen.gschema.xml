@@ -301,10 +301,10 @@
       <description>Show the media file (video, GIF or picture) behind the lock screen.</description>
     </key>
     <key name="dim-opacity" type="i">
-      <range min="0" max="80"/>
-      <default>25</default>
-      <summary>Background dimming (%)</summary>
-      <description>How much the lock screen background is darkened under the clock, 0 to 80.</description>
+      <range min="0" max="85"/>
+      <default>45</default>
+      <summary>Lock screen scrim (%)</summary>
+      <description>A light scrim, rgba(12,14,20), over the lock screen background under the clock, 0 to 85.</description>
     </key>
     <key name="unlock-animation" type="s">
       <choices><choice value="slow-stop"/><choice value="zoom"/><choice value="crossfade"/><choice value="none"/></choices>
@@ -364,6 +364,134 @@
       <default>true</default>
       <summary>Hide the fingerprint hint</summary>
       <description>No "or touch the fingerprint reader" line under the password field (the reader still works).</description>
+    </key>
+
+    <!-- MK v17: wallpapers and audio -->
+    <key name="wallpaper-sync-mode" type="b">
+      <default>false</default>
+      <summary>Same media on the desktop and the lock screen</summary>
+      <description>On: the lock screen plays the desktop's media (desktop-wallpaper-path); off: each has its own (the lock screen's is background-video-path).</description>
+    </key>
+    <key name="desktop-wallpaper-path" type="s">
+      <default>''</default>
+      <summary>Desktop live wallpaper</summary>
+      <description>A video or picture as the desktop background; empty: GNOME's own wallpaper.</description>
+    </key>
+    <key name="desktop-hwaccel" type="s">
+      <choices><choice value="vaapi"/><choice value="none"/></choices>
+      <default>'vaapi'</default>
+      <summary>Desktop video decoding</summary>
+      <description>vaapi: the graphics card; none: the processor.</description>
+    </key>
+    <key name="desktop-audio-enabled" type="b">
+      <default>false</default>
+      <summary>Desktop wallpaper sound</summary>
+      <description>Off: the desktop video never opens an audio stream.</description>
+    </key>
+    <key name="desktop-audio-volume" type="d">
+      <range min="0.0" max="1.0"/>
+      <default>0.5</default>
+      <summary>Desktop wallpaper volume</summary>
+    </key>
+    <key name="lockscreen-audio-enabled" type="b">
+      <default>false</default>
+      <summary>Lock screen video sound</summary>
+      <description>Off: the lock screen video never opens an audio stream.</description>
+    </key>
+    <key name="lockscreen-audio-volume" type="d">
+      <range min="0.0" max="1.0"/>
+      <default>0.35</default>
+      <summary>Lock screen video volume</summary>
+    </key>
+    <key name="audio-auto-mute-on-other-media" type="b">
+      <default>true</default>
+      <summary>Mute the wallpaper while other media plays</summary>
+      <description>Any other media player (MPRIS) playing mutes the wallpaper's sound until it stops.</description>
+    </key>
+    <!-- MK v17: the top bar -->
+    <key name="topbar-enabled" type="b">
+      <default>true</default>
+      <summary>Finder, Places and the app indicator in the top bar</summary>
+      <description>Off: this extension adds nothing to the top bar (MK Shell Engine's own, if on, show instead).</description>
+    </key>
+    <key name="finder-logo-preset" type="s">
+      <choices><choice value="fedora-blue"/><choice value="fedora-mono"/><choice value="mk"/><choice value="apple"/><choice value="custom"/><choice value="none"/></choices>
+      <default>'fedora-blue'</default>
+      <summary>Finder logo</summary>
+      <description>fedora-blue (#51a2da), fedora-mono, mk, apple, custom (finder-custom-logo), none.</description>
+    </key>
+    <key name="finder-custom-logo" type="s">
+      <default>''</default>
+      <summary>Custom Finder logo</summary>
+      <description>An image file, used with the custom preset.</description>
+    </key>
+    <key name="finder-show-label" type="b">
+      <default>true</default>
+      <summary>Finder label</summary>
+    </key>
+    <key name="finder-label" type="s">
+      <default>'Finder'</default>
+      <summary>Finder label text</summary>
+    </key>
+    <key name="places-show-text" type="b">
+      <default>false</default>
+      <summary>Places label</summary>
+      <description>Off: the Places button is an icon only.</description>
+    </key>
+    <key name="show-app-indicator" type="b">
+      <default>true</default>
+      <summary>App indicator</summary>
+      <description>The focused app's icon and name in the top bar, with its window menu.</description>
+    </key>
+    <!-- MK v17: lock screen widgets and performance -->
+    <key name="lock-media-controls" type="b">
+      <default>true</default>
+      <summary>Now Playing on the lock screen</summary>
+    </key>
+    <key name="lock-status-pill" type="b">
+      <default>true</default>
+      <summary>Battery and weather under the date</summary>
+    </key>
+    <key name="lock-weather" type="b">
+      <default>true</default>
+      <summary>Weather in the status pill</summary>
+      <description>GNOME's weather (the location set in GNOME Weather or the clock).</description>
+    </key>
+    <key name="compact-notifications" type="b">
+      <default>true</default>
+      <summary>Compact notification pills</summary>
+      <description>Narrow pills (380 px at most), three at a time and a count of the rest, with Clear.</description>
+    </key>
+    <key name="lock-power-button" type="b">
+      <default>true</default>
+      <summary>Power button on the lock screen</summary>
+      <description>Bottom right: Sleep, Hibernate, Restart, Shut Down.</description>
+    </key>
+    <key name="zero-lag-lock" type="b">
+      <default>true</default>
+      <summary>Zero-lag lock screen</summary>
+      <description>No heavy background blur (a light scrim instead; a single blur pass only while the password field shows), video in step with the screen's refresh rate.</description>
+    </key>
+    <key name="pause-on-sleep" type="b">
+      <default>true</default>
+      <summary>Pause on sleep and screen off</summary>
+      <description>The video pauses as the screen turns off or the computer sleeps, and plays again 250 ms after waking.</description>
+    </key>
+    <key name="wake-to-password" type="b">
+      <default>true</default>
+      <summary>Password field on wake</summary>
+      <description>Waking the computer shows the password field at once, not the clock.</description>
+    </key>
+    <!-- MK v17: power -->
+    <key name="show-hibernate" type="b">
+      <default>true</default>
+      <summary>Hibernate buttons</summary>
+      <description>Hibernate in the Finder menu, Quick Settings' power menu and the lock screen's power button.</description>
+    </key>
+    <key name="remap-sleep-to-hibernate" type="b">
+      <default>false</default>
+      <summary>Sleep means hibernate</summary>
+      <description>The Sleep buttons this extension adds hibernate instead.</description>
     </key>
   </schema>
 </schemalist>

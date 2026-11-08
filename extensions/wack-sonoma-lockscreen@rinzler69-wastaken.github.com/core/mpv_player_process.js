@@ -37,7 +37,7 @@ const PROFILE_NAMES = {
 export class MpvPlayerProcess {
     constructor({
         playlist, actionOnEnd = ActionOnEnd.LOOP, 
-        volume,
+        volume, audio = false, extraArgs = [],
         useVideorate = false, framerate, imageDuration = 5,
         onSizeChange, onPauseChange, onFileChange, onNext, onPlaybackRestart,
         configPath,
@@ -58,6 +58,10 @@ export class MpvPlayerProcess {
         this._shouldPlay = false;
         this._paused = true;
         this._volume = volume;
+        // MK: no audio stream at all unless the lock screen's sound is switched on
+        this._audio = audio;
+        // MK: options the extension adds (the screen's refresh rate), after the custom ones
+        this._extraArgs = extraArgs;
         this._useVideorate = useVideorate;
         this._framerate = framerate;
         this._framerateProfilePath = null;
@@ -125,9 +129,9 @@ export class MpvPlayerProcess {
             // and thats a pain in the rear to deal with. Hence starting with a 
             // small window. 50% is a safe spot
             '--geometry=50%',
-            // MK: no audio at all, whatever the custom args say
-            '--aid=no',
-            '--ao=null'
+            ...this._extraArgs,
+            // MK: no audio at all (whatever the custom args say) unless switched on
+            ...(this._audio ? ['--aid=auto'] : ['--aid=no', '--ao=null'])
         );
 
         args.push(...await this._ensureSupportedArgs());

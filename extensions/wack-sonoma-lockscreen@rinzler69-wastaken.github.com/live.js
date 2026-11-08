@@ -1,3 +1,4 @@
+import GLib from 'gi://GLib';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { Keys, ActionOnBlank } from './enums.js';
 
@@ -57,6 +58,20 @@ export default class LockscreenExtension extends Extension {
         await this._setupRenderer(window);
     }
 
+    // MK: zero-lag mode keeps the video in step with the screen (its refresh rate, from
+    // the stage's view), frames resampled to the display rather than to an audio clock
+    _frameArgs() {
+        if (!this._settings.get_boolean('zero-lag-lock'))
+            return [];
+        const rate = global.stage.peek_stage_views?.()[0]?.get_refresh_rate?.() ?? 0;
+        return rate > 1 ? ['--video-sync=display-resample', `--display-fps-override=${rate.toFixed(3)}`] : [];
+    }
+
+    // MK: the volume slider, live
+    setVolume(volume) {
+        this._player?._queueCommand?.('set_property', 'volume', Math.round(volume * 100));
+    }
+
     _checkMpv() {
         if (isMpvAvailable())
             return true;
@@ -71,7 +86,10 @@ export default class LockscreenExtension extends Extension {
     }
 
     _getVideoPaths() {
-        const videoPath = this._settings.get_string(Keys.VIDEO_PATH);
+        // MK: the desktop's media on the lock screen too, in sync mode
+        const videoPath = this._settings.get_boolean('wallpaper-sync-mode')
+            ? this._settings.get_string('desktop-wallpaper-path') || this._settings.get_string(Keys.VIDEO_PATH)
+            : this._settings.get_string(Keys.VIDEO_PATH);
         if (!videoPath) {
             logWarn('Video not set, falling back');
             return null;
@@ -97,7 +115,9 @@ export default class LockscreenExtension extends Extension {
      * so they have to be read before anything else is set up
      */
     _readPlaybackSettings() {
-        this._actionOnBlank = this._settings.get_int(Keys.ACTION_ON_BLANK);
+        // MK: pause-on-sleep off carries on while the screen is off (suspending still pauses)
+        this._actionOnBlank = this._settings.get_boolean('pause-on-sleep')
+            ? this._settings.get_int(Keys.ACTION_ON_BLANK) : ActionOnBlank.IGNORE;
         this._disableOnBattery = this._settings.get_boolean(Keys.PAUSE_ON_BATTERY);
         this._promptPause = this._settings.get_boolean(Keys.PROMPT_PAUSE);
     }
@@ -129,7 +149,10 @@ export default class LockscreenExtension extends Extension {
             playlist,
             actionOnEnd: this._settings.get_int(Keys.ACTION_ON_END),
             imageDuration: this._settings.get_int(Keys.PHOTO_DURATION),
-            volume: this._settings.get_int(Keys.AUDIO_VOLUME) / 100,
+            // MK: silent (no audio stream) unless the lock screen's sound is on
+            volume: this._settings.get_double('lockscreen-audio-volume'),
+            audio: this._settings.get_boolean('lockscreen-audio-enabled'),
+            extraArgs: this._frameArgs(),
             useVideorate: this._settings.get_boolean(Keys.USE_VIDEORATE),
             framerate: this._settings.get_int(Keys.FRAMERATE),
             configPath: this.dir.get_child('external').get_child('mpv.conf').get_path(),
@@ -174,7 +197,8 @@ export default class LockscreenExtension extends Extension {
             h: this._player.h,
             scalingMode: this._settings.get_int(Keys.SCALING_MODE),
             fadeInDuration: this._settings.get_int(Keys.FADE_IN_DURATION),
-            blurRadius: this._settings.get_int(Keys.BLUR_RADIUS),
+            // MK: zero-lag mode: no blur while the clock shows (the prompt's blur still comes)
+            blurRadius: this._settings.get_boolean('zero-lag-lock') ? 0 : this._settings.get_int(Keys.BLUR_RADIUS),
             blurBrightness: this._settings.get_double(Keys.BLUR_BRIGHTNESS),
             promptGrayscale: this._settings.get_boolean(Keys.PROMPT_GRAYSCALE),
             promptChangeBlur: this._settings.get_boolean(Keys.PROMPT_CHANGE_BLUR),
@@ -232,8 +256,15 @@ export default class LockscreenExtension extends Extension {
                 this._updateActive();
             },
             onResume: () => {
-                this._sleeping = false;
-                this._updateActive();
+                // MK: 250 ms after waking, once the screen is back (no glitch as it wakes)
+                if (this._resumeId)
+                    GLib.source_remove(this._resumeId);
+                this._resumeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+                    this._resumeId = 0;
+                    this._sleeping = false;
+                    this._updateActive();
+                    return GLib.SOURCE_REMOVE;
+                });
             }
         });
 
@@ -345,6 +376,9 @@ export default class LockscreenExtension extends Extension {
     */
     disable() {
         destroySleeps();
+        if (this._resumeId)
+            GLib.source_remove(this._resumeId);
+        this._resumeId = 0;
 
         this._mpris?.destroy();
         this._batteryWatcher?.destroy();

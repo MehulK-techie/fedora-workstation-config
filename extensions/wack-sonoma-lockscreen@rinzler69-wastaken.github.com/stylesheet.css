@@ -399,3 +399,94 @@
 }
 /* MK: no "touch the fingerprint reader" line under the password field (the reader still works) */
 .mk-hide-fp-hint .login-dialog-message-hint { color: transparent; font-size: 1px; height: 0; margin: 0; padding: 0; }
+
+/* ===== MK v17: the top bar (topbar.js) ===== */
+.wack-finder-box { spacing: 6px; }
+.wack-finder-label { font-weight: bold; }
+.wack-places-box { spacing: 6px; }
+.wack-topbar-menu { -boxpointer-gap: 8px; }
+.wack-power-row-item { padding: 4px 6px; }
+.wack-power-row-item:hover { background-color: transparent; }
+.wack-power-row { spacing: 2px; }
+.wack-power-button {
+  padding: 6px 4px 4px;
+  border-radius: 10px;
+  min-width: 52px;
+}
+.wack-power-button:hover, .wack-power-button:focus { background-color: rgba(255, 255, 255, 0.10); }
+.wack-power-button:active { background-color: rgba(255, 255, 255, 0.16); }
+.wack-power-caption { font-size: 9px; padding-top: 3px; color: rgba(255, 255, 255, 0.75); }
+.wack-app-indicator { -natural-hpadding: 4px; -minimum-hpadding: 4px; }
+.wack-app-pill {
+  height: 24px;
+  padding: 0 10px 0 8px;
+  spacing: 6px;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.wack-app-name { font-size: 13px; font-weight: bold; max-width: 180px; }
+
+/* ===== MK v17: the lock screen (lockWidgets.js) ===== */
+.wack-status-pill {
+  margin-top: 8px;
+  padding: 4px 12px;
+  spacing: 6px;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.wack-status-text { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.92); }
+.wack-status-sep { color: rgba(255, 255, 255, 0.5); }
+.wack-status-icon { color: rgba(255, 255, 255, 0.92); }
+
+.wack-now-playing {
+  margin-top: 18px;
+  padding: 10px 12px;
+  spacing: 12px;
+  width: 340px;
+  border-radius: 18px;
+  background-color: rgba(20, 22, 30, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+.wack-np-art { width: 40px; height: 40px; border-radius: 8px; background-color: rgba(255, 255, 255, 0.10); }
+.wack-np-cover-none { color: rgba(255, 255, 255, 0.7); }
+.wack-np-text { spacing: 2px; }
+.wack-np-title { font-size: 14px; font-weight: bold; color: white; }
+.wack-np-artist { font-size: 12px; color: rgba(255, 255, 255, 0.7); }
+.wack-np-controls { spacing: 4px; }
+.wack-np-button { padding: 8px; border-radius: 999px; color: white; }
+.wack-np-button:hover, .wack-np-button:focus { background-color: rgba(255, 255, 255, 0.14); }
+.wack-np-button:insensitive { color: rgba(255, 255, 255, 0.35); }
+
+.wack-lock-power { spacing: 8px; }
+.wack-lock-power-button {
+  padding: 12px;
+  border-radius: 999px;
+  color: white;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.wack-lock-power-button:hover, .wack-lock-power-button:focus { background-color: rgba(255, 255, 255, 0.22); }
+.wack-lock-power-menu {
+  padding: 6px;
+  spacing: 2px;
+  border-radius: 14px;
+  background-color: rgba(20, 22, 30, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+.wack-lock-power-item { padding: 8px 14px; border-radius: 9px; color: white; }
+.wack-lock-power-item:hover, .wack-lock-power-item:focus { background-color: rgba(255, 255, 255, 0.14); }
+.wack-lock-power-row { spacing: 10px; }
+
+.wack-compact-notifs { max-width: 380px; }
+.wack-compact-notifs .notification,
+.wack-compact-notifs .unlock-dialog-notification-source { max-width: 380px; border-radius: 999px; }
+.wack-notif-footer { spacing: 10px; padding-top: 6px; }
+.wack-notif-more { font-size: 12px; color: rgba(255, 255, 255, 0.7); }
+.wack-notif-clear {
+  font-size: 12px;
+  font-weight: bold;
+  padding: 3px 12px;
+  border-radius: 999px;
+  color: white;
+  background-color: rgba(255, 255, 255, 0.14);
+}
+.wack-notif-clear:hover, .wack-notif-clear:focus { background-color: rgba(255, 255, 255, 0.24); }

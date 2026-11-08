@@ -1,0 +1,452 @@
+// MK: the left of the top bar, in the user session only (gone while locked):
+//   [Fedora + Finder] [Places] [divider] [workspace dots] [App Indicator]
+//   Finder         the system menu: a row of power buttons (Shut Down, Restart,
+//                  Hibernate, Sleep, Lock, Log Out), then About This System,
+//                  System Settings, App Store, Extension Settings, System
+//                  Monitor. Logo presets: fedora-blue (Fedora's own logo, in its
+//                  #51a2da), fedora-mono, mk, apple, custom, none.
+//   Places         an icon (a label with places-show-text): Home, Desktop,
+//                  Documents, Downloads, Music, Pictures, Videos, Trash (full or
+//                  empty, live), Network, and Recent Files (GTK's list,
+//                  ~/.local/share/recently-used.xbel: GTK itself can't load in
+//                  the shell, so it's read with GLib.BookmarkFile).
+//   App Indicator  the focused app: a 24 px pill, its 16 px icon and bold name
+//                  (180 px at most), crossfading with a 4 px slide (110 ms) as
+//                  focus moves. Menu: New Window, Hide, Maximize, Close, Quit.
+// Never two of anything: MK Shell Engine hides its own Finder and app pill while
+// these show (and puts them in this order, with its divider); GNOME's Places
+// extension's button is hidden while this one shows, and back when it goes.
+import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import Shell from 'gi://Shell';
+import St from 'gi://St';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
+import { hibernate, sleep } from './power.js';
+
+const FINDER_KEYS = ['finder-logo-preset', 'finder-custom-logo', 'finder-show-label', 'finder-label'];
+const GNOME_PLACES = 'places-menu';
+
+function launchUri(uri) {
+    try {
+        Gio.AppInfo.launch_default_for_uri(uri, global.create_app_launch_context(0, -1));
+    } catch (e) {
+        Main.notify('Places', e.message);
+    }
+}
+
+function launchApp(...ids) {
+    const app = ids.map(id => Shell.AppSystem.get_default().lookup_app(id)).find(Boolean);
+    if (app)
+        app.activate();
+    else
+        Main.notify('Finder', `Not installed: ${ids[0].replace(/\.desktop$/, '')}`);
+}
+
+// ----- Finder
+class Finder {
+    constructor(settings, extension) {
+        this._settings = settings;
+        this._extension = extension;
+        this.button = new PanelMenu.Button(0.5, 'Finder', false);
+        this.button.add_style_class_name('wack-finder');
+        const box = new St.BoxLayout({style_class: 'wack-finder-box', y_align: Clutter.ActorAlign.CENTER});
+        this._icon = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
+        this._label = new St.Label({style_class: 'wack-finder-label', y_align: Clutter.ActorAlign.CENTER});
+        box.add_child(this._icon);
+        box.add_child(this._label);
+        this.button.add_child(box);
+        this.button.menu.actor.add_style_class_name('wack-topbar-menu');
+        this._ids = FINDER_KEYS.map(k => settings.connect(`changed::${k}`, () => this._sync()));
+        this._ids.push(settings.connect('changed::show-hibernate', () => this._fill()));
+        this._fill();
+        this._sync();
+    }
+
+    _logo() {
+        const preset = this._settings.get_string('finder-logo-preset');
+        const icons = this._extension.dir.get_child('icons');
+        const themed = name => new St.Icon({icon_name: name, icon_size: 16, style_class: 'wack-finder-icon'});
+        const file = gfile => new St.Icon({gicon: Gio.FileIcon.new(gfile), icon_size: 16, style_class: 'wack-finder-icon'});
+        switch (preset) {
+        case 'none':
+            return null;
+        case 'apple':
+            return file(icons.get_child('mk-apple-symbolic.svg'));
+        case 'mk':
+            return file(icons.get_child('mk-emblem-symbolic.svg'));
+        case 'custom': {
+            const path = this._settings.get_string('finder-custom-logo').replace(/^~(?=\/)/, GLib.get_home_dir());
+            return path && GLib.file_test(path, GLib.FileTest.EXISTS)
+                ? file(Gio.File.new_for_path(path)) : themed('image-missing-symbolic');
+        }
+        case 'fedora-mono': {
+            // Fedora's logo as a white glyph: no colour, lifted toward the bar's text
+            const icon = themed('fedora-logo-icon');
+            icon.add_effect(new Clutter.DesaturateEffect({factor: 1.0}));
+            const lift = new Clutter.BrightnessContrastEffect();
+            lift.set_brightness(0.45);
+            icon.add_effect(lift);
+            return icon;
+        }
+        default:
+            return themed('fedora-logo-icon');      // Fedora's own logo, in its blue (#51a2da)
+        }
+    }
+
+    _sync() {
+        this._icon.set_child(this._logo());
+        const text = this._settings.get_string('finder-label');
+        this._label.text = text;
+        this._label.visible = this._settings.get_boolean('finder-show-label') && text !== '';
+        this.button.accessible_name = text || 'Finder';
+    }
+
+    _fill() {
+        const menu = this.button.menu, actions = SystemActions.getDefault(), s = this._settings;
+        menu.removeAll();
+        // the power row: one press each, as on a Mac's  menu
+        const row = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'wack-power-row-item'});
+        const box = new St.BoxLayout({style_class: 'wack-power-row', x_expand: true});
+        const power = [
+            ['system-shutdown-symbolic', 'Shut Down', () => actions.activatePowerOff()],
+            ['system-reboot-symbolic', 'Restart', () => actions.activateRestart()],
+            ...(s.get_boolean('show-hibernate') ? [['media-floppy-symbolic', 'Hibernate', () => hibernate()]] : []),
+            ['weather-clear-night-symbolic', 'Sleep', () => sleep(s)],
+            ['system-lock-screen-symbolic', 'Lock', () => actions.activateLockScreen()],
+            ['system-log-out-symbolic', 'Log Out', () => actions.activateLogout()],
+        ];
+        for (const [icon, label, run] of power) {
+            const b = new St.Button({style_class: 'wack-power-button', can_focus: true, accessible_name: label,
+                x_expand: true, child: new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL,
+                    x_align: Clutter.ActorAlign.CENTER})});
+            b.child.add_child(new St.Icon({icon_name: icon, icon_size: 16, x_align: Clutter.ActorAlign.CENTER}));
+            b.child.add_child(new St.Label({text: label, style_class: 'wack-power-caption', x_align: Clutter.ActorAlign.CENTER}));
+            b.connect('clicked', () => {
+                menu.close();
+                run();
+            });
+            box.add_child(b);
+        }
+        row.add_child(box);
+        menu.addMenuItem(row);
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        menu.addAction('About This System', () => launchApp('gnome-system-panel.desktop', 'org.gnome.Settings.desktop'));
+        menu.addAction('System Settings…', () => launchApp('org.gnome.Settings.desktop'));
+        menu.addAction('App Store…', () => launchApp('org.gnome.Software.desktop'));
+        menu.addAction('Extension Settings…', () => launchApp('com.mattjakeman.ExtensionManager.desktop',
+            'org.gnome.Extensions.desktop'));
+        menu.addAction('System Monitor', () => launchApp('org.gnome.SystemMonitor.desktop',
+            'gnome-system-monitor.desktop', 'io.missioncenter.MissionCenter.desktop'));
+        if (s.get_boolean('show-hibernate')) {
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            menu.addAction('Hibernate', () => hibernate());
+        }
+    }
+
+    destroy() {
+        this._ids.forEach(id => this._settings.disconnect(id));
+        this.button.destroy();
+    }
+}
+
+// ----- Places
+const FOLDERS = [
+    ['Home', 'user-home-symbolic', () => GLib.get_home_dir()],
+    ['Desktop', 'user-desktop-symbolic', () => GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP)],
+    ['Documents', 'folder-documents-symbolic', () => GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS)],
+    ['Downloads', 'folder-download-symbolic', () => GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD)],
+    ['Music', 'folder-music-symbolic', () => GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_MUSIC)],
+    ['Pictures', 'folder-pictures-symbolic', () => GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES)],
+    ['Videos', 'folder-videos-symbolic', () => GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_VIDEOS)],
+];
+const RECENT = GLib.build_filenamev([GLib.get_user_data_dir(), 'recently-used.xbel']);
+const RECENT_MAX = 8;
+
+class Places {
+    constructor(settings) {
+        this._settings = settings;
+        this.button = new PanelMenu.Button(0.5, 'Places', false);
+        this.button.add_style_class_name('wack-places');
+        const box = new St.BoxLayout({y_align: Clutter.ActorAlign.CENTER, style_class: 'wack-places-box'});
+        box.add_child(new St.Icon({icon_name: 'folder-symbolic', icon_size: 16, style_class: 'system-status-icon'}));
+        this._label = new St.Label({text: 'Places', y_align: Clutter.ActorAlign.CENTER, style_class: 'wack-places-label'});
+        box.add_child(this._label);
+        this.button.add_child(box);
+        this.button.menu.actor.add_style_class_name('wack-topbar-menu');
+        this._textId = settings.connect('changed::places-show-text', () => this._syncLabel());
+        this._syncLabel();
+
+        const menu = this.button.menu;
+        for (const [name, icon, path] of FOLDERS) {
+            const item = menu.addAction(name, () => launchUri(Gio.File.new_for_path(path() ?? GLib.get_home_dir()).get_uri()),
+                icon);
+            item._wackPath = path;
+        }
+        this._trash = menu.addAction('Trash', () => launchUri('trash:///'), 'user-trash-symbolic');
+        menu.addAction('Network', () => launchUri('network:///'), 'network-workgroup-symbolic');
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        this._recent = new PopupMenu.PopupSubMenuMenuItem('Recent Files', true);
+        this._recent.icon.icon_name = 'document-open-recent-symbolic';
+        menu.addMenuItem(this._recent);
+        this._openId = menu.connect('open-state-changed', (_m, open) => {
+            if (open)
+                this._fillRecent();
+        });
+
+        // the trash, full or empty, as it changes
+        try {
+            this._trashFile = Gio.File.new_for_uri('trash:///');
+            this._trashMonitor = this._trashFile.monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this._trashMonitor.connect('changed', () => this._syncTrash());
+        } catch {}
+        this._syncTrash();
+    }
+
+    _syncLabel() {
+        this._label.visible = this._settings.get_boolean('places-show-text');
+    }
+
+    _syncTrash() {
+        if (!this._trashFile)
+            return;
+        this._trashFile.query_info_async('trash::item-count', Gio.FileQueryInfoFlags.NONE, GLib.PRIORITY_DEFAULT, null,
+            (f, res) => {
+                try {
+                    const full = f.query_info_finish(res).get_attribute_uint32('trash::item-count') > 0;
+                    this._trash?.setIcon(full ? 'user-trash-full-symbolic' : 'user-trash-symbolic');
+                } catch {}
+            });
+    }
+
+    _fillRecent() {
+        const sub = this._recent.menu;
+        sub.removeAll();
+        const files = [];
+        try {
+            const bookmarks = new GLib.BookmarkFile();
+            bookmarks.load_from_file(RECENT);
+            for (const uri of bookmarks.get_uris()) {
+                if (!uri.startsWith('file://'))
+                    continue;
+                const file = Gio.File.new_for_uri(uri);
+                if (!file.query_exists(null))
+                    continue;
+                const when = bookmarks.get_modified_date_time(uri)?.to_unix() ?? 0;
+                files.push([when, uri, file.get_basename()]);
+            }
+        } catch {}
+        files.sort((a, b) => b[0] - a[0]);
+        for (const [, uri, name] of files.slice(0, RECENT_MAX))
+            sub.addAction(name, () => launchUri(uri));
+        if (!files.length) {
+            const none = sub.addAction('No recent files', () => {});
+            none.setSensitive(false);
+        } else {
+            sub.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            sub.addAction('All Recent…', () => launchUri('recent:///'));
+        }
+    }
+
+    destroy() {
+        this._settings.disconnect(this._textId);
+        this._trashMonitor?.cancel();
+        this._trashMonitor = this._trashFile = this._trash = null;
+        this.button.destroy();
+    }
+}
+
+// ----- the App Indicator
+class AppIndicator {
+    constructor() {
+        this.button = new PanelMenu.Button(0.0, 'App', false);
+        this.button.add_style_class_name('wack-app-indicator');
+        this._pill = new St.BoxLayout({style_class: 'wack-app-pill', y_align: Clutter.ActorAlign.CENTER});
+        this._iconBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER, style_class: 'wack-app-icon'});
+        this._label = new St.Label({style_class: 'wack-app-name', y_align: Clutter.ActorAlign.CENTER});
+        this._label.clutter_text.ellipsize = 3;            // Pango.EllipsizeMode.END
+        this._pill.add_child(this._iconBin);
+        this._pill.add_child(this._label);
+        this.button.add_child(this._pill);
+        this.button.menu.actor.add_style_class_name('wack-topbar-menu');
+        this._tracker = Shell.WindowTracker.get_default();
+        this._ids = [
+            [this._tracker, this._tracker.connect('notify::focus-app', () => this._sync(true))],
+            [Main.overview, Main.overview.connect('showing', () => this._sync(false))],
+            [Main.overview, Main.overview.connect('hidden', () => this._sync(false))],
+        ];
+        this.button.menu.connect('open-state-changed', (_m, open) => open && this._fill());
+        this.button.connect('destroy', () => (this._gone = true));
+        this._sync(false);
+    }
+
+    _sync(animate) {
+        if (this._gone)
+            return;
+        const app = this._tracker.focus_app;
+        this.button.visible = Boolean(app) && !Main.overview.visible;
+        if (app === this._app)
+            return;
+        this._app = app;
+        if (!app)
+            return;
+        const icon = app.create_icon_texture(16);
+        icon.style = '-st-icon-style: requested;';          // its own colours
+        this._iconBin.set_child(icon);
+        this._label.text = app.get_name();
+        if (animate && St.Settings.get().enable_animations) {
+            this._pill.remove_all_transitions();
+            this._pill.set({opacity: 0, translation_y: 4});
+            this._pill.ease({opacity: 255, translation_y: 0, duration: 110, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        }
+    }
+
+    _window() {
+        const win = global.display.focus_window;
+        return win && this._app?.get_windows().includes(win) ? win : this._app?.get_windows()[0] ?? null;
+    }
+
+    _fill() {
+        const menu = this.button.menu, app = this._app;
+        menu.removeAll();
+        if (!app)
+            return;
+        const win = this._window();
+        menu.addAction('New Window', () => app.open_new_window(-1));
+        menu.addAction(`Hide ${app.get_name()}`, () => app.get_windows().forEach(w => w.minimize()));
+        if (win) {
+            const maxed = win.is_maximized();
+            menu.addAction(maxed ? 'Restore' : 'Maximize', () => (maxed ? win.unmaximize() : win.maximize()));
+            menu.addAction('Close Window', () => win.delete(global.get_current_time()));
+        }
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        menu.addAction(`Quit ${app.get_name()}`, () => app.request_quit());
+    }
+
+    destroy() {
+        for (const [object, id] of this._ids)
+            object.disconnect(id);
+        this.button.destroy();
+    }
+}
+
+// ----- the three, in the user session
+export class TopBar {
+    constructor(settings, extension) {
+        this._settings = settings;
+        this._extension = extension;
+        this._setIds = ['topbar-enabled', 'show-app-indicator'].map(k =>
+            settings.connect(`changed::${k}`, () => this._rebuild()));
+        this._build();
+    }
+
+    _build() {
+        if (!this._settings.get_boolean('topbar-enabled'))
+            return;
+        const panel = Main.panel;
+        const mount = (name, make, index) => {
+            try {
+                const part = make();
+                panel.addToStatusArea(name, part.button, index, 'left');
+                return part;
+            } catch (e) {
+                console.error(`wack-sonoma-lockscreen: ${name}: ${e.message}`);
+                return null;
+            }
+        };
+        // (each name once: a statusArea name already taken means another copy is up)
+        if (!panel.statusArea['wack-finder'])
+            this._finder = mount('wack-finder', () => new Finder(this._settings, this._extension), 0);
+        if (!panel.statusArea['wack-places'])
+            this._places = mount('wack-places', () => new Places(this._settings), 1);
+        if (this._settings.get_boolean('show-app-indicator') && !panel.statusArea['wack-app-indicator'])
+            this._app = mount('wack-app-indicator', () => new AppIndicator(), -1);
+        // GNOME's Places extension's button stands aside while ours shows (and when it comes back later)
+        this._leftId = panel._leftBox.connect('child-added', () => this._hideGnomePlaces());
+        this._hideGnomePlaces();
+    }
+
+    _hideGnomePlaces() {
+        const theirs = Main.panel.statusArea[GNOME_PLACES];
+        if (!theirs || !this._places)
+            return;
+        theirs.container.visible = false;
+        this._hidPlaces = theirs;
+    }
+
+    _teardown() {
+        if (this._leftId)
+            Main.panel._leftBox.disconnect(this._leftId);
+        this._leftId = 0;
+        try {
+            if (this._hidPlaces && Main.panel.statusArea[GNOME_PLACES] === this._hidPlaces)
+                this._hidPlaces.container.visible = true;
+        } catch {}                           // (gone with its extension)
+        this._hidPlaces = null;
+        for (const part of ['_finder', '_places', '_app']) {
+            try {
+                this[part]?.destroy();
+            } catch (e) {
+                console.error(`wack-sonoma-lockscreen: ${e.message}`);
+            }
+            this[part] = null;
+        }
+    }
+
+    _rebuild() {
+        this._teardown();
+        this._build();
+    }
+
+    destroy() {
+        this._setIds.forEach(id => this._settings.disconnect(id));
+        this._teardown();
+    }
+}
+
+// ----- Hibernate in Quick Settings' power menu, after Suspend
+export class QuickSettingsHibernate {
+    constructor(settings) {
+        this._settings = settings;
+        this._id = settings.connect('changed::show-hibernate', () => this._sync());
+        this._tries = 0;
+        this._sync();
+    }
+
+    _sync() {
+        this._item?.destroy();
+        this._item = null;
+        if (!this._settings.get_boolean('show-hibernate'))
+            return;
+        const menu = Main.panel.statusArea.quickSettings?._system?._systemItem?.menu;
+        if (!menu) {
+            // (Quick Settings builds its items a moment after the shell starts)
+            if (this._tries++ < 20) {
+                this._retry = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                    this._retry = 0;
+                    this._sync();
+                    return GLib.SOURCE_REMOVE;
+                });
+            }
+            return;
+        }
+        this._item = new PopupMenu.PopupMenuItem('Hibernate');
+        this._item.add_style_class_name('wack-qs-hibernate');
+        this._item.connect('activate', () => {
+            Main.panel.closeQuickSettings?.();
+            hibernate();
+        });
+        menu.addMenuItem(this._item, 1);                 // (after Suspend)
+    }
+
+    destroy() {
+        if (this._retry)
+            GLib.source_remove(this._retry);
+        this._settings.disconnect(this._id);
+        this._item?.destroy();
+        this._item = null;
+    }
+}

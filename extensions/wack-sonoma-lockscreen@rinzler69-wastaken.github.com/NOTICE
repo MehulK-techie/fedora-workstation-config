@@ -1,0 +1,25 @@
+WACK Sonoma Live Lockscreen
+===========================
+
+One GNOME Shell extension made by MK Workstation from two others:
+
+  WACK Sonoma Lockscreen 2.2.0 (rinzler69-wastaken)
+    https://github.com/rinzler69-wastaken/wack-sonoma-lockscreen
+    GPL-3.0 (LICENSE.GPL-3.0): sonoma.js, crossSessionManager.js, src/,
+    stylesheet.css, and its schema keys
+
+  Live Lock Screen (nick-redwill)
+    https://github.com/nick-redwill/LiveLockScreen
+    AGPL-3.0 (LICENSE.AGPL-3.0): live.js, core/, helpers/, utils/,
+    external/, enums.js, and its schema keys
+
+  MK Workstation: extension.js (the glue: both parts started while locked,
+  lock / unlock animations, dimming, clock styling, avatar / notification
+  switches, the fingerprint hint), prefs.js (the four-page settings window),
+  the MK schema keys, and these changes to Live Lock Screen: mpv always
+  without audio (aid=no, ao=null), no audio volume setting.
+
+GPL-3.0 section 13 allows combining GPL-3.0 code with AGPL-3.0 code; the
+combined work is conveyed under AGPL-3.0, each part keeping its own notice.
+Upstream WACK's GDM (login screen) features and its own settings pages are
+not used here; its uuid (wack-lockscreen-clock@...) is a separate extension.

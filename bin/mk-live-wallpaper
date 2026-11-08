@@ -2,16 +2,17 @@
 """MK live wallpaper: a video (or picture) on the desktop and on the lock screen.
 
   mk-live-wallpaper set-desktop FILE      the desktop's video (mp4, webm, mkv...) or picture
-  mk-live-wallpaper set-lockscreen FILE   the lock screen's (behind the clock)
+  mk-live-wallpaper set-lockscreen FILE   the lock screen's (behind the Sonoma clock)
   mk-live-wallpaper off [desktop|lockscreen|all]   back to GNOME's own (default: all)
   mk-live-wallpaper loop on|off           the lock screen's video loops, or plays once and holds
-  mk-live-wallpaper hwaccel vaapi|none    the graphics card decodes (default), or the processor
+  mk-live-wallpaper hwaccel vaapi|none    the desktop's: graphics card (default) or processor
   mk-live-wallpaper list                  what's set
   mk-live-wallpaper set FILE              (the same as set-desktop)
 
-Settings: ~/.config/mk/wallpaper.json
-  {"desktop": "...", "lockscreen": "...", "lockscreen_loop": true, "hwaccel": "vaapi"}
-MK Shell Engine follows it as it changes.
+The desktop: ~/.config/mk/wallpaper.json ({"desktop": "...", "hwaccel": "vaapi"}),
+followed by MK Shell Engine. The lock screen belongs to the WACK Sonoma Live
+Lockscreen extension: set-lockscreen, loop and off lockscreen write its
+settings (the same as its gear in Extension Manager).
 
 How it works (GNOME's way: mpvpaper and its kind need wlroots' layer-shell,
 which GNOME doesn't have): this player shows the video, muted, in a plain
@@ -42,10 +43,34 @@ def read_conf():
     except (OSError, ValueError):
         conf = {}
     conf.setdefault("desktop", "")
-    conf.setdefault("lockscreen", "")
-    conf.setdefault("lockscreen_loop", True)
     conf.setdefault("hwaccel", "vaapi")
     return conf
+
+
+LOCK_EXT = Path.home() / ".local/share/gnome-shell/extensions/wack-sonoma-lockscreen@rinzler69-wastaken.github.com"
+LOCK_SCHEMA = "org.gnome.shell.extensions.wack-sonoma-lockscreen"
+
+
+def lock_settings(*args):
+    """gsettings for the lock screen extension (None: it isn't installed)."""
+    import subprocess
+    if not (LOCK_EXT / "schemas" / "gschemas.compiled").exists():
+        return None
+    return subprocess.run(["gsettings", "--schemadir", str(LOCK_EXT / "schemas"), *args, ],
+                          capture_output=True, text=True)
+
+
+def lock_get(key):
+    r = lock_settings("get", LOCK_SCHEMA, key)
+    return r.stdout.strip().strip("'") if r and r.returncode == 0 else None
+
+
+def lock_set(key, value):
+    r = lock_settings("set", LOCK_SCHEMA, key, value)
+    if r is None:
+        print("The lock screen is WACK Sonoma Live Lockscreen's, and it isn't installed (mk sync).", file=sys.stderr)
+        return False
+    return r.returncode == 0
 
 
 def write_conf(conf):
@@ -196,25 +221,33 @@ def main(argv):
         if not path.is_file():
             print(f"No such file: {path}", file=sys.stderr)
             return 1
-        where = "lockscreen" if cmd == "set-lockscreen" else "desktop"
-        conf[where] = str(path)
+        if cmd == "set-lockscreen":
+            if not (lock_set("background-video-path", str(path)) and lock_set("live-enabled", "true")):
+                return 1
+            print(f"Lock screen: {path.name}")
+            return 0
+        conf["desktop"] = str(path)
         write_conf(conf)
-        print(f"{'Lock screen' if where == 'lockscreen' else 'Desktop'}: {path.name}")
+        print(f"Desktop: {path.name}")
         return 0
     if cmd == "off":
         which = argv[1] if len(argv) > 1 else "all"
         for where in (("desktop", "lockscreen") if which == "all" else (which,)):
-            if where not in ("desktop", "lockscreen"):
+            if where == "desktop":
+                conf["desktop"] = ""
+            elif where == "lockscreen":
+                lock_set("background-video-path", "")
+            else:
                 print("off desktop | lockscreen | all", file=sys.stderr)
                 return 2
-            conf[where] = ""
         write_conf(conf)
         print("Live wallpaper off" + ("" if which == "all" else f" ({which})") + ": GNOME's own wallpaper is back.")
         return 0
     if cmd == "loop" and len(argv) > 1 and argv[1] in ("on", "off"):
-        conf["lockscreen_loop"] = argv[1] == "on"
-        write_conf(conf)
-        print(f"Lock screen video: {'loops' if conf['lockscreen_loop'] else 'plays once and holds its last frame'}")
+        # (the lock screen extension's "at the end": 0 loops, 1 holds the last frame)
+        if not lock_set("general-action-on-end", "0" if argv[1] == "on" else "1"):
+            return 1
+        print(f"Lock screen video: {'loops' if argv[1] == 'on' else 'plays once and holds its last frame'}")
         return 0
     if cmd == "hwaccel" and len(argv) > 1 and argv[1] in ("vaapi", "none"):
         conf["hwaccel"] = argv[1]
@@ -223,8 +256,14 @@ def main(argv):
         return 0
     if cmd in ("list", "status"):
         print(f"Desktop:     {conf['desktop'] or 'off'}")
-        print(f"Lock screen: {conf['lockscreen'] or 'off'}" +
-              (f" ({'loops' if conf['lockscreen_loop'] else 'plays once'})" if conf["lockscreen"] else ""))
+        lock = lock_get("background-video-path")
+        if lock is None:
+            print("Lock screen: (WACK Sonoma Live Lockscreen isn't installed)")
+        else:
+            on = lock_get("live-enabled") == "true"
+            loops = lock_get("general-action-on-end") in ("0", "int32 0")
+            print(f"Lock screen: {lock if lock and on else 'off'}" +
+                  (f" ({'loops' if loops else 'plays once'})" if lock and on else ""))
         print(f"Decoding:    {'graphics card (VA-API)' if conf['hwaccel'] != 'none' else 'processor'}")
         return 0
     print(__doc__.strip())

@@ -31,9 +31,9 @@ import { ControlCenter } from './modules/controlCenter.js';
 
 export default class MKShellEngine extends Extension {
     // The engine also runs on the lock screen (metadata: session-modes), but there only the
-    // live wallpaper: everything else stops as the screen locks and starts again after
-    // unlocking, as GNOME does with other extensions. (The wallpaper's lock-screen video,
-    // and its slow-down as you unlock, need the engine there.)
+    // desktop's live wallpaper, paused (so it plays on the moment you unlock): everything
+    // else stops as the screen locks and starts again after unlocking, as GNOME does with
+    // other extensions. The lock screen itself is WACK Sonoma Live Lockscreen's.
     enable() {
         this._settings = this.getSettings();
         this._parts = [];

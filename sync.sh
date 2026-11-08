@@ -629,6 +629,16 @@ rm -rf "${USER_EXT_DIR:?}/$MK_ENGINE"
 cp -r "$SCRIPT_DIR/extensions/$MK_ENGINE" "$USER_EXT_DIR/"
 glib-compile-schemas "$USER_EXT_DIR/$MK_ENGINE/schemas" || true
 
+# WACK Sonoma Live Lockscreen: MK's merge of WACK Sonoma Lockscreen and Live Lock
+# Screen (the Sonoma clock and prompt, a silent video / GIF / picture behind it,
+# unlock animations; settings behind its gear in Extension Manager). Refreshed
+# from the repo like the engine; switched on or off by you in Extension Manager.
+MK_LOCK="wack-sonoma-lockscreen@rinzler69-wastaken.github.com"
+[[ -d "$USER_EXT_DIR/$MK_LOCK" ]] || NEW_EXTENSIONS=1
+rm -rf "${USER_EXT_DIR:?}/$MK_LOCK"
+cp -r "$SCRIPT_DIR/extensions/$MK_LOCK" "$USER_EXT_DIR/"
+glib-compile-schemas "$USER_EXT_DIR/$MK_LOCK/schemas" || true
+
 gsettings set org.gnome.shell disable-user-extensions false
 # GNOME 51 removed St.BoxLayout's `vertical` property; extensions that still set
 # it fail to start (WACK's lock-screen clock: "No property vertical"). Their

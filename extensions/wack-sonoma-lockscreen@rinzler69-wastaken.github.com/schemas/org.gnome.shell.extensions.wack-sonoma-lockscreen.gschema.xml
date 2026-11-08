@@ -1,0 +1,369 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- WACK Sonoma Live Lockscreen: WACK Sonoma Lockscreen's keys (GPL-3.0, rinzler69-wastaken),
+     Live Lock Screen's keys (AGPL-3.0, nick-redwill), and MK's own (the last group). -->
+<schemalist>
+  <schema id="org.gnome.shell.extensions.wack-sonoma-lockscreen" path="/org/gnome/shell/extensions/wack-sonoma-lockscreen/">
+    <!-- WACK Sonoma Lockscreen -->
+    <key name="lockscreen-mode" type="s">
+      <choices>
+        <choice value="wack"/>
+        <choice value="cupertino"/>
+      </choices>
+      <default>'wack'</default>
+      <summary>Lockscreen mode</summary>
+      <description>Visual style of the lock screen. WACK is the classic GNOME-compliant mode; Cupertino emulates macOS Sonoma style.</description>
+    </key>
+    <key name="cupertino-always-show-user" type="b">
+      <default>false</default>
+      <summary>Always show user widget in Cupertino mode</summary>
+      <description>If true, the user widget is always shown in Cupertino mode. Notifications are hidden by default but can be toggled by pressing Shift+N.</description>
+    </key>
+    <key name="cupertino-unlock-fade" type="b">
+      <default>true</default>
+      <summary>Cupertino unlock fade animation</summary>
+      <description>If true, unlocking in Cupertino mode plays a fade-out animation with a panel slide-in (automatically disabled when Power Saver mode is active). Disable for an instant unlock.</description>
+    </key>
+
+    <key name="cupertino-crossfade-speed" type="s">
+      <default>'slow'</default>
+      <summary>Cupertino unlock crossfade speed</summary>
+      <description>Speed preset for the unlock crossfade animation. Values: 'slow', 'normal', 'fast'.</description>
+    </key>
+
+    <key name="clock-animation" type="s">
+      <choices>
+        <choice value="scale-down"/>
+        <choice value="zoom-up"/>
+        <choice value="slide-up"/>
+        <choice value="slide-down"/>
+        <choice value="fade"/>
+      </choices>
+      <default>'scale-down'</default>
+      <summary>Clock animation</summary>
+      <description>Animation applied to the date and time while opening the authentication prompt.</description>
+    </key>
+    <key name="prompt-animation" type="s">
+      <choices>
+        <choice value="rise"/>
+        <choice value="zoom"/>
+        <choice value="slide-up"/>
+        <choice value="slide-down"/>
+        <choice value="fade"/>
+        <choice value="shell"/>
+      </choices>
+      <default>'shell'</default>
+      <summary>Prompt animation</summary>
+      <description>Animation applied to the authentication prompt while it appears.</description>
+    </key>
+    <key name="enable-unblank" type="b">
+      <default>true</default>
+      <summary>Keep screen on when locked</summary>
+      <description>Prevent the screen/monitor from blanking or turning off when locked.</description>
+    </key>
+    <key name="unblank-on-ac-only" type="b">
+      <default>true</default>
+      <summary>Only on AC power</summary>
+      <description>Only keep the screen on if the system is plugged into AC power.</description>
+    </key>
+    <key name="esc-to-sleep" type="b">
+      <default>true</default>
+      <summary>Escape to Sleep</summary>
+      <description>Pressing Escape on the lock screen immediately blanks/sleeps the display (or suspends the system if Keep Screen On is disabled).</description>
+    </key>
+    <key name="prompt-vibrancy" type="s">
+      <default>'tonal'</default>
+      <summary>Prompt Vibrancy</summary>
+      <description>Adaptive color and depth enhancements for the password field.</description>
+    </key>
+
+    <key name="cursor-blink" type="b">
+      <default>true</default>
+      <summary>Cursor Blinking</summary>
+      <description>Enable or disable text cursor blinking in the password entry field.</description>
+    </key>
+
+    <key name="cupertino-lockscreen-message-enable" type="b">
+      <default>false</default>
+      <summary>Enable Lockscreen Message</summary>
+      <description>Show a custom message on the lock screen in Cupertino mode.</description>
+    </key>
+    <key name="cupertino-lockscreen-message-text" type="s">
+      <default>''</default>
+      <summary>Lockscreen Message Text</summary>
+      <description>The text to display on the lock screen in Cupertino mode.</description>
+    </key>
+    <key name="lockscreen-wallpaper-enable" type="b">
+      <default>false</default>
+      <summary>Custom Lockscreen Wallpaper</summary>
+      <description>Use a custom image overlay as the lock screen background.</description>
+    </key>
+    <key name="lockscreen-wallpaper-path" type="s">
+      <default>''</default>
+      <summary>Custom Lockscreen Wallpaper Path</summary>
+      <description>File path to the custom lock screen wallpaper image.</description>
+    </key>
+    <key name="date-style" type="s">
+      <choices>
+        <choice value="short"/>
+        <choice value="full"/>
+      </choices>
+      <default>'full'</default>
+      <summary>Date Style</summary>
+      <description>Choose between shortened and full date names on the lockscreen.</description>
+    </key>
+    <key name="lockscreen-wallpaper-monitors" type="a{ss}">
+      <default>{}</default>
+      <summary>Per-monitor lockscreen wallpapers</summary>
+      <description>Map of monitor connector name (e.g. 'DP-1') to wallpaper path. Monitors without an entry use lockscreen-wallpaper-path. Paths may be images or GNOME slideshow XML files (time-of-day wallpapers).</description>
+    </key>
+    <key name="clock-weight" type="s">
+      <choices>
+        <choice value="light"/>
+        <choice value="regular"/>
+        <choice value="medium"/>
+        <choice value="semibold"/>
+        <choice value="bold"/>
+        <choice value="heavy"/>
+      </choices>
+      <default>'semibold'</default>
+      <summary>Clock font weight</summary>
+      <description>Font weight of the lockscreen time.</description>
+    </key>
+    <key name="clock-format" type="s">
+      <choices>
+        <choice value="system"/>
+        <choice value="12h"/>
+        <choice value="24h"/>
+      </choices>
+      <default>'system'</default>
+      <summary>Clock format</summary>
+      <description>Use the system 12/24-hour setting, or override it on the lockscreen.</description>
+    </key>
+    <key name="clock-tint" type="b">
+      <default>false</default>
+      <summary>Wallpaper-tinted clock</summary>
+      <description>Tint the clock and date with a light shade of the wallpaper colour.</description>
+    </key>
+    <key name="status-corner" type="b">
+      <default>true</default>
+      <summary>Sonoma-style status corner</summary>
+      <description>Restyle the top-right status icons (battery, network, input source) on the lockscreen in Cupertino mode.</description>
+    </key>
+    <key name="password-indicators" type="b">
+      <default>true</default>
+      <summary>Password field indicators</summary>
+      <description>Show Caps Lock and keyboard layout indicators inside the password field instead of the Caps Lock text warning.</description>
+    </key>
+    <key name="cupertino-system-actions" type="b">
+      <default>true</default>
+      <summary>Cupertino System Actions</summary>
+      <description>GDM DLC: show Suspend / Restart / Power Off buttons under the login user list and hide the Quick Settings power menu.</description>
+    </key>
+    <key name="gdm-background-dimmer" type="b">
+      <default>false</default>
+      <summary>Dim background wallpaper</summary>
+      <description>GDM DLC: apply a subtle 15% darkening overlay to the login wallpaper for enhanced contrast.</description>
+    </key>
+    <!-- Live Lock Screen -->
+        <key name="general-disable-on-battery" type="b">
+            <default>false</default>
+            <summary>Whether to pause the video when on battery</summary>
+        </key>
+        <key name="general-action-on-blank" type="i">
+            <range min="0" max="3" />
+            <default>1</default>
+            <summary>What do to when the screen goes blank (0 - nothing, 1 - pause, 2 - restart video, 3 - next video)</summary>
+        </key>
+        <key name="general-action-on-end" type="i">
+            <range min="0" max="2" />
+            <default>0</default>
+            <summary>What to do when the video ends (0 - loop, 1 - pause, 2 - next video)</summary>
+        </key>
+
+        <key name="playlist-order" type="i">
+            <range min="0" max="2" />
+            <default>0</default>
+            <summary>Order of the videos in a folder (0 - sequential, 1 - shuffle, 2 - random)</summary>
+        </key>
+        <key name="playlist-start" type="i">
+            <range min="0" max="2" />
+            <default>1</default>
+            <summary>Which video to start with (0 - first, 1 - random, 2 - last played)</summary>
+        </key>
+        <key name="playlist-fade-enabled" type="b">
+            <default>true</default>
+            <summary>Whether to fade through black when switching videos</summary>
+        </key>
+        <key name="playlist-fade-duration" type="i">
+            <range min="0" max="10000" />
+            <default>300</default>
+            <summary>Duration of the fade to and from black when switching videos (ms)</summary>
+        </key>
+        <key name="playlist-last-played" type="s">
+            <default>""</default>
+            <summary>Path of the last played video, used when starting with the last played one</summary>
+        </key>
+        <key name="general-mpris-enabled" type="b">
+            <default>false</default>
+            <summary>Whether the video can be controlled with media keys and other MPRIS clients</summary>
+        </key>
+
+        <key name="general-static-image-enabled" type="b">
+            <default>true</default>
+            <summary>Also play static images from the selected file or folder</summary>
+        </key>
+        <key name="background-photo-duration-seconds" type="i">
+            <range min="1" max="3600" />
+            <default>5</default>
+            <summary>How long each static image is displayed</summary>
+        </key>
+        <key name="background-video-path" type="s">
+            <default>""</default>
+            <summary>Path to background video</summary>
+        </key>
+        <key name="background-video-scaling-mode" type="i">
+            <range min="0" max="2" />
+            <default>2</default>
+            <summary>Background video scaling mode (0 - stretch, 1 - fit, 2 - cover)</summary>
+        </key>
+        <key name="background-video-blur-radius" type="i">
+            <range min="0" max="100" />
+            <default>0</default>
+            <summary>Background video blur radius</summary>
+        </key>
+        <key name="background-video-blur-brightness" type="d">
+            <range min="0" max="1" />
+            <default>0.65</default>
+            <summary>Background video brightness</summary>
+        </key>
+        <key name="background-video-use-videorate" type="b">
+            <default>false</default>
+            <summary>Whether to change FPS of the source (term videorate is a leftover from GStreamer)</summary>
+        </key>
+        <key name="background-video-framerate" type="i">
+            <range min="1" max="120" />
+            <default>25</default>
+            <summary>Background video framerate</summary>
+        </key>
+        <key name="background-audio-volume" type="i">
+            <range min="0" max="100" />
+            <default>0</default>
+            <summary>Background audio volume</summary>
+        </key>
+        <key name="background-fade-in-duration" type="i">
+            <range min="0" max="600000" />
+            <default>500</default>
+            <summary>Background fade-in animation duration</summary>
+        </key>
+
+        <key name="prompt-pause-video" type="b">
+            <default>false</default>
+            <summary>Whether to pause the video on password prompt</summary>
+        </key>
+        <key name="prompt-grayscale" type="b">
+            <default>false</default>
+            <summary>Whether to grayscale the video on password prompt</summary>
+        </key>
+        <key name="prompt-change-blur" type="b">
+            <default>true</default>
+            <summary>Whether to change the blur value on password prompt</summary>
+        </key>
+        
+        <key name="prompt-blur-radius" type="i">
+            <range min="0" max="100" />
+            <default>18</default>
+            <summary>Background video blur radius on password prompt</summary>
+        </key>
+        <key name="prompt-blur-brightness" type="d">
+            <range min="0" max="1" />
+            <default>0.65</default>
+            <summary>Background video brightness on password prompt</summary>
+        </key>
+        <key name="prompt-blur-anim-duration" type="i">
+            <range min="0" max="600000" />
+            <default>300</default>
+            <summary>Background video blur change animation duration</summary>
+        </key>
+
+        <key name="mpv-profile" type="i">
+            <range min="0" max="2" />
+            <default>0</default>
+            <summary>MPV profile from external/mpv.conf (0 - quality, 1 - balanced, 2 - efficient)</summary>
+        </key>
+        <key name="mpv-custom-args" type="as">
+            <default>[]</default>
+            <summary>Custom MPV arguments applied on top of the profile</summary>
+        </key>
+    <!-- MK -->
+    <key name="live-enabled" type="b">
+      <default>true</default>
+      <summary>Live wallpaper</summary>
+      <description>Show the media file (video, GIF or picture) behind the lock screen.</description>
+    </key>
+    <key name="dim-opacity" type="i">
+      <range min="0" max="80"/>
+      <default>25</default>
+      <summary>Background dimming (%)</summary>
+      <description>How much the lock screen background is darkened under the clock, 0 to 80.</description>
+    </key>
+    <key name="unlock-animation" type="s">
+      <choices><choice value="slow-stop"/><choice value="zoom"/><choice value="crossfade"/><choice value="none"/></choices>
+      <default>'slow-stop'</default>
+      <summary>Unlock animation</summary>
+      <description>slow-stop: the video slows to a stop and dissolves as the lock screen slides away; zoom: it grows a little as it fades; crossfade: a plain fade; none: at once.</description>
+    </key>
+    <key name="animation-duration" type="i">
+      <range min="120" max="600"/>
+      <default>260</default>
+      <summary>Animation duration (ms)</summary>
+      <description>How long the lock and unlock animations take.</description>
+    </key>
+    <key name="lock-entry-animation" type="b">
+      <default>true</default>
+      <summary>Lock animation</summary>
+      <description>The lock screen fades in from 1.04x to its size as the screen locks.</description>
+    </key>
+    <key name="clock-style" type="s">
+      <choices><choice value="sonoma-bold"/><choice value="cupertino-thin"/><choice value="digital"/><choice value="custom"/></choices>
+      <default>'sonoma-bold'</default>
+      <summary>Clock style</summary>
+      <description>sonoma-bold, cupertino-thin, digital, or custom (clock-font).</description>
+    </key>
+    <key name="clock-font" type="s">
+      <default>''</default>
+      <summary>Custom clock font</summary>
+      <description>A Pango font description (family, weight, size), used when clock-style is custom.</description>
+    </key>
+    <key name="clock-color" type="s">
+      <default>''</default>
+      <summary>Clock colour</summary>
+      <description>A CSS colour for the time; empty: the theme's.</description>
+    </key>
+    <key name="date-color" type="s">
+      <default>''</default>
+      <summary>Date colour</summary>
+      <description>A CSS colour for the date; empty: the theme's.</description>
+    </key>
+    <key name="clock-offset" type="i">
+      <range min="-200" max="200"/>
+      <default>0</default>
+      <summary>Clock vertical offset (px)</summary>
+      <description>Moves the clock and date up (negative) or down.</description>
+    </key>
+    <key name="show-notifications" type="b">
+      <default>true</default>
+      <summary>Lock screen notifications</summary>
+      <description>Show notifications on the lock screen (frosted cards).</description>
+    </key>
+    <key name="show-avatar" type="b">
+      <default>true</default>
+      <summary>User avatar</summary>
+      <description>Show your picture above the password field.</description>
+    </key>
+    <key name="hide-fingerprint-hint" type="b">
+      <default>true</default>
+      <summary>Hide the fingerprint hint</summary>
+      <description>No "or touch the fingerprint reader" line under the password field (the reader still works).</description>
+    </key>
+  </schema>
+</schemalist>

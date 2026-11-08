@@ -1,0 +1,11 @@
+{
+  "uuid": "wack-sonoma-lockscreen@rinzler69-wastaken.github.com",
+  "name": "WACK Sonoma Live Lockscreen",
+  "description": "macOS Sonoma Lockscreen with hardware-accelerated Live Video, GIF & Image Wallpapers, customizable clock typography, and smooth unlock animations.",
+  "shell-version": ["45", "46", "47", "48", "49", "50", "51"],
+  "session-modes": ["user", "unlock-dialog"],
+  "settings-schema": "org.gnome.shell.extensions.wack-sonoma-lockscreen",
+  "gettext-domain": "wack-sonoma-lockscreen",
+  "url": "https://github.com/MehulK-techie/fedora-workstation-config",
+  "version-name": "1.0 (WACK Sonoma Lockscreen 2.2.0 + Live Lock Screen)"
+}

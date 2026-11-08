@@ -6,13 +6,18 @@
   mk-live-wallpaper off [desktop|lockscreen|all]   back to GNOME's own (default: all)
   mk-live-wallpaper loop on|off           the lock screen's video loops, or plays once and holds
   mk-live-wallpaper hwaccel vaapi|none    the desktop's: graphics card (default) or processor
+  mk-live-wallpaper audio desktop|lockscreen on|off|VOLUME
+                                          sound (off by default: no audio stream at all);
+                                          VOLUME 0-100 sets the level (live)
+  mk-live-wallpaper automute on|off       mute the wallpaper while other media plays (default on)
+  mk-live-wallpaper sync on|off           the lock screen plays the desktop's media
   mk-live-wallpaper list                  what's set
   mk-live-wallpaper set FILE              (the same as set-desktop)
 
-The desktop: ~/.config/mk/wallpaper.json ({"desktop": "...", "hwaccel": "vaapi"}),
-followed by MK Shell Engine. The lock screen belongs to the WACK Sonoma Live
-Lockscreen extension: set-lockscreen, loop and off lockscreen write its
-settings (the same as its gear in Extension Manager).
+Both belong to the WACK Sonoma Live Lockscreen extension: these commands write
+its settings (the same as its gear in Extension Manager). The desktop's file is
+also kept in ~/.config/mk/wallpaper.json ({"desktop": "...", "hwaccel": "vaapi"})
+for MK Shell Engine, which plays it while that extension is off.
 
 How it works (GNOME's way: mpvpaper and its kind need wlroots' layer-shell,
 which GNOME doesn't have): this player shows the video, muted, in a plain
@@ -22,8 +27,9 @@ window, on every workspace, never in Alt+Tab or the overview), and on the
 lock screen shows a live copy of it behind the clock. When you unlock, the
 lock screen's video slows to a stop and dissolves into the desktop.
 
-  mk-live-wallpaper run FILE [--once]     the player (the engine starts it);
-                                          stdin: play, pause, decelerate MS, quit
+  mk-live-wallpaper run FILE [--once] [--audio VOL] [--hwaccel vaapi|none]
+                                          the player (the extension starts it);
+                                          stdin: play, pause, decelerate MS, volume VOL, quit
 """
 import json
 import os
@@ -81,11 +87,16 @@ def write_conf(conf):
 
 
 # ---------------------------------------------------------------- the player
-def player(path, once=False):
+def player(path, once=False, audio=None, hwaccel=None):
     import gi
     gi.require_version("Gtk", "4.0")
     gi.require_version("Gst", "1.0")
     from gi.repository import GLib, Gst, Gtk
+    try:
+        gi.require_version("GstAudio", "1.0")
+        from gi.repository import GstAudio
+    except (ValueError, ImportError):
+        GstAudio = None
 
     app = Gtk.Application(application_id=None)
     state = {"pipeline": None, "loop": not once, "rate": 1.0, "decel": 0}
@@ -93,7 +104,7 @@ def player(path, once=False):
 
     def video_widget():
         Gst.init(None)
-        if read_conf().get("hwaccel") == "none":
+        if (hwaccel or read_conf().get("hwaccel")) == "none":
             registry = Gst.Registry.get()
             for name in VA_DECODERS:
                 feature = registry.lookup_feature(name)
@@ -110,11 +121,16 @@ def player(path, once=False):
             sink.set_property("sink", gtksink)
         playbin.set_property("uri", Gst.filename_to_uri(path))
         playbin.set_property("video-sink", sink)
-        # no audio at all: the audio stream isn't decoded, and nothing ever connects to
-        # PipeWire / PulseAudio (a fakesink stands in should a file force one)
-        Gst.util_set_object_arg(playbin, "flags", "video+deinterlace+soft-colorbalance")
-        playbin.set_property("audio-sink", Gst.ElementFactory.make("fakesink", None))
-        playbin.set_property("mute", True)
+        if audio is None:
+            # no audio at all: the audio stream isn't decoded, and nothing ever connects to
+            # PipeWire / PulseAudio (a fakesink stands in should a file force one)
+            Gst.util_set_object_arg(playbin, "flags", "video+deinterlace+soft-colorbalance")
+            playbin.set_property("audio-sink", Gst.ElementFactory.make("fakesink", None))
+            playbin.set_property("mute", True)
+        else:
+            # sound on (the extension's switch): the default output, at the slider's volume
+            Gst.util_set_object_arg(playbin, "flags", "video+audio+deinterlace+soft-colorbalance")
+            playbin.set_property("volume", linear(audio))
         state["pipeline"] = playbin
         bus = playbin.get_bus()
         bus.add_signal_watch()
@@ -138,6 +154,14 @@ def player(path, once=False):
         playbin.set_state(Gst.State.PLAYING)
         return Gtk.Picture(paintable=paintable, content_fit=Gtk.ContentFit.COVER, can_shrink=True)
 
+    def linear(volume):
+        # a slider's volume (0-1, as heard) to playbin's linear gain
+        volume = min(1.0, max(0.0, float(volume)))
+        if GstAudio is not None:
+            return GstAudio.StreamVolume.convert_volume(GstAudio.StreamVolumeFormat.CUBIC,
+                                                        GstAudio.StreamVolumeFormat.LINEAR, volume)
+        return volume ** 3
+
     def control(cmd):
         pipeline = state["pipeline"]
         words = cmd.split()
@@ -153,6 +177,11 @@ def player(path, once=False):
             state["decel"] += 1                   # (cancels a slow-down under way)
             set_rate(1.0)
             pipeline.set_state(Gst.State.PLAYING)
+        elif words[0] == "volume" and len(words) > 1 and audio is not None:
+            try:
+                pipeline.set_property("volume", linear(words[1]))
+            except ValueError:
+                pass
         elif words[0] == "decelerate":
             decelerate(int(words[1]) if len(words) > 1 else 600)
 
@@ -214,7 +243,13 @@ def player(path, once=False):
 def main(argv):
     cmd = argv[0] if argv else "list"
     if cmd == "run" and len(argv) > 1:
-        return player(argv[1], once="--once" in argv[2:])
+        rest = argv[2:]
+
+        def opt(name):
+            return rest[rest.index(name) + 1] if name in rest[:-1] else None
+        audio = opt("--audio")
+        return player(argv[1], once="--once" in rest, audio=float(audio) if audio is not None else None,
+                      hwaccel=opt("--hwaccel"))
     conf = read_conf()
     if cmd in ("set", "set-desktop", "set-lockscreen") and len(argv) > 1:
         path = Path(argv[1]).expanduser().resolve()
@@ -228,6 +263,7 @@ def main(argv):
             return 0
         conf["desktop"] = str(path)
         write_conf(conf)
+        lock_set("desktop-wallpaper-path", str(path))
         print(f"Desktop: {path.name}")
         return 0
     if cmd == "off":
@@ -235,6 +271,7 @@ def main(argv):
         for where in (("desktop", "lockscreen") if which == "all" else (which,)):
             if where == "desktop":
                 conf["desktop"] = ""
+                lock_set("desktop-wallpaper-path", "")
             elif where == "lockscreen":
                 lock_set("background-video-path", "")
             else:
@@ -252,10 +289,35 @@ def main(argv):
     if cmd == "hwaccel" and len(argv) > 1 and argv[1] in ("vaapi", "none"):
         conf["hwaccel"] = argv[1]
         write_conf(conf)
+        lock_set("desktop-hwaccel", argv[1])
         print(f"Decoding: {'the graphics card (VA-API)' if argv[1] == 'vaapi' else 'the processor'}")
         return 0
+    if cmd == "audio" and len(argv) > 2 and argv[1] in ("desktop", "lockscreen"):
+        where, value = argv[1], argv[2]
+        if value in ("on", "off"):
+            ok = lock_set(f"{where}-audio-enabled", "true" if value == "on" else "false")
+            msg = f"{where.capitalize()} sound {value}"
+        else:
+            try:
+                level = min(100, max(0, int(value)))
+            except ValueError:
+                print("audio desktop|lockscreen on|off|0-100", file=sys.stderr)
+                return 2
+            ok = lock_set(f"{where}-audio-volume", f"{level / 100:.2f}")
+            msg = f"{where.capitalize()} volume: {level}%"
+        if not ok:
+            return 1
+        print(msg)
+        return 0
+    if cmd in ("automute", "sync") and len(argv) > 1 and argv[1] in ("on", "off"):
+        key = "audio-auto-mute-on-other-media" if cmd == "automute" else "wallpaper-sync-mode"
+        if not lock_set(key, "true" if argv[1] == "on" else "false"):
+            return 1
+        print(f"{'Auto-mute' if cmd == 'automute' else 'Same media on desktop and lock screen'}: {argv[1]}")
+        return 0
     if cmd in ("list", "status"):
-        print(f"Desktop:     {conf['desktop'] or 'off'}")
+        desktop = lock_get("desktop-wallpaper-path")
+        print(f"Desktop:     {(desktop if desktop is not None else conf['desktop']) or 'off'}")
         lock = lock_get("background-video-path")
         if lock is None:
             print("Lock screen: (WACK Sonoma Live Lockscreen isn't installed)")
@@ -265,6 +327,13 @@ def main(argv):
             print(f"Lock screen: {lock if lock and on else 'off'}" +
                   (f" ({'loops' if loops else 'plays once'})" if lock and on else ""))
         print(f"Decoding:    {'graphics card (VA-API)' if conf['hwaccel'] != 'none' else 'processor'}")
+        if lock is not None:
+            for where in ("desktop", "lockscreen"):
+                on = lock_get(f"{where}-audio-enabled") == "true"
+                vol = lock_get(f"{where}-audio-volume") or "0"
+                print(f"Sound ({where}):".ljust(13) + (f"on, {round(float(vol) * 100)}%" if on else "off"))
+            print(f"Auto-mute:   {'on' if lock_get('audio-auto-mute-on-other-media') == 'true' else 'off'}")
+            print(f"Sync mode:   {'on' if lock_get('wallpaper-sync-mode') == 'true' else 'off'}")
         return 0
     print(__doc__.strip())
     return 2

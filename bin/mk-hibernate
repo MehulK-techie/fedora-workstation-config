@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# mk-hibernate: hibernate now (the Hibernate buttons in the Finder menu, Quick
+# Settings and the lock screen run this).
+#
+#   mk-hibernate            hibernate; if this computer can't, suspend-then-hibernate,
+#                           then hybrid-sleep; if none works, say how to set it up
+#   mk-hibernate --check    what logind allows here (no sleeping)
+#
+# Hibernating needs a disk swap at least the size of your RAM and the kernel's
+# resume= setting: set them up once with  sudo scripts/setup-hibernate.sh
+# Attempts are logged to ~/.cache/mk-hibernate.log.
+set -uo pipefail
+
+LOG="${XDG_CACHE_HOME:-$HOME/.cache}/mk-hibernate.log"
+mkdir -p "$(dirname "$LOG")"
+
+log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
+
+# logind's answer for one action: yes, no, challenge or na
+can() {
+    busctl call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager "$1" 2>/dev/null \
+        | sed -n 's/^s "\(.*\)"$/\1/p'
+}
+
+lockdown() {
+    [[ -r /sys/kernel/security/lockdown ]] && grep -qE '\[(integrity|confidentiality)\]' /sys/kernel/security/lockdown
+}
+
+if [[ "${1:-}" == "--check" ]]; then
+    printf 'Hibernate:                 %s\n' "$(can CanHibernate)"
+    printf 'Suspend, then hibernate:   %s\n' "$(can CanSuspendThenHibernate)"
+    printf 'Hybrid sleep:              %s\n' "$(can CanHybridSleep)"
+    if lockdown; then
+        echo "Kernel lockdown is on (Secure Boot): the kernel refuses to hibernate while it is."
+    fi
+    exit 0
+fi
+
+for pair in CanHibernate:hibernate CanSuspendThenHibernate:suspend-then-hibernate CanHybridSleep:hybrid-sleep; do
+    answer=$(can "${pair%%:*}")
+    if [[ "$answer" == "yes" || "$answer" == "challenge" ]]; then
+        log "systemctl ${pair#*:} (logind: $answer)"
+        if systemctl "${pair#*:}"; then
+            exit 0
+        fi
+        log "systemctl ${pair#*:} failed"
+    fi
+done
+
+reason="no disk swap big enough, or no resume= kernel setting"
+lockdown && reason="kernel lockdown (Secure Boot) forbids hibernation"
+log "can't hibernate: $reason. Set it up once with: sudo scripts/setup-hibernate.sh"
+echo "This computer can't hibernate yet ($reason). Set it up once with: sudo scripts/setup-hibernate.sh" >&2
+exit 1

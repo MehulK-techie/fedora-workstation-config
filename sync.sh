@@ -651,9 +651,9 @@ if [[ -n "$old_desktop" ]] &&
     ext_set "$MK_LOCK" "$LOCK_SCHEMA" desktop-wallpaper-path "$old_desktop"
     echo "    [+] Desktop live wallpaper: now played by WACK Sonoma Live Lockscreen"
 fi
-# Its "Sync Refresh Rate to GDM" button runs this (through pkexec, which asks for
-# your password): your display settings copied to the login screen's.
-install -Dm755 "$SCRIPT_DIR/scripts/setup-system-optimizations.sh" "$HOME/.local/libexec/mk/setup-system-optimizations.sh"
+# (Its "Sync Refresh Rate to GDM" button runs /usr/local/libexec/mk-gdm-monitors,
+# root-owned, which setup.sh installs; an earlier copy in ~/.local/libexec goes.)
+rm -f "$HOME/.local/libexec/mk/setup-system-optimizations.sh"
 
 gsettings set org.gnome.shell disable-user-extensions false
 # GNOME 51 removed St.BoxLayout's `vertical` property; extensions that still set

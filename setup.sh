@@ -148,6 +148,10 @@ install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-security-scan" /usr/local/libex
 # needs no password at the computer (it only reads); fixes ask an admin.
 install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-security-scan" /usr/local/libexec/mk-security-fix
 install -m 644 "$SCRIPT_DIR/assets/polkit/io.github.mehulk.mk-security.policy" /usr/share/polkit-1/actions/
+# WACK Sonoma Live Lockscreen's "Sync Refresh Rate to GDM" button: your display
+# settings for the login screen, through pkexec (asks an admin). Root-owned here,
+# so nothing in your home is ever run as root.
+install -D -o root -g root -m 755 "$SCRIPT_DIR/scripts/setup-system-optimizations.sh" /usr/local/libexec/mk-gdm-monitors
 # In-app Face ID (MK Notes' lock, the MK unlock dialog): a socket-activated
 # root helper that checks the calling user's own face through the face-only
 # PAM service mk-auth (MK's OpenCV engine). Only once face unlock is set up

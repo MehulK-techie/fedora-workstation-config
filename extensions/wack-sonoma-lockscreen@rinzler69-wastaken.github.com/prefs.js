@@ -15,7 +15,8 @@ import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/
 const MEDIA_TYPES = ['video/mp4', 'video/webm', 'video/x-matroska', 'video/quicktime', 'image/gif', 'image/png',
     'image/jpeg', 'image/webp'];
 const IMAGE_TYPES = ['image/png', 'image/svg+xml', 'image/jpeg', 'image/webp'];
-const LIBEXEC = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'libexec', 'mk']);
+// root-owned, installed by setup.sh: pkexec only ever runs this fixed path, never a file in $HOME
+const GDM_HELPER = '/usr/local/libexec/mk-gdm-monitors';
 const BIN = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin']);
 
 export default class WackSonomaLivePrefs extends ExtensionPreferences {
@@ -185,14 +186,13 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
         const row = new Adw.ActionRow({title: 'Sync Refresh Rate to GDM', subtitle: 'Asks for your password'});
         const button = new Gtk.Button({label: 'Sync', valign: Gtk.Align.CENTER, css_classes: ['suggested-action']});
         button.connect('clicked', () => {
-            const script = GLib.build_filenamev([LIBEXEC, 'setup-system-optimizations.sh']);
-            if (!GLib.file_test(script, GLib.FileTest.IS_EXECUTABLE)) {
-                row.subtitle = 'Not installed yet: run ./sync.sh, or sudo scripts/setup-system-optimizations.sh';
+            if (!rootOwned(GDM_HELPER)) {
+                row.subtitle = 'Not installed yet: run sudo ./setup.sh once, or sudo scripts/setup-system-optimizations.sh';
                 return;
             }
             button.sensitive = false;
             row.subtitle = 'Waiting for your password…';
-            run(['pkexec', script, '--user', GLib.get_user_name()], (ok, out) => {
+            run(['pkexec', GDM_HELPER], (ok, out) => {
                 button.sensitive = true;
                 row.subtitle = GLib.markup_escape_text(ok ? out.trim().split('\n').pop()
                     : `Not synced: ${out.trim().split('\n').pop() || 'cancelled'}`, -1);
@@ -231,6 +231,18 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
             description: 'Once, in a terminal: sudo scripts/setup-hibernate.sh (a swap file the size of your memory, the kernel\'s resume setting, and permission to hibernate without a password). Secure Boot keeps the kernel from hibernating while it\'s on.'});
         page.add(setup);
         return page;
+    }
+}
+
+// a file root owns and only root can change (else pkexec would run what anyone wrote)
+function rootOwned(path) {
+    try {
+        const info = Gio.File.new_for_path(path).query_info('unix::uid,unix::mode,standard::type,standard::is-symlink',
+            Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
+        return info.get_file_type() === Gio.FileType.REGULAR && info.get_attribute_uint32('unix::uid') === 0 &&
+            (info.get_attribute_uint32('unix::mode') & 0o022) === 0;
+    } catch {
+        return false;
     }
 }
 

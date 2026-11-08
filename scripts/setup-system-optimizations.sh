@@ -6,10 +6,14 @@
 #
 #   sudo scripts/setup-system-optimizations.sh [--user NAME] [--dry-run]
 #
-# The lock screen extension's "Sync refresh to GDM" button runs it through
-# pkexec (it asks for your password). Safe to run again: it copies only when
-# the files differ, and backs GDM's old file up once (monitors.xml.bak, never
-# overwritten).
+# setup.sh installs it root-owned as /usr/local/libexec/mk-gdm-monitors; the lock
+# screen extension's "Sync Refresh Rate to GDM" button runs that copy through
+# pkexec (it asks for your password), never a file in your home. Under pkexec
+# the user is always the one who asked (PKEXEC_UID); --user is ignored then.
+# Your file is read with your own rights (never root's), must be a regular
+# file (no symlinks) and look like monitors.xml. Safe to run again: it copies
+# only when the files differ, and backs GDM's old file up once
+# (monitors.xml.bak, never overwritten).
 set -euo pipefail
 
 DRY=0
@@ -20,9 +24,12 @@ fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --user) USER_NAME="${2:?--user needs a name}"; shift 2 ;;
+        --user)
+            # (under pkexec the caller is PKEXEC_UID's user, whatever this says)
+            [[ -z "${PKEXEC_UID:-}" ]] && USER_NAME="${2:?--user needs a name}"
+            shift 2 ;;
         --dry-run) DRY=1; shift ;;
-        -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
         *) echo "Unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -38,6 +45,10 @@ gdm_home=$(getent passwd gdm | cut -d: -f6)
 src="$home/.config/monitors.xml"
 dst="${gdm_home:-/var/lib/gdm}/.config/monitors.xml"
 
+if [[ -L "$src" || -L "$(dirname "$src")" ]]; then
+    echo "$src (or its folder) is a symbolic link: refusing." >&2
+    exit 1
+fi
 if [[ ! -f "$src" ]]; then
     echo "No display settings at $src yet: change a display setting in Settings once (or apply the current one), then run this again." >&2
     exit 1
@@ -47,19 +58,33 @@ if [[ -z "$gdm_home" ]]; then
     exit 1
 fi
 
-if [[ -f "$dst" ]] && cmp -s "$src" "$dst"; then
+# read as the user (root never opens a path the user controls), into a private temp file
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+if [[ $EUID -eq 0 && "$USER_NAME" != root ]]; then
+    runuser -u "$USER_NAME" -- cat -- "$src" > "$tmp"
+else
+    cat -- "$src" > "$tmp"
+fi
+if (( $(stat -c %s "$tmp") > 1048576 )) || ! grep -q '<monitors' "$tmp" || ! grep -q '</monitors>' "$tmp"; then
+    echo "$src doesn't look like GNOME's display settings: refusing." >&2
+    exit 1
+fi
+
+if [[ -f "$dst" ]] && cmp -s "$tmp" "$dst"; then
     echo "GDM already uses your display settings."
     exit 0
 fi
 
 if [[ $DRY -eq 1 ]]; then
-    echo "would copy $src -> $dst (owner gdm:gdm, mode 644)"
+    echo "would copy $src -> $dst (owner gdm:gdm, mode 600)"
     exit 0
 fi
 
-if [[ -f "$dst" && ! -e "$dst.bak" ]]; then
+if [[ -f "$dst" && ! -L "$dst" && ! -e "$dst.bak" ]]; then
     cp -a "$dst" "$dst.bak"
 fi
-install -D -o gdm -g gdm -m 644 "$src" "$dst"
+rm -f "$dst"          # (never write through a link someone left there)
+install -D -o gdm -g gdm -m 600 "$tmp" "$dst"
 command -v restorecon > /dev/null && restorecon "$dst" || true
 echo "GDM now uses your display settings ($dst). They apply from the next login screen."

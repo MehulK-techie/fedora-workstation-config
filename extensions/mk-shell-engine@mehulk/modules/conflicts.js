@@ -7,6 +7,9 @@ export const DASH_TO_DOCK = 'dash-to-dock@micxgx.gmail.com';
 export const BLUR_MY_SHELL = 'blur-my-shell@aunetx';
 export const MAGIC_LAMP = 'compiz-alike-magic-lamp-effect@hermes83.github.com';
 export const BURN_MY_WINDOWS = 'burn-my-windows@schneegans.github.com';
+// WACK Sonoma Live Lockscreen (MK's unified build): it brings its own desktop live
+// wallpaper and, in the top bar, Finder, Places and the app indicator
+export const UNIFIED = 'wack-sonoma-lockscreen@rinzler69-wastaken.github.com';
 
 const ACTIVE = 1;     // ExtensionState.ACTIVE (named ENABLED before GNOME 48)
 

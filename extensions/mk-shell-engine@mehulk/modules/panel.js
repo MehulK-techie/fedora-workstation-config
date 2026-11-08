@@ -267,11 +267,17 @@ class GlassMenus {
                 continue;
             menu.box.add_style_class_name('mk-glass-menu');
             menu.actor.add_style_class_name('mk-glass-pointer');
-            if (name === 'places-menu' || name === 'mk-logo')
+            if (['places-menu', 'mk-logo', 'wack-finder', 'wack-places'].includes(name))
                 menu._arrowAlignment = 0.5;
             const id = menu.connect('open-state-changed', (_m, open) => {
                 menu._mkUnglass?.();
                 menu._mkUnglass = open ? addWallpaperGlass(menu.box, menu.actor, MENU_GLASS, 16, desktopCopy) : null;
+            });
+            // a button that goes first (its extension switched off, or GNOME locking the screen)
+            // takes its menu along: forgotten here, never touched again
+            menu.connect('destroy', () => {
+                menu._mkUnglass?.();
+                this._done.delete(menu);
             });
             this._done.set(menu, id);
         }
@@ -632,6 +638,12 @@ export class Panel {
         // something added to the left later (WACK Shell's logo button after a settings change,
         // Places switched on): put the island back in order
         this._leftId = Main.panel._leftBox.connect('child-added', () => this._queueOrder());
+        this._leftGoneId = Main.panel._leftBox.connect('child-removed', () => this._queueOrder());
+        // (GNOME destroys the whole bar as it shuts down, then runs what's still queued)
+        this._leftDeadId = Main.panel._leftBox.connect('destroy', () => {
+            this._barGone = true;
+            this._dots = this._dotsBox = this._divider = null;
+        });
         this._quiet = new QuietIndicators();
         this._glassMenus = new GlassMenus();
         this._battery = new BatteryTint();
@@ -747,7 +759,7 @@ export class Panel {
     }
 
     _queueOrder() {
-        if (this._orderIdle)
+        if (this._orderIdle || this._barGone)
             return;
         this._orderIdle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
             this._orderIdle = 0;
@@ -757,6 +769,8 @@ export class Panel {
     }
 
     _orderLeft() {
+        if (this._barGone)
+            return;
         const left = Main.panel._leftBox, area = Main.panel.statusArea;
         this._divider ??= new St.Widget({style_class: 'mk-island-divider', y_align: Clutter.ActorAlign.CENTER});
         if (!this._divider.get_parent())
@@ -765,11 +779,19 @@ export class Panel {
         // (the dots: WACK Shell's workspace button when it's on, GNOME's own otherwise)
         const dotsItem = area['wack-workspace-button'] ?? area.activities;
         // the logo: WACK Shell's when it shows one, MK's otherwise (never both)
+        // (and never two Finders, Places or app pills: WACK Sonoma Live Lockscreen's own top bar
+        // pieces, when it shows them, win over the engine's; it hides GNOME's Places itself)
+        const shown = name => area[name] && area[name].container.get_parent() === left;
         const wack = area['wack-logo-menu'];
         if (area['mk-logo'])
-            area['mk-logo'].container.visible = !(wack && wack.container.get_parent() === left && wack.visible);
-        const order = [area['mk-logo']?.container, area['wack-logo-menu']?.container, area['places-menu']?.container, this._divider,
-            area['wack-workspace-button']?.container, area.activities?.container, area['mk-active-app']?.container]
+            area['mk-logo'].container.visible = !shown('wack-finder') &&
+                !(wack && wack.container.get_parent() === left && wack.visible);
+        if (area['mk-active-app'])
+            area['mk-active-app'].container.visible = !shown('wack-app-indicator');
+        const order = [area['wack-finder']?.container, area['mk-logo']?.container, area['wack-logo-menu']?.container,
+            area['wack-places']?.container, area['places-menu']?.container, this._divider,
+            area['wack-workspace-button']?.container, area.activities?.container,
+            area['wack-app-indicator']?.container, area['mk-active-app']?.container]
             .filter(a => a && a.get_parent() === left);
         order.forEach((actor, i) => left.set_child_at_index(actor, i));
         this._divider.visible = true;
@@ -788,9 +810,11 @@ export class Panel {
     }
 
     _teardown() {
-        if (this._leftId)
-            Main.panel._leftBox.disconnect(this._leftId);
-        this._leftId = 0;
+        if (!this._barGone) {
+            for (const id of [this._leftId, this._leftGoneId, this._leftDeadId].filter(Boolean))
+                Main.panel._leftBox.disconnect(id);
+        }
+        this._leftId = this._leftGoneId = this._leftDeadId = 0;
         if (this._orderIdle)
             GLib.source_remove(this._orderIdle);
         this._orderIdle = 0;

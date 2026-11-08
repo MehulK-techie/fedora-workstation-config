@@ -3,7 +3,8 @@
 // leaves the others (and GNOME Shell) running.
 //   modules/tiling.js  snap layouts (Super+Z), Snap Assist, Super+Left / Right, the coder desktop (Super+Shift+Z)
 //   modules/screenshotActions.js  Annotate, OCR Text, Open Folder on the screenshot notification
-//   modules/liveWallpaper.js  a video as the desktop background (bin/mk-live-wallpaper)
+//   modules/liveWallpaper.js  a video as the desktop background (bin/mk-live-wallpaper), while
+//                             WACK Sonoma Live Lockscreen (which has its own) is off
 //   modules/dock.js    the glass dock (while Dash to Dock is off)
 //   modules/blur.js    native blur (GNOME's GPU blur) for the dock, islands and switcher (while Blur my Shell is off)
 //   modules/panel.js   the top bar as three glass islands, the active app, the clock
@@ -28,6 +29,8 @@ import { ScreenshotActions } from './modules/screenshotActions.js';
 import { LiveWallpaper } from './modules/liveWallpaper.js';
 import { Panel } from './modules/panel.js';
 import { ControlCenter } from './modules/controlCenter.js';
+import { UNIFIED, isActive, watch } from './modules/conflicts.js';
+import GLib from 'gi://GLib';
 
 export default class MKShellEngine extends Extension {
     // The engine also runs on the lock screen (metadata: session-modes), but there only the
@@ -37,13 +40,40 @@ export default class MKShellEngine extends Extension {
     enable() {
         this._settings = this.getSettings();
         this._parts = [];
-        try {
-            this._wallpaper = new LiveWallpaper();
-        } catch (e) {
-            console.error(`mk-shell-engine: live wallpaper didn't start: ${e.message}\n${e.stack}`);
-        }
+        // the desktop's live wallpaper: WACK Sonoma Live Lockscreen plays it while that's on
+        // (decided once every extension has started: it's enabled after this one)
+        this._wallpaperIdle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._wallpaperIdle = 0;
+            this._syncWallpaper();
+            return GLib.SOURCE_REMOVE;
+        });
+        this._unwatch = watch(() => this._syncWallpaper());
         this._sessionId = Main.sessionMode.connect('updated', () => this._syncSession());
         this._syncSession();
+    }
+
+    _syncWallpaper() {
+        if (this._wallpaperIdle)
+            return;                                  // (not yet: see enable)
+        const yours = !isActive(UNIFIED);
+        if (yours && !this._wallpaper) {
+            try {
+                this._wallpaper = new LiveWallpaper();
+            } catch (e) {
+                console.error(`mk-shell-engine: live wallpaper didn't start: ${e.message}\n${e.stack}`);
+            }
+        } else if (!yours && this._wallpaper) {
+            this._stopWallpaper();
+        }
+    }
+
+    _stopWallpaper() {
+        try {
+            this._wallpaper?.destroy();
+        } catch (e) {
+            console.error(`mk-shell-engine: ${e.message}`);
+        }
+        this._wallpaper = null;
     }
 
     _syncSession() {
@@ -106,12 +136,12 @@ export default class MKShellEngine extends Extension {
             Main.sessionMode.disconnect(this._sessionId);
         this._sessionId = 0;
         this._stopParts();
-        try {
-            this._wallpaper?.destroy();
-        } catch (e) {
-            console.error(`mk-shell-engine: ${e.message}`);
-        }
-        this._wallpaper = null;
+        if (this._wallpaperIdle)
+            GLib.source_remove(this._wallpaperIdle);
+        this._wallpaperIdle = 0;
+        this._unwatch?.();
+        this._unwatch = null;
+        this._stopWallpaper();
         this._settings = null;
     }
 }

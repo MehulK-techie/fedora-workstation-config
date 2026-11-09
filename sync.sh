@@ -957,6 +957,9 @@ fi
 # ./scripts/setup-audio.sh now); a sync never restarts audio for it.
 install -Dm644 "$SCRIPT_DIR/config/wireplumber/51-mk-follow-default.conf" \
     "$HOME/.config/wireplumber/wireplumber.conf.d/51-mk-follow-default.conf"
+# the built-in speaker outranks HDMI and virtual outputs at every boot (read at the next login)
+install -Dm644 "$SCRIPT_DIR/config/wireplumber/52-prefer-hardware-speaker.conf" \
+    "$HOME/.config/wireplumber/wireplumber.conf.d/52-prefer-hardware-speaker.conf"
 cat > "$HOME/.config/systemd/user/mk-audio-init.service" << 'UNIT'
 [Unit]
 Description=MK Workstation: sound for every app at login (bin/mk-audio-init)
@@ -965,7 +968,8 @@ Wants=pipewire-pulse.service wireplumber.service
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/mk-audio-init
+ExecStart=%h/.local/bin/mk-audio-init --watch
+TimeoutStartSec=45
 RemainAfterExit=yes
 
 [Install]

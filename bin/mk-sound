@@ -56,7 +56,11 @@ DESKTOP
         else
             echo "Speaker tuning: off   (mk sound on)"
         fi
-        [[ -f "$AUTOSTART" ]] && echo "Starts at login: yes" || echo "Starts at login: no"
+        if [[ -f "$AUTOSTART" ]] && ! grep -q '^Hidden=true' "$AUTOSTART"; then
+            echo "Starts at login: yes"
+        else
+            echo "Starts at login: no"
+        fi
         ;;
     *)
         echo "Usage: mk sound [on | off | status]" >&2

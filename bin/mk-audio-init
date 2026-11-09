@@ -4,6 +4,9 @@
 #   mk-audio-init            check the audio stack, pick the right output, send apps to it
 #   mk-audio-init --clean    also forget the outputs WirePlumber had pinned apps to
 #                            (restarts the audio stack once; scripts/setup-audio.sh uses it)
+#   mk-audio-init --watch    then keep watch for the first 15 s of the session (every
+#                            2.5 s): anything that grabs the default output at startup
+#                            (Easy Effects' virtual sink) is undone (mk-audio-init.service)
 #
 # What it does:
 #   1. waits for the sound card (up to 10 s after boot)
@@ -14,7 +17,8 @@
 #   3. the default output: kept when it's real hardware; else the built-in
 #      speakers / analog output (never a dummy, an HDMI port with nothing on it,
 #      or Easy Effects' virtual sink)
-#   4. every app playing now moves to the default output, unmuted
+#   4. every app playing now moves to the default output, unmuted; the output and
+#      the sound card's Master and Speaker channels (amixer) unmuted
 # The volume is left where you set it.
 set -uo pipefail
 UNITS=(pipewire.socket pipewire-pulse.socket pipewire.service pipewire-pulse.service wireplumber.service)
@@ -50,26 +54,52 @@ else
     done
 fi
 
-# the default output: real hardware, built-in first
-default=$(pactl get-default-sink 2> /dev/null || true)
-real() { [[ -n "$1" && "$1" == alsa_output.* ]] && ! grep -qiE 'hdmi|displayport' <<< "$1"; }
-if ! real "$default"; then
-    pick=$(pactl list short sinks 2> /dev/null | awk '{print $2}' |
-        grep -E '^alsa_output\.' | grep -viE 'hdmi|displayport' |
-        grep -iE 'speaker|analog' | head -n 1)
-    [[ -z "$pick" ]] && pick=$(pactl list short sinks 2> /dev/null | awk '{print $2}' | grep -E '^alsa_output\.' | head -n 1)
-    if [[ -n "$pick" ]]; then
-        pactl set-default-sink "$pick"
-        default=$pick
-    fi
-fi
+# real hardware: the built-in card (not HDMI with nothing on it), or Bluetooth you connected
+real() {
+    [[ -n "$1" ]] || return 1
+    [[ "$1" == bluez_output.* ]] && return 0
+    [[ "$1" == alsa_output.* ]] && ! grep -qiE 'hdmi|displayport' <<< "$1"
+}
 
-# apps playing now: onto it, unmuted
-if [[ -n "$default" ]]; then
-    pactl list short sink-inputs 2> /dev/null | awk '{print $1}' | while read -r id; do
-        pactl move-sink-input "$id" "$default" 2> /dev/null || true
-        pactl set-sink-input-mute "$id" 0 2> /dev/null || true
+# the default output on real hardware, apps on it, everything unmuted; prints the output
+settle() {
+    local default pick
+    default=$(pactl get-default-sink 2> /dev/null || true)
+    if ! real "$default"; then
+        pick=$(pactl list short sinks 2> /dev/null | awk '{print $2}' |
+            grep -E '^alsa_output\.' | grep -viE 'hdmi|displayport' |
+            grep -iE 'speaker|analog' | head -n 1)
+        [[ -z "$pick" ]] && pick=$(pactl list short sinks 2> /dev/null | awk '{print $2}' | grep -E '^alsa_output\.' | head -n 1)
+        if [[ -n "$pick" ]]; then
+            pactl set-default-sink "$pick"
+            default=$pick
+        fi
+    fi
+    # apps playing now: onto it, unmuted
+    if [[ -n "$default" ]]; then
+        pactl list short sink-inputs 2> /dev/null | awk -v d="$default" '$2 != d {print $1}' | while read -r id; do
+            pactl move-sink-input "$id" "$default" 2> /dev/null || true
+        done
+        pactl list short sink-inputs 2> /dev/null | awk '{print $1}' | while read -r id; do
+            pactl set-sink-input-mute "$id" 0 2> /dev/null || true
+        done
+    fi
+    wpctl set-mute @DEFAULT_AUDIO_SINK@ 0 2> /dev/null || true
+    # the card's own channels (a cold boot can leave them muted below PipeWire)
+    if command -v amixer > /dev/null; then
+        for channel in Master Speaker; do
+            amixer -q sset "$channel" unmute 2> /dev/null || true
+        done
+    fi
+    echo "$default"
+}
+
+out=$(settle)
+if [[ "${1:-}" == --watch || "${2:-}" == --watch ]]; then
+    # the first 15 s of the session: whatever starts late and grabs the output is undone
+    for _ in 1 2 3 4 5 6; do
+        sleep 2.5
+        out=$(settle)
     done
 fi
-wpctl set-mute @DEFAULT_AUDIO_SINK@ 0 2> /dev/null || true
-echo "Audio: $(pactl get-default-sink 2> /dev/null || echo 'no output found')"
+echo "Audio: ${out:-no output found}"

@@ -1,7 +1,7 @@
 {
   "uuid": "wack-sonoma-lockscreen@rinzler69-wastaken.github.com",
-  "name": "WACK Sonoma Live Lockscreen",
-  "description": "macOS Sonoma lock screen with hardware-accelerated live video, GIF and image wallpapers (optional sound), Now Playing controls, battery and weather, a power button with Hibernate, customizable clock typography and smooth unlock animations; plus the desktop's live wallpaper and, in the top bar, Finder, Places and the app indicator.",
+  "name": "MehulK Workstation & Sonoma Suite",
+  "description": "MehulK's personal workstation suite: a macOS Sonoma lock screen with live video, GIF and image wallpapers (optional sound), clock layouts, a glass card, Now Playing, battery and weather and a power button with Hibernate; the desktop's live wallpaper; and in the top bar Finder (round custom logo, 14-30 px), Places and the app indicator. Built on WACK Sonoma Lockscreen (rinzler69-wastaken, GPL-3.0) and Live Lock Screen (nick-redwill, AGPL-3.0); AGPL-3.0.",
   "shell-version": [
     "45",
     "46",
@@ -18,5 +18,6 @@
   "settings-schema": "org.gnome.shell.extensions.wack-sonoma-lockscreen",
   "gettext-domain": "wack-sonoma-lockscreen",
   "url": "https://github.com/MehulK-techie/fedora-workstation-config",
-  "version-name": "1.0 (WACK Sonoma Lockscreen 2.2.0 + Live Lock Screen)"
+  "version-name": "v18.0 — MehulK Personal Edition",
+  "author": "MehulK"
 }

@@ -483,6 +483,31 @@ export class VideoRenderer {
     /**
      * Starts (or continues) the fade in. Call when the screen turns on
      */
+    // MK: going to sleep: the video's copies gone at once (GNOME's still wallpaper shows
+    // under them), so nothing half-drawn greets you as the screen comes back
+    sleepHide() {
+        if (this._asleep)
+            return;
+        this._asleep = true;
+        for (const w of this._wrapperActors ?? []) {
+            w._mkOpacity = w.opacity;
+            w.hide();
+        }
+    }
+
+    // MK: awake again: the copies fade back in over DURATION ms
+    wakeShow(duration = 320) {
+        if (!this._asleep)
+            return;
+        this._asleep = false;
+        for (const w of this._wrapperActors ?? []) {
+            const target = w._mkOpacity ?? 255;
+            w.opacity = 0;
+            w.show();
+            w.ease({opacity: target, duration, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        }
+    }
+
     fadeIn(delay = 0) {
         this._fadeAnim?.play(Direction.FORWARD, delay);
     }

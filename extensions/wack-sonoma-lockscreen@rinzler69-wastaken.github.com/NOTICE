@@ -1,11 +1,14 @@
-WACK Sonoma Live Lockscreen
-===========================
+MehulK Workstation & Sonoma Suite (v18.0, MehulK Personal Edition)
+==================================================================
 
-One GNOME Shell extension made by MK Workstation from two others:
+By MehulK. Formerly "WACK Sonoma Live Lockscreen" (the UUID is unchanged, so
+settings and the enabled list carry over). One GNOME Shell extension made by
+MK Workstation from two others, plus MehulK's own modules (extension.js,
+topbar.js, lockWidgets.js, desktop.js, media.js, power.js, preview.js):
 
   WACK Sonoma Lockscreen 2.2.0 (rinzler69-wastaken)
     https://github.com/rinzler69-wastaken/wack-sonoma-lockscreen
-    GPL-3.0 (LICENSE.GPL-3.0): sonoma.js, crossSessionManager.js, src/,
+    GPL-3.0 (LICENSE.GPL-3.0): sonoma.js, src/,
     stylesheet.css, and its schema keys
 
   Live Lock Screen (nick-redwill)

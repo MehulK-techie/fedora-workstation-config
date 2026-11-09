@@ -1,4 +1,5 @@
-// WACK Sonoma Live Lockscreen: settings (the gear in Extension Manager).
+// MehulK Workstation & Sonoma Suite: settings (the gear in Extension Manager).
+// A live preview of the screen sits at the top of the first and third pages.
 // Five pages: Wallpapers & Audio, Finder & Top Bar, Sonoma Lock Screen,
 // Performance & Refresh Rate, Power & Hibernate. Every switch writes the merged
 // schema (org.gnome.shell.extensions.wack-sonoma-lockscreen); the shell follows
@@ -11,6 +12,7 @@ import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 import Pango from 'gi://Pango';
 import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import { LivePreview } from './preview.js';
 
 const MEDIA_TYPES = ['video/mp4', 'video/webm', 'video/x-matroska', 'video/quicktime', 'image/gif', 'image/png',
     'image/jpeg', 'image/webp'];
@@ -24,6 +26,7 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
         const s = this.getSettings();
         window.set_default_size(700, 760);
         window.set_search_enabled(true);
+        window.set_title('MehulK Workstation & Sonoma Suite');
         window.add(this._wallpaperPage(window, s));
         window.add(this._topBarPage(window, s));
         window.add(this._lockPage(s));
@@ -31,9 +34,25 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
         window.add(this._powerPage(s));
     }
 
+    // The live preview: the screen as it'll look, following every change; a button locks for real
+    _previewGroup(s) {
+        const group = new Adw.PreferencesGroup({title: 'Live Preview'});
+        const preview = new LivePreview(s, this.dir.get_child('icons'));
+        const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 10, halign: Gtk.Align.CENTER,
+            margin_bottom: 6});
+        box.append(preview.widget);
+        const lock = new Gtk.Button({label: 'Preview Fullscreen Lock Screen', halign: Gtk.Align.CENTER,
+            css_classes: ['pill'], tooltip_text: 'Locks the screen now (your password unlocks it)'});
+        lock.connect('clicked', () => run(['loginctl', 'lock-session'], () => {}));
+        box.append(lock);
+        group.add(box);
+        return group;
+    }
+
     // ----- 1. Wallpapers & Audio
     _wallpaperPage(window, s) {
         const page = new Adw.PreferencesPage({title: 'Wallpapers & Audio', icon_name: 'video-display-symbolic'});
+        page.add(this._previewGroup(s));
 
         const desktop = new Adw.PreferencesGroup({title: 'Desktop',
             description: 'A video, GIF or picture as the desktop background, below every window.'});
@@ -97,12 +116,16 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
         const label = new Adw.EntryRow({title: 'Label Text', text: s.get_string('finder-label'), show_apply_button: true});
         label.connect('apply', () => s.set_string('finder-label', label.text.trim()));
         finder.add(label);
+        finder.add(scaleRow(s, 'finder-icon-size', 'Logo Size', 14, 30, 1, 'px', 'The top bar follows as you drag'));
+        finder.add(switchRow(s, 'finder-logo-circular', 'Round Custom Logo', 'A picture is cropped to a circle, like an avatar'));
         page.add(finder);
 
         const more = new Adw.PreferencesGroup({title: 'Places and the app indicator'});
         more.add(switchRow(s, 'places-show-text', 'Places Label', 'Off: an icon only'));
         more.add(switchRow(s, 'show-app-indicator', 'App Indicator',
             'The focused app\'s icon and name, with New Window, Hide, Maximize, Close and Quit'));
+        more.add(switchRow(s, 'app-indicator-animate', 'App Indicator Animations',
+            'Fades and shrinks away on an empty desktop, grows back with the next app'));
         page.add(more);
         return page;
     }
@@ -110,7 +133,13 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
     // ----- 3. Sonoma Lock Screen
     _lockPage(s) {
         const page = new Adw.PreferencesPage({title: 'Sonoma Lock Screen', icon_name: 'system-lock-screen-symbolic'});
+        page.add(this._previewGroup(s));
         const clock = new Adw.PreferencesGroup({title: 'Clock'});
+        clock.add(comboRow(s, 'lock-clock-layout', 'Clock Layout',
+            [['sonoma-center', 'Sonoma Center Giant'], ['sequoia-compact', 'macOS Sequoia Compact'],
+                ['minimal-left', 'Minimalist Left-Aligned'], ['vertical-stacked', 'Vertical Stacked']]));
+        clock.add(switchRow(s, 'lock-glass-card', 'Glass Card Behind the Clock',
+            'A frosted card behind the clock, the battery and weather pill and Now Playing'));
         clock.add(comboRow(s, 'clock-style', 'Clock Style',
             [['sonoma-bold', 'Sonoma Bold Rounded'], ['cupertino-thin', 'Cupertino Thin'], ['digital', 'Classic Digital'],
                 ['custom', 'Custom Font']]));
@@ -156,6 +185,10 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
             s.set_boolean('cupertino-lockscreen-message-enable', text !== '');
         });
         widgets.add(hint);
+        const greeting = new Adw.EntryRow({title: 'Greeting or Quote Above the Password Field',
+            text: s.get_string('lock-greeting'), show_apply_button: true});
+        greeting.connect('apply', () => s.set_string('lock-greeting', greeting.text.trim()));
+        widgets.add(greeting);
         page.add(widgets);
 
         const anims = new Adw.PreferencesGroup({title: 'Animations'});
@@ -230,6 +263,12 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
         const setup = new Adw.PreferencesGroup({title: 'Setting it up',
             description: 'Once, in a terminal: sudo scripts/setup-hibernate.sh (a swap file the size of your memory, the kernel\'s resume setting, and permission to hibernate without a password). Secure Boot keeps the kernel from hibernating while it\'s on.'});
         page.add(setup);
+
+        const about = new Adw.PreferencesGroup({title: 'About',
+            description: 'MehulK Workstation and Sonoma Suite, v18.0 (MehulK Personal Edition), by MehulK. ' +
+                'Built on WACK Sonoma Lockscreen by rinzler69-wastaken (GPL-3.0) and Live Lock Screen by nick-redwill ' +
+                '(AGPL-3.0); the whole is under AGPL-3.0 (LICENSE.AGPL-3.0, NOTICE).'});
+        page.add(about);
         return page;
     }
 }
@@ -247,6 +286,8 @@ function rootOwned(path) {
 }
 
 // a command's output, asynchronously: done(succeeded, stdout + stderr)
+// (the live preview group is built per page: a widget lives in one place)
+
 function run(argv, done) {
     try {
         const proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE);

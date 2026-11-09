@@ -44,7 +44,15 @@ import { DesktopWallpaper } from './desktop.js';
 import { MediaWatcher } from './media.js';
 
 const STYLE_KEYS = ['dim-opacity', 'clock-style', 'clock-font', 'clock-color', 'date-color', 'clock-offset',
-    'show-notifications', 'show-avatar', 'hide-fingerprint-hint', 'zero-lag-lock'];
+    'show-notifications', 'show-avatar', 'hide-fingerprint-hint', 'zero-lag-lock', 'lock-clock-layout', 'lock-glass-card',
+    'lock-greeting'];
+// the clock's layout presets: the time's size, the date's, how far up
+const LAYOUTS = {
+    'sonoma-center': {time: 0, date: 0, lift: 0},
+    'sequoia-compact': {time: 84, date: 22, lift: -48},
+    'minimal-left': {time: 96, date: 24, lift: 0},
+    'vertical-stacked': {time: 112, date: 24, lift: -24},
+};
 // a change to any of these restarts the lock screen's video (when it's showing)
 const LIVE_KEYS = ['live-enabled', 'lockscreen-audio-enabled', 'wallpaper-sync-mode', 'zero-lag-lock', 'pause-on-sleep'];
 const CLOCK_FONTS = {
@@ -67,7 +75,7 @@ export default class WackSonomaLiveLockscreen extends Extension {
         this._qsHibernate = this._make('hibernate', () => new QuickSettingsHibernate(this._settings));
         // waking: the password field at once, 250 ms on (once the screen is back)
         this._login = LoginManager.getLoginManager();
-        this._login.connectObject('prepare-for-sleep', (_m, sleeping) => !sleeping && this._woke(), this);
+        this._login.connectObject('prepare-for-sleep', (_m, sleeping) => (sleeping ? this._sleeping() : this._woke()), this);
         this._sync();
     }
 
@@ -80,11 +88,31 @@ export default class WackSonomaLiveLockscreen extends Extension {
         }
     }
 
+    // going to sleep: no blur pass on the lock screen while the display goes down and comes back
+    _sleeping() {
+        if (this._wakeId)
+            GLib.source_remove(this._wakeId);
+        this._wakeId = 0;
+        this._blurAsleep = true;
+        for (const w of Main.screenShield?._dialog?._backgroundGroup?.get_children() ?? []) {
+            const effect = w.get_effect('blur');
+            if (effect)
+                effect.enabled = false;
+        }
+    }
+
+    // awake: 600 ms on (the display back, the password field drawn), the password field and the blur
     _woke() {
         if (this._wakeId)
             GLib.source_remove(this._wakeId);
-        this._wakeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+        this._wakeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => {
             this._wakeId = 0;
+            this._blurAsleep = false;
+            for (const w of Main.screenShield?._dialog?._backgroundGroup?.get_children() ?? []) {
+                const effect = w.get_effect('blur');
+                if (effect)
+                    effect.enabled = !this._settings?.get_boolean('zero-lag-lock') || effect.radius > 0;
+            }
             if (Main.sessionMode.isLocked && this._settings?.get_boolean('wake-to-password'))
                 Main.screenShield?._dialog?._showPrompt?.();
             return GLib.SOURCE_REMOVE;
@@ -188,6 +216,9 @@ export default class WackSonomaLiveLockscreen extends Extension {
         }
         this._dim?.destroy();
         this._dim = null;
+        this._greeting?.destroy();
+        this._greeting = null;
+        this._unlayoutClock();
         this._unwatchBlur();
         this._media?.destroy();
         this._media = null;
@@ -199,8 +230,17 @@ export default class WackSonomaLiveLockscreen extends Extension {
     // ----- the look: dimming, the clock, the avatar, notifications, the hint line
     _applyStyle() {
         const dialog = Main.screenShield?._dialog;
-        if (!this._running || !dialog)
+        if (!this._running)
             return;
+        if (!dialog) {
+            // (the parts start as GNOME enters the lock screen, a moment before its dialog exists)
+            this._retryStyle();
+            return;
+        }
+        // GNOME 51's unlock dialog asks its clock to show the hint for the way you'll sign in
+        // (as the password field is made, on waking): WACK's clock has its own hint line
+        if (dialog._clock && typeof dialog._clock.selectAuthHint !== 'function')
+            dialog._clock.selectAuthHint = () => {};
         const s = this._settings;
         // a light scrim, rgba(12,14,20,a), over the wallpaper and video, under the clock and the prompt
         const dim = s.get_int('dim-opacity') / 100;
@@ -225,29 +265,32 @@ export default class WackSonomaLiveLockscreen extends Extension {
         // the clock: WACK's time and date, in the lock screen's group beside the dialog
         // (made as the lock screen appears: look again a few times)
         const group = Main.screenShield._lockDialogGroup ?? dialog;
-        const time = findByClass(group, 'wack-time'), date = findByClass(group, 'wack-date');
+        // WACK's clock box (date, time, and the pill and Now Playing MK adds) and its own labels
+        const clockBox = dialog._clock?.has_style_class_name?.('unlock-dialog-clock') ? dialog._clock : null;
+        const time = clockBox?._time ?? findByClass(group, 'wack-time');
+        const date = clockBox?._dateOutput ?? findByClass(group, 'wack-date');
+        const layout = LAYOUTS[s.get_string('lock-clock-layout')] ?? LAYOUTS['sonoma-center'];
         if (time) {
             const style = s.get_string('clock-style');
             let font = CLOCK_FONTS[style] ?? '';
             if (style === 'custom' && s.get_string('clock-font'))
                 font = fontToCss(s.get_string('clock-font'));
             const colour = s.get_string('clock-color');
-            time.set_style(`${font}${colour ? ` color: ${colour};` : ''}`);
+            // the layout's size first, so a custom font's own size still wins
+            time.set_style(`${layout.time ? `font-size: ${layout.time}px; ` : ''}${font}${colour ? ` color: ${colour};` : ''}`);
             const block = time.get_parent();
             if (block)
-                block.translation_y = s.get_int('clock-offset');
+                block.translation_y = s.get_int('clock-offset') + layout.lift;
+            this._layoutClock(clockBox, time, date);
         }
         if (date) {
             const colour = s.get_string('date-color');
-            date.set_style(colour ? `color: ${colour};` : null);
+            const size = layout.date ? `font-size: ${layout.date}px; ` : '';
+            date.set_style(size || colour ? `${size}${colour ? `color: ${colour};` : ''}` : null);
         }
-        if (!time && this._styleTries++ < 8) {
-            this._styleRetry = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
-                this._styleRetry = 0;
-                this._applyStyle();
-                return GLib.SOURCE_REMOVE;
-            });
-        }
+        this._greet(dialog);
+        if (!time)
+            this._retryStyle();
         // the user pill (avatar and name) above the password field
         const well = dialog._authPrompt?._userWell;
         if (well)
@@ -265,6 +308,100 @@ export default class WackSonomaLiveLockscreen extends Extension {
             dialog.add_style_class_name('mk-hide-fp-hint');
         else
             dialog.remove_style_class_name('mk-hide-fp-hint');
+    }
+
+    _retryStyle() {
+        if (this._styleRetry || this._styleTries++ >= 12)
+            return;
+        this._styleRetry = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+            this._styleRetry = 0;
+            this._applyStyle();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // The clock's layout: left-aligned (96 px in from the screen's left), hours over minutes,
+    // or centred; and the glass card behind it all (the clock box holds the date, the time,
+    // the battery and weather pill and Now Playing)
+    _layoutClock(block, time, date) {
+        if (!block?.add_style_class_name)
+            return;
+        const s = this._settings, layout = s.get_string('lock-clock-layout');
+        if (s.get_boolean('lock-glass-card'))
+            block.add_style_class_name('wack-glass-card');
+        else
+            block.remove_style_class_name('wack-glass-card');
+        const left = layout === 'minimal-left';
+        for (const a of [time, date])
+            if (a)
+                a.x_align = left ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
+        if (!this._clockBlock || this._clockBlock !== block) {
+            this._unlayoutClock();
+            this._clockBlock = block;
+            this._clockTime = time;
+            this._blockId = block.connect('notify::allocation', () => this._placeLeft());
+            this._timeId = time.clutter_text.connect('notify::text', () => this._stackTime());
+        }
+        time.clutter_text.line_alignment = left ? 0 : 1;       // Pango.Alignment LEFT / CENTER
+        this._placeLeft();
+        if (layout === 'vertical-stacked')
+            this._stackTime();
+        else if (time.text.includes('\n'))
+            this._sonoma?._clock?._updateTime?.();             // back to one line
+    }
+
+    _stackTime() {
+        const time = this._clockTime;
+        if (!time || this._settings?.get_string('lock-clock-layout') !== 'vertical-stacked' || !time.text.includes(':'))
+            return;
+        time.text = time.text.replace(/\s*:\s*/, '\n');
+    }
+
+    _placeLeft() {
+        const block = this._clockBlock;
+        if (!block || this._placing)
+            return;
+        this._placing = true;
+        const m = Main.layoutManager.primaryMonitor;
+        if (this._settings?.get_string('lock-clock-layout') === 'minimal-left' && m) {
+            const [x] = block.get_transformed_position();
+            block.translation_x = Math.round(m.x + 96 - (x - block.translation_x));
+        } else {
+            block.translation_x = 0;
+        }
+        this._placing = false;
+    }
+
+    _unlayoutClock() {
+        try {
+            if (this._blockId)
+                this._clockBlock.disconnect(this._blockId);
+            if (this._timeId)
+                this._clockTime.clutter_text.disconnect(this._timeId);
+        } catch {}                          // (gone with the lock screen)
+        this._blockId = this._timeId = 0;
+        this._clockBlock = this._clockTime = null;
+    }
+
+    // a line of your own above the password field
+    _greet(dialog) {
+        const text = this._settings.get_string('lock-greeting').trim();
+        const box = dialog._promptBox ?? dialog._authPrompt?.get_parent();
+        if (!text || !box) {
+            this._greeting?.destroy();
+            this._greeting = null;
+            return;
+        }
+        if (!this._greeting || this._greeting.get_parent() !== box) {
+            this._greeting?.destroy();
+            this._greeting = new St.Label({style_class: 'wack-greeting', x_align: Clutter.ActorAlign.CENTER});
+            this._greeting.connect('destroy', g => {
+                if (this._greeting === g)
+                    this._greeting = null;
+            });
+            box.insert_child_at_index(this._greeting, 0);
+        }
+        this._greeting.text = text;
     }
 
     // A Shell.BlurEffect at radius 0 still copies the whole screen through an offscreen
@@ -286,7 +423,7 @@ export default class WackSonomaLiveLockscreen extends Extension {
         const effect = widget.get_effect('blur');
         if (!(effect instanceof Shell.BlurEffect))
             return;
-        const sync = () => (effect.enabled = effect.radius > 0);
+        const sync = () => (effect.enabled = !this._blurAsleep && effect.radius > 0);
         this._blurIds.push([effect, effect.connect('notify::radius', sync)]);
         sync();
     }

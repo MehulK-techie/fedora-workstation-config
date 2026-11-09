@@ -253,15 +253,18 @@ export default class LockscreenExtension extends Extension {
         this._sleepWatcher = new SleepWatcher({
             onSleep: () => {
                 this._sleeping = true;
+                this._renderer?.sleepHide();
                 this._updateActive();
             },
             onResume: () => {
-                // MK: 250 ms after waking, once the screen is back (no glitch as it wakes)
+                // MK: the still picture for 600 ms after waking, while the display comes back
+                // and the password field draws; then the video fades back in
                 if (this._resumeId)
                     GLib.source_remove(this._resumeId);
-                this._resumeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+                this._resumeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => {
                     this._resumeId = 0;
                     this._sleeping = false;
+                    this._renderer?.wakeShow();
                     this._updateActive();
                     return GLib.SOURCE_REMOVE;
                 });

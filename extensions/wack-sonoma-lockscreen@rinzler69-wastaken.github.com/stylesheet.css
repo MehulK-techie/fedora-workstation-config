@@ -405,22 +405,35 @@
 .wack-finder-label { font-weight: bold; }
 .wack-places-box { spacing: 6px; }
 .wack-topbar-menu { -boxpointer-gap: 8px; }
-.wack-power-row-item { padding: 4px 6px; }
+.wack-power-row-item { padding: 6px 8px 8px; }
 .wack-power-row-item:hover { background-color: transparent; }
-.wack-power-row { spacing: 2px; }
+.wack-power-row { spacing: 6px; }
+/* six frosted cards, each with its own glow on hover */
 .wack-power-button {
-  padding: 6px 4px 4px;
-  border-radius: 10px;
-  min-width: 52px;
+  width: 46px;
+  height: 44px;
+  padding: 5px 2px 3px;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.92);
+  transition-duration: 120ms;
 }
-.wack-power-button:hover, .wack-power-button:focus { background-color: rgba(255, 255, 255, 0.10); }
-.wack-power-button:active { background-color: rgba(255, 255, 255, 0.16); }
-.wack-power-caption { font-size: 9px; padding-top: 3px; color: rgba(255, 255, 255, 0.75); }
+.wack-power-button:hover, .wack-power-button:focus { background-color: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.22); }
+.wack-power-button:active { background-color: rgba(255, 255, 255, 0.18); }
+.wack-power-shutdown:hover, .wack-power-shutdown:focus { border-color: rgba(248, 113, 113, 0.75); box-shadow: 0 0 12px rgba(239, 68, 68, 0.55); color: #fecaca; }
+.wack-power-restart:hover, .wack-power-restart:focus { border-color: rgba(251, 191, 36, 0.75); box-shadow: 0 0 12px rgba(245, 158, 11, 0.5); color: #fde68a; }
+.wack-power-hibernate:hover, .wack-power-hibernate:focus { border-color: rgba(103, 232, 249, 0.75); box-shadow: 0 0 12px rgba(34, 211, 238, 0.5); color: #cffafe; }
+.wack-power-sleep:hover, .wack-power-sleep:focus { border-color: rgba(192, 132, 252, 0.75); box-shadow: 0 0 12px rgba(168, 85, 247, 0.5); color: #e9d5ff; }
+.wack-power-lock:hover, .wack-power-lock:focus, .wack-power-logout:hover, .wack-power-logout:focus { box-shadow: 0 0 10px rgba(255, 255, 255, 0.18); }
+.wack-power-caption { font-size: 10px; padding-top: 3px; color: rgba(255, 255, 255, 0.78); }
+#panel .panel-button.wack-finder { padding: 0 8px; -natural-hpadding: 0; -minimum-hpadding: 0; }
+.wack-finder-round { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18); }
 .wack-app-indicator { -natural-hpadding: 4px; -minimum-hpadding: 4px; }
+.wack-app-inner { spacing: 6px; }
 .wack-app-pill {
   height: 24px;
   padding: 0 10px 0 8px;
-  spacing: 6px;
   border-radius: 12px;
   background-color: rgba(255, 255, 255, 0.08);
 }
@@ -490,3 +503,19 @@
   background-color: rgba(255, 255, 255, 0.14);
 }
 .wack-notif-clear:hover, .wack-notif-clear:focus { background-color: rgba(255, 255, 255, 0.24); }
+
+/* ===== MK v18: the lock screen's glass card and greeting ===== */
+.wack-glass-card {
+  padding: 22px 36px 26px;
+  border-radius: 28px;
+  background-color: rgba(18, 20, 30, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+.wack-greeting {
+  margin-bottom: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.86);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}

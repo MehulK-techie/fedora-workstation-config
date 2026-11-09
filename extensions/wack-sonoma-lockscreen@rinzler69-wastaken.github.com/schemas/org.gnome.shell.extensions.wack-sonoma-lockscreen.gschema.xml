@@ -493,5 +493,39 @@
       <summary>Sleep means hibernate</summary>
       <description>The Sleep buttons this extension adds hibernate instead.</description>
     </key>
+
+    <!-- MK v18 -->
+    <key name="finder-icon-size" type="i">
+      <range min="14" max="30"/>
+      <default>22</default>
+      <summary>Finder logo size (px)</summary>
+      <description>14 to 30 px; the top bar follows the slider live.</description>
+    </key>
+    <key name="finder-logo-circular" type="b">
+      <default>true</default>
+      <summary>Round custom logo</summary>
+      <description>A custom picture is cropped to a circle, like an avatar.</description>
+    </key>
+    <key name="app-indicator-animate" type="b">
+      <default>true</default>
+      <summary>App indicator animations</summary>
+      <description>The pill fades and shrinks away on an empty desktop and grows back with the next app.</description>
+    </key>
+    <key name="lock-clock-layout" type="s">
+      <choices><choice value="sonoma-center"/><choice value="sequoia-compact"/><choice value="minimal-left"/><choice value="vertical-stacked"/></choices>
+      <default>'sonoma-center'</default>
+      <summary>Clock layout</summary>
+      <description>sonoma-center (giant, centred), sequoia-compact (smaller, higher), minimal-left (left-aligned), vertical-stacked (hours over minutes).</description>
+    </key>
+    <key name="lock-glass-card" type="b">
+      <default>false</default>
+      <summary>Glass card behind the clock</summary>
+      <description>A frosted card behind the clock, the battery and weather pill and Now Playing.</description>
+    </key>
+    <key name="lock-greeting" type="s">
+      <default>''</default>
+      <summary>Greeting above the password field</summary>
+      <description>A line of your own (a greeting or a quote) above the password field; empty: none.</description>
+    </key>
   </schema>
 </schemalist>

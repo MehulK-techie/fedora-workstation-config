@@ -27,7 +27,8 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 import { hibernate, sleep } from './power.js';
 
-const FINDER_KEYS = ['finder-logo-preset', 'finder-custom-logo', 'finder-show-label', 'finder-label'];
+const FINDER_KEYS = ['finder-logo-preset', 'finder-custom-logo', 'finder-show-label', 'finder-label', 'finder-icon-size',
+    'finder-logo-circular'];
 const GNOME_PLACES = 'places-menu';
 
 function launchUri(uri) {
@@ -69,8 +70,9 @@ class Finder {
     _logo() {
         const preset = this._settings.get_string('finder-logo-preset');
         const icons = this._extension.dir.get_child('icons');
-        const themed = name => new St.Icon({icon_name: name, icon_size: 16, style_class: 'wack-finder-icon'});
-        const file = gfile => new St.Icon({gicon: Gio.FileIcon.new(gfile), icon_size: 16, style_class: 'wack-finder-icon'});
+        const size = this._settings.get_int('finder-icon-size');
+        const themed = name => new St.Icon({icon_name: name, icon_size: size, style_class: 'wack-finder-icon'});
+        const file = gfile => new St.Icon({gicon: Gio.FileIcon.new(gfile), icon_size: size, style_class: 'wack-finder-icon'});
         switch (preset) {
         case 'none':
             return null;
@@ -80,8 +82,17 @@ class Finder {
             return file(icons.get_child('mk-emblem-symbolic.svg'));
         case 'custom': {
             const path = this._settings.get_string('finder-custom-logo').replace(/^~(?=\/)/, GLib.get_home_dir());
-            return path && GLib.file_test(path, GLib.FileTest.EXISTS)
-                ? file(Gio.File.new_for_path(path)) : themed('image-missing-symbolic');
+            if (!path || !GLib.file_test(path, GLib.FileTest.EXISTS))
+                return themed('image-missing-symbolic');
+            // a photo or picture: a round avatar filling the circle (an SVG glyph stays as drawn)
+            if (this._settings.get_boolean('finder-logo-circular') && !/\.svg$/i.test(path)) {
+                const uri = Gio.File.new_for_path(path).get_uri().replace(/["\\]/g, c => `\\${c}`);
+                return new St.Bin({style_class: 'wack-finder-round', width: size, height: size,
+                    y_align: Clutter.ActorAlign.CENTER,
+                    style: `background-image: url("${uri}"); background-size: cover; background-position: center; ` +
+                        `border-radius: ${size / 2}px;`});
+            }
+            return file(Gio.File.new_for_path(path));
         }
         case 'fedora-mono': {
             // Fedora's logo as a white glyph: no colour, lifted toward the bar's text
@@ -111,19 +122,20 @@ class Finder {
         // the power row: one press each, as on a Mac's  menu
         const row = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'wack-power-row-item'});
         const box = new St.BoxLayout({style_class: 'wack-power-row', x_expand: true});
+        // a frosted grid of six cards, each with its own glow on hover
         const power = [
-            ['system-shutdown-symbolic', 'Shut Down', () => actions.activatePowerOff()],
-            ['system-reboot-symbolic', 'Restart', () => actions.activateRestart()],
-            ...(s.get_boolean('show-hibernate') ? [['media-floppy-symbolic', 'Hibernate', () => hibernate()]] : []),
-            ['weather-clear-night-symbolic', 'Sleep', () => sleep(s)],
-            ['system-lock-screen-symbolic', 'Lock', () => actions.activateLockScreen()],
-            ['system-log-out-symbolic', 'Log Out', () => actions.activateLogout()],
+            ['system-shutdown-symbolic', 'Shut Down', 'shutdown', () => actions.activatePowerOff()],
+            ['system-reboot-symbolic', 'Restart', 'restart', () => actions.activateRestart()],
+            ...(s.get_boolean('show-hibernate') ? [['media-floppy-symbolic', 'Hibernate', 'hibernate', () => hibernate()]] : []),
+            ['weather-clear-night-symbolic', 'Sleep', 'sleep', () => sleep(s)],
+            ['system-lock-screen-symbolic', 'Lock', 'lock', () => actions.activateLockScreen()],
+            ['system-log-out-symbolic', 'Log Out', 'logout', () => actions.activateLogout()],
         ];
-        for (const [icon, label, run] of power) {
-            const b = new St.Button({style_class: 'wack-power-button', can_focus: true, accessible_name: label,
-                x_expand: true, child: new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL,
-                    x_align: Clutter.ActorAlign.CENTER})});
-            b.child.add_child(new St.Icon({icon_name: icon, icon_size: 16, x_align: Clutter.ActorAlign.CENTER}));
+        for (const [icon, label, kind, run] of power) {
+            const b = new St.Button({style_class: `wack-power-button wack-power-${kind}`, can_focus: true,
+                accessible_name: label, child: new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL,
+                    x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER})});
+            b.child.add_child(new St.Icon({icon_name: icon, icon_size: 18, x_align: Clutter.ActorAlign.CENTER}));
             b.child.add_child(new St.Label({text: label, style_class: 'wack-power-caption', x_align: Clutter.ActorAlign.CENTER}));
             b.connect('clicked', () => {
                 menu.close();
@@ -141,10 +153,6 @@ class Finder {
             'org.gnome.Extensions.desktop'));
         menu.addAction('System Monitor', () => launchApp('org.gnome.SystemMonitor.desktop',
             'gnome-system-monitor.desktop', 'io.missioncenter.MissionCenter.desktop'));
-        if (s.get_boolean('show-hibernate')) {
-            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-            menu.addAction('Hibernate', () => hibernate());
-        }
     }
 
     destroy() {
@@ -261,15 +269,20 @@ class Places {
 
 // ----- the App Indicator
 class AppIndicator {
-    constructor() {
+    constructor(settings) {
+        this._settings = settings;
         this.button = new PanelMenu.Button(0.0, 'App', false);
         this.button.add_style_class_name('wack-app-indicator');
+        // the glass capsule (stays put while the app inside it changes), and what's inside
         this._pill = new St.BoxLayout({style_class: 'wack-app-pill', y_align: Clutter.ActorAlign.CENTER});
+        this._pill.set_pivot_point(0.5, 0.5);
+        this._inner = new St.BoxLayout({style_class: 'wack-app-inner', y_align: Clutter.ActorAlign.CENTER});
         this._iconBin = new St.Bin({y_align: Clutter.ActorAlign.CENTER, style_class: 'wack-app-icon'});
         this._label = new St.Label({style_class: 'wack-app-name', y_align: Clutter.ActorAlign.CENTER});
         this._label.clutter_text.ellipsize = 3;            // Pango.EllipsizeMode.END
-        this._pill.add_child(this._iconBin);
-        this._pill.add_child(this._label);
+        this._inner.add_child(this._iconBin);
+        this._inner.add_child(this._label);
+        this._pill.add_child(this._inner);
         this.button.add_child(this._pill);
         this.button.menu.actor.add_style_class_name('wack-topbar-menu');
         this._tracker = Shell.WindowTracker.get_default();
@@ -280,27 +293,65 @@ class AppIndicator {
         ];
         this.button.menu.connect('open-state-changed', (_m, open) => open && this._fill());
         this.button.connect('destroy', () => (this._gone = true));
+        // nothing focused yet: no capsule until an app is
+        this._shown = false;
+        this.button.visible = false;
+        this._pill.opacity = 0;
         this._sync(false);
     }
 
+    get _animate() {
+        return this._settings.get_boolean('app-indicator-animate') && St.Settings.get().enable_animations;
+    }
+
+    // An app focused: its icon and name. None (an empty desktop, everything minimized):
+    // the capsule fades and shrinks away (200 ms), and grows back with the next app (180 ms);
+    // from one app to another only the inside crossfades (110 ms), the capsule stays.
     _sync(animate) {
         if (this._gone)
             return;
         const app = this._tracker.focus_app;
-        this.button.visible = Boolean(app) && !Main.overview.visible;
-        if (app === this._app)
-            return;
+        const want = Boolean(app) && !Main.overview.visible;
+        animate = animate && this._animate;
+        const changed = app !== this._app;
         this._app = app;
-        if (!app)
-            return;
-        const icon = app.create_icon_texture(16);
-        icon.style = '-st-icon-style: requested;';          // its own colours
-        this._iconBin.set_child(icon);
-        this._label.text = app.get_name();
-        if (animate && St.Settings.get().enable_animations) {
+        if (app && changed) {
+            const icon = app.create_icon_texture(16);
+            icon.style = '-st-icon-style: requested;';      // its own colours
+            this._iconBin.set_child(icon);
+            this._label.text = app.get_name();
+        }
+        if (want && !this._shown) {
+            this._shown = true;
+            this.button.visible = true;
             this._pill.remove_all_transitions();
-            this._pill.set({opacity: 0, translation_y: 4});
-            this._pill.ease({opacity: 255, translation_y: 0, duration: 110, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            this._inner.remove_all_transitions();
+            this._inner.set({opacity: 255, translation_y: 0});
+            if (animate) {
+                this._pill.set({opacity: 0, scale_x: 0.92, scale_y: 0.92});
+                this._pill.ease({opacity: 255, scale_x: 1, scale_y: 1, duration: 180,
+                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            } else {
+                this._pill.set({opacity: 255, scale_x: 1, scale_y: 1});
+            }
+        } else if (!want && this._shown) {
+            this._shown = false;
+            this._pill.remove_all_transitions();
+            if (animate && !Main.overview.visible) {
+                this._pill.ease({opacity: 0, scale_x: 0.92, scale_y: 0.92, duration: 200,
+                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                    onStopped: done => {
+                        if (done && !this._shown && !this._gone)
+                            this.button.visible = false;
+                    }});
+            } else {
+                this._pill.set({opacity: 0});
+                this.button.visible = false;
+            }
+        } else if (want && changed && animate) {
+            this._inner.remove_all_transitions();
+            this._inner.set({opacity: 0, translation_y: 4});
+            this._inner.ease({opacity: 255, translation_y: 0, duration: 110, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         }
     }
 
@@ -363,7 +414,7 @@ export class TopBar {
         if (!panel.statusArea['wack-places'])
             this._places = mount('wack-places', () => new Places(this._settings), 1);
         if (this._settings.get_boolean('show-app-indicator') && !panel.statusArea['wack-app-indicator'])
-            this._app = mount('wack-app-indicator', () => new AppIndicator(), -1);
+            this._app = mount('wack-app-indicator', () => new AppIndicator(this._settings), -1);
         // GNOME's Places extension's button stands aside while ours shows (and when it comes back later)
         this._leftId = panel._leftBox.connect('child-added', () => this._hideGnomePlaces());
         this._hideGnomePlaces();

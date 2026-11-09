@@ -37,12 +37,62 @@ import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as WorkspaceAnimation from 'resource:///org/gnome/shell/ui/workspaceAnimation.js';
 import { OtherMedia } from './otherMedia.js';
 
 const PLAYER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-live-wallpaper']);
 const LOG = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-live-wallpaper.log']);
 const KEYS = ['desktop-wallpaper-path', 'desktop-hwaccel', 'desktop-audio-enabled'];
 const FADE_OUT = 400, FADE_IN = 350;
+
+// Switching workspaces (Super+PageUp/PageDown, a swipe, the grid): GNOME slides a copy of
+// each workspace, every one on a still background of its own, made fresh for the switch
+// (loading the wallpaper picture each time) and drawn over the live wallpaper. While the
+// live wallpaper shows, the primary monitor's copies get no background: one clone of the
+// video, pinned to the monitor, sits under them instead, so the windows slide over a
+// wallpaper that stays put and keeps playing from the same GPU texture (nothing is made,
+// loaded or decoded again for the switch).
+const pin = {source: null, saved: null};
+
+function pinWorkspaces(source) {
+    pin.source = source;
+    if (pin.saved)
+        return;
+    const groupProto = WorkspaceAnimation.WorkspaceGroup?.prototype;
+    const controller = Main.wm?._workspaceAnimation;
+    if (!groupProto?._createBackground || !controller?._prepareWorkspaceSwitch)
+        return;                                      // (GNOME's animation has changed shape: left as it is)
+    pin.saved = {create: groupProto._createBackground, prepare: controller._prepareWorkspaceSwitch, controller};
+    const primary = monitor => monitor?.index === Main.layoutManager.primaryIndex;
+    groupProto._createBackground = function (...args) {
+        if (pin.source && this._workspace && primary(this._monitor))
+            return;                                  // (the pinned video is the background)
+        return pin.saved.create.apply(this, args);
+    };
+    controller._prepareWorkspaceSwitch = function (...args) {
+        const result = pin.saved.prepare.apply(this, args);
+        for (const group of this._switchData?.monitors ?? []) {
+            if (!pin.source || !primary(group._monitor))
+                continue;
+            const m = group._monitor;
+            group.insert_child_at_index(new Clutter.Clone({source: pin.source, reactive: false,
+                x: 0, y: 0, width: m.width, height: m.height}), 0);
+        }
+        return result;
+    };
+}
+
+function unpinWorkspaces() {
+    pin.source = null;
+    if (!pin.saved)
+        return;
+    WorkspaceAnimation.WorkspaceGroup.prototype._createBackground = pin.saved.create;
+    if (pin.saved.controller._prepareWorkspaceSwitch !== pin.saved.prepare)
+        delete pin.saved.controller._prepareWorkspaceSwitch;   // (the class's own again)
+    if (pin.saved.controller._prepareWorkspaceSwitch !== pin.saved.prepare)
+        pin.saved.controller._prepareWorkspaceSwitch = pin.saved.prepare;
+    pin.saved = null;
+}
 
 const usable = path => typeof path === 'string' && path !== '' && GLib.file_test(path, GLib.FileTest.IS_REGULAR);
 
@@ -228,6 +278,16 @@ export class DesktopWallpaper {
             return;
         this._volIdle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
             this._volIdle = 0;
+            // (mid workspace-switch the video is on screen, pinned under the sliding windows: it may
+            // start playing at once, but it's never paused or faded out until the slide is over)
+            if (Main.wm?._workspaceAnimation?._switchData && this._wantsPause()) {
+                this._volIdle = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
+                    this._volIdle = 0;
+                    this._queueVolume();
+                    return GLib.SOURCE_REMOVE;
+                });
+                return GLib.SOURCE_REMOVE;
+            }
             this._syncPlaying();                     // (play first, so a fade-in is heard from its start)
             this._syncVolume(true);
             return GLib.SOURCE_REMOVE;
@@ -284,10 +344,12 @@ export class DesktopWallpaper {
         layer.add_child(this._clone);                // (above the still backgrounds)
         actor.opacity = 0;                           // (a clone paints its source at full opacity)
         this._coverActor = actor;
+        pinWorkspaces(actor);
         actor.connectObject('destroy', () => this._uncover(), this);
     }
 
     _uncover() {
+        unpinWorkspaces();
         if (this._coverActor) {
             this._coverActor.disconnectObject(this);
             this._coverActor.opacity = 255;
@@ -309,15 +371,23 @@ export class DesktopWallpaper {
     // it (the bare desktop, or the overview, where it's the backdrop), or, with Background
     // Play, while you can hear it (under your windows, with no other media playing). Top-bar
     // menus never pause it. With sound on, a pause waits for the 400 ms fade-out first.
-    _syncPlaying() {
-        if (!this._player.win)
-            return;                                  // (no commands before its window)
+    _hidden() {
         const m = Main.layoutManager.primaryIndex;
         const seen = Main.overview.visible || this._onDesktop();
         const heard = this._background && !this._media?.playing;
-        const hidden = Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m)) ||
-            !(seen || heard);
-        const want = hidden ? 'pause' : 'play';
+        return Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m)) || !(seen || heard);
+    }
+
+    // would the next sync pause it, or bring its sound down?
+    _wantsPause() {
+        return (this._player.win && this._hidden() && this._playState !== 'pause') ||
+            (this.audio && this._volume() < (this._level ?? 0));
+    }
+
+    _syncPlaying() {
+        if (!this._player.win)
+            return;                                  // (no commands before its window)
+        const want = this._hidden() ? 'pause' : 'play';
         if (want === this._playState)
             return;
         this._playState = want;

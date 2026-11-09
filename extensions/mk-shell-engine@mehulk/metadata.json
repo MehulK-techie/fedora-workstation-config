@@ -13,5 +13,7 @@
   "session-modes": [
     "user",
     "unlock-dialog"
-  ]
+  ],
+  "author": "MehulK",
+  "version-name": "v18.0 — MehulK Personal Edition"
 }

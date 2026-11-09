@@ -10,20 +10,80 @@
 // Style and the Welcome light toggle (never the battery: GNOME shows the top
 // bar's battery icon only while that tile is there), so the toggles are a clean 2 x 4: Wi-Fi,
 // Bluetooth, Power Mode, Night Light, Do Not Disturb, Airplane Mode, Microphone
-// (the engine's own) and Caffeine (when installed), in that order. Screenshots have their keys:
-// Super+Shift+S, Print, Super+Print.
+// (the engine's own) and Caffeine (when installed), in that order, then the engine's
+// Screenshot (instant: saved and copied) and Wallpaper Sound (the live wallpaper's, while
+// MehulK Workstation & Sonoma Suite runs). Hibernate is in the power menu (that suite's).
+// Screenshot keys: Shift+Print instantly, Print and Super+Shift+S to pick an area.
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { QuickToggle, SystemIndicator } from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import { getMixerControl } from 'resource:///org/gnome/shell/ui/status/volume.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
+import { instantScreenshot } from './instantShot.js';
+import { UNIFIED } from './conflicts.js';
 
 // The grid's order, two by two: Wi-Fi, Bluetooth / Power Mode, Night Light /
 // Do Not Disturb, Airplane Mode / Microphone, Caffeine. (What else is there
 // follows; whatever isn't there is skipped.)
 const ORDER = ['NMWirelessToggle', 'BluetoothToggle', 'PowerProfilesToggle', 'NightLightToggle',
-    'DoNotDisturbToggle', 'RfkillToggle', 'MkMicToggle', 'CaffeineToggle'];
+    'DoNotDisturbToggle', 'RfkillToggle', 'MkMicToggle', 'CaffeineToggle', 'MkScreenshotToggle', 'MkWallpaperSoundToggle'];
+
+// Screenshot: one press, the whole screen, saved and copied (once the menu has closed)
+const ScreenshotToggle = GObject.registerClass({GTypeName: 'MkScreenshotToggle'}, class ScreenshotToggle extends QuickToggle {
+    constructor() {
+        super({title: 'Screenshot', subtitle: 'Saved & copied', iconName: 'camera-photo-symbolic', toggleMode: false});
+        this.connect('clicked', () => {
+            Main.panel.closeQuickSettings?.();
+            this._wait = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 350, () => {
+                this._wait = 0;
+                instantScreenshot().catch(e => Main.notify('Screenshot failed', e.message));
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+    }
+
+    destroy() {
+        if (this._wait)
+            GLib.source_remove(this._wait);
+        super.destroy();
+    }
+});
+
+// The live wallpaper's sound (MehulK Workstation & Sonoma Suite's desktop-audio-enabled)
+function unifiedSettings() {
+    const dir = Main.extensionManager.lookup(UNIFIED)?.dir?.get_child('schemas');
+    if (!dir?.query_exists(null))
+        return null;
+    const source = Gio.SettingsSchemaSource.new_from_directory(dir.get_path(),
+        Gio.SettingsSchemaSource.get_default(), false);
+    const schema = source.lookup('org.gnome.shell.extensions.wack-sonoma-lockscreen', false);
+    return schema?.has_key('desktop-audio-enabled') ? new Gio.Settings({settings_schema: schema}) : null;
+}
+
+const WallpaperSoundToggle = GObject.registerClass({GTypeName: 'MkWallpaperSoundToggle'},
+class WallpaperSoundToggle extends QuickToggle {
+    constructor(settings) {
+        super({title: 'Wallpaper Sound', iconName: 'audio-speakers-symbolic', toggleMode: true});
+        this._settings = settings;
+        settings.bind('desktop-audio-enabled', this, 'checked', Gio.SettingsBindFlags.DEFAULT);
+        this._id = settings.connect('changed::desktop-audio-enabled', () => this._sync());
+        this._sync();
+    }
+
+    _sync() {
+        const on = this._settings.get_boolean('desktop-audio-enabled');
+        this.subtitle = on ? `${Math.round(this._settings.get_double('desktop-audio-volume') * 100)} %` : 'Muted';
+        this.iconName = on ? 'audio-speakers-symbolic' : 'audio-volume-muted-symbolic';
+    }
+
+    destroy() {
+        this._settings.disconnect(this._id);
+        Gio.Settings.unbind(this, 'checked');
+        super.destroy();
+    }
+});
 
 // Microphone: on = listening; off mutes the default input (the same mute as Settings).
 const MicToggle = GObject.registerClass({GTypeName: 'MkMicToggle'}, class MicToggle extends QuickToggle {
@@ -107,6 +167,10 @@ export class ControlCenter {
         try {
             this._mic = new SystemIndicator();
             this._mic.quickSettingsItems.push(new MicToggle());
+            this._mic.quickSettingsItems.push(new ScreenshotToggle());
+            const wall = unifiedSettings();
+            if (wall)
+                this._mic.quickSettingsItems.push(new WallpaperSoundToggle(wall));
             this._qs.addExternalIndicator(this._mic);
         } catch (e) {
             console.warn(`mk-shell-engine: microphone toggle: ${e.message}`);

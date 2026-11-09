@@ -25,10 +25,15 @@
       <description>An SVG or PNG (for example ~/.config/mk/logo.svg), used when finder-logo-mode is custom.</description>
     </key>
     <key name="finder-icon-size" type="i">
-      <range min="12" max="22"/>
-      <default>16</default>
+      <range min="14" max="30"/>
+      <default>22</default>
       <summary>Finder logo size (px)</summary>
-      <description>The logo's size in the top bar.</description>
+      <description>The logo's size in the top bar, 14 to 30 px (follows the slider live).</description>
+    </key>
+    <key name="finder-logo-circular" type="b">
+      <default>true</default>
+      <summary>Round custom logo</summary>
+      <description>A custom picture as the logo is cropped to a circle (like an avatar), filling it.</description>
     </key>
     <key name="finder-show-label" type="b">
       <default>true</default>
@@ -70,6 +75,12 @@
       <default>'obsidian-glass'</default>
       <summary>Dock style</summary>
       <description>obsidian-glass: translucent dark smoke. cupertino-frost: bright diffused glass. spider-glow: a dark core with a red laser edge. minimal-flat: a solid dark shelf, no border or blur.</description>
+    </key>
+    <key name="dock-opacity" type="d">
+      <range min="0.15" max="0.90"/>
+      <default>0.46</default>
+      <summary>Dock translucency</summary>
+      <description>How solid the obsidian-glass dock's tint is: 0.15 nearly clear, 0.90 nearly solid.</description>
     </key>
     <key name="dock-icon-size" type="i">
       <range min="36" max="56"/>

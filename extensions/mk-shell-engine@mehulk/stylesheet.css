@@ -25,10 +25,10 @@
 
 /* The MK dock (modules/dock.js): a frosted shelf, lit along its top edge like glass,
    with dots under running apps */
-.mk-dock { background-color: rgba(16, 18, 24, 0.58); border: 1px solid rgba(255, 255, 255, 0.14);
-  border-top-color: rgba(255, 255, 255, 0.40); border-bottom-color: rgba(255, 255, 255, 0.06);
-  border-radius: 22px; padding: 6px 10px 4px; spacing: 2px;
-  box-shadow: 0 18px 40px -6px rgba(0, 0, 0, 0.55); }
+.mk-dock { background-color: rgba(18, 20, 30, 0.46); border: 1px solid rgba(255, 255, 255, 0.20);
+  border-top-color: rgba(255, 255, 255, 0.42); border-bottom-color: rgba(255, 255, 255, 0.08);
+  border-radius: 22px; padding: 6px 10px; spacing: 2px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55); }
 /* dock-style: the default above is obsidian-glass; the others (all keep the 22 px corners
    the blur behind is cut to) */
 .mk-dock.mk-dock-cupertino-frost { background-color: rgba(255, 255, 255, 0.22); border: 1px solid rgba(255, 255, 255, 0.42);
@@ -43,7 +43,7 @@
 .mk-dock-item { padding: 3px 5px 1px; border-radius: 14px; }
 .mk-dock-item:focus { background-color: rgba(255, 255, 255, 0.10); }
 .mk-dock-bars { height: 4px; margin-top: 3px; spacing: 3px; }
-.mk-dock-bar { width: 4px; height: 4px; border-radius: 2px; }
+.mk-dock-bar { width: 5px; height: 5px; border-radius: 99px; }
 .mk-dock-separator { width: 1px; height: 32px; margin: 0 8px; border-radius: 1px; background-color: rgba(255, 255, 255, 0.20); }
 .mk-dock-grid { color: rgba(242, 246, 255, 0.88); }
 .mk-dock-tooltip { color: #f5f7fb; font-size: 0.86em; font-weight: 600; padding: 5px 12px; border-radius: 10px;

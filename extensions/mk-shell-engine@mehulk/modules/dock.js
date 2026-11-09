@@ -49,7 +49,7 @@ export class Dock {
         this._actor = null;
         this._unwatch = watch(() => this._sync());
         this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::dock-hide-ms',
-            'changed::dock-reveal-ms', 'changed::blur', 'changed::dock-style'].map(
+            'changed::dock-reveal-ms', 'changed::blur', 'changed::dock-style', 'changed::dock-opacity'].map(
             signal => settings.connect(signal, () => this._sync(true)));
         this._sync();
     }
@@ -88,11 +88,20 @@ export class Dock {
         this._ids = [];
         this._appIds = [];
         this._hidden = false;
+        this._pointerable = true;
         // its look (dock-style): obsidian-glass, cupertino-frost, spider-glow or minimal-flat
         const style = this._settings.get_string('dock-style');
         this._actor = new St.BoxLayout({style_class: `mk-dock mk-dock-${style}`, reactive: true, track_hover: true,
             y_align: Clutter.ActorAlign.END});
         this._actor.set_pivot_point(0.5, 1);
+        if (style === 'obsidian-glass')
+            this._actor.style = `background-color: rgba(18, 20, 30, ${this._settings.get_double('dock-opacity').toFixed(2)});`;
+        // the icons only take the pointer once the dock is (nearly) back in place: a hidden
+        // dock never shows a name or grows an icon (it used to, from just under the screen's edge)
+        this._actor.connect('notify::translation-y', () => {
+            if (!this._hidden && !this._inOverview && this._actor.translation_y < 10)
+                this._setPointerable(true);
+        });
         this._actor.connect('destroy', () => (this._gone = true));     // (GNOME Shell quitting takes it down first)
         this._gone = false;
         // GNOME shows and hides the chrome it tracks by itself (full screen, and
@@ -273,9 +282,11 @@ export class Dock {
         box.add_child(icon);
         const bars = new St.BoxLayout({style_class: 'mk-dock-bars', x_align: Clutter.ActorAlign.CENTER});
         box.add_child(bars);
-        const button = new St.Button({style_class: 'mk-dock-item', child: box, reactive: true, track_hover: true,
+        // (an icon added while the dock is away takes the pointer only once it's back)
+        const live = this._pointerable !== false;
+        const button = new St.Button({style_class: 'mk-dock-item', child: box, reactive: live, track_hover: live,
             can_focus: true, button_mask: (St.ButtonMask.PRIMARY ?? St.ButtonMask.ONE), accessible_name: name});
-        button.connect('notify::hover', () => this._tooltip(button.hover ? item : null));
+        button.connect('notify::hover', () => this._tooltip(button.hover && this._showing() ? item : null));
         this._actor.add_child(button);
         const item = {button, box, icon, bars, name};
         this._items.push(item);
@@ -418,12 +429,12 @@ export class Dock {
             // a small glowing dot pops in under each running app (two for several windows);
             // the app you're using gets its dot in your accent colour
             const dot = colour => {
-                const w = new St.Widget({style_class: 'mk-dock-bar', style: `background-color: ${colour};`,
+                const w = new St.Widget({style_class: 'mk-dock-bar', style: `background-color: ${colour}; box-shadow: 0 0 6px ${colour};`,
                     pivot_point: new Graphene.Point({x: 0.5, y: 0.5}), scale_x: 0, scale_y: 0, opacity: 0});
                 item.bars.add_child(w);
                 w.ease({scale_x: 1, scale_y: 1, opacity: 255, duration: 220, mode: Clutter.AnimationMode.EASE_OUT_BACK});
             };
-            const white = 'rgba(255,255,255,0.82)', accent = `rgb(${r},${g},${b})`;
+            const white = '#60a5fa', accent = `rgb(${r},${g},${b})`;
             if (state === 'one')
                 dot(white);
             else if (state === 'many') {
@@ -466,7 +477,29 @@ export class Dock {
         this._tooltip(null);
     }
 
+    // Is the dock really there (not hidden, not in the overview, not fading)?
+    _showing() {
+        return !this._hidden && !this._inOverview && this._actor?.visible && this._actor.opacity >= 200;
+    }
+
+    // every icon taking the pointer, or none (a hidden dock: no hover, no names, no hit-testing)
+    _setPointerable(on) {
+        if (this._pointerable === on || !this._actor || this._gone)
+            return;
+        this._pointerable = on;
+        for (const child of this._actor.get_children()) {
+            child.reactive = on;
+            child.track_hover = on;
+            if (!on)
+                child.sync_hover?.();
+        }
+        if (!on)
+            this._tooltip(null);
+    }
+
     _tooltip(item) {
+        if (item && !this._showing())
+            item = null;
         if (!item) {
             this._tip?.destroy();
             this._tip = null;
@@ -564,11 +597,24 @@ export class Dock {
             return;
         this._hidden = hide;
         this._edge.visible = hide && !this._fullscreen() && !this._inOverview;
+        if (hide) {
+            this._setPointerable(false);
+            this._tooltip(null);
+        } else if (!this._inOverview) {
+            this._actor.show();
+        }
         // (ease() retargets a slide already under way from where it is, so a quick hide-then-show never jumps)
         this._actor.ease({translation_y: hide ? this._hiddenY() : 0, opacity: hide ? 0 : 255,
             duration: hide ? this._hideMs : this._revealMs,
-            mode: hide ? Clutter.AnimationMode.EASE_IN_OUT_QUAD : Clutter.AnimationMode.EASE_OUT_CUBIC});
+            mode: hide ? Clutter.AnimationMode.EASE_IN_OUT_QUAD : Clutter.AnimationMode.EASE_OUT_CUBIC,
+            // gone altogether once it has faded: nothing left to hit-test, only the edge strip
+            onStopped: done => {
+                if (done && hide && this._hidden && this._actor && !this._gone)
+                    this._actor.hide();
+            }});
         this._actor.reactive = !hide;
+        if (!hide && !this._inOverview && this._actor.translation_y < 10)
+            this._setPointerable(true);
     }
 
     _hiddenY() {
@@ -596,6 +642,7 @@ export class Dock {
         this._actor.remove_transition('opacity');
         if (showing) {
             this._tooltip(null);
+            this._setPointerable(false);
             this._edge.visible = false;
             this._actor.reactive = false;
             // down and out of the way: the overview's own dash and the desktops are all yours
@@ -603,7 +650,8 @@ export class Dock {
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onStopped: done => done && this._inOverview && this._actor?.hide()});
         } else {
-            this._actor.show();
+            if (!this._hidden)
+                this._actor.show();
             if (!this._hidden) {
                 this._actor.reactive = true;
                 this._actor.ease({opacity: 255, translation_y: 0, duration: OVERVIEW_IN, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});

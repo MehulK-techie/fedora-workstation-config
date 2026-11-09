@@ -31,7 +31,16 @@ import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.j
 const ICONS = GLib.build_filenamev([GLib.path_get_dirname(GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0])),
     'icons']);
 const LOGO_KEYS = ['finder-logo-mode', 'finder-custom-logo-path', 'finder-icon-size', 'finder-show-label',
-    'finder-label-text'];
+    'finder-label-text', 'finder-logo-circular'];
+
+// A picture as a round avatar (St crops a background image to its rounded corners),
+// filling the circle; the escaped path keeps quotes in a file name from breaking the CSS
+export function roundPicture(path, size) {
+    const uri = Gio.File.new_for_path(path).get_uri().replace(/["\\]/g, c => `\\${c}`);
+    return new St.Bin({style_class: 'mk-logo-round', width: size, height: size, y_align: Clutter.ActorAlign.CENTER,
+        style: `background-image: url("${uri}"); background-size: cover; background-position: center; ` +
+            `border-radius: ${size / 2}px;`});
+}
 
 const ISLAND_RADIUS = 12;            // (the islands' CSS corners; the glass is cut to match)
 
@@ -185,7 +194,11 @@ class LogoButton {
             return file(GLib.build_filenamev([ICONS, 'mk-emblem-symbolic.svg']));
         if (kind === 'custom') {
             const path = this._settings.get_string('finder-custom-logo-path').replace(/^~(?=\/)/, GLib.get_home_dir());
-            return path && GLib.file_test(path, GLib.FileTest.EXISTS) ? file(path) : themed('image-missing-symbolic');
+            if (!path || !GLib.file_test(path, GLib.FileTest.EXISTS))
+                return themed('image-missing-symbolic');
+            // a photo or picture: round by default (an SVG glyph stays as drawn)
+            return this._settings.get_boolean('finder-logo-circular') && !/\.svg$/i.test(path)
+                ? roundPicture(path, size) : file(path);
         }
         if (kind === 'distro')
             return mono(themed(GLib.get_os_info('LOGO') || 'start-here-symbolic'));

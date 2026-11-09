@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""MK Control Center: the MK tools in one window.
+"""MK Command Centre (MK Control Center): the MK tools in one window.
 
-  mk-center [home | actions | lock | security]   (also: mk center, the app grid;
-                                                 mk hub opens Actions)
+  mk-center [home | studio | topbar | actions | lock | security]
+        (also: mk-control-center, mk center, the app grid; mk hub opens Actions)
+
+Studio: the Wallpaper & Sonoma Lockscreen Studio (a live 16:9 preview; desktop
+and lock screen media, sound and volume, the clock styler). Top Bar: the Top
+Bar, Circular Logo & Dock Studio (the Finder logo, its round crop and 14-30 px
+size, the app indicator's animation, the dock's translucency). Both write the
+extensions' own settings (lib/mkworkstation/studio.py).
 
 Actions: every mk command as a card, by category, with a search box; star
 the ones you use most and they stay on top (~/.config/mk-workstation/hub-pins).
-Home: quick actions (vault, speed test, live wallpaper, scratchpad,
-distraction-free mode, system health), App Nap, the live wallpaper and the
-desktop tools. MK Lock: lock apps with a switch, lock
+Home: quick actions (vault, speed test, the wallpaper studio, scratchpad,
+distraction-free mode, system health), App Nap and the desktop tools. MK Lock: lock apps with a switch, lock
 and open folders and the vault, lock notebooks of MK Notes. Security: run the
 security check and apply its fixes.
 
@@ -38,7 +43,7 @@ for _lib in (Path(__file__).resolve().parent.parent / "lib",
     if (_lib / "mkworkstation").is_dir():
         sys.path.insert(0, str(_lib))
         break
-from mkworkstation import auth, radios, saver_conf  # noqa: E402
+from mkworkstation import auth, radios, studio  # noqa: E402
 
 FINGERS = [("Right index", "right-index-finger"), ("Right thumb", "right-thumb"),
            ("Right middle", "right-middle-finger"), ("Left index", "left-index-finger"),
@@ -188,13 +193,15 @@ def load_css():
 
 class Center(Adw.ApplicationWindow):
     def __init__(self, app, page="home"):
-        super().__init__(application=app, title="MK Control Center", default_width=980, default_height=760)
+        super().__init__(application=app, title="MK Command Centre", default_width=980, default_height=760)
         load_css()
         self.toast = Adw.ToastOverlay()
         view = Adw.ToolbarView()
         head = Adw.HeaderBar()
         self.stack = Adw.ViewStack()
         self.stack.add_titled_with_icon(self._home(), "home", "Home", "go-home-symbolic")
+        self.stack.add_titled_with_icon(studio.wallpaper_studio(self), "studio", "Studio", "preferences-desktop-wallpaper-symbolic")
+        self.stack.add_titled_with_icon(studio.topbar_studio(self), "topbar", "Top Bar", "view-app-grid-symbolic")
         self.stack.add_titled_with_icon(self._actions(), "actions", "Actions", "view-grid-symbolic")
         self.stack.add_titled_with_icon(self._lock(), "lock", "MK Lock", "changes-prevent-symbolic")
         self.stack.add_titled_with_icon(self._security(), "security", "Security", "security-high-symbolic")
@@ -219,7 +226,8 @@ class Center(Adw.ApplicationWindow):
                                                                         lambda c, o: self.say("Vault: " + (o.strip().splitlines() or ["done"])[-1].strip("✔ ")))),
                    ("network-wireless-signal-excellent-symbolic", "Speed test",
                     lambda: run_bg([tool("mk-speedtest"), "--gui", "--start"])),
-                   ("preferences-desktop-wallpaper-symbolic", "Live wallpaper", lambda: self._toggle_live_wallpaper()),
+                   ("preferences-desktop-wallpaper-symbolic", "Wallpaper studio",
+                    lambda: self.stack.set_visible_child_name("studio")),
                    ("accessories-text-editor-symbolic", "Quick scratchpad", lambda: run_bg([tool("mk-scratchpad")])),
                    ("weather-clear-night-symbolic", "Distraction-free",
                     lambda: run_bg(mk("exam"), lambda c, o: self.say((o.strip().splitlines() or ["Done"])[-1]))),
@@ -244,20 +252,8 @@ class Center(Adw.ApplicationWindow):
         power.add(nap)
         page.add(power)
 
+        # (the live wallpaper is the Studio's: one player, MehulK Workstation & Sonoma Suite's)
         desk = Adw.PreferencesGroup(title="Desktop")
-        conf = saver_conf.conf()
-        self.live_row = Adw.SwitchRow(title="Live wallpaper",
-                                      subtitle="A screensaver scene behind your windows; pauses when a window fills the screen",
-                                      active=conf.get("LIVE_WALLPAPER", "off") == "on")
-        self.live_row.connect("notify::active", lambda r, _p: saver_conf.set_conf("LIVE_WALLPAPER", "on" if r.get_active() else "off"))
-        desk.add(self.live_row)
-        scenes = ["aurora", "web", "knight", "matrix"]
-        names = ["Aurora", "Web Hang", "Night Watch", "Terminal Stream"]
-        scene_row = Adw.ComboRow(title="Live wallpaper scene", model=Gtk.StringList.new(names))
-        current = conf.get("LIVE_SCENE", "aurora")
-        scene_row.set_selected(scenes.index(current) if current in scenes else 0)
-        scene_row.connect("notify::selected", lambda r, _p: saver_conf.set_conf("LIVE_SCENE", scenes[r.get_selected()]))
-        desk.add(scene_row)
         for title, sub, argv in (("Screensaver", "Pick a scene or shuffle; the lock screen too", [tool("mk-screensaver"), "settings"]),
                                  ("Keyboard shortcuts", "Every shortcut and gesture, live", [tool("show-shortcuts")]),
                                  ("Photo Booth", "Your webcam with live looks and stickers", [tool("camera-controls")]),
@@ -507,10 +503,6 @@ class Center(Adw.ApplicationWindow):
             self.say(text or "Storage Sense done")
             return False
         threading.Thread(target=read, daemon=True).start()
-
-    def _toggle_live_wallpaper(self):
-        self.live_row.set_active(not self.live_row.get_active())
-        self.say("Live wallpaper " + ("on" if self.live_row.get_active() else "off"))
 
     # ---------------------------------------------------------------- actions
     def _actions(self):
@@ -1332,7 +1324,7 @@ class FingerRing(Gtk.DrawingArea):
 class CenterApp(Adw.Application):
     """One window; mk-center PAGE (or mk hub) switches it to that page."""
 
-    PAGES = ("home", "actions", "lock", "security")
+    PAGES = ("home", "studio", "topbar", "actions", "lock", "security")
 
     def __init__(self):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)

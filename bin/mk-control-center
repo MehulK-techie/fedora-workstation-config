@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# mk-control-center: MK Command Centre (the same window as mk-center).
+#   mk-control-center [home | studio | topbar | actions | lock | security]
+exec "$(dirname "$(readlink -f "$0")")/mk-center" "$@"

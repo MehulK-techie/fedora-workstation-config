@@ -51,4 +51,5 @@ install -Dm755 "$SCRIPT_DIR/bin/mk-audio-init" "$HOME/.local/bin/mk-audio-init"
 "$HOME/.local/bin/mk-audio-init" --clean
 echo
 wpctl status 2> /dev/null | sed -n '/^Audio/,/^Video/p' | sed '$d'
-echo "Apps still pinned to an output: $(grep -c '"target"' "${XDG_STATE_HOME:-$HOME/.local/state}/wireplumber/stream-properties" 2> /dev/null || echo 0)"
+pinned=$(grep -c '"target"' "${XDG_STATE_HOME:-$HOME/.local/state}/wireplumber/stream-properties" 2> /dev/null) || true
+echo "Apps still pinned to an output: ${pinned:-0}"

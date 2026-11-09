@@ -95,7 +95,7 @@ class ActiveApp {
             icon = new St.Icon({icon_name: 'user-desktop-symbolic', icon_size: 14});   // a desktop glyph
         }
         this._iconBin.set_child(icon);
-        this._label.text = app ? app.get_name() : `WS ${ws}`;
+        this._label.text = app ? app.get_name() : '';
         if (animate && St.Settings.get().enable_animations) {
             // only the name and icon crossfade: the capsule (glass behind it) never changes size
             this._box.remove_transition('opacity');
@@ -789,7 +789,7 @@ export class Panel {
 
     // The left island, near the corner (Fitts's law: the pointer stops at the
     // screen's edge by itself): the emblem (WACK Shell's menu, when on), a divider,
-    // the app you're in (or "WS 1" on an empty desktop), the workspace dots, Places.
+    // the app you're in (nothing on an empty desktop), the workspace dots, Places.
     // GNOME's own dots (WorkspaceIndicators of WorkspaceDots), dressed after each of
     // GNOME's own updates: up to 4 desktops 6 px dots 5 px apart and an 18 px pill for the
     // current one, from 5 on 5 px / 4 px / 16 px; the others at full size, faint (45 %);
@@ -901,7 +901,7 @@ export class Panel {
         this._divider ??= new St.Widget({style_class: 'mk-island-divider', y_align: Clutter.ActorAlign.CENTER});
         if (!this._divider.get_parent())
             left.add_child(this._divider);
-        // the emblem (WACK Shell's menu), Places, a divider, the workspace dots, then the app (or "WS 2")
+        // the emblem (WACK Shell's menu), Places, a divider, the workspace dots, then the app (none on an empty desktop)
         // (the dots: WACK Shell's workspace button when it's on, GNOME's own otherwise)
         const dotsItem = area['wack-workspace-button'] ?? area.activities;
         // the logo: WACK Shell's when it shows one, MK's otherwise (never both)

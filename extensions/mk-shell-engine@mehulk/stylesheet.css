@@ -57,8 +57,8 @@
 .mk-dock-separator { width: 1px; height: 32px; margin: 0 8px; border-radius: 1px; background-color: rgba(255, 255, 255, 0.20); }
 .mk-dock-grid { color: rgba(242, 246, 255, 0.88); }
 .mk-dock-tooltip { color: #f5f7fb; font-size: 0.86em; font-weight: 600; padding: 5px 12px; border-radius: 10px;
-  background-color: rgba(28, 30, 38, 0.92); border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.35); }
+  background-color: rgba(28, 30, 38, 0.92); border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22); }
 
 /* The Super+Tab app switcher (modules/appSwitcher.js) */
 .mk-appsw-panel { border-radius: 18px; background-color: rgba(16, 18, 24, 0.78); border: 1px solid rgba(255, 255, 255, 0.14);
@@ -92,7 +92,7 @@
    tile: no outer glow (it spilled past the tiles), the arrow is part of the same tile. On: a soft
    accent tint, a hairline accent border, the icon lit and a thin accent line along the bottom. */
 .quick-settings.mk-bento { border-radius: 24px; padding: 16px; background-color: rgba(14, 16, 22, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.09); box-shadow: 0 18px 48px 0 rgba(0, 0, 0, 0.45); }
+  border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22); }
 .mk-bento .quick-settings-grid { spacing-rows: 10px; spacing-columns: 10px; }
 .mk-bento .quick-toggle, .mk-bento .quick-toggle-has-menu {
   border-radius: 12px; min-width: 14.5em; max-width: 14.5em; min-height: 3.5em; box-shadow: none; }
@@ -171,9 +171,11 @@
 .mk-danger { color: #ff6b6b; }
 .mk-danger:hover { background-color: rgba(239, 68, 68, 0.22); }
 
+/* Menus, the calendar, Quick Settings and tooltips share one light shadow: 0 4px 12px at 22 %,
+   and a 1 px hairline at 12 % white (no heavy drop shadows) */
 /* The calendar, as glass (modules/calendarDeck.js) */
-.mk-cal { background-color: rgba(16, 19, 28, 0.72); border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 20px 48px -8px rgba(0, 0, 0, 0.6); }
+.mk-cal { background-color: rgba(16, 19, 28, 0.72); border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22); }
 .mk-cal #calendarArea .message, .mk-cal .events-button, .mk-cal .world-clocks-button, .mk-cal .weather-button,
 .mk-cal .datemenu-today-button { background-color: rgba(255, 255, 255, 0.07); border-radius: 14px; }
 .mk-cal #calendarArea .message:hover, .mk-cal .events-button:hover, .mk-cal .world-clocks-button:hover,
@@ -253,7 +255,7 @@
 /* the top bar's menus as floating glass (panel.js GlassMenus): 8 px below the bar, 6 px from the edge */
 .popup-menu-boxpointer.mk-glass-pointer { -arrow-rise: 6px; -boxpointer-gap: 8px; }
 .popup-menu-content.mk-glass-menu { border-radius: 16px; padding: 6px 0; background-color: rgba(16, 18, 24, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: 0 16px 40px 0 rgba(0, 0, 0, 0.65); }
+  border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22); }
 .mk-glass-menu .popup-menu-item { padding: 8px 14px; margin: 2px 6px; border-radius: 10px; transition-duration: 80ms; }
 .mk-glass-menu .popup-menu-item:hover, .mk-glass-menu .popup-menu-item:focus,
 .mk-glass-menu .popup-menu-item.selected { background-color: rgba(255, 255, 255, 0.08); }

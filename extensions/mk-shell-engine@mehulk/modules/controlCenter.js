@@ -158,16 +158,27 @@ export class ControlCenter {
                 !s.get_boolean('desktop-audio-enabled')))],
         ];
         sync();
-        // right after the last of GNOME's sliders (brightness, else the microphone or the speaker)
-        const lastSlider = [qs._brightness, qs._volumeInput, qs._volumeOutput]
-            .map(ind => ind?.quickSettingsItems?.at(-1)).find(item => item?.get_parent());
-        const next = lastSlider?.get_next_sibling();
-        if (next)
-            qs.menu.insertItemBefore(slider, next, 2);
-        else
-            qs.menu.addItem(slider, 2);
+        qs.menu.addItem(slider, 2);
         this._wallSlider = slider;
         this._wallSettings = s;
+        // right after the last of GNOME's sliders (brightness, else the microphone or the speaker),
+        // again whenever the grid changes: GNOME adds its own sliders a moment after starting up
+        const grid = qs.menu._grid;
+        this._wallIds.push([grid, grid.connect('child-added', () => this._placeWallSlider())]);
+        this._placeWallSlider();
+    }
+
+    _placeWallSlider() {
+        const qs = this._qs, slider = this._wallSlider, grid = qs.menu._grid;
+        if (!slider || slider.get_parent() !== grid || this._placingWall)
+            return;
+        const last = [qs._brightness, qs._volumeInput, qs._volumeOutput]
+            .map(ind => ind?.quickSettingsItems?.at(-1)).find(item => item?.get_parent() === grid);
+        if (!last || last.get_next_sibling() === slider)
+            return;
+        this._placingWall = true;
+        grid.set_child_above_sibling(slider, last);
+        this._placingWall = false;
     }
 
     // The header row: battery, Settings, MK Command Centre (no screenshot, lock or power button)

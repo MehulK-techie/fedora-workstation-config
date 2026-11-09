@@ -31,6 +31,7 @@ import { LiveWallpaper } from './modules/liveWallpaper.js';
 import { Panel } from './modules/panel.js';
 import { ControlCenter } from './modules/controlCenter.js';
 import { UNIFIED, isActive, watch } from './modules/conflicts.js';
+import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 
 export default class MKShellEngine extends Extension {
@@ -110,10 +111,57 @@ export default class MKShellEngine extends Extension {
         this._start('calendar', () => new CalendarDeck(this._settings));
         this._start('notification centre', () => new NotifyCenter());
         this._start('screenshot actions', () => new ScreenshotActions());
+        if (Main.layoutManager._startingUp && !this._bootFaded)
+            this._bootFade();
+    }
+
+    // At login the top bar and the dock come in together: invisible at first, then (120 ms
+    // later, once the session has drawn) a 260 ms fade with a 12 px glide into place
+    _bootFade() {
+        this._bootFaded = true;
+        const parts = [[Main.layoutManager.panelBox, -12], [this._dock?._chrome, 12]].filter(([a]) => a);
+        for (const [actor, from] of parts) {
+            actor.opacity = 0;
+            actor.translation_y = from;
+        }
+        const go = () => {
+            this._bootId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 120, () => {
+                this._bootId = 0;
+                for (const [actor] of parts)
+                    actor.ease({opacity: 255, translation_y: 0, duration: 260, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+                return GLib.SOURCE_REMOVE;
+            });
+        };
+        // (GNOME slides the panel in itself while starting up: ours follows once that's done)
+        const id = Main.layoutManager.connect('startup-complete', () => {
+            Main.layoutManager.disconnect(id);
+            this._bootWait = 0;
+            for (const [actor, from] of parts) {
+                actor.remove_all_transitions();
+                actor.opacity = 0;
+                actor.translation_y = from;
+            }
+            go();
+        });
+        this._bootWait = id;
+    }
+
+    _endBootFade() {
+        if (this._bootWait)
+            Main.layoutManager.disconnect(this._bootWait);
+        if (this._bootId)
+            GLib.source_remove(this._bootId);
+        this._bootWait = this._bootId = 0;
+        for (const actor of [Main.layoutManager.panelBox, this._dock?._chrome].filter(Boolean)) {
+            actor.opacity = 255;
+            actor.translation_y = 0;
+        }
     }
 
     _stopParts() {
         this._running = false;
+        if (this._bootWait || this._bootId)
+            this._endBootFade();
         for (const part of this._parts.reverse()) {
             try {
                 part.destroy();

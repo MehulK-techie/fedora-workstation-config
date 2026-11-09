@@ -10,8 +10,11 @@
 
 It goes through the desktop's screenshot portal (org.freedesktop.portal.Screenshot):
 GNOME only lets its own tools call the shell's screenshot service directly.
-The keys stay GNOME's own: Shift+Print (instantly), Print and Super+Shift+S
-(pick an area); Quick Settings has a Screenshot tile.
+The keys stay GNOME's own, inside the shell (no outside grabber, so no input grab to
+fight on Wayland): Print takes the whole screen; Super+Shift+S opens GNOME's screenshot
+tool with no box and takes the area the moment you let go (MK Shell Engine's snip.js).
+grim and slurp aren't used: they need wlroots' screencopy, which GNOME doesn't have, and
+org.gnome.Shell.Eval is closed outside unsafe mode.
 """
 import fcntl
 import os
@@ -98,6 +101,10 @@ def main(argv):
     else:
         print("mk-screenshot: another screenshot is still open", file=sys.stderr)
         return 1
+    if argv[0] == "--area":
+        # a picker left over from another tool (slurp, grim: wlroots-only, they never work on
+        # GNOME and can hold the pointer) is cleared first
+        subprocess.run(["pkill", "-x", "slurp"], check=False, stderr=subprocess.DEVNULL)
     try:
         shot = portal_screenshot(interactive=argv[0] == "--area")
     except (RuntimeError, GLib.Error) as e:

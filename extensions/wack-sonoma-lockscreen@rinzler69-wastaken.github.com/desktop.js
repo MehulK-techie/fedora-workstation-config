@@ -342,6 +342,15 @@ export class DesktopWallpaper {
         this._clone.set_position(m.x, m.y);
         this._clone.set_size(m.width, m.height);
         layer.add_child(this._clone);                // (above the still backgrounds)
+        // permanent: nothing (focus, a window, a theme) gets to hide or dim it; behind windows it
+        // stays as it is, at most paused on its frame
+        const keep = () => {
+            if (!this._clone.visible)
+                this._clone.show();
+            if (this._clone.opacity !== 255)
+                this._clone.opacity = 255;
+        };
+        this._clone.connectObject('notify::visible', keep, 'notify::opacity', keep, this);
         actor.opacity = 0;                           // (a clone paints its source at full opacity)
         this._coverActor = actor;
         pinWorkspaces(actor);
@@ -354,6 +363,7 @@ export class DesktopWallpaper {
             this._coverActor.disconnectObject(this);
             this._coverActor.opacity = 255;
         }
+        this._clone?.disconnectObject(this);
         this._clone?.destroy();
         this._clone = this._coverActor = null;
     }

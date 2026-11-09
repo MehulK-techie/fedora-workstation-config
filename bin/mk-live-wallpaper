@@ -157,7 +157,9 @@ def player(path, once=False, audio=None, hwaccel=None):
                 app.quit()
         bus.connect("message", on_message)
         playbin.set_state(Gst.State.PLAYING)
-        return Gtk.Picture(paintable=paintable, content_fit=Gtk.ContentFit.COVER, can_shrink=True)
+        picture = Gtk.Picture(paintable=paintable, content_fit=Gtk.ContentFit.COVER, can_shrink=True)
+        state["paintable"], state["picture"] = paintable, picture
+        return picture
 
     def linear(volume):
         # a slider's volume (0-1, as heard) to playbin's linear gain
@@ -177,11 +179,13 @@ def player(path, once=False, audio=None, hwaccel=None):
         elif pipeline is None:
             return                                # (a picture: nothing plays)
         elif words[0] == "pause":
+            hold_frame()
             pipeline.set_state(Gst.State.PAUSED)
         elif words[0] == "play":
             state["decel"] += 1                   # (cancels a slow-down under way)
             set_rate(1.0)
             pipeline.set_state(Gst.State.PLAYING)
+            release_frame()
         elif words[0] == "volume" and len(words) > 1 and audio is not None:
             try:
                 state["fade"] = state.get("fade", 0) + 1   # (stops a ramp under way)
@@ -196,6 +200,36 @@ def player(path, once=False, audio=None, hwaccel=None):
                 pass
         elif words[0] == "decelerate":
             decelerate(int(words[1]) if len(words) > 1 else 600)
+
+    def hold_frame():
+        # Paused, a hardware decoder may take back the video surface it was showing, leaving the
+        # window empty (GNOME's still wallpaper then shows through it). The frame on screen is
+        # kept as a picture of its own instead, until the video draws again: the wallpaper never
+        # blanks, flickers or falls back while it's paused.
+        paintable, picture = state.get("paintable"), state.get("picture")
+        if paintable is None or picture is None:
+            return
+        if state.get("release_id"):               # (paused again before it drew: keep holding)
+            paintable.disconnect(state.pop("release_id"))
+        if state.get("held") is not None:
+            return
+        frame = paintable.get_current_image()
+        if frame is None or frame.get_intrinsic_width() <= 0:
+            return
+        state["held"] = frame
+        picture.set_paintable(frame)
+
+    def release_frame():
+        # back to the live video once it has drawn a new frame (no blank frame in between)
+        paintable, picture = state.get("paintable"), state.get("picture")
+        if picture is None or state.get("held") is None or state.get("release_id"):
+            return
+
+        def drawn(*_args):
+            paintable.disconnect(state.pop("release_id"))
+            state.pop("held", None)
+            picture.set_paintable(paintable)
+        state["release_id"] = paintable.connect("invalidate-contents", drawn)
 
     def fade_to(target, ms):
         # a smooth ramp, as heard (the slider's scale), from where it is now, in 20 ms steps
@@ -230,6 +264,7 @@ def player(path, once=False, audio=None, hwaccel=None):
                 return False
             rate = steps.pop(0)
             if rate == 0.0:
+                hold_frame()
                 state["pipeline"].set_state(Gst.State.PAUSED)
                 return False
             set_rate(rate)

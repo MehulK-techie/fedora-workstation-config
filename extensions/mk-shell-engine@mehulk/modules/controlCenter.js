@@ -20,7 +20,8 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import { QuickToggle, SystemIndicator } from 'resource:///org/gnome/shell/ui/quickSettings.js';
+import { QuickSlider, QuickToggle, SystemIndicator } from 'resource:///org/gnome/shell/ui/quickSettings.js';
+import { suiteSettings } from './notifyCenter.js';
 import { getMixerControl } from 'resource:///org/gnome/shell/ui/status/volume.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
 
@@ -122,6 +123,51 @@ export class ControlCenter {
         }
         this._prune();
         this._header();
+        this._wallpaperSlider();
+    }
+
+    // The live wallpaper's volume, under the sound and brightness sliders: the speaker mutes and
+    // unmutes it (its sound is heard only on the bare desktop anyway). Only with the suite there.
+    _wallpaperSlider() {
+        const s = suiteSettings();
+        const qs = this._qs;
+        if (!s || !qs.menu.insertItemBefore)
+            return;
+        const slider = new QuickSlider({iconName: 'video-display-symbolic', iconReactive: true,
+            iconLabel: 'Live wallpaper sound', style_class: 'quick-slider mk-wallpaper-volume'});
+        slider.accessible_name = 'Live wallpaper volume';
+        const sync = () => {
+            const on = s.get_boolean('desktop-audio-enabled');
+            this._syncingWall = true;
+            slider.slider.value = s.get_double('desktop-audio-volume');
+            this._syncingWall = false;
+            slider.iconName = on ? 'video-display-symbolic' : 'audio-volume-muted-symbolic';
+            slider.slider.opacity = on ? 255 : 120;
+        };
+        this._wallIds = [
+            [s, s.connect('changed::desktop-audio-volume', sync)],
+            [s, s.connect('changed::desktop-audio-enabled', sync)],
+            [slider.slider, slider.slider.connect('notify::value', () => {
+                if (this._syncingWall)
+                    return;
+                s.set_double('desktop-audio-volume', Math.round(slider.slider.value * 100) / 100);
+                if (!s.get_boolean('desktop-audio-enabled'))
+                    s.set_boolean('desktop-audio-enabled', true);    // (moving it means you want it)
+            })],
+            [slider, slider.connect('icon-clicked', () => s.set_boolean('desktop-audio-enabled',
+                !s.get_boolean('desktop-audio-enabled')))],
+        ];
+        sync();
+        // right after the last of GNOME's sliders (brightness, else the microphone or the speaker)
+        const lastSlider = [qs._brightness, qs._volumeInput, qs._volumeOutput]
+            .map(ind => ind?.quickSettingsItems?.at(-1)).find(item => item?.get_parent());
+        const next = lastSlider?.get_next_sibling();
+        if (next)
+            qs.menu.insertItemBefore(slider, next, 2);
+        else
+            qs.menu.addItem(slider, 2);
+        this._wallSlider = slider;
+        this._wallSettings = s;
     }
 
     // The header row: battery, Settings, MK Command Centre (no screenshot, lock or power button)
@@ -256,6 +302,11 @@ export class ControlCenter {
         }
         this._restore();
         this._unheader();
+        for (const [obj, id] of this._wallIds ?? [])
+            obj.disconnect(id);
+        this._wallIds = null;
+        this._wallSlider?.destroy();
+        this._wallSlider = null;
         this._original.clear();
         this._box.remove_style_class_name('mk-bento');
     }

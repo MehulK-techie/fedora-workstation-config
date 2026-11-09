@@ -156,6 +156,12 @@ export class DesktopWallpaper {
                 this._queueVolume();
             })],
         ];
+        this._watchMenus();
+        // (menus that join the bar later: Places, other extensions' buttons)
+        this._menuTimer = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 5, () => {
+            this._watchMenus();
+            return GLib.SOURCE_CONTINUE;
+        });
         this._media = new MediaWatcher();
         this._media.connect('changed', () => this._queueVolume());
         this._start();
@@ -196,14 +202,29 @@ export class DesktopWallpaper {
         return muted || !this._onDesktop() ? 0 : this._settings.get_double('desktop-audio-volume');
     }
 
+    // (the name stays: it's called on every change that decides whether you're on the desktop;
+    // that decides the sound and, now, whether the video runs at all)
     _queueVolume() {
-        if (this._volIdle || !this.audio)
+        if (this._volIdle)
             return;
         this._volIdle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
             this._volIdle = 0;
             this._syncVolume(true);
+            this._syncPlaying();
             return GLib.SOURCE_REMOVE;
         });
+    }
+
+    // every top-bar menu (Quick Settings, the calendar, stats, Finder...): while one is open the
+    // video stops decoding, so the menu opens on a quiet GPU
+    _watchMenus() {
+        this._menuIds ??= new Map();
+        for (const item of Object.values(Main.panel.statusArea)) {
+            const menu = item?.menu;
+            if (!menu?.connect || this._menuIds.has(menu))
+                continue;
+            this._menuIds.set(menu, menu.connect('open-state-changed', () => this._syncPlaying()));
+        }
     }
 
     // FADE: a smooth ramp (out 250 ms, in 300 ms) rather than a jump (the slider moving)
@@ -220,6 +241,7 @@ export class DesktopWallpaper {
     }
 
     _place(win) {
+        this._playState = null;                      // (a new player: tell it, whatever the last one was told)
         this._sizeWin = win;
         this._sizeId = win.connect('size-changed', () => this._scale());
         this._fit();
@@ -247,17 +269,33 @@ export class DesktopWallpaper {
     }
 
     // paused under a full-screen window and while locked; playing again the moment that ends
+    // It plays only while you can see it: the bare desktop, or the overview (where it's the
+    // backdrop). A window showing, a full-screen one, the lock screen or an open top-bar menu
+    // pause it, on the frame it's on (no decoding at all), and it carries on from there.
     _syncPlaying() {
         if (!this._player.win)
             return;                                  // (no commands before its window)
         const m = Main.layoutManager.primaryIndex;
-        const hidden = Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m));
-        this._player.send(hidden ? 'pause' : 'play');
+        const covered = !Main.overview.visible && !this._onDesktop();
+        const hidden = Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m)) ||
+            covered || [...(this._menuIds?.keys() ?? [])].some(menu => menu.isOpen);
+        const want = hidden ? 'pause' : 'play';
+        if (want !== this._playState) {
+            this._playState = want;
+            this._player.send(want);
+        }
     }
 
     destroy() {
         if (this._volIdle)
             GLib.source_remove(this._volIdle);
+        if (this._menuTimer)
+            GLib.source_remove(this._menuTimer);
+        for (const [menu, id] of this._menuIds ?? []) {
+            try {
+                menu.disconnect(id);
+            } catch {}                           // (its button went first)
+        }
         for (const id of this._setIds)
             this._settings.disconnect(id);
         for (const [object, id] of this._ids)

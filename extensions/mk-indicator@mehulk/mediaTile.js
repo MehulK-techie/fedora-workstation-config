@@ -45,7 +45,29 @@ const PLAYER = 'org.mpris.MediaPlayer2.Player';
 // playerctl's daemon re-publishes whichever player was active last under its own name: a mirror, not a
 // player. Counted as one, it could keep the tile on a song after Spotify quit (a ghost).
 const MIRRORS = new Set([`${PREFIX}playerctld`]);
-const isPlayer = name => name.startsWith(PREFIX) && !MIRRORS.has(name);
+// the live wallpaper's own players (the lock screen's video, the desktop's) are never media to show
+const WALLPAPER = /LiveLockScreen|mk.?live.?wallpaper/i;
+const isPlayer = name => name.startsWith(PREFIX) && !MIRRORS.has(name) && !WALLPAPER.test(name);
+// a player playing one of the live wallpaper files (any player) is the wallpaper, not music
+function wallpaperFiles() {
+    const files = new Set();
+    try {
+        const [ok, bytes] = GLib.file_get_contents(GLib.build_filenamev([GLib.get_user_config_dir(), 'mk', 'wallpaper.json']));
+        const desk = ok ? JSON.parse(new TextDecoder().decode(bytes)).desktop : '';
+        if (desk)
+            files.add(Gio.File.new_for_path(desk).get_uri());
+    } catch {}
+    try {
+        const ext = Main.extensionManager.lookup('wack-sonoma-lockscreen@rinzler69-wastaken.github.com');
+        const s = ext?.stateObj?._settings;
+        for (const k of ['desktop-wallpaper-path', 'background-video-path']) {
+            const p = s?.get_string(k);
+            if (p)
+                files.add(Gio.File.new_for_path(p).get_uri());
+        }
+    } catch {}
+    return files;
+}
 const USER_CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'media.conf']);
 const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'media.conf']);
 const ART_DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'album-art']);
@@ -308,7 +330,12 @@ export class MediaTile {
                 info[name] = props;
                 if (--pending || round !== this._round)
                     return;
-                this._decide(names.filter(n => info[n]), info);
+                const walls = wallpaperFiles();
+                const url = n => {
+                    const v = info[n]?.Metadata?.['xesam:url'];
+                    return v?.deepUnpack ? v.deepUnpack() : v;
+                };
+                this._decide(names.filter(n => info[n] && !walls.has(url(n))), info);
             });
         }
     }

@@ -8,7 +8,7 @@ import GLib from 'gi://GLib';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
 const PREFIX = 'org.mpris.MediaPlayer2.';
-const OWN = new Set([`${PREFIX}LiveLockScreen`]);
+const OWN = new Set([`${PREFIX}LiveLockScreen`, `${PREFIX}mk-live-wallpaper`]);
 const PATH = '/org/mpris/MediaPlayer2';
 const IFACE = 'org.mpris.MediaPlayer2.Player';
 

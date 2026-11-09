@@ -109,6 +109,10 @@ export class NotifyCenter {
             const player = msg._player;
             if (!player)
                 continue;
+            if (/LiveLockScreen|mk.?live.?wallpaper/i.test(player._busName ?? '')) {
+                msg.visible = false;                 // (the live wallpaper's own player: not media)
+                continue;
+            }
             if (!msg._mkDressed)
                 this._dress(msg);
             const art = player.trackCoverUrl ?? '';

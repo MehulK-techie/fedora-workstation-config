@@ -29,10 +29,21 @@ import { addWallpaperGlass, desktopCopy } from './blur.js';
 // Do Not Disturb, Airplane Mode / Microphone, Caffeine. (What else is there
 // follows; whatever isn't there is skipped.)
 const ORDER = ['NMWirelessToggle', 'BluetoothToggle', 'PowerProfilesToggle', 'NightLightToggle',
-    'DoNotDisturbToggle', 'RfkillToggle', 'MkMicToggle', 'CaffeineToggle'];
+    'DoNotDisturbToggle', 'RfkillToggle', 'MkMicToggle', 'MkWallpaperBgPlayToggle', 'CaffeineToggle'];
 // the header row's buttons that leave (GNOME's own classes)
 const HEADER_GONE = /ScreenshotItem|LockItem|ShutdownItem/;
 const CENTRE = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-control-center']);
+
+// Wallpaper Bg Play: the live wallpaper's sound plays on under your windows and steps aside
+// (fades out) while other media plays (the Suite's wallpaper-background-play; its desktop.js)
+const BgPlayToggle = GObject.registerClass({GTypeName: 'MkWallpaperBgPlayToggle'}, class BgPlayToggle extends QuickToggle {
+    constructor(settings) {
+        super({title: 'Wallpaper Bg Play', subtitle: 'Auto-pauses on media', iconName: 'media-playlist-repeat-symbolic',
+            toggleMode: true});
+        this.accessible_name = 'Wallpaper background play';
+        settings.bind('wallpaper-background-play', this, 'checked', Gio.SettingsBindFlags.DEFAULT);
+    }
+});
 
 // Microphone: on = listening; off mutes the default input (the same mute as Settings).
 const MicToggle = GObject.registerClass({GTypeName: 'MkMicToggle'}, class MicToggle extends QuickToggle {
@@ -116,6 +127,9 @@ export class ControlCenter {
         try {
             this._mic = new SystemIndicator();
             this._mic.quickSettingsItems.push(new MicToggle());
+            const suite = suiteSettings();
+            if (suite?.settings_schema.has_key('wallpaper-background-play'))
+                this._mic.quickSettingsItems.push(new BgPlayToggle(suite));
             this._qs.addExternalIndicator(this._mic);
         } catch (e) {
             console.warn(`mk-shell-engine: microphone toggle: ${e.message}`);
@@ -161,8 +175,8 @@ export class ControlCenter {
         qs.menu.addItem(slider, 2);
         this._wallSlider = slider;
         this._wallSettings = s;
-        // right after the last of GNOME's sliders (brightness, else the microphone or the speaker),
-        // again whenever the grid changes: GNOME adds its own sliders a moment after starting up
+        // right under the speaker's volume (then the microphone and brightness), again whenever
+        // the grid changes: GNOME adds its own sliders a moment after starting up
         const grid = qs.menu._grid;
         this._wallIds.push([grid, grid.connect('child-added', () => this._placeWallSlider())]);
         this._placeWallSlider();
@@ -172,7 +186,7 @@ export class ControlCenter {
         const qs = this._qs, slider = this._wallSlider, grid = qs.menu._grid;
         if (!slider || slider.get_parent() !== grid || this._placingWall)
             return;
-        const last = [qs._brightness, qs._volumeInput, qs._volumeOutput]
+        const last = [qs._volumeOutput, qs._volumeInput, qs._brightness]
             .map(ind => ind?.quickSettingsItems?.at(-1)).find(item => item?.get_parent() === grid);
         if (!last || last.get_next_sibling() === slider)
             return;

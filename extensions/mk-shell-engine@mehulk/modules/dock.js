@@ -55,7 +55,8 @@ export class Dock {
         this._unwatch = watch(() => this._sync());
         this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::dock-hide-ms',
             'changed::dock-reveal-ms', 'changed::blur', 'changed::dock-style', 'changed::dock-opacity',
-            'changed::dock-corner-radius', 'changed::dock-indicator-style', 'changed::dock-glow-color'].map(
+            'changed::dock-corner-radius', 'changed::dock-indicator-style', 'changed::dock-glow-color',
+            'changed::dock-icon-glass'].map(
             signal => settings.connect(signal, () => this._sync(true)));
         this._sync();
     }
@@ -99,6 +100,9 @@ export class Dock {
         const style = this._settings.get_string('dock-style');
         this._actor = new St.BoxLayout({style_class: `mk-dock mk-dock-${style}`, reactive: true, track_hover: true,
             y_align: Clutter.ActorAlign.END});
+        // frosted glass behind each icon (dock-icon-glass)
+        if (this._settings.get_boolean('dock-icon-glass'))
+            this._actor.add_style_class_name('mk-dock-glass-icons');
         this._actor.set_pivot_point(0.5, 1);
         // the glass styles' tint follows dock-opacity; the corners dock-corner-radius (Tahoe: round ends)
         const op = this._settings.get_double('dock-opacity');
@@ -115,6 +119,7 @@ export class Dock {
         this._actor.style = `${tint ? `background-color: ${tint}; ` : ''}${edge}border-radius: ${this._radius}px;`;
         this._indicator = this._settings.get_string('dock-indicator-style');
         this._connect(this._settings, 'changed::dock-focused-raise', () => this._settle());
+        this._connect(this._settings, 'changed::dock-hide-on-desktop', () => this._queueDodge());
         // the icons only take the pointer once the dock is (nearly) back in place: a hidden
         // dock never shows a name or grows an icon (it used to, from just under the screen's edge)
         this._actor.connect('notify::translation-y', () => {
@@ -614,10 +619,16 @@ export class Dock {
         });
     }
 
-    // Is any window on this desktop over the dock's spot?
+    // Is any window on this desktop over the dock's spot? (Or, with dock-hide-on-desktop, is
+    // no window focused at all: the clean desktop, its wallpaper left unobstructed.)
     _covered() {
         if (!this._rect)
             return false;
+        if (this._settings.get_boolean('dock-hide-on-desktop')) {
+            const focus = global.display.focus_window;
+            if (!focus || focus.get_window_type() === Meta.WindowType.DESKTOP)
+                return true;
+        }
         const ws = global.workspace_manager.get_active_workspace();
         const primary = Main.layoutManager.primaryIndex;
         const {x, y, width, height} = this._rect;

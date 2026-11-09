@@ -42,6 +42,12 @@
 .mk-dock.mk-dock-minimal-flat { background-color: rgb(24, 25, 30); border: none; box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5); }
 .mk-dock-item { padding: 3px 5px 1px; border-radius: 14px; }
 .mk-dock-item:focus { background-color: rgba(255, 255, 255, 0.10); }
+/* dock-icon-glass: each icon on a small pane of frosted glass (St draws one shadow per box:
+   the top edge is brighter instead of an inset highlight), and the running dots glow */
+.mk-dock-glass-icons .mk-dock-item { background-color: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top-color: rgba(255, 255, 255, 0.30); border-radius: 14px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  margin: 0 2px; }
+.mk-dock-glass-icons .mk-dock-bar { box-shadow: 0 0 6px 1px st-transparentize(-st-accent-color, 0.35); }
 .mk-dock-bars { height: 4px; margin-top: 3px; spacing: 3px; }
 .mk-dock-bar { width: 5px; height: 5px; border-radius: 99px; }
 .mk-dock-bar.mk-dock-bar-wide-pill { width: 14px; height: 4px; border-radius: 2px; }

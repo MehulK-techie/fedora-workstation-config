@@ -11,7 +11,18 @@ hardware controls (brightness, contrast, saturation, gamma, sharpness, white
 balance) with Reset to hardware defaults. Space or the shutter button takes
 the photo, after an optional 3-2-1 countdown.
 
-G shows nine looks at once, live (3 x 3); click one to use it.
+G shows every look at once, live: a scrollable gallery of all of them (looks, AR
+effects and frames), filtered by the same kind pills and search as the strip;
+click one to use it. The camera frame is shrunk once per tick (192 x 108) for
+the tiles, and the tiles share a 14 ms budget a tick, so the camera never lags.
+
+AR & Hearts (lib/mkworkstation/booth_ar.py) follow your face (OpenCV YuNet):
+Love Hearts AR, Hand Heart Burst (raise your hands: hearts puff up from them;
+bring them together near your face: a burst), Golden Crown, Neon Halo, Emoji
+Orbit and Spidey-Sense. Frames show live and go on the photo: 4-Shot Photo
+Strip (the shutter takes four, a second apart), Polaroid with a date stamp,
+Sweetheart Pink, Cyberpunk Neon HUD, Vintage 35mm. The gallery drawer above
+the shutter shows your latest photos.
 
 Decorate page (the camera and its light are off here; Retake turns them
 back on): pick a look for the photo, type text or pick a vector badge or
@@ -67,30 +78,31 @@ def _add_lib_path():
 _add_lib_path()
 from PIL import Image, ImageOps  # noqa: E402
 
-from mkworkstation import decals, photo  # noqa: E402
+from mkworkstation import booth_ar, decals, photo  # noqa: E402
 
 APP_ID = "io.github.mehulk.MkCamera"
 OUT_DIR = Path(GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES) or Path.home() / "Pictures") / "MK Booth"
 PREVIEW_W = 640
-GRID_W = 240  # each of the nine looks: small enough for all nine at 24 fps
+TILE_W, TILE_H = 192, 108  # each tile of the gallery: the frame is shrunk to this once per tick
 # The looks tray's kinds (photo.py's names); a look missing here shows under All only.
 LOOK_CATEGORIES = {
     "Distort / Fun": ("distort", "pinch", "twirl", "squeeze", "kaleido", "stretch", "mirror", "comic", "vhs",
                       "pixel", "thermal"),
     "Vintage Film": ("polaroid", "instant", "portra", "film", "noir", "retro"),
     "Artistic": ("cyberpunk", "popart", "flash", "vignette", "duotone", "neon", "hue", "glow"),
+    "AR & Hearts": tuple(booth_ar.AR_LOOKS),
+    "Frames": tuple(booth_ar.FRAMES),
 }
-# The 3 x 3 grid: one row per kind.
-GRID_ROWS = (("Vintage", ("polaroid", "portra", "noir")),
-             ("Artistic", ("cyberpunk", "popart", "duotone")),
-             ("Distort", ("distort", "twirl", "kaleido")))
+# every look: photo.py's, the AR effects, the frames
+ALL_LOOKS = [(None, "Original")] + [(k, f.label) for k, f in photo.FILTERS.items()] + \
+    list(booth_ar.AR_LOOKS.items()) + list(booth_ar.FRAMES.items())
+BAKED = set(booth_ar.AR_LOOKS) | set(booth_ar.FRAMES)    # drawn into the photo when it's taken
 # The emoji board in the sticker drawer, by kind.
 EMOJI = {"Faces": "😀😂🤣😍🥰😎🤩😜🤪😇🥳😏😴🤯🥺😭😡🤠👻🤖",
          "Gestures": "👍👎👌✌️🤞🤘🤙👋🙌👏🙏💪🫶🤝✍️👀",
          "Reactions": "🔥💯✨🎉🎊💥💫⭐🌟💖💔😱🙈🤡👑🏆",
          "Symbols": "❤️🧡💛💚💙💜🖤🤍✅❌⚡☀️🌙🌈🎵🎈🍕🌸🦄"}
 THUMB_W = 112  # the looks strip's live thumbnails
-GRID_LOOKS = [key for _name, row in GRID_ROWS for key in row]
 STICKERS = "😀😂😍🥳😎🤩😜🥰🤪😇👻🤖👑🎉🎈🎂🌈⭐✨🔥💖💯👍✌️🙌🍕🍿🌸🦄🐶🐱"
 COLORS = [("White", (1, 1, 1)), ("Black", (0.08, 0.08, 0.1)), ("Pink", (1, 0.35, 0.65)),
           ("Yellow", (1, 0.85, 0.15)), ("Blue", (0.25, 0.6, 1)), ("Green", (0.3, 0.9, 0.45)),
@@ -115,6 +127,12 @@ CSS = b"""
 .mk-booth-look label { font-size: 0.8em; font-weight: 600; }
 .mk-booth-look:checked { background: alpha(@accent_bg_color, 0.35); box-shadow: inset 0 0 0 2px @accent_color; }
 .mk-booth-photo { border-radius: 12px; }
+.mk-booth-bar { background: alpha(#10121a, 0.72); border-radius: 22px; border: 1px solid alpha(white, 0.08);
+                padding: 8px 14px; }
+.mk-booth-cats button { border-radius: 99px; padding: 4px 12px; margin: 0 2px; }
+.mk-booth-tile { border-radius: 10px; }
+.mk-booth-gallery { background: alpha(#10121a, 0.72); border-radius: 18px; padding: 8px; }
+.mk-booth-gallery picture { border-radius: 8px; }
 .mk-booth-cell-label { background: alpha(black, 0.55); color: white; border-radius: 99px; padding: 2px 10px;
                        font-weight: 700; font-size: 0.9em; }
 .mk-booth-angle { background: alpha(black, 0.65); color: white; border-radius: 8px; padding: 2px 8px;
@@ -124,6 +142,19 @@ CSS = b"""
 .mk-booth-chip:checked { border: 3px solid @accent_color; }
 """ + "".join(f".mk-chip-{name.lower()} {{ background: rgb({round(r * 255)}, {round(g * 255)}, {round(b * 255)}); }}\n"
               for name, (r, g, b) in COLORS).encode()
+
+def render_look(img, key, tracker=None, stamp=None):
+    """IMG with look KEY: a photo.py look, an AR effect or a frame."""
+    if not key:
+        return img
+    if key == "polaroid":
+        return photo.polaroid_photo(img)
+    if key in booth_ar.AR_LOOKS:
+        return booth_ar.render(img, key, tracker)
+    if key in booth_ar.FRAMES:
+        return booth_ar.frame(img, key, stamp)
+    return photo.apply(img, key)
+
 
 # ---------------------------------------------------------------- webcam hardware controls (v4l2)
 CTRL_RE = re.compile(r"^\s*(\w+)\s+0x[0-9a-f]+\s+\((int|bool)\)\s*:\s*(?:min=(-?\d+)\s+max=(-?\d+)\s+step=(\d+)\s+)?"
@@ -238,31 +269,41 @@ def draw_items(img, items, caption=None, caption_box=None, date=None, photo_box=
             # A colour emoji is a bitmap glyph, and cairo clips a turned bitmap glyph to its
             # unturned box (the corners went missing). Draw it upright on a canvas of its own,
             # big enough for any angle (w|cos| + h|sin| by w|sin| + h|cos|), then turn that.
+            # The glyph's canvas is sized by its INK, not its advance: a colour emoji's
+            # picture is often wider than the space Pango gives it, and an advance-sized
+            # canvas cut its left and right sides off (whatever the angle). The ink plus a
+            # 30 % margin each side; the turned canvas is the diagonal plus 16 px, so no
+            # angle clips it.
             layout = PangoCairo.create_layout(cr)
             layout.set_font_description(Pango.FontDescription.from_string(f"Noto Color Emoji {max(6, px)}px"))
             layout.set_text(item["text"], -1)
             tw, th = layout.get_pixel_size()
+            ink, logical = layout.get_pixel_extents()
+            gw = max(tw, ink.width) + 2 * round(max(tw, ink.width) * 0.3) + 4
+            gh = max(th, ink.height) + 2 * round(max(th, ink.height) * 0.3) + 4
             a = math.radians(angle)
-            rw = math.ceil(tw * abs(math.cos(a)) + th * abs(math.sin(a))) + 4
-            rh = math.ceil(tw * abs(math.sin(a)) + th * abs(math.cos(a))) + 4
-            glyph = cairo.ImageSurface(cairo.FORMAT_ARGB32, tw + 4, th + 4)
+            diag = math.ceil(math.hypot(gw, gh)) + 16
+            rw = rh = diag
+            glyph = cairo.ImageSurface(cairo.FORMAT_ARGB32, gw, gh)
             gcr = cairo.Context(glyph)
             glayout = PangoCairo.create_layout(gcr)
             glayout.set_font_description(layout.get_font_description())
             glayout.set_text(item["text"], -1)
-            gcr.move_to(2, 2)
+            # the ink centred on the canvas (its box can start left of the pen: a negative x)
+            gcr.move_to(gw / 2 - (ink.x + ink.width / 2), gh / 2 - (ink.y + ink.height / 2))
             PangoCairo.show_layout(gcr, glayout)
             glyph.flush()
             turned = cairo.ImageSurface(cairo.FORMAT_ARGB32, rw, rh)
             tcr = cairo.Context(turned)
             tcr.translate(rw / 2, rh / 2)
             tcr.rotate(a)
-            tcr.set_source_surface(glyph, -(tw + 4) / 2, -(th + 4) / 2)
+            tcr.set_source_surface(glyph, -gw / 2, -gh / 2)
             tcr.get_source().set_filter(cairo.FILTER_GOOD)
             tcr.paint()
             turned.flush()
             cr.set_source_surface(turned, item["x"] * w - rw / 2, item["y"] * h - rh / 2)
             cr.paint()
+            tw, th = max(tw, ink.width), max(th, ink.height)     # (the selection box: the whole glyph)
         elif item["kind"] == "decal":    # a vector badge or stamp: SIZE is its height, its width follows its shape
             th = px
             tw = round(px * decals.DECALS[item["key"]][2])
@@ -318,6 +359,8 @@ class Booth(Adw.ApplicationWindow):
         self.items = []
         self.shot = None           # the captured photo (PIL), before decorations
         self.crop_offset = (0.5, 0.5)  # which part of it a frame shows (dragged)
+        self.tracker = booth_ar.Tracker()   # your face and hands, for the AR effects
+        self.tile_next = 0             # the gallery's round robin
 
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS)
@@ -357,34 +400,27 @@ class Booth(Adw.ApplicationWindow):
                                    css_classes=["mk-booth-photo"])
         self.countdown = Gtk.Label(css_classes=["mk-booth-countdown"], visible=False)
         self.flash = Gtk.Box(css_classes=["mk-booth-flash"], opacity=0, can_target=False)
-        # 3 x 3: nine looks live at once, click one to use it.
+        # The gallery: every look live at once (192 x 108 tiles), scrolling; click one to use it.
         self.grid_mode = False
-        self.grid = Gtk.Grid(row_spacing=12, column_spacing=12, hexpand=True, vexpand=True,
-                             row_homogeneous=True, column_homogeneous=True)
-        row_names = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, homogeneous=True, spacing=12)
+        self.gallery = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True, max_children_per_line=6,
+                                   min_children_per_line=2, row_spacing=10, column_spacing=10, valign=Gtk.Align.START)
         self.grid_cells = []
-        for name, _keys in GRID_ROWS:
-            row_names.append(Gtk.Label(label=name, css_classes=["heading"], xalign=0, valign=Gtk.Align.CENTER,
-                                       width_chars=10))
-        for n, key in enumerate(GRID_LOOKS):
-            pic = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, css_classes=["mk-booth-photo"],
-                              cursor=Gdk.Cursor.new_from_name("pointer"))
-            label = Gtk.Label(label=photo.FILTERS[key].label if key else "Original",
-                              css_classes=["mk-booth-cell-label"], valign=Gtk.Align.END, halign=Gtk.Align.CENTER,
-                              margin_bottom=6)
+        for key, label in ALL_LOOKS:
+            pic = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, css_classes=["mk-booth-tile"], can_shrink=True,
+                              width_request=TILE_W, height_request=TILE_H, cursor=Gdk.Cursor.new_from_name("pointer"))
             cell = Gtk.Overlay(child=pic)
-            cell.add_overlay(label)
+            cell.add_overlay(Gtk.Label(label=label, css_classes=["mk-booth-cell-label"], valign=Gtk.Align.END,
+                                       halign=Gtk.Align.CENTER, margin_bottom=6, ellipsize=3, max_width_chars=18))
             click = Gtk.GestureClick()
             click.connect("released", lambda *_a, k=key: self._pick_from_grid(k))
             cell.add_controller(click)
-            self.grid.attach(cell, n % 3, n // 3, 1, 1)
-            self.grid_cells.append((key, pic))
+            self.gallery.append(cell)
+            self.grid_cells.append((key, pic, cell.get_parent()))
+        gallery_scroll = Gtk.ScrolledWindow(child=self.gallery, hscrollbar_policy=Gtk.PolicyType.NEVER,
+                                            hexpand=True, vexpand=True)
         self.view_stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, hexpand=True, vexpand=True)
         self.view_stack.add_named(self.preview, "single")
-        grid_page = Gtk.Box(spacing=12)
-        grid_page.append(row_names)
-        grid_page.append(self.grid)
-        self.view_stack.add_named(grid_page, "grid")
+        self.view_stack.add_named(gallery_scroll, "grid")
         overlay = Gtk.Overlay(child=self.view_stack, margin_start=16, margin_end=16, margin_top=16)
         overlay.add_overlay(self.flash)
         overlay.add_overlay(self.countdown)
@@ -398,11 +434,11 @@ class Booth(Adw.ApplicationWindow):
 
         # Room under the pills for the scrollbar, so they never overlap.
         # The looks, by kind, with a search box: All / Vintage / Artistic / Fun.
-        tray = Gtk.Box(spacing=12, margin_start=16, margin_end=16, margin_top=12)
+        tray = Gtk.Box(spacing=12, margin_start=16, margin_end=16, margin_top=12, css_classes=["mk-booth-bar"])
         self.look_search = Gtk.SearchEntry(placeholder_text="Find a look…", width_chars=16)
         self.look_search.connect("search-changed", lambda *_: self._filter_looks())
         tray.append(self.look_search)
-        cats = Gtk.Box(css_classes=["linked"])
+        cats = Gtk.Box(css_classes=["mk-booth-cats"])
         self.look_cat = "All"
         cat_group = None
         for cat in ("All",) + tuple(LOOK_CATEGORIES):
@@ -418,7 +454,7 @@ class Booth(Adw.ApplicationWindow):
         group = None
         self.look_buttons = {}
         self.look_thumbs = {}
-        for key, label in [(None, "Original")] + [(k, f.label) for k, f in photo.FILTERS.items()]:
+        for key, label in ALL_LOOKS:
             # a card: the look live on a small copy of the camera, and its name
             card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
             thumb = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, width_request=THUMB_W,
@@ -439,10 +475,10 @@ class Booth(Adw.ApplicationWindow):
                                       hscrollbar_policy=Gtk.PolicyType.AUTOMATIC, propagate_natural_height=True,
                                       overlay_scrolling=False, margin_start=4, margin_end=4)
 
-        bottom = Gtk.CenterBox(margin_top=12, margin_bottom=16, margin_start=16, margin_end=16)
+        bottom = Gtk.CenterBox(margin_top=12, margin_bottom=16, margin_start=16, margin_end=16, css_classes=["mk-booth-bar"])
         self.timer_btn = Gtk.ToggleButton(icon_name="alarm-symbolic", tooltip_text="3-2-1 countdown",
                                           css_classes=["circular"], valign=Gtk.Align.CENTER)
-        self.grid_btn = Gtk.ToggleButton(icon_name="view-grid-symbolic", tooltip_text="Nine looks at once (G)",
+        self.grid_btn = Gtk.ToggleButton(icon_name="view-grid-symbolic", tooltip_text="Every look at once (G)",
                                          css_classes=["circular"], valign=Gtk.Align.CENTER)
         self.grid_btn.connect("toggled", lambda b: self._set_grid(b.get_active()))
         left = Gtk.Box(spacing=16)
@@ -453,9 +489,21 @@ class Booth(Adw.ApplicationWindow):
                              tooltip_text="Take the photo (Space)")
         shutter.connect("clicked", lambda *_: self.take())
         bottom.set_center_widget(shutter)
-        folder = Gtk.Button(icon_name="folder-pictures-symbolic", tooltip_text="Your photos",
-                            css_classes=["circular"], valign=Gtk.Align.CENTER)
-        folder.connect("clicked", lambda *_: self._open_folder())
+        folder = Gtk.ToggleButton(icon_name="folder-pictures-symbolic", tooltip_text="Your latest photos",
+                                  css_classes=["circular"], valign=Gtk.Align.CENTER)
+        # the gallery drawer: your latest photos, a click opens one; Open Folder for the rest
+        self.drawer_box = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=12,
+                                      min_children_per_line=4, column_spacing=8, row_spacing=8)
+        drawer_inner = Gtk.Box(spacing=10, css_classes=["mk-booth-gallery"], margin_start=16, margin_end=16)
+        drawer_inner.append(Gtk.ScrolledWindow(child=self.drawer_box, hexpand=True, propagate_natural_height=True,
+                                               vscrollbar_policy=Gtk.PolicyType.NEVER))
+        open_folder = Gtk.Button(icon_name="folder-open-symbolic", tooltip_text="Open the folder",
+                                 css_classes=["circular"], valign=Gtk.Align.CENTER)
+        open_folder.connect("clicked", lambda *_: self._open_folder())
+        drawer_inner.append(open_folder)
+        self.drawer = Gtk.Revealer(child=drawer_inner, transition_type=Gtk.RevealerTransitionType.SLIDE_UP)
+        folder.connect("toggled", lambda b: (self._fill_drawer() if b.get_active() else None,
+                                             self.drawer.set_reveal_child(b.get_active())))
         open_photo = Gtk.Button(child=Adw.ButtonContent(icon_name="document-open-symbolic", label="Open Photo"),
                                 css_classes=["pill"], valign=Gtk.Align.CENTER,
                                 tooltip_text="Decorate a picture from disk: looks, frames, light leaks, stickers")
@@ -469,14 +517,44 @@ class Booth(Adw.ApplicationWindow):
         page.append(top)
         page.append(tray)
         page.append(scroller)
+        page.append(self.drawer)
         page.append(bottom)
         return page
+
+    def _fill_drawer(self):
+        """The drawer: the twelve latest photos in ~/Pictures/MK Booth."""
+        child = self.drawer_box.get_first_child()
+        while child:
+            nxt = child.get_next_sibling()
+            self.drawer_box.remove(child)
+            child = nxt
+        try:
+            shots = sorted((p for p in OUT_DIR.glob("*.png")), key=lambda p: p.stat().st_mtime, reverse=True)[:12]
+        except OSError:
+            shots = []
+        if not shots:
+            self.drawer_box.append(Gtk.Label(label="No photos yet: take one!", css_classes=["dim-label"]))
+        for path in shots:
+            try:
+                thumb = Image.open(path)
+                thumb.thumbnail((120, 120))
+            except (OSError, ValueError):
+                continue
+            pic = Gtk.Picture(paintable=to_texture(thumb), can_shrink=False, cursor=Gdk.Cursor.new_from_name("pointer"),
+                              tooltip_text=path.name)
+            click = Gtk.GestureClick()
+            click.connect("released", lambda *_a, p=path: Gio.AppInfo.launch_default_for_uri(p.as_uri(), None))
+            pic.add_controller(click)
+            self.drawer_box.append(pic)
 
     def _filter_looks(self):
         query = self.look_search.get_text().strip().lower()
         for key, b in self.look_buttons.items():
             in_cat = key is None or self.look_cat == "All" or key in LOOK_CATEGORIES.get(self.look_cat, ())
             b.set_visible(in_cat and (not query or query in b.label_text.lower()))
+        for key, _pic, cell in self.grid_cells:
+            if cell:
+                cell.set_visible(self.look_buttons[key].get_visible())
 
     def _adjust_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, width_request=280,
@@ -580,31 +658,40 @@ class Booth(Adw.ApplicationWindow):
         if self.stack.get_visible_child_name() != "camera":
             return GLib.SOURCE_REMOVE
         now = time.monotonic()
-        if now - self.last_shown < 1 / 30:  # 30 fps is plenty, and kinder to the battery
+        if now - self.last_shown < 1 / 60:  # up to 60 fps (as fast as the camera sends)
             return GLib.SOURCE_REMOVE
         self.last_shown = now
         img = self._latest()
         if img is None:
             return GLib.SOURCE_REMOVE
-        if self.grid_mode:
-            if now - getattr(self, "last_grid", 0) < 1 / 30:  # nine looks at 30 fps on 240 px tiles
-                return GLib.SOURCE_REMOVE
-            self.last_grid = now
-            tiny = img.resize((GRID_W, round(GRID_W * img.height / img.width)), Image.Resampling.BILINEAR)
-            for key, pic in self.grid_cells:
-                look = photo.polaroid_photo(tiny) if key == "polaroid" else photo.apply(tiny, key) if key else tiny
-                pic.set_paintable(to_texture(look))
-            return GLib.SOURCE_REMOVE
         small = img.resize((PREVIEW_W, round(PREVIEW_W * img.height / img.width)), Image.Resampling.BILINEAR)
-        self.preview.set_paintable(to_texture(photo.apply(small, self.look) if self.look else small))
+        # the face and hands, only while something needs them (an AR look, or the gallery's AR tiles)
+        if self.look in booth_ar.AR_LOOKS or (self.grid_mode and self.look_cat in ("All", "AR & Hearts")):
+            if now - getattr(self, "last_track", 0) > 1 / 20:
+                self.last_track = now
+                self.tracker.update(small, now)
+        if self.grid_mode:
+            # the frame shrunk ONCE to a tile; tiles refreshed round robin within 14 ms a tick
+            tile = small.resize((TILE_W, TILE_H), Image.Resampling.BILINEAR)
+            shown = [c for c in self.grid_cells if c[2] is None or c[2].get_visible()]
+            start, budget = time.perf_counter(), 0.014
+            for n in range(len(shown)):
+                key, pic, _cell = shown[(self.tile_next + n) % len(shown)]
+                pic.set_paintable(to_texture(render_look(tile, key, self.tracker)))
+                if time.perf_counter() - start > budget:
+                    self.tile_next = (self.tile_next + n + 1) % max(1, len(shown))
+                    break
+            else:
+                self.tile_next = 0
+            return GLib.SOURCE_REMOVE
+        self.preview.set_paintable(to_texture(render_look(small, self.look, self.tracker)))
         if now - getattr(self, "last_thumbs", 0) > 0.5:     # the looks strip, twice a second
             self.last_thumbs = now
-            tiny = img.resize((THUMB_W, round(THUMB_W * img.height / img.width)), Image.Resampling.BILINEAR)
+            tiny = small.resize((THUMB_W, round(THUMB_W * small.height / small.width)), Image.Resampling.BILINEAR)
             for key, pic in self.look_thumbs.items():
                 if not self.look_buttons[key].get_visible():
                     continue
-                look = photo.polaroid_photo(tiny) if key == "polaroid" else photo.apply(tiny, key) if key else tiny
-                pic.set_paintable(to_texture(look))
+                pic.set_paintable(to_texture(render_look(tiny, key, self.tracker)))
         return GLib.SOURCE_REMOVE
 
     def _set_grid(self, on):
@@ -618,6 +705,9 @@ class Booth(Adw.ApplicationWindow):
     # ----- taking the photo
     def take(self):
         if self.stack.get_visible_child_name() != "camera" or self.countdown.get_visible():
+            return
+        if self.look == "frame-strip":
+            self._take_strip()
             return
         if not self.timer_btn.get_active():
             self._snap()
@@ -636,11 +726,8 @@ class Booth(Adw.ApplicationWindow):
         tick()
         GLib.timeout_add(1000, tick)
 
-    def _snap(self):
-        img = self._latest()
-        if img is None:
-            return
-        # A white flash, fading out.
+    def _flash(self):
+        """A white flash, fading out."""
         self.flash.set_opacity(1)
         start = time.monotonic()
 
@@ -649,7 +736,43 @@ class Booth(Adw.ApplicationWindow):
             self.flash.set_opacity(max(0.0, 1 - k))
             return k < 1
         self.flash.add_tick_callback(fade)
+
+    def _snap(self):
+        img = self._latest()
+        if img is None:
+            return
+        self._flash()
+        if self.look in BAKED:
+            # an AR effect or a frame goes into the photo itself (where your face is now),
+            # then the photo is decorated like any other
+            self.tracker.update(img)
+            self._begin_decorating(render_look(img, self.look, self.tracker, time.strftime("%d %b %Y")), None)
+            return
         self._begin_decorating(img, self.look)
+
+    def _take_strip(self):
+        """The 4-shot strip: 3-2-1, then four photos a second apart (a flash each), on one strip."""
+        shots = []
+        steps = iter(["3", "2", "1", "shot", "1/4", "shot", "2/4", "shot", "3/4", "shot"])
+
+        def tick():
+            step = next(steps, None)
+            if step is None:
+                self.countdown.set_visible(False)
+                if shots:
+                    self._begin_decorating(booth_ar.strip(shots), None)
+                return GLib.SOURCE_REMOVE
+            if step == "shot":
+                img = self._latest()
+                if img is not None:
+                    shots.append(img)
+                    self._flash()
+                return GLib.SOURCE_CONTINUE
+            self.countdown.set_label(step)
+            self.countdown.set_visible(True)
+            return GLib.SOURCE_CONTINUE
+        tick()
+        GLib.timeout_add(500, tick)
 
     def _begin_decorating(self, img, look):
         """The decorate page for IMG (straight from the camera, or opened from

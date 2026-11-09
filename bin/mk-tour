@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""MK Workstation Tour: the workstation in eight slides, GNOME Tour style.
+"""MK Workstation Tour: the workstation in six slides (v20.0), GNOME Tour style.
 
-  mk-tour              the eight-slide tour (also mk tour, Super+Shift+/,
+  mk-tour              the six-slide tour (also mk tour, Super+Shift+/,
                        MK Control Center or the app grid)
   mk-tour --reference  the MK Quick Reference: a searchable cheat sheet
   mk-tour --full       the long walkthrough, every page
@@ -332,35 +332,37 @@ class CheatSheet(Adw.ApplicationWindow):
 
 
 
-# The six slides: (icon, title, text, (button label, action) or None).
-# action: a command to start, "face" (try Face ID here) or "done".
+# The showcase: (icon, title, text, (button label, action) or None).
+# action: a command to start, "face" (try Face ID here), "next" or "done".
 SLIDES = [
-    ("org.fedoraproject.AnacondaInstaller-symbolic", "Your Laptop, Supercharged.",
-     "A student-first Fedora workstation blending macOS fluidity, Windows 11 window snapping and pure "
-     "open-source Infrastructure-as-Code. Born from lockdown late nights, mentor wisdom, and zero bloat.",
-     ("Let's Explore", "next")),
-    ("camera-web-symbolic", "Instant Unlocking, No New Hardware.",
-     "Unlock apps, the terminal's sudo and the desktop in about a second with your laptop's own webcam. "
-     "Your password or fingerprint is always the fallback; strict matching, and an IR camera even stops photos. "
-     "The camera only runs while it's checking.", ("Try Face ID", "face")),
-    ("accessories-text-editor-symbolic", "Your Ideas, Beautifully Structured.",
-     "A4 pages that grow as you write, real tables you resize and move, text boxes on PDF printouts, "
-     "highlighters, drawing and one-click PDF or Word export. Completely offline.", ("Open MK Notes", "mk-notes")),
-    ("view-list-bullet-symbolic", "Distraction-Free Quick Capture.",
-     "A floating companion for task lists, study reminders and quick notes, tucked away until you need it "
-     "(Super+Shift+N).", ("Launch Companion", "mk-companion")),
-    ("input-keyboard-symbolic", "Speed at Your Fingertips.",
-     "Super+1…9 opens your dock apps, Super+Tab switches apps, Super+. puts an emoji right at your cursor, "
-     "Super+Left/Right snaps windows. Every shortcut is listed and editable.", ("View Shortcuts", "show-shortcuts")),
-    ("edit-paste-symbolic", "Never Lose What You Copy.",
-     "Super+V opens a translucent clipboard deck in a few milliseconds: images, text and pinned items, "
-     "search, tags, arrow keys and Enter to paste.", ("Test Clipboard", "clip")),
-    ("applications-graphics-symbolic", "Personality Meets Performance.",
-     "Live Cairo skylines: Spider-Man swinging past Stan Lee's window-light tribute, and Batman over Gotham "
-     "under the MK signal. Cached, so a frame takes a few milliseconds.", ("Choose a scene", "mk-screensaver settings")),
-    ("utilities-terminal-symbolic", "Reproducible Anywhere in Minutes.",
-     "Fresh install? Run ./setup.sh and ./sync.sh and your exact workspace is back. 100 % open source under "
-     "the MIT License.", ("Finish Tour", "done")),
+    ("org.fedoraproject.AnacondaInstaller-symbolic", "Welcome to MehulK Workstation v20.0",
+     "Top left, one frosted glass capsule: your round logo and Finder menu (About, MK Command Centre, Settings, "
+     "the App Store, and Lock / Sleep / Hibernate / Restart / Shut Down at the bottom), Places, and your "
+     "workspaces. Beside it, the app you're in. Top right, a steady stats pill: CPU and temperature that never "
+     "jiggle the bar.", ("Let's Explore", "next")),
+    ("x-office-calendar-symbolic", "Your Day in One Click",
+     "Click the clock: today's weather by the date, your media with its cover and a progress bar you can drag, "
+     "a checklist for the day (type a reminder, pick a chip, tick it off), your last four copies in a clipboard "
+     "shelf that never shuffles, and Focus 25m to silence notifications while you work.",
+     ("Open the Calendar", "calendar")),
+    ("system-lock-screen-symbolic", "A Lock Screen That's Yours",
+     "A Sonoma-style lock screen with a live video or picture behind the clock, five layouts, your fonts and "
+     "colours. The desktop's live wallpaper can play sound, only while you're on the bare desktop. MK Command "
+     "Centre shows a live preview right beside every setting, dock glow colour included.",
+     ("Open MK Command Centre", "mk-control-center studio")),
+    ("input-keyboard-symbolic", "Screenshots and Snapping, Like Windows",
+     "PrtSc takes the whole screen at once (saved and copied). Super+Shift+S: drag an area and it's taken the "
+     "moment you let go. Super+Left and Super+Right snap a window to half the screen, Super+Up maximizes, "
+     "Super+Down restores. Every shortcut is listed and editable.", ("View Shortcuts", "show-shortcuts")),
+    ("applications-graphics-symbolic", "Studio Apps: Notes and Photo Booth",
+     "MK Notes writes like Google Docs: a floating toolbar on any selection, pictures that move with your text, "
+     "one Ctrl+Z for words and pictures alike, and PDFs exactly as you see them. Photo Booth: live looks, AR "
+     "hearts, crowns, ears and shades that follow your face, photo-strip and Polaroid frames, fullscreen (F11).",
+     ("Open Photo Booth", "camera-controls")),
+    ("emblem-ok-symbolic", "You're All Set",
+     "Everything is plain text in the repo: change it, run ./sync.sh, and it's yours. Updating later is "
+     "git pull && ./sync.sh. Super+/ shows every shortcut; mk on its own lists every command.",
+     ("Finish Tour", "done")),
 ]
 SHOW_CSS = b"""
 .mk-slide-art { min-width: 140px; min-height: 140px; border-radius: 70px; color: white;
@@ -471,6 +473,10 @@ class Showcase(Adw.ApplicationWindow):
             self.toast.add_toast(Adw.Toast(title="Copied a line for you: now press Super+V", timeout=5))
         elif what == "face":
             self.try_face()
+        elif what == "calendar":
+            # (there's no outside way to open the shell's calendar: point at it)
+            self.toast.add_toast(Adw.Toast(title="Click the clock in the middle of the top bar (Super+Alt+A adds a reminder)",
+                                           timeout=6))
         else:
             run(what)
 

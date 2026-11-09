@@ -100,3 +100,10 @@ python3-pip
 nodejs22-npm
 espeak-ng
 sox
+
+# v20: Photo Booth AR and fast looks (OpenCV face tracking, remap), live wallpapers
+# (mpv on the lock screen, GStreamer GTK 4 sink on the desktop)
+python3-opencv
+python3-numpy
+mpv
+gstreamer1-plugin-gtk4

@@ -34,7 +34,7 @@ MEDIA_TYPES = ["video/mp4", "video/webm", "video/x-matroska", "video/quicktime",
                "image/jpeg", "image/webp"]
 IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"]
 VIDEO = re.compile(r"\.(mp4|webm|mkv|mov|m4v|avi)$", re.I)
-W, H = 360, 210
+W, H = 380, 214
 SCALE = W / 1920
 FONTS = {
     "sonoma-bold": 'font-family: "SF Pro Rounded", "Inter Display", Inter, Cantarell, sans-serif; font-weight: 700;',
@@ -105,7 +105,7 @@ class Preview(Gtk.Frame):
     serial = 0
 
     def __init__(self, suite):
-        super().__init__(halign=Gtk.Align.CENTER, css_classes=["mk-preview"])
+        super().__init__(halign=Gtk.Align.CENTER, valign=Gtk.Align.START, css_classes=["mk-preview"])
         Preview.serial += 1
         self.id = i = f"mkstudio{Preview.serial}"
         self.s = suite
@@ -115,8 +115,11 @@ class Preview(Gtk.Frame):
         overlay = Gtk.Overlay(width_request=W, height_request=H)
         overlay.set_overflow(Gtk.Overflow.HIDDEN)
         self.set_child(overlay)
-        self.picture = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True, width_request=W, height_request=H)
-        overlay.set_child(self.picture)
+        # (a fixed-size base, the picture over it: a big wallpaper never makes the preview grow)
+        overlay.set_child(Gtk.Box(width_request=W, height_request=H, hexpand=False, vexpand=False))
+        self.picture = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True)
+        overlay.add_overlay(self.picture)
+        overlay.set_clip_overlay(self.picture, True)
         overlay.add_overlay(Gtk.Box(css_classes=[f"{i}-scrim"]))
         bar = Gtk.Box(valign=Gtk.Align.START, spacing=4, height_request=18, css_classes=[f"{i}-bar"])
         self.logo = Gtk.Picture(margin_start=6, valign=Gtk.Align.CENTER, halign=Gtk.Align.START,
@@ -133,7 +136,7 @@ class Preview(Gtk.Frame):
         self.time = Gtk.Label(css_classes=[f"{i}-time"], justify=Gtk.Justification.CENTER)
         self.tagline = Gtk.Label(css_classes=[f"{i}-tagline"])
         self.pill = Gtk.Label(label="82%  ·  21°C", halign=Gtk.Align.CENTER, margin_top=4, css_classes=[f"{i}-pill"])
-        for w in (self.date, self.time, self.tagline, self.pill):
+        for w in (self.date, self.time, self.pill, self.tagline):
             self.clock.append(w)
         overlay.add_overlay(self.clock)
         self.column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START, halign=Gtk.Align.END,
@@ -253,9 +256,9 @@ class Preview(Gtk.Frame):
         self.tagline.set_label(tagline)
         self.tagline.set_visible(bool(tagline))
         pill = s.get_boolean("lock-status-pill")
-        self.pill.set_visible(pill and not layout.get("split"))
+        self.pill.set_visible(pill)                    # (always under the time, never on its own)
         self.column.set_visible(bool(layout.get("split")))
-        self.col_pill.set_visible(pill)
+        self.col_pill.set_visible(False)
         self.col_media.set_visible(s.get_boolean("lock-media-controls"))
         greeting = s.get_string("lock-greeting").strip()
         self.greeting.set_label(greeting)
@@ -388,13 +391,18 @@ def file_row(window, s, key, title, types, none, folder):
     return row
 
 
-def colour_row(s, key, title):
-    row = Adw.ActionRow(title=title)
+def colour_row(s, key, title, subtitle=""):
+    row = Adw.ActionRow(title=title, subtitle=subtitle)
     button = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(title=title, with_alpha=False), valign=Gtk.Align.CENTER)
     rgba = Gdk.RGBA()
     if rgba.parse(s.get_string(key) or "white"):
         button.set_rgba(rgba)
-    button.connect("notify::rgba", lambda b, _p: s.set_string(key, b.get_rgba().to_string()))
+    def chosen(b, _p):
+        c = b.get_rgba()
+        # the dock takes #rrggbb; the lock screen's colours any CSS colour
+        s.set_string(key, f"#{round(c.red * 255):02x}{round(c.green * 255):02x}{round(c.blue * 255):02x}"
+                     if key == "dock-glow-color" else c.to_string())
+    button.connect("notify::rgba", chosen)
     reset = Gtk.Button(icon_name="edit-undo-symbolic", valign=Gtk.Align.CENTER, css_classes=["flat"],
                        tooltip_text="The theme's colour")
     reset.connect("clicked", lambda _b: s.set_string(key, ""))
@@ -414,23 +422,59 @@ def lock_now(_b=None):
     subprocess.Popen(["loginctl", "lock-session"])
 
 
+# ----------------------------------------------------------------- the split view
+PRESETS = [("sonoma-center", "Sonoma"), ("sequoia-split", "Sequoia"), ("vertical-stacked", "Cyberpunk"),
+           ("corner-hud", "Corner HUD"), ("glass-framed", "Glass Card")]
+
+
+def split(s, page, title):
+    """Two columns: on the left (always in view, it never scrolls away) the live preview, the
+    lock screen button and the layout presets; on the right the settings, scrolling. Every
+    change shows in the preview beside it at once."""
+    outer = Gtk.Box(spacing=0, hexpand=True, vexpand=True)
+    left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=18, margin_bottom=18,
+                   margin_start=18, margin_end=12, width_request=W + 24, css_classes=["mk-studio-sticky"])
+    left.append(Gtk.Label(label=title.replace("&amp;", "&"), xalign=0, css_classes=["title-4"]))
+    left.append(Preview(s))
+    lock = Gtk.Button(label="Preview Fullscreen Lock Screen", css_classes=["pill"],
+                      tooltip_text="Locks the screen now (your password unlocks it)")
+    lock.connect("clicked", lock_now)
+    left.append(lock)
+    left.append(Gtk.Label(label="Lock screen layout", xalign=0, css_classes=["caption-heading", "dim-label"]))
+    presets = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, max_children_per_line=3, min_children_per_line=3,
+                          column_spacing=6, row_spacing=6, homogeneous=True)
+    buttons = {}
+    group = None
+    for value, label in PRESETS:
+        b = Gtk.ToggleButton(label=label, css_classes=["pill"])
+        if group:
+            b.set_group(group)
+        group = group or b
+        b.connect("toggled", lambda btn, v=value: btn.get_active() and s.get_string("lock-clock-layout") != v
+                  and s.set_string("lock-clock-layout", v))
+        buttons[value] = b
+        presets.append(b)
+
+    def follow(*_):
+        b = buttons.get(s.get_string("lock-clock-layout"))
+        if b and not b.get_active():
+            b.set_active(True)
+    follow()
+    s.connect("changed::lock-clock-layout", follow)
+    left.append(presets)
+    outer.append(left)
+    outer.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+    page.set_hexpand(True)
+    outer.append(page)                       # (an Adw.PreferencesPage scrolls by itself)
+    return outer
+
+
 # ----------------------------------------------------------------- the pages
 def wallpaper_studio(window):
     page = Adw.PreferencesPage()
     s = settings_for(SUITE, SUITE_SCHEMA)
     if not s:
         return missing(page, "MehulK Workstation &amp; Sonoma Suite")
-    top = Adw.PreferencesGroup(title="Wallpaper &amp; Sonoma Lockscreen Studio",
-                               description="The screen as it'll look; everything below changes it as you go.")
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER)
-    box.append(Preview(s))
-    lock = Gtk.Button(label="Preview Fullscreen Lock Screen", halign=Gtk.Align.CENTER, css_classes=["pill"],
-                      tooltip_text="Locks the screen now (your password unlocks it)")
-    lock.connect("clicked", lock_now)
-    box.append(lock)
-    top.add(box)
-    page.add(top)
-
     media = Adw.PreferencesGroup(title="Media")
     media.add(file_row(window, s, "desktop-wallpaper-path", "Desktop", MEDIA_TYPES, "GNOME's own wallpaper",
                        GLib.UserDirectory.DIRECTORY_VIDEOS))
@@ -474,6 +518,8 @@ def wallpaper_studio(window):
     clock.add(colour_row(s, "clock-color", "Clock Colour"))
     clock.add(colour_row(s, "date-color", "Date Colour"))
     clock.add(scale_row(s, "dim-opacity", "Scrim", 0, 85, 5, lambda v: f"{round(v)} %"))
+    clock.add(switch_row(s, "weather-enabled", "Live Weather",
+                         "Open-Meteo for where your connection is (no account); shown under the clock and by the calendar's date"))
     clock.add(switch_row(s, "lock-glass-card", "Glass Card Behind the Clock"))
     clock.add(scale_row(s, "lock-card-opacity", "Glass Card Opacity", 10, 90, 2, lambda v: f"{round(v)} %"))
     tagline = Adw.EntryRow(title="Tagline Under the Clock", text=s.get_string("lock-tagline"), show_apply_button=True)
@@ -488,7 +534,7 @@ def wallpaper_studio(window):
     more.connect("activated", lambda _r: subprocess.Popen(["gnome-extensions", "prefs", SUITE]))
     clock.add(more)
     page.add(clock)
-    return page
+    return split(s, page, "Wallpaper &amp; Sonoma Lockscreen Studio")
 
 
 def topbar_studio(window):
@@ -497,12 +543,6 @@ def topbar_studio(window):
     engine = settings_for(ENGINE, ENGINE_SCHEMA)
     if not s:
         return missing(page, "MehulK Workstation &amp; Sonoma Suite")
-    top = Adw.PreferencesGroup(title="Top Bar, Circular Logo &amp; Dock Studio")
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, halign=Gtk.Align.CENTER)
-    box.append(Preview(s))
-    top.add(box)
-    page.add(top)
-
     logo = Adw.PreferencesGroup(title="Finder logo")
     logo.add(combo_row(s, "finder-logo-preset", "Logo", [("fedora-blue", "Fedora Blue"), ("fedora-mono", "Fedora Monochrome"),
                                                         ("mk", "MK Emblem"), ("apple", "Apple Fruit"),
@@ -524,13 +564,16 @@ def topbar_studio(window):
 
     dock = Adw.PreferencesGroup(title="Dock")
     if engine:
-        dock.add(combo_row(engine, "dock-style", "Theme", [("obsidian-glass", "Obsidian Frosted Glass"),
+        dock.add(combo_row(engine, "dock-style", "Theme", [("spider-glow", "Spider-Verse Crimson Glow"),
+                                                          ("obsidian-glass", "Obsidian Frosted Glass"),
                                                           ("crystal-clear", "Crystal Clear Translucent"),
                                                           ("tahoe-pill", "macOS Tahoe Pill"),
                                                           ("cyber-neon", "Cyberpunk Neon Edge"),
                                                           ("floating-icons", "Minimal Floating Icons (No Backplate)"),
                                                           ("cupertino-frost", "Cupertino Frost"),
-                                                          ("spider-glow", "Spider Glow"), ("minimal-flat", "Minimal Flat")]))
+                                                          ("minimal-flat", "Minimal Flat")]))
+        dock.add(colour_row(engine, "dock-glow-color", "Glow Colour",
+                            "The running dots and the focused app's glow; the edge of the glow themes"))
         dock.add(scale_row(engine, "dock-icon-size", "Icon Size", 36, 68, 2, lambda v: f"{round(v)} px"))
         dock.add(scale_row(engine, "dock-hover-scale", "Magnification", 1.0, 1.5, 0.02,
                            lambda v: "Off" if v < 1.005 else f"{v:.2f}x", "d", subtitle="Only the icon under the pointer"))
@@ -544,4 +587,4 @@ def topbar_studio(window):
     else:
         dock.set_description("MK Shell Engine isn't installed: run ./sync.sh (mk sync) once.")
     page.add(dock)
-    return page
+    return split(s, page, "Top Bar, Circular Logo &amp; Dock Studio")

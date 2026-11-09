@@ -885,8 +885,14 @@ gsettings set org.gnome.settings-daemon.plugins.color night-light-enabled true
 # 7. Smooth Animation Performance Tweaks
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.overview blur false
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.lockscreen blur false
+# The panel when Blur my Shell is on: dynamic blur (it follows what's behind), the
+# background overridden only while a window touches the bar, the default style
+# (style-panel 0), so it sits with MK's own glass islands instead of fighting them.
 ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel blur true
-ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel static-blur true
+ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel static-blur false
+ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel override-background true
+ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel override-background-dynamically true
+ext_set blur-my-shell@aunetx org.gnome.shell.extensions.blur-my-shell.panel style-panel 0
 # Fractional scaling (e.g. 125%) without blur: native framebuffer scaling, and
 # X11 apps (Steam, many games) rendered at native size instead of upscaled.
 # (GNOME 51 has both built in and no longer has the experimental-features key.)

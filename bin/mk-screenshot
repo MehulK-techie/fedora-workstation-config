@@ -13,6 +13,7 @@ GNOME only lets its own tools call the shell's screenshot service directly.
 The keys stay GNOME's own: Shift+Print (instantly), Print and Super+Shift+S
 (pick an area); Quick Settings has a Screenshot tile.
 """
+import fcntl
 import os
 import shutil
 import subprocess
@@ -84,6 +85,19 @@ def main(argv):
     if not argv or argv[0] not in ("--instant", "--area"):
         print(__doc__.strip())
         return 2
+    # one at a time: pressed again while one is still open, the new one waits up to 3 s for it
+    # and then gives up (a lock on a file in your runtime folder; it's let go when this exits,
+    # however it exits, so a cancelled or crashed one never blocks the next)
+    lock = open(Path(GLib.get_user_runtime_dir()) / "mk-screenshot.lock", "w")
+    for _ in range(30):
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            GLib.usleep(100000)
+    else:
+        print("mk-screenshot: another screenshot is still open", file=sys.stderr)
+        return 1
     try:
         shot = portal_screenshot(interactive=argv[0] == "--area")
     except (RuntimeError, GLib.Error) as e:

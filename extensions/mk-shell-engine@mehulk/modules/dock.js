@@ -455,7 +455,7 @@ export class Dock {
             // the app you're using gets its dot in your accent colour
             const dot = colour => {
                 const w = new St.Widget({style_class: `mk-dock-bar mk-dock-bar-${this._indicator ?? 'glowing-dot'}`,
-                    style: `background-color: ${colour}; box-shadow: 0 0 ${state === 'focus' ? 12 : 6}px ${colour};`,
+                    style: `background-color: ${colour}; box-shadow: 0 0 ${state === 'focus' ? 8 : 6}px ${colour};`,
                     pivot_point: new Graphene.Point({x: 0.5, y: 0.5}), scale_x: 0, scale_y: 0, opacity: 0});
                 item.bars.add_child(w);
                 w.ease({scale_x: 1, scale_y: 1, opacity: 255, duration: 220, mode: Clutter.AnimationMode.EASE_OUT_BACK});
@@ -498,14 +498,25 @@ export class Dock {
         return Clutter.EVENT_PROPAGATE;
     }
 
-    // an icon at rest: the focused app's raised a little (1.12x, 5 px up), every other at 1x
+    // an icon at rest: the focused app's raised (1.15x, 9 px up, on a soft glow), every other at 1x
+    _focused(item) {
+        return this._settings.get_boolean('dock-focused-raise') && item.app &&
+            item.app === Shell.WindowTracker.get_default().focus_app;
+    }
+
     _rest(item) {
-        const focus = Shell.WindowTracker.get_default().focus_app;
-        return this._settings.get_boolean('dock-focused-raise') && item.app && item.app === focus ? [1.12, 5] : [1, 0];
+        return this._focused(item) ? [1.15, 9] : [1, 0];
+    }
+
+    // the glow colour as "R, G, B"
+    _rgb() {
+        const hex = this._glow ?? '#ef4444';
+        return [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(', ');
     }
 
     _settle() {
-        const ease = {duration: 150, mode: Clutter.AnimationMode.EASE_OUT_CUBIC};
+        const ease = {duration: 180, mode: Clutter.AnimationMode.EASE_OUT_QUAD};
+        const rgb = this._rgb();
         if (this._gone)
             return;
         for (const item of this._items ?? []) {
@@ -514,6 +525,11 @@ export class Dock {
             const [scale, lift] = this._rest(item);
             item.target = `${scale}/${lift}`;
             item.icon.ease({scale_x: scale, scale_y: scale, translation_y: -lift, ...ease});
+            // the app you're in sits on a soft tile of the glow colour
+            item.button.style = this._focused(item)
+                ? `background-color: rgba(${rgb}, 0.22); border: 1px solid rgba(${rgb}, 0.70); border-radius: 16px; ` +
+                  `box-shadow: 0 4px 16px rgba(${rgb}, 0.60);`
+                : null;
         }
         this._tooltip(null);
     }

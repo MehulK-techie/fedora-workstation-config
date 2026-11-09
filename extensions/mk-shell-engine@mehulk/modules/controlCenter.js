@@ -10,46 +10,29 @@
 // Style and the Welcome light toggle (never the battery: GNOME shows the top
 // bar's battery icon only while that tile is there), so the toggles are a clean 2 x 4: Wi-Fi,
 // Bluetooth, Power Mode, Night Light, Do Not Disturb, Airplane Mode, Microphone
-// (the engine's own) and Caffeine (when installed), in that order, then the engine's
-// Screenshot (instant: saved and copied) and Wallpaper Sound (the live wallpaper's, while
-// MehulK Workstation & Sonoma Suite runs). Hibernate is in the power menu (that suite's).
-// Screenshot keys: Shift+Print instantly, Print and Super+Shift+S to pick an area.
+// (the engine's own) and Caffeine (when installed), in that order, then Wallpaper Sound
+// (the live wallpaper's, while MehulK Workstation & Sonoma Suite runs).
+// The header row keeps the battery and the Settings gear, plus a button for MK Command
+// Centre; GNOME's screenshot, lock and power buttons leave it (Lock and power live in the
+// Finder menu; screenshots on Print and Super+Shift+S).
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { QuickToggle, SystemIndicator } from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import { getMixerControl } from 'resource:///org/gnome/shell/ui/status/volume.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
-import { instantScreenshot } from './instantShot.js';
 import { UNIFIED } from './conflicts.js';
 
 // The grid's order, two by two: Wi-Fi, Bluetooth / Power Mode, Night Light /
 // Do Not Disturb, Airplane Mode / Microphone, Caffeine. (What else is there
 // follows; whatever isn't there is skipped.)
 const ORDER = ['NMWirelessToggle', 'BluetoothToggle', 'PowerProfilesToggle', 'NightLightToggle',
-    'DoNotDisturbToggle', 'RfkillToggle', 'MkMicToggle', 'CaffeineToggle', 'MkScreenshotToggle', 'MkWallpaperSoundToggle'];
-
-// Screenshot: one press, the whole screen, saved and copied (once the menu has closed)
-const ScreenshotToggle = GObject.registerClass({GTypeName: 'MkScreenshotToggle'}, class ScreenshotToggle extends QuickToggle {
-    constructor() {
-        super({title: 'Screenshot', subtitle: 'Saved & copied', iconName: 'camera-photo-symbolic', toggleMode: false});
-        this.connect('clicked', () => {
-            Main.panel.closeQuickSettings?.();
-            this._wait = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 350, () => {
-                this._wait = 0;
-                instantScreenshot().catch(e => Main.notify('Screenshot failed', e.message));
-                return GLib.SOURCE_REMOVE;
-            });
-        });
-    }
-
-    destroy() {
-        if (this._wait)
-            GLib.source_remove(this._wait);
-        super.destroy();
-    }
-});
+    'DoNotDisturbToggle', 'RfkillToggle', 'MkMicToggle', 'CaffeineToggle', 'MkWallpaperSoundToggle'];
+// the header row's buttons that leave (GNOME's own classes)
+const HEADER_GONE = /ScreenshotItem|LockItem|ShutdownItem/;
+const CENTRE = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-control-center']);
 
 // The live wallpaper's sound (MehulK Workstation & Sonoma Suite's desktop-audio-enabled)
 function unifiedSettings() {
@@ -167,7 +150,6 @@ export class ControlCenter {
         try {
             this._mic = new SystemIndicator();
             this._mic.quickSettingsItems.push(new MicToggle());
-            this._mic.quickSettingsItems.push(new ScreenshotToggle());
             const wall = unifiedSettings();
             if (wall)
                 this._mic.quickSettingsItems.push(new WallpaperSoundToggle(wall));
@@ -177,6 +159,63 @@ export class ControlCenter {
             this._mic = null;
         }
         this._prune();
+        this._header();
+    }
+
+    // The header row: battery, Settings, MK Command Centre (no screenshot, lock or power button)
+    _header() {
+        const row = this._qs._system?._systemItem?.child;
+        if (!row) {
+            if ((this._headerTries = (this._headerTries ?? 0) + 1) <= 20) {
+                this._headerRetry = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                    this._headerRetry = 0;
+                    this._header();
+                    return GLib.SOURCE_REMOVE;
+                });
+            }
+            return;
+        }
+        this._headerHidden = [];
+        let settings = null;
+        for (const item of row.get_children()) {
+            const name = `${item.constructor.name} ${item.constructor.$gtype?.name ?? ''}`;
+            if (/SettingsItem/.test(name))
+                settings = item;
+            if (!HEADER_GONE.test(name))
+                continue;
+            item.visible = false;
+            // (GNOME shows these again whenever their state changes)
+            const id = item.connect('notify::visible', () => item.visible && (item.visible = false));
+            this._headerHidden.push([item, id]);
+        }
+        this._centre = new St.Button({style_class: 'icon-button', can_focus: true, accessible_name: 'MK Command Centre',
+            child: new St.Icon({icon_name: 'applications-system-symbolic'})});
+        this._centre.connect('clicked', () => {
+            Main.panel.closeQuickSettings?.();
+            try {
+                Gio.Subprocess.new([CENTRE], Gio.SubprocessFlags.NONE);
+            } catch (e) {
+                Main.notify('MK Command Centre', e.message);
+            }
+        });
+        if (settings)
+            row.insert_child_above(this._centre, settings);
+        else
+            row.add_child(this._centre);
+    }
+
+    _unheader() {
+        if (this._headerRetry)
+            GLib.source_remove(this._headerRetry);
+        for (const [item, id] of this._headerHidden ?? []) {
+            try {
+                item.disconnect(id);
+                item.visible = true;
+            } catch {}
+        }
+        this._headerHidden = [];
+        this._centre?.destroy();
+        this._centre = null;
     }
 
     // the toggles in ORDER, where the first of them was (sliders and the rest stay put)
@@ -254,6 +293,7 @@ export class ControlCenter {
             delete this._pointer._mkOpen;
         }
         this._restore();
+        this._unheader();
         this._original.clear();
         this._box.remove_style_class_name('mk-bento');
     }

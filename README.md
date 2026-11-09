@@ -223,8 +223,8 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | | `Super+1…9` | Open the 1st…9th dock app |
 | | `Ctrl+Shift+Esc` | System Monitor |
 | | `Super+V` · `Super+.` | Clipboard history · emoji |
-| **Screenshots** | `Shift+Print` · `Super+Shift+3` · Quick Settings › Screenshot | Whole screen, instantly |
-| | `Print` (`Fn+PrtSc`) · `Super+Shift+S` · `Super+Shift+4` | **Select an area** (or a window) |
+| **Screenshots** | `Print` (`Fn+PrtSc`) · `Super+Shift+3` | Whole screen, instantly (saved and copied, no overlay) |
+| | `Super+Shift+S` · `Super+Shift+4` · `Shift+Print` | **Select an area**: taken the moment you let go |
 | | `Alt+Print` | Current window |
 | | `Super+Shift+C` · `Super+Alt+T` | Copy text from the screen (OCR) |
 | | `Super+Return` | Scratchpad (the Companion) |

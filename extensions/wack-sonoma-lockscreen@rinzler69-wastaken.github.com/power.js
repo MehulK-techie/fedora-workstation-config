@@ -38,3 +38,25 @@ export function sleep(settings) {
     else
         SystemActions.getDefault().activateSuspend();
 }
+
+// Straight to systemd-logind (org.freedesktop.login1.Manager) over the system bus: works on
+// the lock screen too, where GNOME's own power dialogs don't open. interactive=true lets
+// polkit ask if it must. One object, so it can be swapped out (the tests never sleep the PC).
+function login1(method) {
+    Gio.DBus.system.call('org.freedesktop.login1', '/org/freedesktop/login1', 'org.freedesktop.login1.Manager',
+        method, new GLib.Variant('(b)', [true]), null, Gio.DBusCallFlags.ALLOW_INTERACTIVE_AUTHORIZATION, -1, null,
+        (bus, res) => {
+            try {
+                bus.call_finish(res);
+            } catch (e) {
+                Main.notify('Power', `${method} didn't work: ${e.message}`);
+            }
+        });
+}
+
+export const powerActions = {
+    suspend: () => login1('Suspend'),
+    hibernate: () => hibernate(),          // (mk-hibernate: real hibernation, or sleep keeping everything)
+    reboot: () => login1('Reboot'),
+    powerOff: () => login1('PowerOff'),
+};

@@ -42,6 +42,7 @@ import { LockWidgets } from './lockWidgets.js';
 import { TopBar, QuickSettingsHibernate } from './topbar.js';
 import { DesktopWallpaper } from './desktop.js';
 import { MediaWatcher } from './media.js';
+import { WeatherService } from './weather.js';
 
 const STYLE_KEYS = ['dim-opacity', 'clock-style', 'clock-font', 'clock-color', 'date-color', 'clock-offset',
     'show-notifications', 'show-avatar', 'hide-fingerprint-hint', 'zero-lag-lock', 'lock-clock-layout', 'lock-glass-card',
@@ -84,6 +85,7 @@ export default class WackSonomaLiveLockscreen extends Extension {
         // both sessions: the desktop video (paused while locked), Hibernate in Quick Settings
         this._desktop = this._make('desktop wallpaper', () => new DesktopWallpaper(this._settings));
         this._qsHibernate = this._make('hibernate', () => new QuickSettingsHibernate(this._settings));
+        this._weather = this._make('weather', () => new WeatherService(this._settings));
         // waking: the password field at once, 250 ms on (once the screen is back)
         this._login = LoginManager.getLoginManager();
         this._login.connectObject('prepare-for-sleep', (_m, sleeping) => (sleeping ? this._sleeping() : this._woke()), this);
@@ -667,7 +669,7 @@ export default class WackSonomaLiveLockscreen extends Extension {
         this._login?.disconnectObject(this);
         this._login = null;
         this._syncTopBar(true);
-        for (const part of ['_qsHibernate', '_desktop']) {
+        for (const part of ['_qsHibernate', '_desktop', '_weather']) {
             try {
                 this[part]?.destroy();
             } catch (e) {

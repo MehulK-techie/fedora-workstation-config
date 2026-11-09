@@ -67,14 +67,15 @@ export class LivePreview {
         this._icons = icons;
         this._id = `mkp${++serial}`;
         const id = this._id;
-        this.widget = new Gtk.Frame({halign: Gtk.Align.CENTER, css_classes: ['mkp-frame']});
+        this.widget = new Gtk.Frame({halign: Gtk.Align.CENTER, valign: Gtk.Align.START, css_classes: ['mkp-frame']});
         const overlay = new Gtk.Overlay({width_request: W, height_request: H});
         overlay.set_overflow(Gtk.Overflow.HIDDEN);
         this.widget.set_child(overlay);
         // (a fixed 360 x 210 screen: the overlay's children never make it grow)
-        this._picture = new Gtk.Picture({content_fit: Gtk.ContentFit.COVER, can_shrink: true, width_request: W,
-            height_request: H});
-        overlay.set_child(this._picture);
+        overlay.set_child(new Gtk.Box({width_request: W, height_request: H, hexpand: false, vexpand: false}));
+        this._picture = new Gtk.Picture({content_fit: Gtk.ContentFit.COVER, can_shrink: true});
+        overlay.add_overlay(this._picture);
+        overlay.set_clip_overlay(this._picture, true);
         this._scrim = new Gtk.Box({css_classes: [`${id}-scrim`]});
         overlay.add_overlay(this._scrim);
 
@@ -98,7 +99,7 @@ export class LivePreview {
         this._tagline = new Gtk.Label({css_classes: [`${id}-tagline`]});
         this._pill = new Gtk.Label({label: '82%  ·  21°C', css_classes: [`${id}-pill`], halign: Gtk.Align.CENTER,
             margin_top: 4});
-        [this._date, this._time, this._tagline, this._pill].forEach(w => this._clock.append(w));
+        [this._date, this._time, this._pill, this._tagline].forEach(w => this._clock.append(w));
         overlay.add_overlay(this._clock);
         this._column = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, valign: Gtk.Align.START, halign: Gtk.Align.END,
             margin_top: 60, margin_end: 18, spacing: 4});
@@ -233,9 +234,9 @@ export class LivePreview {
         this._tagline.label = tagline;
         this._tagline.visible = tagline !== '';
         const pill = s.get_boolean('lock-status-pill');
-        this._pill.visible = pill && !layout.split;
+        this._pill.visible = pill;                     // (always under the time, never on its own)
         this._column.visible = Boolean(layout.split);
-        this._colPill.visible = pill;
+        this._colPill.visible = false;
         this._colMedia.visible = s.get_boolean('lock-media-controls');
         const greeting = s.get_string('lock-greeting').trim();
         this._greeting.label = greeting;

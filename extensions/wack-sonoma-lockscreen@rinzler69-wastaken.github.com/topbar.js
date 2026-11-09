@@ -39,6 +39,14 @@ function launchUri(uri) {
     }
 }
 
+function run(argv) {
+    try {
+        Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+    } catch (e) {
+        Main.notify('Finder', e.message);
+    }
+}
+
 function launchApp(...ids) {
     const app = ids.map(id => Shell.AppSystem.get_default().lookup_app(id)).find(Boolean);
     if (app)
@@ -119,40 +127,73 @@ class Finder {
     _fill() {
         const menu = this.button.menu, actions = SystemActions.getDefault(), s = this._settings;
         menu.removeAll();
-        // the power row: one press each, as on a Mac's  menu
-        const row = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'wack-power-row-item'});
-        const box = new St.BoxLayout({style_class: 'wack-power-row', x_expand: true});
-        // a frosted grid of six cards, each with its own glow on hover
-        const power = [
-            ['system-shutdown-symbolic', 'Shut Down', 'shutdown', () => actions.activatePowerOff()],
-            ['system-reboot-symbolic', 'Restart', 'restart', () => actions.activateRestart()],
-            ...(s.get_boolean('show-hibernate') ? [['media-floppy-symbolic', 'Hibernate', 'hibernate', () => hibernate()]] : []),
-            ['weather-clear-night-symbolic', 'Sleep', 'sleep', () => sleep(s)],
-            ['system-lock-screen-symbolic', 'Lock', 'lock', () => actions.activateLockScreen()],
-            ['system-log-out-symbolic', 'Log Out', 'logout', () => actions.activateLogout()],
-        ];
-        for (const [icon, label, kind, run] of power) {
-            const b = new St.Button({style_class: `wack-power-button wack-power-${kind}`, can_focus: true,
-                accessible_name: label, child: new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL,
-                    x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER})});
-            b.child.add_child(new St.Icon({icon_name: icon, icon_size: 18, x_align: Clutter.ActorAlign.CENTER}));
-            b.child.add_child(new St.Label({text: label, style_class: 'wack-power-caption', x_align: Clutter.ActorAlign.CENTER}));
-            b.connect('clicked', () => {
-                menu.close();
-                run();
-            });
-            box.add_child(b);
-        }
-        row.add_child(box);
-        menu.addMenuItem(row);
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        menu.addAction('About This System', () => launchApp('gnome-system-panel.desktop', 'org.gnome.Settings.desktop'));
+        menu.box.add_style_class_name('wack-finder-menu');
+        // the header card: which machine this is, how long it's been up, how much memory is in use
+        const head = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'wack-finder-head-item'});
+        const card = new St.BoxLayout({style_class: 'wack-finder-head', x_expand: true});
+        card.add_child(new St.Icon({icon_name: 'fedora-logo-icon', icon_size: 28, y_align: Clutter.ActorAlign.CENTER}));
+        const text = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, y_align: Clutter.ActorAlign.CENTER,
+            x_expand: true});
+        text.add_child(new St.Label({text: 'MehulK Workstation', style_class: 'wack-finder-head-title'}));
+        text.add_child(new St.Label({text: `${GLib.get_os_info('NAME') || 'Fedora'} ${GLib.get_os_info('VERSION_ID') || ''} · GNOME`.trim(),
+            style_class: 'wack-finder-head-sub'}));
+        card.add_child(text);
+        this._stats = new St.Label({style_class: 'wack-finder-head-pill', y_align: Clutter.ActorAlign.CENTER});
+        card.add_child(this._stats);
+        head.add_child(card);
+        menu.addMenuItem(head);
+        this._statsId ??= menu.connect('open-state-changed', (_m, open) => open && this._syncStats());
+
+        menu.addAction('About This Workstation', () => launchApp('gnome-system-panel.desktop', 'org.gnome.Settings.desktop'));
+        menu.addAction('MK Command Centre…', () => run([GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-control-center'])]));
         menu.addAction('System Settings…', () => launchApp('org.gnome.Settings.desktop'));
         menu.addAction('App Store…', () => launchApp('org.gnome.Software.desktop'));
         menu.addAction('Extension Settings…', () => launchApp('com.mattjakeman.ExtensionManager.desktop',
             'org.gnome.Extensions.desktop'));
         menu.addAction('System Monitor', () => launchApp('org.gnome.SystemMonitor.desktop',
             'gnome-system-monitor.desktop', 'io.missioncenter.MissionCenter.desktop'));
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        // the footer: quiet monochrome pills with their whole names, two rows of three
+        const foot = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'wack-finder-foot-item'});
+        const rows = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'wack-finder-foot', x_expand: true});
+        const power = [
+            ['Lock Screen', () => actions.activateLockScreen()],
+            ['Sleep', () => sleep(s)],
+            ...(s.get_boolean('show-hibernate') ? [['Hibernate', () => hibernate()]] : []),
+            ['Restart…', () => actions.activateRestart()],
+            ['Shut Down…', () => actions.activatePowerOff()],
+            ['Log Out…', () => actions.activateLogout()],
+        ];
+        let line = null;
+        power.forEach(([label, act], i) => {
+            if (i % 3 === 0) {
+                line = new St.BoxLayout({style_class: 'wack-finder-foot-row', x_expand: true});
+                rows.add_child(line);
+            }
+            const b = new St.Button({label, style_class: 'wack-finder-action', can_focus: true, x_expand: true});
+            b.connect('clicked', () => {
+                menu.close();
+                act();
+            });
+            line.add_child(b);
+        });
+        foot.add_child(rows);
+        menu.addMenuItem(foot);
+    }
+
+    // the header's pill: uptime and memory in use, read as the menu opens
+    _syncStats() {
+        try {
+            const up = Number(new TextDecoder().decode(GLib.file_get_contents('/proc/uptime')[1]).split(' ')[0]);
+            const mem = Object.fromEntries(new TextDecoder().decode(GLib.file_get_contents('/proc/meminfo')[1])
+                .split('\n').map(l => l.match(/^(\w+):\s+(\d+)/)).filter(Boolean).map(m => [m[1], Number(m[2])]));
+            const h = Math.floor(up / 3600), m = Math.floor(up % 3600 / 60);
+            const gb = v => (v / 1048576).toFixed(1);
+            this._stats.text = `up ${h ? `${h}h ` : ''}${m}m · ${gb(mem.MemTotal - mem.MemAvailable)}/${gb(mem.MemTotal)} GB`;
+        } catch {
+            this._stats.text = '';
+        }
     }
 
     destroy() {

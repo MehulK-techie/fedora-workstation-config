@@ -13,9 +13,8 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 import { MediaWatcher } from './media.js';
-import { hibernate, sleep } from './power.js';
+import { powerActions } from './power.js';
 
 const KEYS = ['lock-status-pill', 'lock-weather', 'lock-media-controls', 'lock-power-button', 'compact-notifications',
     'show-hibernate', 'lock-clock-layout'];
@@ -47,20 +46,10 @@ class StatusPill {
         this._sync();
     }
 
-    async _startWeather() {
-        if (!this._settings.get_boolean('lock-weather'))
-            return;
-        try {
-            const {WeatherClient} = await import('resource:///org/gnome/shell/misc/weather.js');
-            if (!this.actor)
-                return;
-            this._weather = new WeatherClient();
-            this._weatherId = this._weather.connect('changed', () => this._sync());
-            this._weather.update?.();
-        } catch (e) {
-            console.warn(`wack-sonoma-lockscreen: weather: ${e.message}`);
-        }
-        this._sync();
+    // the weather: weather.js's last reading (cached in the settings, so it's there at once)
+    _startWeather() {
+        this._wIds = ['weather-cache-text', 'weather-cache-icon', 'lock-weather'].map(k =>
+            this._settings.connect(`changed::${k}`, () => this._sync()));
     }
 
     _sync() {
@@ -77,14 +66,9 @@ class StatusPill {
         }
         this._batIcon.visible = this._batLabel.visible = Boolean(hasBattery);
 
-        const info = this._weather?.available && !this._weather.loading ? this._weather.info : null;
-        let temp = '';
-        try {
-            if (info?.is_valid())
-                temp = info.get_temp_summary();
-            if (temp)
-                this._wIcon.icon_name = info.get_symbolic_icon_name();
-        } catch {}
+        const temp = this._settings.get_boolean('lock-weather') ? this._settings.get_string('weather-cache-text') : '';
+        if (temp)
+            this._wIcon.icon_name = this._settings.get_string('weather-cache-icon');
         this._wIcon.visible = this._wLabel.visible = temp !== '';
         this._wLabel.text = temp;
         this._sep.visible = this._batLabel.visible && this._wLabel.visible;
@@ -95,9 +79,8 @@ class StatusPill {
         this._cancel.cancel();
         if (this._upowerId)
             this._upower.disconnect(this._upowerId);
-        if (this._weatherId)
-            this._weather.disconnect(this._weatherId);
-        this._upower = this._weather = null;
+        (this._wIds ?? []).forEach(id => this._settings.disconnect(id));
+        this._upower = null;
         this.actor.destroy();
         this.actor = null;
     }
@@ -166,55 +149,62 @@ class NowPlaying {
 
 // ----- the power button, bottom right (an inline menu: popups can't float above the lock screen)
 class PowerButton {
-    constructor(settings) {
+    // Two pieces on the lock screen: the 42 px round button, 24 px from the bottom-right
+    // corner, and a 170 px card of actions just above it (its bottom 78 px up). The actions go
+    // straight to systemd-logind (power.js powerActions): GNOME's own power dialogs can't open
+    // while the screen is locked, which is why these buttons used to do nothing.
+    constructor(settings, group) {
         this._settings = settings;
-        this.actor = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'wack-lock-power',
-            reactive: true});
         this._list = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'wack-lock-power-menu',
-            visible: false, x_align: Clutter.ActorAlign.END});
-        const actions = SystemActions.getDefault();
+            visible: false, reactive: true, width: 170});
         const entries = [
-            ['Sleep', 'weather-clear-night-symbolic', () => sleep(settings)],
-            ...(settings.get_boolean('show-hibernate') ? [['Hibernate', 'media-floppy-symbolic', () => hibernate()]] : []),
-            ['Restart', 'system-reboot-symbolic', () => actions.activateRestart()],
-            ['Shut Down', 'system-shutdown-symbolic', () => actions.activatePowerOff()],
+            ['Sleep', 'weather-clear-night-symbolic', () => (settings.get_boolean('remap-sleep-to-hibernate')
+                ? powerActions.hibernate() : powerActions.suspend())],
+            ...(settings.get_boolean('show-hibernate') ? [['Hibernate', 'media-floppy-symbolic', () => powerActions.hibernate()]] : []),
+            ['Restart', 'system-reboot-symbolic', () => powerActions.reboot()],
+            ['Shut Down', 'system-shutdown-symbolic', () => powerActions.powerOff()],
         ];
-        for (const [label, icon, run] of entries) {
+        for (const [label, icon, act] of entries) {
             const row = new St.BoxLayout({style_class: 'wack-lock-power-row'});
             row.add_child(new St.Icon({icon_name: icon, icon_size: 16}));
             row.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
-            const b = new St.Button({style_class: 'wack-lock-power-item', can_focus: true, child: row,
-                accessible_name: label});
+            const b = new St.Button({style_class: 'wack-lock-power-item', can_focus: true, reactive: true, track_hover: true,
+                child: row, accessible_name: label, x_expand: true});
             b.connect('clicked', () => {
                 this._list.visible = false;
-                run();
+                act();
             });
             this._list.add_child(b);
         }
-        this._toggle = new St.Button({style_class: 'wack-lock-power-button', can_focus: true, accessible_name: 'Power',
-            x_align: Clutter.ActorAlign.END, child: new St.Icon({icon_name: 'system-shutdown-symbolic', icon_size: 18})});
+        this._toggle = new St.Button({style_class: 'wack-lock-power-button', can_focus: true, reactive: true,
+            track_hover: true, accessible_name: 'Power', child: new St.Icon({icon_name: 'system-shutdown-symbolic', icon_size: 18})});
         this._toggle.connect('clicked', () => {
             this._list.visible = !this._list.visible;
+            this._place();
         });
-        this.actor.add_child(this._list);
-        this.actor.add_child(this._toggle);
-        this._sizeId = this.actor.connect('notify::size', () => this._place());
+        group.add_child(this._list);
+        group.add_child(this._toggle);
+        this.actor = this._toggle;
+        this._ids = [[this._list, this._list.connect('notify::size', () => this._place())],
+            [this._toggle, this._toggle.connect('notify::size', () => this._place())]];
         this._monId = Main.layoutManager.connect('monitors-changed', () => this._place());
+        this._place();
     }
 
-    // 28 px in from the primary monitor's bottom-right corner; the menu opens 10 px above
-    // the button, right edges lined up (the box grows upward from the corner)
     _place() {
         const m = Main.layoutManager.primaryMonitor;
-        if (!m || !this.actor)
+        if (!m || !this._toggle)
             return;
-        this.actor.set_position(m.x + m.width - this.actor.width - 28, m.y + m.height - this.actor.height - 28);
+        const right = m.x + m.width - 24, bottom = m.y + m.height - 24;
+        this._toggle.set_position(right - this._toggle.width, bottom - this._toggle.height);
+        this._list.set_position(right - this._list.width, m.y + m.height - 78 - this._list.height);
     }
 
     destroy() {
         Main.layoutManager.disconnect(this._monId);
-        this.actor.destroy();
-        this.actor = null;
+        this._list.destroy();
+        this._toggle.destroy();
+        this._list = this._toggle = this.actor = null;
     }
 }
 
@@ -311,7 +301,7 @@ export class LockWidgets {
             return;
         }
         const s = this._settings;
-        // Sequoia Split: the clock on the left, the pill and Now Playing in a column on the right
+        // Sequoia Split: the clock on the left (with its battery and weather row), Now Playing on the right
         const split = s.get_string('lock-clock-layout') === 'sequoia-split';
         if (split) {
             this._column = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'wack-split-column'});
@@ -324,20 +314,19 @@ export class LockWidgets {
             this._column.connect('notify::size', place);
             place();
         }
+        // the battery and weather row: always in the clock's own stack, right under the time
+        // (never floating on its own beside it)
         if (s.get_boolean('lock-status-pill')) {
             this._pill = new StatusPill(s);
-            if (split)
-                this._column.add_child(this._pill.actor);
-            else
-                clock.insert_child_at_index(this._pill.actor, Math.min(1, clock.get_n_children()));   // under the date
+            const time = clock._time ? clock.get_children().indexOf(clock._time) : -1;
+            clock.insert_child_at_index(this._pill.actor, time >= 0 ? time + 1 : clock.get_n_children());
         }
         if (s.get_boolean('lock-media-controls')) {
             this._media = new NowPlaying();
             (split ? this._column : clock).add_child(this._media.actor);                          // under the time
         }
         if (s.get_boolean('lock-power-button')) {
-            this._power = new PowerButton(s);
-            (shield._lockDialogGroup ?? dialog).add_child(this._power.actor);
+            this._power = new PowerButton(s, shield._lockDialogGroup ?? dialog);
         }
         if (s.get_boolean('compact-notifications'))
             this._notifs = new CompactNotifications(dialog);

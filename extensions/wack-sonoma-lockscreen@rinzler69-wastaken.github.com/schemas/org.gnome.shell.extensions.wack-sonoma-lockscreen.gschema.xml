@@ -545,5 +545,33 @@
       <default>''</default>
       <summary>Tagline under the clock</summary>
     </key>
+
+    <!-- MK v20: the weather (weather.js) -->
+    <key name="weather-enabled" type="b">
+      <default>true</default>
+      <summary>Live weather</summary>
+      <description>Open-Meteo for where your connection is (ipapi.co); off: no weather requests at all.</description>
+    </key>
+    <key name="weather-cache-text" type="s">
+      <default>''</default>
+      <summary>Last weather reading</summary>
+      <description>"24°C Clear Sky": shown at once after a boot, until the next reading.</description>
+    </key>
+    <key name="weather-cache-icon" type="s">
+      <default>'weather-overcast-symbolic'</default>
+      <summary>Last weather icon</summary>
+    </key>
+    <key name="weather-cache-city" type="s">
+      <default>''</default>
+      <summary>Where the last reading is for</summary>
+    </key>
+    <key name="weather-cache-place" type="s">
+      <default>''</default>
+      <summary>The last place found (JSON: lat, lon, city)</summary>
+    </key>
+    <key name="weather-cache-time" type="x">
+      <default>0</default>
+      <summary>When the last reading was taken (Unix time)</summary>
+    </key>
   </schema>
 </schemalist>

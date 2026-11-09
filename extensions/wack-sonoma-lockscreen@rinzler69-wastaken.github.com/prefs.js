@@ -180,7 +180,9 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
         const widgets = new Adw.PreferencesGroup({title: 'On the lock screen'});
         widgets.add(switchRow(s, 'lock-media-controls', 'Now Playing', 'Cover, title, Previous, Play / Pause, Next'));
         widgets.add(switchRow(s, 'lock-status-pill', 'Battery &amp; Weather Under the Date'));
-        widgets.add(switchRow(s, 'lock-weather', 'Weather in the Pill', 'The location set in GNOME Weather or the clock'));
+        widgets.add(switchRow(s, 'weather-enabled', 'Live Weather',
+            'Open-Meteo for where your connection is (no account); off: no weather requests at all'));
+        widgets.add(switchRow(s, 'lock-weather', 'Weather in the Pill', 'Beside the battery, under the time'));
         widgets.add(switchRow(s, 'show-notifications', 'Show Notifications'));
         widgets.add(switchRow(s, 'compact-notifications', 'Compact Notification Pills',
             'Three at a time and a count of the rest, with Clear (GNOME\'s own Lock Screen Notifications switch, in Settings › Notifications, must be on)'));

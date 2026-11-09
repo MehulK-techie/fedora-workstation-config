@@ -70,7 +70,8 @@
 
 /* The top bar (modules/panel.js): three floating glass islands, or one seamless glass bar */
 /* the bar itself paints nothing: each island is its own pane of glass */
-#panel.mk-islands { background-color: transparent !important; box-shadow: none !important; border: none !important; }
+/* (only while Blur my Shell is off: with it on, its dynamic blur paints the bar's background) */
+#panel.mk-islands.mk-clear { background-color: transparent !important; box-shadow: none !important; border: none !important; }
 #panel.mk-edge { box-shadow: none !important; }
 #panel.mk-islands #panelLeft, #panel.mk-islands #panelCenter, #panel.mk-islands #panelRight {
   background-color: rgba(16, 18, 24, 0.58); border: 1px solid rgba(255, 255, 255, 0.16);

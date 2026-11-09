@@ -25,7 +25,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { PANEL_GLASS, addWallpaperGlass, blurAllowed, desktopCopy } from './blur.js';
 import { partRect, place } from './tiling.js';
 import * as Actions from './appActions.js';
-import { watch } from './conflicts.js';
+import { BLUR_MY_SHELL, UNIFIED, isActive, watch } from './conflicts.js';
 import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 
 const ICONS = GLib.build_filenamev([GLib.path_get_dirname(GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0])),
@@ -78,7 +78,8 @@ class ActiveApp {
         if (this._gone)
             return;
         const app = this._tracker.focus_app;
-        this.button.visible = !Main.overview.visible;
+        // no app focused: no button at all (never "WS 1" in its place)
+        this.button.visible = !Main.overview.visible && Boolean(app);
         this.onVisible?.(this.button.visible);
         const ws = global.workspace_manager.get_active_workspace_index() + 1;
         const key = app ? `app:${app.get_id()}` : `desk:${ws}`;
@@ -724,6 +725,8 @@ export class Panel {
         const panel = Main.panel;
         const style = this._settings.get_string('top-bar-style');
         panel.add_style_class_name(style === 'edge' ? 'mk-edge' : 'mk-islands');
+        if (!isActive(BLUR_MY_SHELL))
+            panel.add_style_class_name('mk-clear');     // (Blur my Shell's panel blur shows through otherwise)
         if (blurAllowed(this._settings)) {
             const glass = style === 'edge' ? [panel] : [panel._centerBox, panel._rightBox];  // (the left: LeftIslands)
             this._unblur = glass.map(actor => addWallpaperGlass(actor, Main.layoutManager.panelBox, PANEL_GLASS,
@@ -909,8 +912,9 @@ export class Panel {
         if (area['mk-logo'])
             area['mk-logo'].container.visible = !shown('wack-finder') &&
                 !(wack && wack.container.get_parent() === left && wack.visible);
+        // (the suite owns the app indicator: with its own switched off, there's none at all)
         if (area['mk-active-app'])
-            area['mk-active-app'].container.visible = !shown('wack-app-indicator');
+            area['mk-active-app'].container.visible = !shown('wack-app-indicator') && !isActive(UNIFIED);
         const order = [area['wack-finder']?.container, area['mk-logo']?.container, area['wack-logo-menu']?.container,
             this._divider, area['wack-places']?.container, area['places-menu']?.container,
             area['wack-workspace-button']?.container, area.activities?.container,
@@ -960,6 +964,7 @@ export class Panel {
         this._logo?.destroy();
         this._tray = this._quiet = this._battery = this._logo = null;
         Main.panel.remove_style_class_name('mk-islands');
+        Main.panel.remove_style_class_name('mk-clear');
         Main.panel.remove_style_class_name('mk-edge');
         for (const off of this._unblur ?? [])
             off();

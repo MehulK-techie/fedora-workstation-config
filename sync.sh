@@ -765,13 +765,28 @@ fi
 #   Shell and Magic Lamp (the engine's dock, glass and minimize glide; each of the engine's stands
 #   aside while the one it replaces runs).
 for uuid in clipboard-indicator@tudmotu.com space-bar@luchrioh monitor@astraext.github.io \
-    macos-dock@vinnytherobot.github.io dash-to-dock@micxgx.gmail.com blur-my-shell@aunetx \
+    macos-dock@vinnytherobot.github.io dash-to-dock@micxgx.gmail.com \
     compiz-alike-magic-lamp-effect@hermes83.github.com; do
     if first_time "retire:$uuid"; then
         gsettings_remove org.gnome.shell enabled-extensions "$uuid"
         echo "retire:$uuid" >> "$APPLIED"
     fi
 done
+# Space Bar and GNOME's Window List draw their own workspace labels ("W.S 1") beside MK's
+# top bar: off at every sync (the app indicator and the workspace dots are MK's own).
+gsettings_remove org.gnome.shell enabled-extensions space-bar@luchrioh window-list@gnome-shell-extensions.gcampax.github.com
+# Blur my Shell: on, with real dynamic blur behind the top bar (MK's own glass stands aside
+# while it runs: modules/blur.js). The panel keys are written straight to dconf, so they're in
+# place even before the extension's schema is installed.
+if [[ -d "$USER_EXT_DIR/blur-my-shell@aunetx" || -d /usr/share/gnome-shell/extensions/blur-my-shell@aunetx ]]; then
+    gsettings_append org.gnome.shell enabled-extensions blur-my-shell@aunetx
+    gsettings_remove org.gnome.shell disabled-extensions blur-my-shell@aunetx
+fi
+dconf write /org/gnome/shell/extensions/blur-my-shell/panel/blur true
+dconf write /org/gnome/shell/extensions/blur-my-shell/panel/static-blur false
+dconf write /org/gnome/shell/extensions/blur-my-shell/panel/override-background true
+dconf write /org/gnome/shell/extensions/blur-my-shell/panel/override-background-dynamically true
+dconf write /org/gnome/shell/extensions/blur-my-shell/panel/style-panel 0
 # Extension managers are tools you open now and then, not dock apps.
 gsettings_remove org.gnome.shell favorite-apps com.mattjakeman.ExtensionManager.desktop org.gnome.Extensions.desktop
 if [[ -d "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io" ]]; then

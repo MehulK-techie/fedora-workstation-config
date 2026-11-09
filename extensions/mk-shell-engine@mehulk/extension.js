@@ -25,6 +25,7 @@ import { Snip } from './modules/snip.js';
 import { MediaKeys } from './modules/mediaKeys.js';
 import { WindowAnimations } from './modules/windowAnimations.js';
 import { CalendarDeck } from './modules/calendarDeck.js';
+import { NotifyCenter } from './modules/notifyCenter.js';
 import { ScreenshotActions } from './modules/screenshotActions.js';
 import { LiveWallpaper } from './modules/liveWallpaper.js';
 import { Panel } from './modules/panel.js';
@@ -107,6 +108,7 @@ export default class MKShellEngine extends Extension {
         this._start('media keys', () => new MediaKeys(this._settings));
         this._start('window animations', () => new WindowAnimations());
         this._start('calendar', () => new CalendarDeck(this._settings));
+        this._start('notification centre', () => new NotifyCenter());
         this._start('screenshot actions', () => new ScreenshotActions());
     }
 

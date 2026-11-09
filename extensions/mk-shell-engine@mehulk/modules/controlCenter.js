@@ -10,8 +10,8 @@
 // Style and the Welcome light toggle (never the battery: GNOME shows the top
 // bar's battery icon only while that tile is there), so the toggles are a clean 2 x 4: Wi-Fi,
 // Bluetooth, Power Mode, Night Light, Do Not Disturb, Airplane Mode, Microphone
-// (the engine's own) and Caffeine (when installed), in that order, then Wallpaper Sound
-// (the live wallpaper's, while MehulK Workstation & Sonoma Suite runs).
+// (the engine's own) and Caffeine (when installed), in that order. (The live wallpaper's
+// sound needs no tile: it's heard only on the bare desktop; MK Command Centre sets it.)
 // The header row keeps the battery and the Settings gear, plus a button for MK Command
 // Centre; GNOME's screenshot, lock and power buttons leave it (Lock and power live in the
 // Finder menu; screenshots on Print and Super+Shift+S).
@@ -23,50 +23,15 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { QuickToggle, SystemIndicator } from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import { getMixerControl } from 'resource:///org/gnome/shell/ui/status/volume.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
-import { UNIFIED } from './conflicts.js';
 
 // The grid's order, two by two: Wi-Fi, Bluetooth / Power Mode, Night Light /
 // Do Not Disturb, Airplane Mode / Microphone, Caffeine. (What else is there
 // follows; whatever isn't there is skipped.)
 const ORDER = ['NMWirelessToggle', 'BluetoothToggle', 'PowerProfilesToggle', 'NightLightToggle',
-    'DoNotDisturbToggle', 'RfkillToggle', 'MkMicToggle', 'CaffeineToggle', 'MkWallpaperSoundToggle'];
+    'DoNotDisturbToggle', 'RfkillToggle', 'MkMicToggle', 'CaffeineToggle'];
 // the header row's buttons that leave (GNOME's own classes)
 const HEADER_GONE = /ScreenshotItem|LockItem|ShutdownItem/;
 const CENTRE = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-control-center']);
-
-// The live wallpaper's sound (MehulK Workstation & Sonoma Suite's desktop-audio-enabled)
-function unifiedSettings() {
-    const dir = Main.extensionManager.lookup(UNIFIED)?.dir?.get_child('schemas');
-    if (!dir?.query_exists(null))
-        return null;
-    const source = Gio.SettingsSchemaSource.new_from_directory(dir.get_path(),
-        Gio.SettingsSchemaSource.get_default(), false);
-    const schema = source.lookup('org.gnome.shell.extensions.wack-sonoma-lockscreen', false);
-    return schema?.has_key('desktop-audio-enabled') ? new Gio.Settings({settings_schema: schema}) : null;
-}
-
-const WallpaperSoundToggle = GObject.registerClass({GTypeName: 'MkWallpaperSoundToggle'},
-class WallpaperSoundToggle extends QuickToggle {
-    constructor(settings) {
-        super({title: 'Wallpaper Sound', iconName: 'audio-speakers-symbolic', toggleMode: true});
-        this._settings = settings;
-        settings.bind('desktop-audio-enabled', this, 'checked', Gio.SettingsBindFlags.DEFAULT);
-        this._id = settings.connect('changed::desktop-audio-enabled', () => this._sync());
-        this._sync();
-    }
-
-    _sync() {
-        const on = this._settings.get_boolean('desktop-audio-enabled');
-        this.subtitle = on ? `${Math.round(this._settings.get_double('desktop-audio-volume') * 100)} %` : 'Muted';
-        this.iconName = on ? 'audio-speakers-symbolic' : 'audio-volume-muted-symbolic';
-    }
-
-    destroy() {
-        this._settings.disconnect(this._id);
-        Gio.Settings.unbind(this, 'checked');
-        super.destroy();
-    }
-});
 
 // Microphone: on = listening; off mutes the default input (the same mute as Settings).
 const MicToggle = GObject.registerClass({GTypeName: 'MkMicToggle'}, class MicToggle extends QuickToggle {
@@ -150,9 +115,6 @@ export class ControlCenter {
         try {
             this._mic = new SystemIndicator();
             this._mic.quickSettingsItems.push(new MicToggle());
-            const wall = unifiedSettings();
-            if (wall)
-                this._mic.quickSettingsItems.push(new WallpaperSoundToggle(wall));
             this._qs.addExternalIndicator(this._mic);
         } catch (e) {
             console.warn(`mk-shell-engine: microphone toggle: ${e.message}`);

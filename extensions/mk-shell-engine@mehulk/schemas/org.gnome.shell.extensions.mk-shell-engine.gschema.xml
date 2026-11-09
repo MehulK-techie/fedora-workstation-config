@@ -86,6 +86,11 @@
       <summary>Dock glass opacity</summary>
       <description>How solid the glass styles' tint is (obsidian-glass, crystal-clear, tahoe-pill, cyber-neon): 0.10 nearly clear, 0.95 nearly solid.</description>
     </key>
+    <key name="dock-glow-color" type="s">
+      <default>'#ef4444'</default>
+      <summary>Dock glow colour</summary>
+      <description>A hex colour (#rrggbb) for the running dots and the focused app's under-glow, and the edge glow of the glow looks (spider-glow: Spider-Verse Crimson Glow, cyber-neon).</description>
+    </key>
     <key name="dock-corner-radius" type="i">
       <range min="12" max="32"/>
       <default>22</default>

@@ -103,12 +103,26 @@ function updateTask(id, change) {
     GLib.file_set_contents(STORE, JSON.stringify(data, null, 2));
 }
 
-// Mark task ID done (a one-off's reminder cleared, as the Companion does).
+// Mark task ID done (a one-off's reminder cleared, as the Companion does). It stays ticked
+// in its day's checklist (agenda_day), and unticking puts its time back (was_at).
 function completeTask(id) {
     updateTask(id, task => {
         task.done = true;
+        if (task.remind_at) {
+            const d = GLib.DateTime.new_from_unix_local(task.remind_at);
+            task.agenda_day = GLib.DateTime.new_local(d.get_year(), d.get_month(), d.get_day_of_month(), 0, 0, 0).to_unix();
+            task.was_at = task.remind_at;
+        }
         if ((task.repeat ?? 'none') === 'none')
             task.remind_at = null;
+    });
+}
+
+function reopenTask(id) {
+    updateTask(id, task => {
+        task.done = false;
+        if (!task.remind_at && task.was_at)
+            task.remind_at = task.was_at;
     });
 }
 
@@ -211,8 +225,10 @@ export class CalendarDeck {
         const day = this._day ?? GLib.DateTime.new_now_local();
         const start = GLib.DateTime.new_local(day.get_year(), day.get_month(), day.get_day_of_month(), 0, 0, 0).to_unix();
         const end = start + 86400;
-        const tasks = readStore().tasks.filter(t => !t.done && t.remind_at >= start && t.remind_at < end)
-            .sort((a, b) => a.remind_at - b.remind_at);
+        // the day's checklist: open tasks with a time that day, and the ones ticked off it
+        const at = t => t.remind_at ?? t.was_at ?? 0;
+        const tasks = readStore().tasks.filter(t => (!t.done && t.remind_at >= start && t.remind_at < end) ||
+            (t.done && t.agenda_day === start)).sort((a, b) => a.done - b.done || at(a) - at(b));
         this._queueScroll.visible = true;
         if (!tasks.length) {
             this._queue.add_child(new St.Label({text: 'No tasks scheduled for this day', style_class: 'mk-cal-queue-empty'}));
@@ -228,18 +244,28 @@ export class CalendarDeck {
         const head = new St.Button({x_expand: true, can_focus: true, style_class: 'mk-cal-queue-head',
             accessible_name: `${task.text}: details`});
         const headBox = new St.BoxLayout({style: 'spacing: 8px;'});
-        const time = GLib.DateTime.new_from_unix_local(task.remind_at).format(h24 ? '%H:%M' : '%-l:%M %p');
-        headBox.add_child(new St.Label({text: time, style_class: 'mk-cal-queue-time', y_align: Clutter.ActorAlign.CENTER}));
-        const title = new St.Label({text: task.text ?? '', x_expand: true, y_align: Clutter.ActorAlign.CENTER,
-            style_class: 'mk-cal-queue-title'});
+        const stamp = task.remind_at ?? task.was_at;
+        const time = GLib.DateTime.new_from_unix_local(stamp).format(h24 ? '%H:%M' : '%-l:%M %p');
+        // a checkbox: ticked, the title is struck through (it stays on the day); unticked, it's back
+        const check = new St.Button({style_class: `mk-cal-check${task.done ? ' mk-cal-checked' : ''}`, can_focus: true,
+            y_align: Clutter.ActorAlign.CENTER, accessible_name: task.done ? 'Not done' : 'Done',
+            child: new St.Icon({icon_name: 'object-select-symbolic', icon_size: 11, opacity: task.done ? 255 : 0})});
+        check.connect('clicked', () => this._act(() => (task.done ? reopenTask(task.id) : completeTask(task.id))));
+        const title = new St.Label({x_expand: true, y_align: Clutter.ActorAlign.CENTER,
+            style_class: `mk-cal-queue-title${task.done ? ' mk-cal-queue-struck' : ''}`});
+        title.clutter_text.set_markup(task.done ? `<s>${GLib.markup_escape_text(task.text ?? '', -1)}</s>`
+            : GLib.markup_escape_text(task.text ?? '', -1));
         title.clutter_text.ellipsize = 3;      // END
         headBox.add_child(title);
         head.set_child(headBox);
-        const when = countdown(task.remind_at, h24);
+        // its time as a badge (a countdown while it's still to come)
+        const when = task.done ? time : countdown(task.remind_at, h24);
         const badge = new St.Label({text: when, y_align: Clutter.ActorAlign.CENTER,
             style_class: when === 'Overdue' ? 'mk-cal-queue-badge mk-cal-queue-late' : 'mk-cal-queue-badge'});
-        const done = this._pill('object-select-symbolic', 'Done', () => this._act(() => completeTask(task.id)));
-        for (const a of [head, badge, done])
+        const remove = new St.Button({style_class: 'mk-cal-remove', can_focus: true, accessible_name: 'Delete',
+            y_align: Clutter.ActorAlign.CENTER, child: new St.Icon({icon_name: 'window-close-symbolic', icon_size: 12})});
+        remove.connect('clicked', () => this._act(() => deleteTask(task.id)));
+        for (const a of [check, head, badge, remove])
             row.add_child(a);
         card.add_child(row);
         // the preview, folded until the card is clicked
@@ -248,7 +274,7 @@ export class CalendarDeck {
         const lines = [];
         if (task.notes)
             lines.push(task.notes);
-        lines.push(GLib.DateTime.new_from_unix_local(task.remind_at).format('%A %-e %B, ') + time +
+        lines.push(GLib.DateTime.new_from_unix_local(stamp).format('%A %-e %B, ') + time +
             (task.repeat && task.repeat !== 'none' ? ` · repeats ${task.repeat}` : ''));
         if (task.created)
             lines.push(`Added ${GLib.DateTime.new_from_unix_local(Math.round(task.created)).format('%a %-e %b, %H:%M')}`);
@@ -262,7 +288,7 @@ export class CalendarDeck {
         edit.clutter_text.connect('activate', () => {
             const typed = edit.get_text().trim();                 // ("7pm" or "18:00" alone: at that time)
             const [, at] = parseWhen(`x ${/^\d/.test(typed) ? `at ${typed}` : typed}`,
-                GLib.DateTime.new_from_unix_local(task.remind_at));
+                GLib.DateTime.new_from_unix_local(stamp));
             if (!at) {
                 edit.set_text('');
                 edit.hint_text = 'Try: in 30m, @ 18:00, at 7pm';
@@ -379,7 +405,7 @@ export class CalendarDeck {
         this._unglass?.();
         this._unglass = null;
         if (open) {
-            this._unglass = addWallpaperGlass(this._menu.box, this._menu.actor, CAL_GLASS, 18, desktopCopy);
+            this._unglass = addWallpaperGlass(this._menu.box, this._menu.actor, CAL_GLASS, 14, desktopCopy);
             this._chosen(GLib.DateTime.new_now_local());     // (GNOME opens it on today: the card's chips for today)
             this._fillQueue();
         } else

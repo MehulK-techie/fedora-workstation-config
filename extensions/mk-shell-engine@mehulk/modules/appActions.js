@@ -41,7 +41,7 @@ export function preferences(app) {
     Main.activateWindow(win);
     GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, () => {
         try {
-            const seat = Clutter.get_default_backend().get_default_seat();
+            const seat = (global.stage.get_context?.().get_backend() ?? Clutter.get_default_backend()).get_default_seat();   // (GNOME 51)
             const kb = seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
             const t = GLib.get_monotonic_time();
             kb.notify_keyval(t, Clutter.KEY_Control_L, Clutter.KeyState.PRESSED);

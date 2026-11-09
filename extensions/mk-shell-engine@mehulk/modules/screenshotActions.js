@@ -1,9 +1,8 @@
 // MK Shell Engine: more on GNOME's "Screenshot Captured" notification. In
-// place of its single Show in Files: Annotate (Swappy or Satty when
-// installed; without one, the picture opens in its viewer and the button says
-// Open), OCR Text (Tesseract reads the screenshot; the text goes to the
-// clipboard and a toast says so) and Open Folder (Screenshots, the new one
-// selected). Clicking the notification still opens the picture.
+// place of its single Show in Files: Open Viewer, Annotate Markup (Swappy or
+// Satty when installed; without one, OCR Text: Tesseract reads the screenshot
+// onto the clipboard) and Delete (to the Trash). Clicking the notification
+// still opens the picture.
 //
 // GNOME's own notification, picked up as it's posted (before its banner is
 // drawn); the file is the newest picture in the Screenshots folder.
@@ -75,15 +74,19 @@ export class ScreenshotActions {
         const path = file.get_path();
         const annotator = ANNOTATORS.find(([bin]) => GLib.find_program_in_path(bin));
         notification.clearActions();
+        notification.addAction('Open Viewer', () => Gio.app_info_launch_default_for_uri(file.get_uri(),
+            global.create_app_launch_context(0, -1)));
         if (annotator)
-            notification.addAction('Annotate', () => launch([annotator[0], ...annotator[1], path]));
+            notification.addAction('Annotate Markup', () => launch([annotator[0], ...annotator[1], path]));
         else
-            notification.addAction('Open', () => Gio.app_info_launch_default_for_uri(file.get_uri(),
-                global.create_app_launch_context(0, -1)));
-        notification.addAction('OCR Text', () => this._ocr(path));
-        notification.addAction('Open Folder', () => {
-            const app = Gio.app_info_get_default_for_type('inode/directory', false);
-            app?.launch([file], global.create_app_launch_context(0, -1));      // (Files selects it)
+            notification.addAction('OCR Text', () => this._ocr(path));      // (no annotator installed)
+        notification.addAction('Delete', () => {
+            try {
+                file.trash(null);                                           // (to the Trash: recoverable)
+                Main.notify('Screenshot deleted', `${file.get_basename()} is in the Trash`);
+            } catch (e) {
+                Main.notify('Couldn\'t delete the screenshot', e.message);
+            }
         });
     }
 

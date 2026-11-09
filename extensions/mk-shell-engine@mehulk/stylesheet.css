@@ -148,13 +148,15 @@
 #panel.mk-islands #panelLeft { margin-left: 0; padding-left: 6px; spacing: 6px; }   /* snug to the bezel (after the islands' margin, so it wins) */
 /* the left: no single capsule around everything; each group is an island of its own (panel.js
    LeftIslands draws one frosted backdrop per group, 6 px apart) */
-#panel.mk-islands #panelLeft { background-color: transparent; border: none; padding: 0 0 0 4px; }
-.mk-left-island { background-color: rgba(16, 18, 24, 0.58); border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top-color: rgba(255, 255, 255, 0.28); border-bottom-color: rgba(0, 0, 0, 0.18); border-radius: 12px; }
-/* the suite's app pill: one clean capsule of its own, same glass as the islands */
-#panel.mk-islands .wack-app-pill { height: 26px; padding: 0 12px; border-radius: 12px;
-  background-color: rgba(16, 18, 24, 0.58); border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top-color: rgba(255, 255, 255, 0.28); }
+#panel.mk-islands #panelLeft { background-color: transparent; border: none; padding: 0 0 0 4px; spacing: 8px; }
+/* the top-left glass block: logo, Places and the dots in one frosted pill */
+.mk-left-island { background-color: rgba(18, 22, 32, 0.62); border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top-color: rgba(255, 255, 255, 0.30); border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.30); }
+/* the suite's app pill: one clean capsule of its own, same glass as the block */
+#panel.mk-islands .wack-app-pill { height: 26px; padding: 0 12px; border-radius: 999px;
+  background-color: rgba(18, 22, 32, 0.62); border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top-color: rgba(255, 255, 255, 0.30); }
 #panel.mk-islands .panel-button.wack-app-indicator:hover .wack-app-pill { background-color: rgba(36, 38, 46, 0.66); }
 #panel.mk-islands .panel-button.wack-app-indicator:hover, #panel.mk-islands .panel-button.wack-app-indicator:active,
 #panel.mk-islands .panel-button.wack-app-indicator:checked { background-color: transparent; }
@@ -169,7 +171,7 @@
 .mk-danger:hover { background-color: rgba(239, 68, 68, 0.22); }
 
 /* The calendar, as glass (modules/calendarDeck.js) */
-.mk-cal { background-color: rgba(18, 20, 28, 0.58); border-radius: 18px; border: 1px solid rgba(255, 255, 255, 0.14);
+.mk-cal { background-color: rgba(16, 19, 28, 0.72); border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 20px 48px -8px rgba(0, 0, 0, 0.6); }
 .mk-cal #calendarArea .message, .mk-cal .events-button, .mk-cal .world-clocks-button, .mk-cal .weather-button,
 .mk-cal .datemenu-today-button { background-color: rgba(255, 255, 255, 0.07); border-radius: 14px; }
@@ -255,3 +257,32 @@
 .mk-glass-menu .popup-menu-item:hover, .mk-glass-menu .popup-menu-item:focus,
 .mk-glass-menu .popup-menu-item.selected { background-color: rgba(255, 255, 255, 0.08); }
 .mk-glass-menu .popup-separator-menu-item { margin: 4px 14px; }
+
+/* ===== v20: the calendar menu's notification side (notifyCenter.js) and checklist ===== */
+.mk-cal .message-list, .mk-cal #calendarArea .datemenu-calendar-column { border-radius: 14px; }
+.mk-cal-weather { font-size: 0.9em; font-weight: 600; color: rgba(255, 255, 255, 0.72); padding-left: 8px; padding-bottom: 2px; }
+.mk-media-card { border-radius: 14px; }
+.mk-media-backdrop { border-radius: 14px; }
+.mk-media-progress { spacing: 8px; padding: 6px 2px 0; }
+.mk-media-time { font-size: 0.78em; font-weight: 600; font-feature-settings: "tnum"; color: rgba(255, 255, 255, 0.78); }
+.mk-media-track { height: 4px; border-radius: 2px; background-color: rgba(255, 255, 255, 0.18); }
+.mk-media-fill { height: 4px; border-radius: 2px; background-color: -st-accent-color; }
+.mk-clip-shelf { spacing: 6px; padding: 8px 4px 2px; }
+.mk-clip-shelf-title { font-size: 0.8em; font-weight: 700; color: rgba(255, 255, 255, 0.6); }
+.mk-clip-shelf-row { spacing: 6px; }
+.mk-clip-shelf-item { height: 54px; border-radius: 10px; padding: 0; background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08); }
+.mk-clip-shelf-item:hover { background-color: rgba(255, 255, 255, 0.12); }
+.mk-clip-shelf-selected { border: 1px solid -st-accent-color; box-shadow: 0 0 10px st-transparentize(-st-accent-color, 0.4); }
+.mk-clip-shelf-pic { border-radius: 10px; background-size: cover; background-position: center; min-height: 54px; }
+.mk-clip-shelf-text { font-size: 0.74em; padding: 6px 8px; color: rgba(255, 255, 255, 0.86); }
+.mk-clip-selected-badge { font-size: 0.66em; font-weight: 800; color: white; padding: 1px 7px; margin: 3px;
+  border-radius: 999px; background-color: -st-accent-color; }
+.mk-focus-button { padding: 4px 12px; border-radius: 999px; font-weight: 700; font-feature-settings: "tnum"; }
+.mk-focus-button:checked { background-color: st-transparentize(-st-accent-color, 0.4); }
+.mk-cal-check { width: 16px; height: 16px; border-radius: 5px; padding: 0; margin-right: 6px;
+  border: 1.5px solid rgba(255, 255, 255, 0.45); }
+.mk-cal-check.mk-cal-checked { background-color: -st-accent-color; border-color: -st-accent-color; }
+.mk-cal-queue-struck { color: rgba(255, 255, 255, 0.45); }
+.mk-cal-remove { padding: 3px; border-radius: 999px; color: rgba(255, 255, 255, 0.6); }
+.mk-cal-remove:hover { background-color: rgba(239, 68, 68, 0.35); color: white; }

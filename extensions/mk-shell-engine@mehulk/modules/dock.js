@@ -55,7 +55,7 @@ export class Dock {
         this._unwatch = watch(() => this._sync());
         this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::dock-hide-ms',
             'changed::dock-reveal-ms', 'changed::blur', 'changed::dock-style', 'changed::dock-opacity',
-            'changed::dock-corner-radius', 'changed::dock-indicator-style'].map(
+            'changed::dock-corner-radius', 'changed::dock-indicator-style', 'changed::dock-glow-color'].map(
             signal => settings.connect(signal, () => this._sync(true)));
         this._sync();
     }
@@ -107,7 +107,12 @@ export class Dock {
             'crystal-clear': `rgba(255, 255, 255, ${(op * 0.36).toFixed(2)})`,
             'tahoe-pill': `rgba(28, 30, 40, ${op.toFixed(2)})`,
             'cyber-neon': `rgba(8, 10, 22, ${Math.max(op, 0.5).toFixed(2)})`}[style];
-        this._actor.style = `${tint ? `background-color: ${tint}; ` : ''}border-radius: ${this._radius}px;`;
+        // the glow colour (a #rrggbb only: it goes into the style as it is)
+        const glow = this._settings.get_string('dock-glow-color');
+        this._glow = /^#[0-9a-f]{6}$/i.test(glow) ? glow : '#ef4444';
+        const edge = ['spider-glow', 'cyber-neon'].includes(style)
+            ? `border: 1px solid ${this._glow}; box-shadow: 0 0 20px 1px ${this._glow}80; ` : '';
+        this._actor.style = `${tint ? `background-color: ${tint}; ` : ''}${edge}border-radius: ${this._radius}px;`;
         this._indicator = this._settings.get_string('dock-indicator-style');
         this._connect(this._settings, 'changed::dock-focused-raise', () => this._settle());
         // the icons only take the pointer once the dock is (nearly) back in place: a hidden
@@ -308,6 +313,7 @@ export class Dock {
         button.connect('notify::hover', () => this._tooltip(button.hover && this._showing() ? item : null));
         this._actor.add_child(button);
         const item = {button, box, icon, bars, name};
+        button.connect('destroy', () => (item.gone = true));   // (a refill or shutdown took it away)
         this._items.push(item);
         return item;
     }
@@ -449,12 +455,13 @@ export class Dock {
             // the app you're using gets its dot in your accent colour
             const dot = colour => {
                 const w = new St.Widget({style_class: `mk-dock-bar mk-dock-bar-${this._indicator ?? 'glowing-dot'}`,
-                    style: `background-color: ${colour}; box-shadow: 0 0 6px ${colour};`,
+                    style: `background-color: ${colour}; box-shadow: 0 0 ${state === 'focus' ? 12 : 6}px ${colour};`,
                     pivot_point: new Graphene.Point({x: 0.5, y: 0.5}), scale_x: 0, scale_y: 0, opacity: 0});
                 item.bars.add_child(w);
                 w.ease({scale_x: 1, scale_y: 1, opacity: 255, duration: 220, mode: Clutter.AnimationMode.EASE_OUT_BACK});
             };
-            const white = '#60a5fa', accent = `rgb(${r},${g},${b})`;
+            // the dots in the glow colour; the focused app's glow brighter and wider (its under-glow)
+            const white = this._glow ?? '#ef4444', accent = this._glow ?? `rgb(${r},${g},${b})`;
             if (state === 'one')
                 dot(white);
             else if (state === 'many') {
@@ -478,6 +485,8 @@ export class Dock {
         const under = items.find(it => !it.isAppGrid && pointerX >= dockX + it.button.x &&
             pointerX < dockX + it.button.x + it.button.width);
         items.forEach(it => {
+            if (it.gone)
+                return;
             const [scale, lift] = it === under && this._hover > 1.001 ? [this._hover, LIFT] : this._rest(it);
             const key = `${scale}/${lift}`;
             if (it.target === key)
@@ -497,7 +506,11 @@ export class Dock {
 
     _settle() {
         const ease = {duration: 150, mode: Clutter.AnimationMode.EASE_OUT_CUBIC};
+        if (this._gone)
+            return;
         for (const item of this._items ?? []) {
+            if (item.gone)
+                continue;
             const [scale, lift] = this._rest(item);
             item.target = `${scale}/${lift}`;
             item.icon.ease({scale_x: scale, scale_y: scale, translation_y: -lift, ...ease});

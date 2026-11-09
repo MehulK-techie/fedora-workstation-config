@@ -247,16 +247,17 @@ class LogoButton {
     }
 }
 
-// The left of the bar as separate floating islands, 6 px apart: the brand (the Finder
-// logo, a divider, Places), the workspace dots, and the app you're in (the suite's app
-// pill is a capsule of its own; the engine's app button gets an island here). Each is a
-// frosted backdrop behind the left box, as wide as its buttons, following them as they
-// move, come and go (the left box itself paints nothing).
+// The left of the bar: one frosted glass pill holding the Finder logo, a divider, Places
+// and the workspace dots, and 8 px on, the app you're in (the suite's app pill is a capsule
+// of its own that fades away on an empty desktop; the engine's app button gets a pill here).
+// Each is a frosted backdrop behind the left box, as wide as its buttons, following them
+// as they move, come and go (the left box itself paints nothing).
 const ISLAND_GROUPS = [
-    ['wack-finder', 'mk-logo', 'wack-logo-menu', '@divider', 'wack-places', 'places-menu'],
-    ['wack-workspace-button', 'activities'],
+    ['wack-finder', 'mk-logo', 'wack-logo-menu', '@divider', 'wack-places', 'places-menu', 'wack-workspace-button',
+        'activities'],
     ['mk-active-app'],
 ];
+const BLOCK_RADIUS = 13;          // (a pill: half the block's 26 px height)
 
 class LeftIslands {
     constructor(settings, divider) {
@@ -267,7 +268,7 @@ class LeftIslands {
             return b;
         });
         this._unglass = blurAllowed(settings)
-            ? this._backdrops.map(b => addWallpaperGlass(b, b, PANEL_GLASS, ISLAND_RADIUS)) : [];
+            ? this._backdrops.map(b => addWallpaperGlass(b, b, PANEL_GLASS, BLOCK_RADIUS)) : [];
         const box = Main.layoutManager.panelBox;
         this._ids = [
             [Main.panel._leftBox, Main.panel._leftBox.connect('notify::allocation', () => this.queue())],

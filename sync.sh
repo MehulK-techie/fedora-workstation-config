@@ -742,7 +742,7 @@ if [[ "$EFFECTS" == lite ]]; then
         [[ " ${HEAVY_EXTENSIONS[*]} " == *" $uuid "* ]] || kept+=("$uuid")
     done
     ACTIVE_EXTENSIONS=("${kept[@]}")
-    echo "    [*] Effects: lite (blur, wobbly windows and genie stay off unless you turn them on; 'mk effects full' turns them on)"
+    echo "    [*] Effects: lite (wobbly windows and genie stay off unless you turn them on; 'mk effects full' turns them on)"
 fi
 TO_ENABLE=()
 for uuid in "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR" "$MK_ENGINE"; do
@@ -776,17 +776,12 @@ done
 # top bar: off at every sync (the app indicator and the workspace dots are MK's own).
 gsettings_remove org.gnome.shell enabled-extensions space-bar@luchrioh window-list@gnome-shell-extensions.gcampax.github.com
 # Blur my Shell: on, with real dynamic blur behind the top bar (MK's own glass stands aside
-# while it runs: modules/blur.js). The panel keys are written straight to dconf, so they're in
-# place even before the extension's schema is installed.
+# while it runs: modules/blur.js). Its panel keys are written after the saved extension
+# settings are restored (below), so those never put the old static blur back.
 if [[ -d "$USER_EXT_DIR/blur-my-shell@aunetx" || -d /usr/share/gnome-shell/extensions/blur-my-shell@aunetx ]]; then
     gsettings_append org.gnome.shell enabled-extensions blur-my-shell@aunetx
     gsettings_remove org.gnome.shell disabled-extensions blur-my-shell@aunetx
 fi
-dconf write /org/gnome/shell/extensions/blur-my-shell/panel/blur true
-dconf write /org/gnome/shell/extensions/blur-my-shell/panel/static-blur false
-dconf write /org/gnome/shell/extensions/blur-my-shell/panel/override-background true
-dconf write /org/gnome/shell/extensions/blur-my-shell/panel/override-background-dynamically true
-dconf write /org/gnome/shell/extensions/blur-my-shell/panel/style-panel 0
 # Extension managers are tools you open now and then, not dock apps.
 gsettings_remove org.gnome.shell favorite-apps com.mattjakeman.ExtensionManager.desktop org.gnome.Extensions.desktop
 if [[ -d "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io" ]]; then
@@ -927,6 +922,14 @@ for settings in "$SCRIPT_DIR"/config/extension-settings/*.dconf; do
     fi
     sed "s|__USER_HOME__|$HOME|g" "$settings" | dconf load "$path"
 done
+# Blur my Shell's top bar: dynamic blur, its background overridden only while a window
+# touches the bar, the default style (straight to dconf: in place even before the
+# extension's schema is installed)
+dconf write /org/gnome/shell/extensions/blur-my-shell/panel/blur true
+dconf write /org/gnome/shell/extensions/blur-my-shell/panel/static-blur false
+dconf write /org/gnome/shell/extensions/blur-my-shell/panel/override-background true
+dconf write /org/gnome/shell/extensions/blur-my-shell/panel/override-background-dynamically true
+dconf write /org/gnome/shell/extensions/blur-my-shell/panel/style-panel 0
 
 # 8. Modern Modal Dialog Styling (written once; re-runs don't append again)
 SHELL_CSS="$HOME/.config/gnome-shell/gnome-shell.css"

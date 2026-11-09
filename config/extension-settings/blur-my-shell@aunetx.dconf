@@ -47,16 +47,16 @@ pipeline='pipeline_default'
 style-components=2
 
 [panel]
-blur=false
+blur=true
 brightness=0.84999999999999998
 corner-radius=0
 customize=true
 force-light-text=true
 override-background=true
-override-background-dynamically=false
+override-background-dynamically=true
 pipeline='pipeline_default'
 sigma=30
-static-blur=true
+static-blur=false
 style-panel=0
 unblur-in-overview=true
 

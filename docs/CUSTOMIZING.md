@@ -122,8 +122,9 @@ line, and one extension UUID per line in `config/enabled-extensions.txt`.
 
 ## Effects and performance
 
-`mk effects` shows the current profile. `lite` keeps blur, window open/close
-effects and the genie minimize installed but switched off, which keeps older
+`mk effects` shows the current profile. `lite` keeps the wobbly-window
+effects and the genie minimize installed but switched off (Blur my Shell
+stays on: sync.sh switches it on for the top bar's glass), which keeps older
 laptops and virtual machines smooth; `full` turns them on; `auto` (the
 default) chooses lite when the computer has less than 4 GiB of RAM, two CPU
 cores or fewer, or no GPU rendering. Change which effects count as heavy, or

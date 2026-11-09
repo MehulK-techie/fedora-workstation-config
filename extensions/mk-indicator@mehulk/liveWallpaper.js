@@ -4,6 +4,9 @@
 // screen's size, 15 a second, into $XDG_RUNTIME_DIR, shown here above
 // GNOME's own wallpaper and below every window.
 //
+// Never two wallpaper players: while MehulK Workstation & Sonoma Suite plays a
+// video or picture as the desktop (its desktop-wallpaper-path), this stands aside.
+//
 // It only draws while you can see it: it pauses when a window is
 // maximized or full screen on the primary monitor, while the screen is
 // locked or blanked, and the renderer runs at low priority.
@@ -19,6 +22,13 @@ import { saverConf } from './lockScene.js';
 const FRAME = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'mk-livewall.raw']);
 const SAVER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-screensaver']);
 const USER_CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'screensaver.conf']);
+const SUITE = 'wack-sonoma-lockscreen@rinzler69-wastaken.github.com';
+
+// is the suite on and playing its own desktop media?
+function suitePlays() {
+    const suite = Main.extensionManager.lookup(SUITE);
+    return suite?.state === 1 && Boolean(suite.stateObj?._settings?.get_string('desktop-wallpaper-path'));
+}
 
 export class LiveWallpaper {
     enable() {
@@ -31,12 +41,13 @@ export class LiveWallpaper {
             'in-fullscreen-changed', () => this._sync(), this);
         global.window_manager.connectObject('size-changed', () => this._sync(), this);
         Main.sessionMode.connectObject('updated', () => this._sync(), this);
+        Main.extensionManager.connectObject('extension-state-changed', () => this._reload(), this);
         this._reload();
     }
 
     _reload() {
         const conf = saverConf();
-        const on = conf.LIVE_WALLPAPER === 'on' && GLib.file_test(SAVER, GLib.FileTest.EXISTS);
+        const on = conf.LIVE_WALLPAPER === 'on' && GLib.file_test(SAVER, GLib.FileTest.EXISTS) && !suitePlays();
         const scene = conf.LIVE_SCENE || 'aurora';
         if (this._actor && (!on || scene !== this._scene))
             this._teardown();
@@ -150,5 +161,6 @@ export class LiveWallpaper {
         global.display.disconnectObject(this);
         global.window_manager.disconnectObject(this);
         Main.sessionMode.disconnectObject(this);
+        Main.extensionManager.disconnectObject(this);
     }
 }

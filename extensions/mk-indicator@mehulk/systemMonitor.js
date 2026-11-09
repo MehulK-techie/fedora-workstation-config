@@ -18,7 +18,6 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { accentRGB } from './accent.js';
-import { InternetSection } from './network.js';
 
 const USER_CONF = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk-workstation', 'monitor.conf']);
 const DEFAULT_CONF = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'config', 'monitor.conf']);
@@ -366,6 +365,49 @@ class Row {
     }
 }
 
+const PILL_W = 96;         // the pill's fixed width while it shows figures
+const READOUT_W = 78;      // (the readout's share before the theme is known)
+
+// One small glass tile of the card: a name, a figure, a thin bar.
+class Tile {
+    constructor(name, icon) {
+        this.box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-stats-tile', x_expand: true});
+        const head = new St.BoxLayout({style_class: 'mk-stats-head'});
+        head.add_child(new St.Icon({icon_name: icon, icon_size: 12, style_class: 'mk-stats-icon', y_align: Clutter.ActorAlign.CENTER}));
+        head.add_child(new St.Label({text: name, style_class: 'mk-stats-name', y_align: Clutter.ActorAlign.CENTER}));
+        this.box.add_child(head);
+        this.value = new St.Label({text: '…', style_class: 'mk-stats-value'});
+        this.box.add_child(this.value);
+        this.track = new St.Widget({style_class: 'mk-stats-track', x_expand: true});
+        this.fill = new St.Widget({style_class: 'mk-stats-fill'});
+        this.track.add_child(this.fill);
+        this.box.add_child(this.track);
+    }
+
+    set(text, fraction) {
+        this.value.text = text;
+        const f = Math.max(0, Math.min(1, fraction || 0));
+        const [r, g, b] = f > 0.85 ? [239, 68, 68] : f > 0.6 ? [245, 158, 11] : accentRGB();
+        this.fill.style = `background-color: rgb(${r}, ${g}, ${b});`;
+        this.fill.set_size(Math.max(2, Math.round((this.track.width || 112) * f)), 4);
+    }
+}
+
+// Is a wireless interface up (for the network pill's icon and name)?
+function wirelessUp() {
+    try {
+        const dir = Gio.File.new_for_path('/sys/class/net').enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
+        let info;
+        while ((info = dir.next_file(null))) {
+            const n = info.get_name();
+            if (GLib.file_test(`/sys/class/net/${n}/wireless`, GLib.FileTest.EXISTS) &&
+                (read(`/sys/class/net/${n}/operstate`) || '').trim() === 'up')
+                return true;
+        }
+    } catch {}
+    return false;
+}
+
 export class SystemMonitor {
     enable() {
         this._conf = conf();
@@ -393,29 +435,27 @@ export class SystemMonitor {
 
         const menu = this._button.menu;
         menu.box.add_style_class_name('mk-monitor-menu');
-        this._rows = {
-            cpu: new Row(menu, 'Processor', true, 100),
-            cores: new Row(menu, 'Each core'),
-            mem: new Row(menu, 'Memory', true, 100),
-            swap: new Row(menu, 'Swap', true),
-            gpu: new Row(menu, 'Graphics', true),
-            disk: new Row(menu, 'Disk ( / )', true),
-            io: new Row(menu, 'Disk activity', false, 'auto'),
+        // the compact card: four tiles (processor, graphics, memory, disk), the network,
+        // then power modes and two buttons; 290 px wide, nothing scrolls
+        const card = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'mk-stats-card-item'});
+        const grid = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-stats-card', x_expand: true});
+        const pair = (...tiles) => {
+            const row = new St.BoxLayout({style_class: 'mk-stats-row', x_expand: true});
+            tiles.forEach(t => row.add_child(t.box));
+            grid.add_child(row);
         };
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        this._rows.temp = new Row(menu, 'Temperatures');
-        this._rows.power = new Row(menu, 'Battery');
-        this._internet = new InternetSection(menu);
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Busiest right now'));
-        this._procRows = [0, 1, 2].map(() => new Row(menu, ''));
-        // a stop button on each: asks the app to quit (SIGTERM, as closing it would), never force
-        for (const row of this._procRows) {
-            row.stop = new St.Button({style_class: 'mk-monitor-stop', can_focus: true, y_align: Clutter.ActorAlign.CENTER,
-                child: new St.Icon({icon_name: 'process-stop-symbolic', icon_size: 14}), accessible_name: 'Stop'});
-            row.stop.connect('clicked', () => row.pid && this._stop(row.pid, row.label.text));
-            row.value.get_parent().add_child(row.stop);
-        }
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Power mode'));
+        this._tiles = {cpu: new Tile('CPU', 'cpu-symbolic'), gpu: new Tile('GPU', 'video-display-symbolic'),
+            mem: new Tile('RAM', 'drive-harddisk-solidstate-symbolic'), disk: new Tile('Disk', 'drive-harddisk-symbolic')};
+        pair(this._tiles.cpu, this._tiles.gpu);
+        pair(this._tiles.mem, this._tiles.disk);
+        this._net = new St.BoxLayout({style_class: 'mk-stats-net', x_expand: true});
+        this._netIcon = new St.Icon({icon_name: 'network-wireless-symbolic', icon_size: 14, y_align: Clutter.ActorAlign.CENTER});
+        this._netLabel = new St.Label({style_class: 'mk-stats-net-label', y_align: Clutter.ActorAlign.CENTER, x_expand: true});
+        this._net.add_child(this._netIcon);
+        this._net.add_child(this._netLabel);
+        grid.add_child(this._net);
+        card.add_child(grid);
+        menu.addMenuItem(card);
         this._powerItem = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         const modes = new St.BoxLayout({style_class: 'mk-monitor-modes', x_expand: true});
         this._modeButtons = [['power-saver', 'Saver', 'power-profile-power-saver-symbolic'],
@@ -438,7 +478,7 @@ export class SystemMonitor {
         // One fixed footer row, two buttons side by side: always in view.
         const footer = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false,
             style_class: 'mk-monitor-footer'});
-        const freeLabel = new St.Label({text: 'Free cached memory'});
+        const freeLabel = new St.Label({text: 'Free RAM'});
         const free = new St.Button({child: freeLabel, style_class: 'mk-monitor-action', can_focus: true,
             x_expand: true});
         free.connect('clicked', () => this._freeMemory());
@@ -528,12 +568,21 @@ export class SystemMonitor {
         this._dots.style = this._conf.COMPACT === 'pulse' ? `background-color: ${colour}2e; border: 1px solid ${colour}66;` : '';
         this._syncCompact();
         this._spark.queue_repaint();
-        this._internet?.feed(s.down, s.up);
-        this._rows.cpu.push(s.cpu);
-        this._rows.mem.push(s.memTotal ? 100 * s.memUsed / s.memTotal : 0);
-        this._rows.io.push(s.diskRead + s.diskWrite);
         if (open)
             this._fillMenu(s);
+    }
+
+    // the readout's share of the 96 px pill: what's left after the dot, the gap and the padding
+    _readoutWidth() {
+        try {
+            const node = this._dots.get_theme_node();
+            const chrome = node.get_horizontal_padding() + node.get_border_width(St.Side.LEFT) +
+                node.get_border_width(St.Side.RIGHT) + node.get_length('spacing') +
+                this._loadDot.get_preferred_width(-1)[1];
+            return Math.max(40, Math.round(PILL_W - chrome));
+        } catch {
+            return READOUT_W;               // (not styled yet)
+        }
     }
 
     _syncCompact() {
@@ -546,7 +595,9 @@ export class SystemMonitor {
         const open = this._conf.COMPACT === 'pulse' || this._button.hover || this._button.menu.isOpen;
         this._dots.style_class = this._conf.COMPACT === 'pulse' ? 'mk-monitor-dots mk-pulse' : 'mk-monitor-dots';
         // (measured from the text itself: once a width is set, the label reports that width as its own)
-        const natural = Math.ceil(this._readout.clutter_text.get_preferred_width(-1)[1]);
+        // a fixed width (the whole pill 96 px), the figures centred in tabular digits: 6 % or
+        // 100 %, nothing beside it moves
+        const natural = this._readoutWidth();
         if (open === this._readoutOpen) {
             if (open && !this._readout.get_transition('width'))
                 this._readout.width = natural;    // the numbers changed width
@@ -560,68 +611,26 @@ export class SystemMonitor {
     }
 
     _fillMenu(s) {
-        const r = this._rows;
-        r.cpu.set(`${Math.round(s.cpu)}%`, s.cpu / 100,
-            `Processor · ${s.cores} threads${s.freq ? ` · ${s.freq.toFixed(1)} GHz` : ''}`);
-        r.mem.set(`${fmtBytes(s.memUsed)} of ${fmtBytes(s.memTotal)}`, s.memTotal ? s.memUsed / s.memTotal : 0);
-        r.swap.hide(!s.swapTotal);
-        if (s.swapTotal)
-            r.swap.set(`${fmtBytes(s.swapUsed)} of ${fmtBytes(s.swapTotal)}`, s.swapUsed / s.swapTotal);
-        r.gpu.hide(s.gpu === null);
-        if (s.gpu !== null)
-            r.gpu.set(`${s.gpu}%`, s.gpu / 100);
+        const t = this._tiles;
+        const deg = v => (v ? ` · ${Math.round(v)}°C` : '');
+        t.cpu.set(`${Math.round(s.cpu)}%${deg(s.cpuTemp)}`, s.cpu / 100);
+        t.gpu.box.visible = s.gpu !== null || Boolean(s.gpuTemp);
+        t.gpu.set(`${s.gpu ?? 0}%${deg(s.gpuTemp)}`, (s.gpu ?? 0) / 100);
+        t.mem.set(`${(s.memUsed / 2 ** 30).toFixed(1)} / ${(s.memTotal / 2 ** 30).toFixed(1)} GB`,
+            s.memTotal ? s.memUsed / s.memTotal : 0);
         if (this._diskTick-- <= 0) {  // the disk barely changes: every 30 readings
             this._diskTick = 30;
             try {
                 const info = Gio.File.new_for_path('/').query_filesystem_info('filesystem::size,filesystem::free', null);
                 const size = info.get_attribute_uint64('filesystem::size'), free = info.get_attribute_uint64('filesystem::free');
-                r.disk.set(`${fmtBytes(size - free)} of ${fmtBytes(size)}`, size ? (size - free) / size : 0);
+                t.disk.set(`${fmtBytes(free)} free`, size ? (size - free) / size : 0);
             } catch (e) {
-                r.disk.hide(true);
+                t.disk.set('—', 0);
             }
         }
-        r.io.set(`R ${fmtRate(s.diskRead)} · W ${fmtRate(s.diskWrite)}`);
-        const temps = [['CPU', s.cpuTemp], ['GPU', s.gpuTemp], ['SSD', s.ssdTemp]].filter(t => t[1]);
-        r.temp.hide(!temps.length);
-        r.temp.set(temps.map(([n, t]) => `${n} ${Math.round(t)} °C`).join('   '));
-        r.power.hide(s.battery === undefined);
-        if (s.battery !== undefined) {
-            const draw = s.power ? ` · ${s.power.toFixed(1)} W` : '';
-            const left = s.timeLeft ? ` · ${fmtTime(s.timeLeft)} ${s.batteryStatus === 'Charging' ? 'to full' : 'left'}` : '';
-            r.power.set(`${s.battery}%${draw}${left}`, null, `Battery · ${s.batteryStatus.toLowerCase() || 'unknown'}`);
-        }
-        const top = s.top || [];
-        this._procRows.forEach((row, i) => {
-            row.hide(!top[i]);
-            row.pid = top[i] && stoppable(top[i].pid, top[i].name) ? top[i].pid : 0;
-            row.stop.visible = row.pid > 0;
-            if (top[i])
-                row.set(`${top[i].cpu.toFixed(0)}%`, null, top[i].name);
-        });
-        // one small bar per core, in the order the hardware numbers them
-        const loads = s.coreLoad ?? [];
-        r.cores.hide(!loads.length);
-        r.cores.value.text = loads.length ? `${Math.round(Math.max(...loads))}% busiest` : '';
-        r.cores.bars ??= (() => {
-            const area = new St.DrawingArea({height: 22, x_expand: true, style: 'margin-top: 4px;'});
-            area.connect('repaint', a => {
-                const cr = a.get_context(), [w, h] = a.get_surface_size(), n = this._coreLoads?.length || 1;
-                const bw = Math.max(2, w / n - 2);
-                (this._coreLoads ?? []).forEach((v, k) => {
-                    const bh = Math.max(1.5, (h - 1) * v / 100);
-                    const [cr0, cg, cb] = v > 75 ? [0.94, 0.27, 0.27] : v >= 40 ? [0.96, 0.62, 0.04] : [0.06, 0.73, 0.51];
-                    cr.setSourceRGBA(cr0, cg, cb, 0.9);
-                    cr.rectangle(k * (w / n) + 1, h - bh, bw, bh);
-                    cr.fill();
-                });
-                cr.$dispose();
-            });
-            r.cores.label.get_parent().get_parent().add_child(area);
-            return area;
-        })();
-        this._coreLoads = loads;
-        if (r.cores.bars.width > 0 && r.cores.bars.is_mapped())
-            r.cores.bars.queue_repaint();
+        const wifi = wirelessUp();
+        this._netIcon.icon_name = wifi ? 'network-wireless-symbolic' : 'network-wired-symbolic';
+        this._netLabel.text = `${wifi ? 'Wi-Fi' : 'Network'}   ↓ ${fmtRate(s.down)}   ↑ ${fmtRate(s.up)}`;
         this._syncPower();
     }
 
@@ -663,7 +672,7 @@ export class SystemMonitor {
 
     _freeMemory() {
         const label = this._freeItem.label;
-        label.text = 'Freeing cached memory…';
+        label.text = 'Freeing…';
         try {
             const proc = Gio.Subprocess.new([`${GLib.get_home_dir()}/.local/bin/mk`, 'optimize', 'ram'],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
@@ -680,12 +689,12 @@ export class SystemMonitor {
                     GLib.source_remove(this._freeReset);
                 this._freeReset = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 4, () => {
                     this._freeReset = 0;
-                    label.text = 'Free cached memory';
+                    label.text = 'Free RAM';
                     return GLib.SOURCE_REMOVE;
                 });
             });
         } catch (e) {
-            label.text = 'Free cached memory';
+            label.text = 'Free RAM';
             console.warn(`mk-indicator: mk optimize ram: ${e.message}`);
         }
     }
@@ -707,8 +716,6 @@ export class SystemMonitor {
         this._monitor = null;
         if (this._openId)
             this._button?.menu.disconnect(this._openId);
-        this._internet?.destroy();
-        this._internet = null;
         this._button?.destroy();
         this._button = null;
         this._sampler = null;

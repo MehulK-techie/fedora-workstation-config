@@ -190,7 +190,7 @@
 /* System monitor (systemMonitor.js): quiet in the top bar, clear in its menu. */
 .mk-monitor-panel { spacing: 6px; }
 .mk-monitor-text { font-feature-settings: "tnum"; font-size: 0.92em; font-weight: 600; color: rgba(255, 255, 255, 0.82); }
-.mk-monitor-menu { min-width: 380px; max-width: 380px; }
+.mk-monitor-menu { min-width: 290px; max-width: 290px; }
 .mk-monitor-row { padding: 3px 12px; margin: 0 8px 2px; border-radius: 8px; background-color: rgba(255, 255, 255, 0.035); }
 .mk-monitor-menu .popup-separator-menu-item { padding: 2px 12px; }
 .mk-monitor-footer { padding: 4px 8px 2px; }
@@ -280,7 +280,7 @@
 
 .mk-monitor-dots { spacing: 6px; padding: 0 2px; }
 .mk-monitor-dot { width: 8px; height: 8px; border-radius: 4px; }
-.mk-monitor-readout { font-size: 0.88em; font-weight: 700; font-feature-settings: "tnum"; color: rgba(255, 255, 255, 0.9); }
+.mk-monitor-readout { font-size: 0.78em; font-weight: 700; font-feature-settings: "tnum"; text-align: center; color: rgba(255, 255, 255, 0.9); }
 .mk-pulse { border-radius: 9px; padding: 1px 8px; }
 .mk-monitor-stop { border-radius: 8px; padding: 3px; margin-left: 6px; color: rgba(255, 255, 255, 0.7); }
 .mk-monitor-stop:hover { background-color: rgba(239, 68, 68, 0.35); color: #ffffff; }
@@ -298,3 +298,20 @@
 .mk-agenda-check:hover { border-color: #10b981; color: rgba(16, 185, 129, 0.8); }
 .mk-agenda-check.mk-agenda-checked { background-color: #10b981; border-color: #10b981; color: #ffffff; }
 #panel .panel-button.mk-task-badge.mk-task-done { background-color: rgba(16, 185, 129, 0.28); color: #d1fae5; }
+
+/* The stats card (systemMonitor.js): four tiles, the network, power modes */
+.mk-stats-card-item { padding: 4px 8px; }
+.mk-stats-card-item:hover { background-color: transparent; }
+.mk-stats-card { spacing: 6px; }
+.mk-stats-row { spacing: 6px; }
+.mk-stats-tile { padding: 8px 10px 9px; border-radius: 12px; spacing: 3px;
+  background-color: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); }
+.mk-stats-head { spacing: 5px; }
+.mk-stats-icon { color: rgba(255, 255, 255, 0.55); }
+.mk-stats-name { font-size: 0.78em; font-weight: 700; color: rgba(255, 255, 255, 0.6); }
+.mk-stats-value { font-size: 0.92em; font-weight: 700; font-feature-settings: "tnum"; color: #ffffff; }
+.mk-stats-track { height: 4px; margin-top: 2px; border-radius: 2px; background-color: rgba(255, 255, 255, 0.10); }
+.mk-stats-fill { height: 4px; border-radius: 2px; }
+.mk-stats-net { spacing: 8px; padding: 6px 12px; border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); }
+.mk-stats-net-label { font-size: 0.86em; font-weight: 600; font-feature-settings: "tnum"; }

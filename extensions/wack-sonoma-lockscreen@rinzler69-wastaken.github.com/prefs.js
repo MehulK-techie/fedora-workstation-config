@@ -20,6 +20,14 @@ const IMAGE_TYPES = ['image/png', 'image/svg+xml', 'image/jpeg', 'image/webp'];
 // root-owned, installed by setup.sh: pkexec only ever runs this fixed path, never a file in $HOME
 const GDM_HELPER = '/usr/local/libexec/mk-gdm-monitors';
 const BIN = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin']);
+const LAYOUT_CHOICES = [['sonoma-center', 'Sonoma Classic Center'], ['sequoia-split', 'Sequoia Split (Clock Left, Widgets Right)'],
+    ['vertical-stacked', 'Cyberpunk Vertical Stack'], ['corner-hud', 'Minimalist Corner HUD'],
+    ['glass-framed', 'Glass Card Framed']];
+const STYLE_CHOICES = [['sf-rounded-heavy', 'SF Pro Rounded Heavy'], ['jetbrains-mono', 'JetBrains Mono Tech'],
+    ['editorial-serif', 'Editorial Serif'], ['futura-geometric', 'Futura Geometric'], ['sonoma-bold', 'Sonoma Bold Rounded'],
+    ['cupertino-thin', 'Cupertino Thin'], ['digital', 'Classic Digital'], ['custom', 'Custom System Font']];
+const DATE_CHOICES = [['full', 'Monday, November 9'], ['short', 'Mon, Nov 9'], ['numeric', 'Numeric (your locale)'],
+    ['iso', 'ISO (2026-11-09)']];
 
 export default class WackSonomaLivePrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -124,8 +132,6 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
         more.add(switchRow(s, 'places-show-text', 'Places Label', 'Off: an icon only'));
         more.add(switchRow(s, 'show-app-indicator', 'App Indicator',
             'The focused app\'s icon and name, with New Window, Hide, Maximize, Close and Quit'));
-        more.add(switchRow(s, 'app-indicator-animate', 'App Indicator Animations',
-            'Fades and shrinks away on an empty desktop, grows back with the next app'));
         page.add(more);
         return page;
     }
@@ -136,13 +142,17 @@ export default class WackSonomaLivePrefs extends ExtensionPreferences {
         page.add(this._previewGroup(s));
         const clock = new Adw.PreferencesGroup({title: 'Clock'});
         clock.add(comboRow(s, 'lock-clock-layout', 'Clock Layout',
-            [['sonoma-center', 'Sonoma Center Giant'], ['sequoia-compact', 'macOS Sequoia Compact'],
-                ['minimal-left', 'Minimalist Left-Aligned'], ['vertical-stacked', 'Vertical Stacked']]));
+            LAYOUT_CHOICES));
         clock.add(switchRow(s, 'lock-glass-card', 'Glass Card Behind the Clock',
             'A frosted card behind the clock, the battery and weather pill and Now Playing'));
-        clock.add(comboRow(s, 'clock-style', 'Clock Style',
-            [['sonoma-bold', 'Sonoma Bold Rounded'], ['cupertino-thin', 'Cupertino Thin'], ['digital', 'Classic Digital'],
-                ['custom', 'Custom Font']]));
+        clock.add(scaleRow(s, 'lock-card-opacity', 'Glass Card Opacity', 10, 90, 2, '%'));
+        clock.add(comboRow(s, 'clock-style', 'Clock Typography', STYLE_CHOICES));
+        clock.add(scaleRow(s, 'lock-clock-glow', 'Clock Glow &amp; Shadow', 0, 100, 5, '%'));
+        clock.add(comboRow(s, 'lock-date-format', 'Date Format', DATE_CHOICES));
+        const tagline = new Adw.EntryRow({title: 'Tagline Under the Clock', text: s.get_string('lock-tagline'),
+            show_apply_button: true});
+        tagline.connect('apply', () => s.set_string('lock-tagline', tagline.text.trim()));
+        clock.add(tagline);
         const fontRow = new Adw.ActionRow({title: 'Custom Clock Font &amp; Size', subtitle: 'Used when the style is Custom Font'});
         const fontButton = new Gtk.FontDialogButton({dialog: new Gtk.FontDialog({title: 'Clock font'}), valign: Gtk.Align.CENTER,
             use_font: true, use_size: true});

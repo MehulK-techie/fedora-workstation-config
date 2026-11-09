@@ -18,7 +18,7 @@ import { MediaWatcher } from './media.js';
 import { hibernate, sleep } from './power.js';
 
 const KEYS = ['lock-status-pill', 'lock-weather', 'lock-media-controls', 'lock-power-button', 'compact-notifications',
-    'show-hibernate'];
+    'show-hibernate', 'lock-clock-layout'];
 const NOTIF_SHOWN = 3;
 
 // ----- battery and weather
@@ -171,7 +171,7 @@ class PowerButton {
         this.actor = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'wack-lock-power',
             reactive: true});
         this._list = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'wack-lock-power-menu',
-            visible: false});
+            visible: false, x_align: Clutter.ActorAlign.END});
         const actions = SystemActions.getDefault();
         const entries = [
             ['Sleep', 'weather-clear-night-symbolic', () => sleep(settings)],
@@ -202,12 +202,13 @@ class PowerButton {
         this._monId = Main.layoutManager.connect('monitors-changed', () => this._place());
     }
 
-    // 32 px in from the primary monitor's bottom-right corner
+    // 28 px in from the primary monitor's bottom-right corner; the menu opens 10 px above
+    // the button, right edges lined up (the box grows upward from the corner)
     _place() {
         const m = Main.layoutManager.primaryMonitor;
         if (!m || !this.actor)
             return;
-        this.actor.set_position(m.x + m.width - this.actor.width - 32, m.y + m.height - this.actor.height - 32);
+        this.actor.set_position(m.x + m.width - this.actor.width - 28, m.y + m.height - this.actor.height - 28);
     }
 
     destroy() {
@@ -310,13 +311,29 @@ export class LockWidgets {
             return;
         }
         const s = this._settings;
+        // Sequoia Split: the clock on the left, the pill and Now Playing in a column on the right
+        const split = s.get_string('lock-clock-layout') === 'sequoia-split';
+        if (split) {
+            this._column = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'wack-split-column'});
+            (shield._lockDialogGroup ?? dialog).add_child(this._column);
+            const place = () => {
+                const m = Main.layoutManager.primaryMonitor;
+                if (m && this._column)
+                    this._column.set_position(m.x + m.width - this._column.width - 96, m.y + Math.round(m.height * 0.28));
+            };
+            this._column.connect('notify::size', place);
+            place();
+        }
         if (s.get_boolean('lock-status-pill')) {
             this._pill = new StatusPill(s);
-            clock.insert_child_at_index(this._pill.actor, Math.min(1, clock.get_n_children()));   // under the date
+            if (split)
+                this._column.add_child(this._pill.actor);
+            else
+                clock.insert_child_at_index(this._pill.actor, Math.min(1, clock.get_n_children()));   // under the date
         }
         if (s.get_boolean('lock-media-controls')) {
             this._media = new NowPlaying();
-            clock.add_child(this._media.actor);                                                  // under the time
+            (split ? this._column : clock).add_child(this._media.actor);                          // under the time
         }
         if (s.get_boolean('lock-power-button')) {
             this._power = new PowerButton(s);
@@ -338,6 +355,8 @@ export class LockWidgets {
             }
             this[part] = null;
         }
+        this._column?.destroy();               // (after the parts it held)
+        this._column = null;
     }
 
     destroy() {

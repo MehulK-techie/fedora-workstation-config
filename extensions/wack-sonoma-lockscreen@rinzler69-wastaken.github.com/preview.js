@@ -1,10 +1,14 @@
 // MK: the settings window's live preview, a 360 x 210 (16:9) picture of the
 // screen: the lock screen's media (a video plays, muted), the scrim, the clock
-// in its style, font, colour, size and layout, the glass card, the battery and
-// weather pill, the greeting above a password field, and the top bar's Finder
-// logo at its size (round when it's a picture). It follows every setting as it
-// changes. Prefs-only (GTK): the shell never loads this file.
+// in its style, font, colour, size, glow and layout, the glass card, the
+// tagline, the battery and weather pill, your picture (28 px) and name above
+// the password field with the greeting, and a mini top bar (18 px) with the
+// Finder logo at its size (round when it's a picture). Every picture is scaled
+// to its size before it's shown (a full-size picture used to fill the whole
+// preview). It follows every setting as it changes. Prefs-only (GTK): the
+// shell never loads this file.
 import Gdk from 'gi://Gdk';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
@@ -17,13 +21,44 @@ const FONTS = {
     'sonoma-bold': 'font-family: "SF Pro Rounded", "Inter Display", Inter, Cantarell, sans-serif; font-weight: 700;',
     'cupertino-thin': 'font-family: "SF Pro Display", "Inter Display", Inter, Cantarell, sans-serif; font-weight: 200;',
     'digital': 'font-family: "DSEG7 Classic", "DejaVu Sans Mono", monospace; font-weight: 700;',
+    'sf-rounded-heavy': 'font-family: "SF Pro Rounded", "Nunito", "Inter Display", Inter, sans-serif; font-weight: 900;',
+    'jetbrains-mono': 'font-family: "JetBrains Mono", "Fira Code", "DejaVu Sans Mono", monospace; font-weight: 600;',
+    'editorial-serif': 'font-family: "Playfair Display", "Noto Serif Display", "DejaVu Serif", serif; font-weight: 600; font-style: italic;',
+    'futura-geometric': 'font-family: "Futura", "Jost", "Century Gothic", "URW Gothic", sans-serif; font-weight: 500;',
 };
-const LAYOUT_SIZE = {'sonoma-center': 128, 'sequoia-compact': 84, 'minimal-left': 96, 'vertical-stacked': 112};
-const LAYOUT_DATE = {'sonoma-center': 30, 'sequoia-compact': 22, 'minimal-left': 24, 'vertical-stacked': 24};
+// the lock screen's layouts (extension.js LAYOUTS): sizes and places
+const LAYOUTS = {
+    'sonoma-center': {time: 128, date: 30, place: 'center'},
+    'sequoia-split': {time: 104, date: 26, place: 'left', split: true},
+    'vertical-stacked': {time: 112, date: 24, place: 'center', stack: true, neon: true},
+    'corner-hud': {time: 64, date: 18, place: 'corner'},
+    'glass-framed': {time: 112, date: 26, place: 'center', card: true},
+    'sequoia-compact': {time: 84, date: 22, place: 'center'},
+    'minimal-left': {time: 96, date: 24, place: 'left'},
+};
+const DATES = {full: '%A, %B %-d', short: '%a, %b %-d', numeric: '%x', iso: '%Y-%m-%d'};
 let serial = 0;
 
 const expand = path => (path ?? '').replace(/^~(?=\/)/, GLib.get_home_dir());
 const exists = path => path && GLib.file_test(path, GLib.FileTest.IS_REGULAR);
+
+// a picture scaled to fit SIZE x SIZE (its natural size is then SIZE, never the file's)
+function scaled(path, size) {
+    try {
+        return Gdk.Texture.new_for_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(path, size, size, true));
+    } catch {
+        return null;
+    }
+}
+
+function avatarPath() {
+    for (const p of [GLib.build_filenamev([GLib.get_home_dir(), '.face']),
+        `/var/lib/AccountsService/icons/${GLib.get_user_name()}`]) {
+        if (exists(p))
+            return p;
+    }
+    return null;
+}
 
 export class LivePreview {
     // ICONS: the extension's icons folder (a Gio.File), for the MK and Apple logos
@@ -31,47 +66,66 @@ export class LivePreview {
         this._s = settings;
         this._icons = icons;
         this._id = `mkp${++serial}`;
+        const id = this._id;
         this.widget = new Gtk.Frame({halign: Gtk.Align.CENTER, css_classes: ['mkp-frame']});
         const overlay = new Gtk.Overlay({width_request: W, height_request: H});
         overlay.set_overflow(Gtk.Overflow.HIDDEN);
         this.widget.set_child(overlay);
-
+        // (a fixed 360 x 210 screen: the overlay's children never make it grow)
         this._picture = new Gtk.Picture({content_fit: Gtk.ContentFit.COVER, can_shrink: true, width_request: W,
             height_request: H});
         overlay.set_child(this._picture);
-        this._scrim = new Gtk.Box({css_classes: [`${this._id}-scrim`]});
+        this._scrim = new Gtk.Box({css_classes: [`${id}-scrim`]});
         overlay.add_overlay(this._scrim);
 
-        // the top bar: the Finder logo and its label
+        // the mini top bar (18 px): the Finder logo and its label
         const bar = new Gtk.Box({valign: Gtk.Align.START, halign: Gtk.Align.FILL, height_request: 18,
-            css_classes: [`${this._id}-bar`], spacing: 4});
-        this._logo = new Gtk.Image({margin_start: 8, valign: Gtk.Align.CENTER});
-        this._logoPic = new Gtk.Picture({margin_start: 8, valign: Gtk.Align.CENTER, content_fit: Gtk.ContentFit.COVER,
-            can_shrink: true});
-        this._logoPic.set_overflow(Gtk.Overflow.HIDDEN);
-        this._logoLabel = new Gtk.Label({css_classes: [`${this._id}-barlabel`]});
+            css_classes: [`${id}-bar`], spacing: 4});
+        this._logo = new Gtk.Picture({margin_start: 6, valign: Gtk.Align.CENTER, halign: Gtk.Align.START,
+            content_fit: Gtk.ContentFit.COVER, can_shrink: false});
+        this._logo.set_overflow(Gtk.Overflow.HIDDEN);
+        this._logoLabel = new Gtk.Label({css_classes: [`${id}-barlabel`], valign: Gtk.Align.CENTER});
         bar.append(this._logo);
-        bar.append(this._logoPic);
         bar.append(this._logoLabel);
         overlay.add_overlay(bar);
+        overlay.set_clip_overlay(bar, true);
 
-        // the clock block (date, time, pill), the greeting and a password field
-        this._clock = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, valign: Gtk.Align.START, margin_top: 32,
-            css_classes: [`${this._id}-card`]});
-        this._date = new Gtk.Label({css_classes: [`${this._id}-date`]});
-        this._time = new Gtk.Label({css_classes: [`${this._id}-time`], justify: Gtk.Justification.CENTER});
-        this._pill = new Gtk.Label({label: '82%  ·  21°C', css_classes: [`${this._id}-pill`], halign: Gtk.Align.CENTER,
+        // the clock block (date, time, tagline, pill), and Sequoia Split's widget column
+        this._clock = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, valign: Gtk.Align.START, margin_top: 30,
+            css_classes: [`${id}-card`]});
+        this._date = new Gtk.Label({css_classes: [`${id}-date`]});
+        this._time = new Gtk.Label({css_classes: [`${id}-time`], justify: Gtk.Justification.CENTER});
+        this._tagline = new Gtk.Label({css_classes: [`${id}-tagline`]});
+        this._pill = new Gtk.Label({label: '82%  ·  21°C', css_classes: [`${id}-pill`], halign: Gtk.Align.CENTER,
             margin_top: 4});
-        this._clock.append(this._date);
-        this._clock.append(this._time);
-        this._clock.append(this._pill);
+        [this._date, this._time, this._tagline, this._pill].forEach(w => this._clock.append(w));
         overlay.add_overlay(this._clock);
+        this._column = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, valign: Gtk.Align.START, halign: Gtk.Align.END,
+            margin_top: 60, margin_end: 18, spacing: 4});
+        this._colPill = new Gtk.Label({label: '82%  ·  21°C', css_classes: [`${id}-pill`]});
+        this._colMedia = new Gtk.Label({label: '♪  Now Playing', css_classes: [`${id}-media`]});
+        this._column.append(this._colPill);
+        this._column.append(this._colMedia);
+        overlay.add_overlay(this._column);
+
+        // your picture (28 px) and name, the greeting, the password field
         const bottom = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, valign: Gtk.Align.END, halign: Gtk.Align.CENTER,
-            margin_bottom: 16, spacing: 4});
-        this._greeting = new Gtk.Label({css_classes: [`${this._id}-greeting`]});
-        bottom.append(this._greeting);
-        bottom.append(new Gtk.Label({label: '••••••', css_classes: [`${this._id}-field`], width_request: 96}));
+            margin_bottom: 12, spacing: 3});
+        this._greeting = new Gtk.Label({css_classes: [`${id}-greeting`]});
+        // (an Image keeps its 28 px: a Picture took the column's width)
+        this._avatar = new Gtk.Image({halign: Gtk.Align.CENTER, pixel_size: 28, css_classes: [`${id}-avatar`]});
+        this._avatar.set_overflow(Gtk.Overflow.HIDDEN);
+        this._avatarIcon = new Gtk.Image({icon_name: 'avatar-default-symbolic', pixel_size: 28, halign: Gtk.Align.CENTER});
+        this._name = new Gtk.Label({label: GLib.get_real_name() || GLib.get_user_name(), css_classes: [`${id}-name`]});
+        [this._greeting, this._avatar, this._avatarIcon, this._name,
+            new Gtk.Label({label: '••••••', css_classes: [`${id}-field`], width_request: 96})].forEach(w => bottom.append(w));
         overlay.add_overlay(bottom);
+        const face = avatarPath();
+        const tex = face && scaled(face, 28);
+        this._avatar.visible = Boolean(tex);
+        this._avatarIcon.visible = !tex;
+        if (tex)
+            this._avatar.set_from_paintable(tex);
 
         this._css = new Gtk.CssProvider();
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), this._css,
@@ -101,7 +155,6 @@ export class LivePreview {
             : s.get_string('background-video-path');
         if (s.get_boolean('live-enabled') && exists(expand(lock)))
             return expand(lock);
-        // GNOME's own wallpaper otherwise
         try {
             const bg = new Gio.Settings({schema_id: 'org.gnome.desktop.background'});
             const dark = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'}).get_string('color-scheme') === 'prefer-dark';
@@ -129,58 +182,68 @@ export class LivePreview {
             this._stream = stream;
             this._picture.set_paintable(stream);
         } else {
-            this._picture.set_filename(path);
+            this._picture.set_paintable(scaled(path, 720));      // (a sharp cover, never a 6000 px load)
         }
     }
 
+    // the Finder logo in the mini bar: the slider's 14-30 px, scaled to the 18 px bar (8-15 px)
     _syncLogo() {
-        const s = this._s, preset = s.get_string('finder-logo-preset'), size = s.get_int('finder-icon-size');
-        const px = Math.round(size * 0.75);                 // (a little smaller: the preview is a small screen)
+        const s = this._s, preset = s.get_string('finder-logo-preset');
+        const px = Math.max(8, Math.min(15, Math.round(s.get_int('finder-icon-size') / 2)));
         const custom = expand(s.get_string('finder-custom-logo'));
-        const round = preset === 'custom' && exists(custom) && s.get_boolean('finder-logo-circular') && !/\.svg$/i.test(custom);
-        this._logoPic.visible = round;
-        this._logo.visible = !round && preset !== 'none';
-        if (round) {
-            this._logoPic.set_filename(custom);
-            this._logoPic.set_size_request(px, px);
-        } else if (preset === 'custom' && exists(custom)) {
-            this._logo.set_from_file(custom);
-        } else if (preset === 'mk' || preset === 'apple') {
-            this._logo.set_from_file(this._icons.get_child(`mk-${preset === 'mk' ? 'emblem' : 'apple'}-symbolic.svg`).get_path());
-        } else {
-            this._logo.set_from_icon_name('fedora-logo-icon');
+        let path = null;
+        if (preset === 'custom' && exists(custom))
+            path = custom;
+        else if (preset === 'mk' || preset === 'apple')
+            path = this._icons.get_child(`mk-${preset === 'mk' ? 'emblem' : 'apple'}-symbolic.svg`).get_path();
+        let tex = path ? scaled(path, px) : null;
+        if (!tex && preset !== 'none') {
+            const theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default());
+            tex = theme.lookup_icon('fedora-logo-icon', null, px, 1, Gtk.TextDirection.NONE, 0);
         }
-        this._logo.pixel_size = px;
+        this._logo.set_paintable(preset === 'none' ? null : tex);
+        this._logo.visible = preset !== 'none' && Boolean(tex);
+        this._logo.set_size_request(px, px);
+        this._round = preset === 'custom' && path === custom && s.get_boolean('finder-logo-circular') && !/\.svg$/i.test(custom);
         this._logoLabel.label = s.get_boolean('finder-show-label') ? s.get_string('finder-label') : '';
         return px;
     }
 
     _sync() {
-        const s = this._s;
+        const s = this._s, id = this._id;
         this._syncMedia();
-        const logo = this._syncLogo();
-        const layout = s.get_string('lock-clock-layout');
-        const left = layout === 'minimal-left';
+        this._syncLogo();
+        const name = s.get_string('lock-clock-layout');
+        const layout = LAYOUTS[name] ?? LAYOUTS['sonoma-center'];
+        const left = layout.place !== 'center';
         this._clock.halign = left ? Gtk.Align.START : Gtk.Align.CENTER;
-        this._clock.margin_start = left ? Math.round(96 * SCALE) + 8 : 0;
-        this._clock.margin_top = layout === 'sequoia-compact' ? 24 : 32;
-        this._date.halign = this._time.halign = left ? Gtk.Align.START : Gtk.Align.CENTER;
+        this._clock.margin_start = left ? Math.round((layout.place === 'corner' ? 64 : 96) * SCALE) + 8 : 0;
+        this._clock.margin_top = layout.place === 'corner' ? 22 : name === 'sequoia-compact' ? 24 : 30;
+        for (const label of [this._date, this._time, this._tagline])
+            label.halign = left ? Gtk.Align.START : Gtk.Align.CENTER;
         this._time.justify = left ? Gtk.Justification.LEFT : Gtk.Justification.CENTER;
         const twelve = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'}).get_string('clock-format') === '12h';
         const now = GLib.DateTime.new_now_local();
         let time = now.format(twelve ? '%l:%M' : '%H:%M').trim();
-        if (layout === 'vertical-stacked')
+        if (layout.stack)
             time = time.replace(':', '\n');
         this._time.label = time;
-        this._date.label = now.format('%A, %B %-d');
-        this._pill.visible = s.get_boolean('lock-status-pill');
+        this._date.label = now.format(DATES[s.get_string('lock-date-format')] ?? DATES.full);
+        const tagline = s.get_string('lock-tagline').trim();
+        this._tagline.label = tagline;
+        this._tagline.visible = tagline !== '';
+        const pill = s.get_boolean('lock-status-pill');
+        this._pill.visible = pill && !layout.split;
+        this._column.visible = Boolean(layout.split);
+        this._colPill.visible = pill;
+        this._colMedia.visible = s.get_boolean('lock-media-controls');
         const greeting = s.get_string('lock-greeting').trim();
         this._greeting.label = greeting;
         this._greeting.visible = greeting !== '';
 
         const style = s.get_string('clock-style');
         let font = FONTS[style] ?? '';
-        let size = (LAYOUT_SIZE[layout] ?? 128) * SCALE;
+        let size = layout.time * SCALE;
         if (style === 'custom' && s.get_string('clock-font')) {
             const fd = Pango.FontDescription.from_string(s.get_string('clock-font'));
             font = `${fd.get_family() ? `font-family: "${fd.get_family().replace(/"/g, '')}";` : ''} font-weight: ${fd.get_weight()};`;
@@ -188,30 +251,35 @@ export class LivePreview {
                 size = fd.get_size() / Pango.SCALE * (fd.get_size_is_absolute() ? 1 : 4 / 3) * SCALE;
         }
         const colour = c => (/^[#a-z0-9(),.\s%]+$/i.test(c) ? c : '');   // (a colour, nothing else, into the CSS)
-        const clockColour = colour(s.get_string('clock-color')) || 'rgba(255,255,255,0.85)';
+        const clockColour = colour(s.get_string('clock-color')) || (layout.neon ? '#67e8f9' : 'rgba(255,255,255,0.85)');
         const dateColour = colour(s.get_string('date-color')) || 'rgba(255,255,255,0.65)';
+        const glow = Math.max(s.get_int('lock-clock-glow'), layout.neon ? 45 : 0);
+        const shadow = glow ? `text-shadow: 0 ${(glow / 60).toFixed(1)}px ${(1 + glow * 0.06).toFixed(1)}px ` +
+            `${layout.neon ? `rgba(34,211,238,${(glow / 100).toFixed(2)})` : `rgba(0,0,0,${(0.2 + glow / 160).toFixed(2)})`};` : '';
         const scrim = s.get_int('dim-opacity') / 100;
-        const id = this._id;
-        const card = s.get_boolean('lock-glass-card')
-            ? 'background-color: rgba(18,20,30,0.34); border: 1px solid rgba(255,255,255,0.16); border-radius: 10px; padding: 6px 14px;'
+        const card = s.get_boolean('lock-glass-card') || layout.card
+            ? `background-color: rgba(18,20,30,${(s.get_int('lock-card-opacity') / 100).toFixed(2)}); ` +
+              'border: 1px solid rgba(255,255,255,0.16); border-radius: 10px; padding: 6px 14px;'
             : 'background: none; border: none; padding: 0;';
         this._css.load_from_string(`
             .mkp-frame { border-radius: 10px; }
             .${id}-scrim { background-color: rgba(12, 14, 20, ${scrim.toFixed(2)}); }
-            .${id}-bar { background-color: rgba(0, 0, 0, 0.28); min-height: ${Math.max(18, logo + 6)}px; }
-            .${id}-barlabel { color: white; font-weight: 800; font-size: 9px; }
+            .${id}-bar { background-color: rgba(0, 0, 0, 0.30); min-height: 18px; }
+            .${id}-barlabel { color: white; font-weight: 800; font-size: 8px; }
             .${id}-card { ${card} }
-            .${id}-time { ${font} font-size: ${size.toFixed(1)}px; color: ${clockColour}; line-height: 0.95; }
-            .${id}-date { font-size: ${((LAYOUT_DATE[layout] ?? 30) * SCALE).toFixed(1)}px; font-weight: 600; color: ${dateColour}; }
-            .${id}-pill { font-size: 7px; font-weight: 600; color: white; background-color: rgba(255,255,255,0.14);
+            .${id}-time { ${font} font-size: ${size.toFixed(1)}px; color: ${clockColour}; line-height: 0.95; ${shadow} }
+            .${id}-date { font-size: ${(layout.date * SCALE).toFixed(1)}px; font-weight: 600; color: ${dateColour}; }
+            .${id}-tagline { font-size: 6px; font-weight: 600; color: rgba(255,255,255,0.8); }
+            .${id}-pill, .${id}-media { font-size: 7px; font-weight: 600; color: white; background-color: rgba(255,255,255,0.14);
                 border-radius: 99px; padding: 1px 6px; }
-            .${id}-greeting { font-size: 8px; font-weight: 600; color: rgba(255,255,255,0.88); }
+            .${id}-greeting { font-size: 7px; font-weight: 600; color: rgba(255,255,255,0.88); }
+            .${id}-name { font-size: 7px; font-weight: 700; color: white; }
             .${id}-field { font-size: 7px; color: rgba(255,255,255,0.7); background-color: rgba(255,255,255,0.16);
                 border-radius: 99px; padding: 2px 10px; }
+            image.${id}-avatar { border-radius: 999px; }
             picture.${id}-round { border-radius: 999px; }
         `);
-        this._logoPic.set_css_classes([`${id}-round`]);
-        this._logoPic.margin_top = 0;
+        this._logo.set_css_classes(this._round ? [`${id}-round`] : []);
     }
 
     destroy() {

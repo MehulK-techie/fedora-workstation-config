@@ -470,12 +470,15 @@
 .wack-np-button:hover, .wack-np-button:focus { background-color: rgba(255, 255, 255, 0.14); }
 .wack-np-button:insensitive { color: rgba(255, 255, 255, 0.35); }
 
-.wack-lock-power { spacing: 8px; }
+.wack-lock-power { spacing: 10px; }
 .wack-lock-power-button {
-  padding: 12px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border-radius: 999px;
   color: white;
-  background-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(18, 20, 30, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 .wack-lock-power-button:hover, .wack-lock-power-button:focus { background-color: rgba(255, 255, 255, 0.22); }
 .wack-lock-power-menu {
@@ -519,3 +522,19 @@
   color: rgba(255, 255, 255, 0.86);
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
 }
+
+/* ===== MK v19: the unlock hint as a badge, the tagline ===== */
+.unlock-dialog-clock-hint {
+  background-color: rgba(15, 18, 26, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 6px 18px;
+}
+.wack-tagline {
+  margin-top: 6px;
+  font-size: 17px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+.wack-split-column { spacing: 14px; }

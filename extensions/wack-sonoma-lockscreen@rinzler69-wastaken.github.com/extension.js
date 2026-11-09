@@ -45,13 +45,18 @@ import { MediaWatcher } from './media.js';
 
 const STYLE_KEYS = ['dim-opacity', 'clock-style', 'clock-font', 'clock-color', 'date-color', 'clock-offset',
     'show-notifications', 'show-avatar', 'hide-fingerprint-hint', 'zero-lag-lock', 'lock-clock-layout', 'lock-glass-card',
-    'lock-greeting'];
+    'lock-greeting', 'lock-clock-glow', 'lock-card-opacity', 'lock-date-format', 'lock-tagline'];
 // the clock's layout presets: the time's size, the date's, how far up
+// the clock's layout presets: the time's size, the date's, how far up; where it sits (center,
+// left: 96 px in from the left, corner: the top-left corner); a glass card of its own; a glow
 const LAYOUTS = {
-    'sonoma-center': {time: 0, date: 0, lift: 0},
-    'sequoia-compact': {time: 84, date: 22, lift: -48},
-    'minimal-left': {time: 96, date: 24, lift: 0},
-    'vertical-stacked': {time: 112, date: 24, lift: -24},
+    'sonoma-center': {time: 0, date: 0, lift: 0, place: 'center'},
+    'sequoia-split': {time: 104, date: 26, lift: 0, place: 'left'},
+    'vertical-stacked': {time: 112, date: 24, lift: -24, place: 'center', neon: true},
+    'corner-hud': {time: 64, date: 18, lift: 0, place: 'corner'},
+    'glass-framed': {time: 112, date: 26, lift: 0, place: 'center', card: true},
+    'sequoia-compact': {time: 84, date: 22, lift: -48, place: 'center'},
+    'minimal-left': {time: 96, date: 24, lift: 0, place: 'left'},
 };
 // a change to any of these restarts the lock screen's video (when it's showing)
 const LIVE_KEYS = ['live-enabled', 'lockscreen-audio-enabled', 'wallpaper-sync-mode', 'zero-lag-lock', 'pause-on-sleep'];
@@ -59,7 +64,13 @@ const CLOCK_FONTS = {
     'sonoma-bold': 'font-family: "SF Pro Rounded", "Inter Display", Inter, Cantarell, sans-serif; font-weight: 700;',
     'cupertino-thin': 'font-family: "SF Pro Display", "Inter Display", Inter, Cantarell, sans-serif; font-weight: 200;',
     'digital': 'font-family: "DSEG7 Classic", "DejaVu Sans Mono", monospace; font-weight: 700;',
+    'sf-rounded-heavy': 'font-family: "SF Pro Rounded", "Nunito", "Inter Display", Inter, Cantarell, sans-serif; font-weight: 900;',
+    'jetbrains-mono': 'font-family: "JetBrains Mono", "Fira Code", "DejaVu Sans Mono", monospace; font-weight: 600;',
+    'editorial-serif': 'font-family: "Playfair Display", "Noto Serif Display", "DejaVu Serif", serif; font-weight: 600; font-style: italic;',
+    'futura-geometric': 'font-family: "Futura", "Jost", "Century Gothic", "URW Gothic", sans-serif; font-weight: 500;',
 };
+// the date's own formats (full and short are WACK's own)
+const DATE_FORMATS = {numeric: '%x', iso: '%Y-%m-%d'};
 
 export default class WackSonomaLiveLockscreen extends Extension {
     enable() {
@@ -167,6 +178,12 @@ export default class WackSonomaLiveLockscreen extends Extension {
 
     _startParts() {
         this._running = true;
+        // the desktop's top bar stays away while locked: no second battery or status icons
+        // (the lock screen's own pill under the clock shows the battery and the weather)
+        if (Main.panel.visible) {
+            Main.panel.hide();
+            this._hidPanel = true;
+        }
         this._sonoma = this._part(SonomaPart);
         if (this._settings.get_boolean('live-enabled'))
             this._live = this._part(LivePart);
@@ -214,10 +231,17 @@ export default class WackSonomaLiveLockscreen extends Extension {
             GLib.source_remove(this._styleRetry);
             this._styleRetry = 0;
         }
+        if (this._hidPanel) {
+            Main.panel.show();
+            this._hidPanel = false;
+        }
         this._dim?.destroy();
         this._dim = null;
         this._greeting?.destroy();
         this._greeting = null;
+        this._tagline?.destroy();
+        this._tagline = null;
+        this._unformatDate();
         this._unlayoutClock();
         this._unwatchBlur();
         this._media?.destroy();
@@ -275,20 +299,27 @@ export default class WackSonomaLiveLockscreen extends Extension {
             let font = CLOCK_FONTS[style] ?? '';
             if (style === 'custom' && s.get_string('clock-font'))
                 font = fontToCss(s.get_string('clock-font'));
-            const colour = s.get_string('clock-color');
-            // the layout's size first, so a custom font's own size still wins
-            time.set_style(`${layout.time ? `font-size: ${layout.time}px; ` : ''}${font}${colour ? ` color: ${colour};` : ''}`);
-            const block = time.get_parent();
-            if (block)
-                block.translation_y = s.get_int('clock-offset') + layout.lift;
-            this._layoutClock(clockBox, time, date);
+            const colour = s.get_string('clock-color') || (layout.neon ? '#67e8f9' : '');
+            // a glow / drop shadow (the cyberpunk stack glows cyan by itself)
+            const glow = Math.max(s.get_int('lock-clock-glow'), layout.neon ? 45 : 0);
+            const shadow = glow ? ` text-shadow: 0 ${Math.round(glow / 25)}px ${Math.round(4 + glow * 0.3)}px ` +
+                `${layout.neon ? `rgba(34, 211, 238, ${(glow / 100).toFixed(2)})` : `rgba(0, 0, 0, ${(0.2 + glow / 160).toFixed(2)})`};` : '';
+            // the layout's size first, so a custom font's own size still wins; laid over WACK's
+            // own style (it rewrites the time's colour and weight as it samples the wallpaper)
+            this._timeStyle = `${layout.time ? `font-size: ${layout.time}px; ` : ''}${font}${colour ? ` color: ${colour};` : ''}${shadow}`;
+            this._clockLift = s.get_int('clock-offset') + layout.lift;
+            this._layoutClock(clockBox, time, date, layout);
         }
         if (date) {
             const colour = s.get_string('date-color');
             const size = layout.date ? `font-size: ${layout.date}px; ` : '';
-            date.set_style(size || colour ? `${size}${colour ? `color: ${colour};` : ''}` : null);
+            this._dateStyle = `${size}${colour ? `color: ${colour};` : ''}`;
         }
+        this._overWack(clockBox, time, date);
         this._greet(dialog);
+        this._tag(clockBox);
+        this._formatDate(date);
+        this._avatar(dialog);
         if (!time)
             this._retryStyle();
         // the user pill (avatar and name) above the password field
@@ -320,18 +351,21 @@ export default class WackSonomaLiveLockscreen extends Extension {
         });
     }
 
-    // The clock's layout: left-aligned (96 px in from the screen's left), hours over minutes,
-    // or centred; and the glass card behind it all (the clock box holds the date, the time,
-    // the battery and weather pill and Now Playing)
-    _layoutClock(block, time, date) {
+    // The clock's layout (LAYOUTS): its place (centred, 96 px in from the left, or the
+    // top-left corner), hours over minutes for the stack; the glass card behind it all
+    // (the clock box holds the date, the time, the tagline, the pill and Now Playing)
+    _layoutClock(block, time, date, layout) {
         if (!block?.add_style_class_name)
             return;
-        const s = this._settings, layout = s.get_string('lock-clock-layout');
-        if (s.get_boolean('lock-glass-card'))
+        const s = this._settings, name = s.get_string('lock-clock-layout');
+        if (s.get_boolean('lock-glass-card') || layout.card) {
             block.add_style_class_name('wack-glass-card');
-        else
+            block.set_style(`background-color: rgba(18, 20, 30, ${(s.get_int('lock-card-opacity') / 100).toFixed(2)});`);
+        } else {
             block.remove_style_class_name('wack-glass-card');
-        const left = layout === 'minimal-left';
+            block.set_style(null);
+        }
+        const left = layout.place !== 'center';
         for (const a of [time, date])
             if (a)
                 a.x_align = left ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
@@ -339,12 +373,12 @@ export default class WackSonomaLiveLockscreen extends Extension {
             this._unlayoutClock();
             this._clockBlock = block;
             this._clockTime = time;
-            this._blockId = block.connect('notify::allocation', () => this._placeLeft());
+            this._blockId = block.connect('notify::allocation', () => this._placeClock());
             this._timeId = time.clutter_text.connect('notify::text', () => this._stackTime());
         }
         time.clutter_text.line_alignment = left ? 0 : 1;       // Pango.Alignment LEFT / CENTER
-        this._placeLeft();
-        if (layout === 'vertical-stacked')
+        this._placeClock();
+        if (name === 'vertical-stacked')
             this._stackTime();
         else if (time.text.includes('\n'))
             this._sonoma?._clock?._updateTime?.();             // back to one line
@@ -357,19 +391,107 @@ export default class WackSonomaLiveLockscreen extends Extension {
         time.text = time.text.replace(/\s*:\s*/, '\n');
     }
 
-    _placeLeft() {
+    _placeClock() {
         const block = this._clockBlock;
-        if (!block || this._placing)
+        if (!block || this._placing || !this._settings)
             return;
         this._placing = true;
         const m = Main.layoutManager.primaryMonitor;
-        if (this._settings?.get_string('lock-clock-layout') === 'minimal-left' && m) {
-            const [x] = block.get_transformed_position();
-            block.translation_x = Math.round(m.x + 96 - (x - block.translation_x));
-        } else {
-            block.translation_x = 0;
-        }
+        const place = (LAYOUTS[this._settings.get_string('lock-clock-layout')] ?? LAYOUTS['sonoma-center']).place;
+        const [x, y] = block.get_transformed_position();
+        block.translation_x = m && place !== 'center' ? Math.round(m.x + (place === 'corner' ? 64 : 96) - (x - block.translation_x)) : 0;
+        block.translation_y = m && place === 'corner' ? Math.round(m.y + 56 - (y - block.translation_y)) : (this._clockLift ?? 0);
         this._placing = false;
+    }
+
+    // WACK's clock writes its own style on the time and date (colour, weight) whenever it
+    // samples the wallpaper: ours goes on top of it each time, later declarations winning
+    _overWack(clockBox, time, date) {
+        const apply = () => {
+            if (time && this._timeStyle && !(time.style ?? '').includes(this._timeStyle))
+                time.set_style(`${time.style ?? ''} ${this._timeStyle}`.trim());
+            if (date && this._dateStyle && !(date.style ?? '').includes(this._dateStyle))
+                date.set_style(`${date.style ?? ''} ${this._dateStyle}`.trim());
+        };
+        if (clockBox?._applyTextStyle && !clockBox._mkStyled) {
+            const own = clockBox._applyTextStyle;
+            clockBox._mkStyled = true;
+            clockBox._applyTextStyle = function (...args) {
+                const result = own.apply(this, args);
+                apply();
+                return result;
+            };
+        }
+        if (clockBox?._applyTextStyle)
+            clockBox._applyTextStyle();                // (WACK's own style afresh, then ours: never piled up)
+        else
+            apply();
+    }
+
+    // a tagline under the time
+    _tag(clockBox) {
+        const text = this._settings.get_string('lock-tagline').trim();
+        if (!text || !clockBox?.add_child) {
+            this._tagline?.destroy();
+            this._tagline = null;
+            return;
+        }
+        if (!this._tagline || this._tagline.get_parent() !== clockBox) {
+            this._tagline?.destroy();
+            this._tagline = new St.Label({style_class: 'wack-tagline', x_align: Clutter.ActorAlign.CENTER});
+            this._tagline.connect('destroy', l => {
+                if (this._tagline === l)
+                    this._tagline = null;
+            });
+            const after = clockBox._time ? clockBox.get_children().indexOf(clockBox._time) + 1 : clockBox.get_n_children();
+            clockBox.insert_child_at_index(this._tagline, after);
+        }
+        this._tagline.text = text;
+        this._tagline.x_align = (LAYOUTS[this._settings.get_string('lock-clock-layout')]?.place ?? 'center') === 'center'
+            ? Clutter.ActorAlign.CENTER : Clutter.ActorAlign.START;
+    }
+
+    // the date's format: full / short are WACK's own (date-style); numeric and ISO are written here
+    _formatDate(date) {
+        if (!date)
+            return;
+        const fmt = this._settings.get_string('lock-date-format');
+        const wack = fmt === 'short' ? 'short' : 'full';
+        if (this._settings.get_string('date-style') !== wack)
+            this._settings.set_string('date-style', wack);
+        if (this._dateLabel !== date) {
+            this._unformatDate();
+            this._dateLabel = date;
+            this._dateId = date.clutter_text.connect('notify::text', () => this._writeDate());
+        }
+        this._writeDate();
+    }
+
+    _writeDate() {
+        const pattern = DATE_FORMATS[this._settings?.get_string('lock-date-format')];
+        if (!pattern || !this._dateLabel)
+            return;
+        const text = GLib.DateTime.new_now_local().format(pattern);
+        if (this._dateLabel.text !== text)
+            this._dateLabel.text = text;
+    }
+
+    _unformatDate() {
+        try {
+            if (this._dateId)
+                this._dateLabel.clutter_text.disconnect(this._dateId);
+        } catch {}
+        this._dateId = 0;
+        this._dateLabel = null;
+    }
+
+    // your picture at 56 px above the password field
+    _avatar(dialog) {
+        const icon = findByClass(dialog, 'user-icon');
+        if (icon && icon._iconSize !== 56 && typeof icon.update === 'function') {
+            icon._iconSize = 56;
+            icon.update();
+        }
     }
 
     _unlayoutClock() {

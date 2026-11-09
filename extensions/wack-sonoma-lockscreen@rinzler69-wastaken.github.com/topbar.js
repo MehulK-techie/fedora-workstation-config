@@ -301,11 +301,11 @@ class AppIndicator {
     }
 
     get _animate() {
-        return this._settings.get_boolean('app-indicator-animate') && St.Settings.get().enable_animations;
+        return St.Settings.get().enable_animations;          // (always on: only GNOME's own switch stops it)
     }
 
     // An app focused: its icon and name. None (an empty desktop, everything minimized):
-    // the capsule fades and shrinks away (200 ms), and grows back with the next app (180 ms);
+    // the capsule fades and shrinks away (180 ms, to 0.94), and grows back with the next app (180 ms);
     // from one app to another only the inside crossfades (110 ms), the capsule stays.
     _sync(animate) {
         if (this._gone)
@@ -328,7 +328,7 @@ class AppIndicator {
             this._inner.remove_all_transitions();
             this._inner.set({opacity: 255, translation_y: 0});
             if (animate) {
-                this._pill.set({opacity: 0, scale_x: 0.92, scale_y: 0.92});
+                this._pill.set({opacity: 0, scale_x: 0.94, scale_y: 0.94});
                 this._pill.ease({opacity: 255, scale_x: 1, scale_y: 1, duration: 180,
                     mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
             } else {
@@ -338,7 +338,7 @@ class AppIndicator {
             this._shown = false;
             this._pill.remove_all_transitions();
             if (animate && !Main.overview.visible) {
-                this._pill.ease({opacity: 0, scale_x: 0.92, scale_y: 0.92, duration: 200,
+                this._pill.ease({opacity: 0, scale_x: 0.94, scale_y: 0.94, duration: 180,
                     mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
                     onStopped: done => {
                         if (done && !this._shown && !this._gone)

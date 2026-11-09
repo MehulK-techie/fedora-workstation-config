@@ -22,7 +22,8 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, Gtk, Pango  # noqa: E402
 
 EXT_DIR = Path(GLib.get_user_data_dir()) / "gnome-shell/extensions"
 SUITE = "wack-sonoma-lockscreen@rinzler69-wastaken.github.com"
@@ -60,51 +61,107 @@ def _exists(path):
 
 
 # ----------------------------------------------------------------- the preview
+LAYOUTS = {
+    "sonoma-center": {"time": 128, "date": 30, "place": "center"},
+    "sequoia-split": {"time": 104, "date": 26, "place": "left", "split": True},
+    "vertical-stacked": {"time": 112, "date": 24, "place": "center", "stack": True, "neon": True},
+    "corner-hud": {"time": 64, "date": 18, "place": "corner"},
+    "glass-framed": {"time": 112, "date": 26, "place": "center", "card": True},
+    "sequoia-compact": {"time": 84, "date": 22, "place": "center"},
+    "minimal-left": {"time": 96, "date": 24, "place": "left"},
+}
+FONTS.update({
+    "sf-rounded-heavy": 'font-family: "SF Pro Rounded", "Nunito", "Inter Display", Inter, sans-serif; font-weight: 900;',
+    "jetbrains-mono": 'font-family: "JetBrains Mono", "Fira Code", "DejaVu Sans Mono", monospace; font-weight: 600;',
+    "editorial-serif": 'font-family: "Playfair Display", "Noto Serif Display", "DejaVu Serif", serif; font-weight: 600; font-style: italic;',
+    "futura-geometric": 'font-family: "Futura", "Jost", "Century Gothic", "URW Gothic", sans-serif; font-weight: 500;',
+})
+DATES = {"full": "%A, %B {day}", "short": "%a, %b {day}", "numeric": "%x", "iso": "%Y-%m-%d"}
+
+
+def scaled(path, size):
+    """A picture scaled to fit SIZE x SIZE: its natural size is then SIZE, never the file's
+    (a full-size logo used to fill the whole preview)."""
+    try:
+        return Gdk.Texture.new_for_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), size, size, True))
+    except GLib.Error:
+        return None
+
+
+def avatar_path():
+    for p in (Path.home() / ".face", Path("/var/lib/AccountsService/icons") / GLib.get_user_name()):
+        try:
+            if p.is_file():
+                return p
+        except OSError:
+            pass
+    return None
+
+
 class Preview(Gtk.Frame):
-    """The screen at 360 x 210: media, scrim, clock, pill, greeting, the Finder logo."""
+    """The screen at 360 x 210: media, scrim, a mini 18 px top bar with the Finder logo,
+    the clock, tagline, pill, your 28 px picture and name, the greeting, a password field."""
 
     serial = 0
 
     def __init__(self, suite):
         super().__init__(halign=Gtk.Align.CENTER, css_classes=["mk-preview"])
         Preview.serial += 1
-        self.id = f"mkstudio{Preview.serial}"
+        self.id = i = f"mkstudio{Preview.serial}"
         self.s = suite
         self.media_path = None
         self.stream = None
+        self.round = False
         overlay = Gtk.Overlay(width_request=W, height_request=H)
         overlay.set_overflow(Gtk.Overflow.HIDDEN)
         self.set_child(overlay)
         self.picture = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True, width_request=W, height_request=H)
         overlay.set_child(self.picture)
-        overlay.add_overlay(Gtk.Box(css_classes=[f"{self.id}-scrim"]))
-        bar = Gtk.Box(valign=Gtk.Align.START, spacing=4, css_classes=[f"{self.id}-bar"])
-        self.logo = Gtk.Image(margin_start=8, valign=Gtk.Align.CENTER)
-        self.logo_pic = Gtk.Picture(margin_start=8, valign=Gtk.Align.CENTER, content_fit=Gtk.ContentFit.COVER,
-                                    can_shrink=True, css_classes=[f"{self.id}-round"])
-        self.logo_pic.set_overflow(Gtk.Overflow.HIDDEN)
-        self.logo_label = Gtk.Label(css_classes=[f"{self.id}-barlabel"])
-        for w in (self.logo, self.logo_pic, self.logo_label):
-            bar.append(w)
+        overlay.add_overlay(Gtk.Box(css_classes=[f"{i}-scrim"]))
+        bar = Gtk.Box(valign=Gtk.Align.START, spacing=4, height_request=18, css_classes=[f"{i}-bar"])
+        self.logo = Gtk.Picture(margin_start=6, valign=Gtk.Align.CENTER, halign=Gtk.Align.START,
+                                content_fit=Gtk.ContentFit.COVER, can_shrink=False)
+        self.logo.set_overflow(Gtk.Overflow.HIDDEN)
+        self.logo_label = Gtk.Label(css_classes=[f"{i}-barlabel"], valign=Gtk.Align.CENTER)
+        bar.append(self.logo)
+        bar.append(self.logo_label)
         overlay.add_overlay(bar)
-        self.clock = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START, margin_top=32,
-                             css_classes=[f"{self.id}-card"])
-        self.date = Gtk.Label(css_classes=[f"{self.id}-date"])
-        self.time = Gtk.Label(css_classes=[f"{self.id}-time"], justify=Gtk.Justification.CENTER)
-        self.pill = Gtk.Label(label="82%  ·  21°C", halign=Gtk.Align.CENTER, margin_top=4, css_classes=[f"{self.id}-pill"])
-        for w in (self.date, self.time, self.pill):
+        overlay.set_clip_overlay(bar, True)
+        self.clock = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START, margin_top=30,
+                             css_classes=[f"{i}-card"])
+        self.date = Gtk.Label(css_classes=[f"{i}-date"])
+        self.time = Gtk.Label(css_classes=[f"{i}-time"], justify=Gtk.Justification.CENTER)
+        self.tagline = Gtk.Label(css_classes=[f"{i}-tagline"])
+        self.pill = Gtk.Label(label="82%  ·  21°C", halign=Gtk.Align.CENTER, margin_top=4, css_classes=[f"{i}-pill"])
+        for w in (self.date, self.time, self.tagline, self.pill):
             self.clock.append(w)
         overlay.add_overlay(self.clock)
+        self.column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START, halign=Gtk.Align.END,
+                              margin_top=60, margin_end=18, spacing=4)
+        self.col_pill = Gtk.Label(label="82%  ·  21°C", css_classes=[f"{i}-pill"])
+        self.col_media = Gtk.Label(label="♪  Now Playing", css_classes=[f"{i}-pill"])
+        self.column.append(self.col_pill)
+        self.column.append(self.col_media)
+        overlay.add_overlay(self.column)
         bottom = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.END, halign=Gtk.Align.CENTER,
-                         margin_bottom=16, spacing=4)
-        self.greeting = Gtk.Label(css_classes=[f"{self.id}-greeting"])
-        bottom.append(self.greeting)
-        bottom.append(Gtk.Label(label="••••••", width_request=96, css_classes=[f"{self.id}-field"]))
+                         margin_bottom=12, spacing=3)
+        self.greeting = Gtk.Label(css_classes=[f"{i}-greeting"])
+        # (an Image keeps its 28 px: a Picture took the column's width)
+        avatar = Gtk.Image(halign=Gtk.Align.CENTER, pixel_size=28, css_classes=[f"{i}-avatar"])
+        avatar.set_overflow(Gtk.Overflow.HIDDEN)
+        face = avatar_path()
+        tex = scaled(face, 28) if face else None
+        if tex:
+            avatar.set_from_paintable(tex)
+        else:
+            avatar.set_from_icon_name("avatar-default-symbolic")
+        name = Gtk.Label(label=GLib.get_real_name() or GLib.get_user_name(), css_classes=[f"{i}-name"])
+        for w in (self.greeting, avatar, name, Gtk.Label(label="••••••", width_request=96, css_classes=[f"{i}-field"])):
+            bottom.append(w)
         overlay.add_overlay(bottom)
         self.css = Gtk.CssProvider()
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), self.css,
                                                   Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        self.engine = None
         self.idle = 0
         suite.connect("changed", lambda *_: self.queue())
         GLib.timeout_add_seconds(20, lambda: (self.sync(), True)[1])
@@ -150,54 +207,62 @@ class Preview(Gtk.Frame):
             self.stream.play()
             self.picture.set_paintable(self.stream)
         else:
-            self.picture.set_filename(path)
+            self.picture.set_paintable(scaled(path, 720))
 
     def _sync_logo(self):
+        """The Finder logo in the mini bar: the slider's 14-30 px, scaled to the 18 px bar (8-15 px)."""
         s = self.s
-        preset, size = s.get_string("finder-logo-preset"), s.get_int("finder-icon-size")
-        px = round(size * 0.75)
+        preset = s.get_string("finder-logo-preset")
+        px = max(8, min(15, round(s.get_int("finder-icon-size") / 2)))
         custom = str(Path(s.get_string("finder-custom-logo")).expanduser()) if s.get_string("finder-custom-logo") else ""
-        round_ = preset == "custom" and _exists(custom) and s.get_boolean("finder-logo-circular") and not custom.lower().endswith(".svg")
-        self.logo_pic.set_visible(round_)
-        self.logo.set_visible(not round_ and preset != "none")
-        if round_:
-            self.logo_pic.set_filename(custom)
-            self.logo_pic.set_size_request(px, px)
-        elif preset == "custom" and _exists(custom):
-            self.logo.set_from_file(custom)
+        path = None
+        if preset == "custom" and _exists(custom):
+            path = custom
         elif preset in ("mk", "apple"):
-            name = "mk-emblem-symbolic.svg" if preset == "mk" else "mk-apple-symbolic.svg"
-            self.logo.set_from_file(str(EXT_DIR / SUITE / "icons" / name))
-        else:
-            self.logo.set_from_icon_name("fedora-logo-icon")
-        self.logo.set_pixel_size(px)
+            path = EXT_DIR / SUITE / "icons" / ("mk-emblem-symbolic.svg" if preset == "mk" else "mk-apple-symbolic.svg")
+        tex = scaled(path, px) if path else None
+        if not tex and preset != "none":
+            theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+            tex = theme.lookup_icon("fedora-logo-icon", None, px, 1, Gtk.TextDirection.NONE, 0)
+        self.logo.set_paintable(None if preset == "none" else tex)
+        self.logo.set_visible(preset != "none" and tex is not None)
+        self.logo.set_size_request(px, px)
+        self.round = preset == "custom" and path == custom and s.get_boolean("finder-logo-circular") \
+            and not custom.lower().endswith(".svg")
         self.logo_label.set_label(s.get_string("finder-label") if s.get_boolean("finder-show-label") else "")
-        return px
 
     def sync(self):
         s = self.s
         self._sync_media()
-        logo = self._sync_logo()
-        layout = s.get_string("lock-clock-layout")
-        left = layout == "minimal-left"
+        self._sync_logo()
+        name = s.get_string("lock-clock-layout")
+        layout = LAYOUTS.get(name, LAYOUTS["sonoma-center"])
+        left = layout["place"] != "center"
         self.clock.set_halign(Gtk.Align.START if left else Gtk.Align.CENTER)
-        self.clock.set_margin_start(round(96 * SCALE) + 8 if left else 0)
-        self.clock.set_margin_top(24 if layout == "sequoia-compact" else 32)
-        for label in (self.date, self.time):
+        self.clock.set_margin_start(round((64 if layout["place"] == "corner" else 96) * SCALE) + 8 if left else 0)
+        self.clock.set_margin_top(22 if layout["place"] == "corner" else 24 if name == "sequoia-compact" else 30)
+        for label in (self.date, self.time, self.tagline):
             label.set_halign(Gtk.Align.START if left else Gtk.Align.CENTER)
         self.time.set_justify(Gtk.Justification.LEFT if left else Gtk.Justification.CENTER)
         twelve = Gio.Settings(schema_id="org.gnome.desktop.interface").get_string("clock-format") == "12h"
         now = datetime.now()
         text = now.strftime("%I:%M").lstrip("0") if twelve else now.strftime("%H:%M")
-        self.time.set_label(text.replace(":", "\n") if layout == "vertical-stacked" else text)
-        self.date.set_label(now.strftime("%A, %B ") + str(now.day))
-        self.pill.set_visible(s.get_boolean("lock-status-pill"))
+        self.time.set_label(text.replace(":", "\n") if layout.get("stack") else text)
+        self.date.set_label(now.strftime(DATES.get(s.get_string("lock-date-format"), DATES["full"]).replace("{day}", str(now.day))))
+        tagline = s.get_string("lock-tagline").strip()
+        self.tagline.set_label(tagline)
+        self.tagline.set_visible(bool(tagline))
+        pill = s.get_boolean("lock-status-pill")
+        self.pill.set_visible(pill and not layout.get("split"))
+        self.column.set_visible(bool(layout.get("split")))
+        self.col_pill.set_visible(pill)
+        self.col_media.set_visible(s.get_boolean("lock-media-controls"))
         greeting = s.get_string("lock-greeting").strip()
         self.greeting.set_label(greeting)
         self.greeting.set_visible(bool(greeting))
         style = s.get_string("clock-style")
         font = FONTS.get(style, "")
-        size = LAYOUT_SIZE.get(layout, 128) * SCALE
+        size = layout["time"] * SCALE
         if style == "custom" and s.get_string("clock-font"):
             fd = Pango.FontDescription.from_string(s.get_string("clock-font"))
             family = (fd.get_family() or "").replace('"', "")
@@ -205,25 +270,35 @@ class Preview(Gtk.Frame):
             if fd.get_size() > 0:
                 size = fd.get_size() / Pango.SCALE * (1 if fd.get_size_is_absolute() else 4 / 3) * SCALE
         colour = lambda key, default: s.get_string(key) if s.get_string(key) and COLOUR.match(s.get_string(key)) else default  # noqa: E731
-        card = ("background-color: rgba(18,20,30,0.34); border: 1px solid rgba(255,255,255,0.16); border-radius: 10px; "
-                "padding: 6px 14px;") if s.get_boolean("lock-glass-card") else "background: none; border: none; padding: 0;"
+        neon = layout.get("neon", False)
+        glow = max(s.get_int("lock-clock-glow"), 45 if neon else 0)
+        shadow = (f"text-shadow: 0 {glow / 60:.1f}px {1 + glow * 0.06:.1f}px "
+                  + (f"rgba(34,211,238,{glow / 100:.2f});" if neon else f"rgba(0,0,0,{0.2 + glow / 160:.2f});")) if glow else ""
+        card = (f"background-color: rgba(18,20,30,{s.get_int('lock-card-opacity') / 100:.2f}); "
+                "border: 1px solid rgba(255,255,255,0.16); border-radius: 10px; padding: 6px 14px;") \
+            if s.get_boolean("lock-glass-card") or layout.get("card") else "background: none; border: none; padding: 0;"
         i = self.id
         self.css.load_from_string(f"""
             .mk-preview {{ border-radius: 10px; }}
             .{i}-scrim {{ background-color: rgba(12, 14, 20, {s.get_int('dim-opacity') / 100:.2f}); }}
-            .{i}-bar {{ background-color: rgba(0, 0, 0, 0.28); min-height: {max(18, logo + 6)}px; }}
-            .{i}-barlabel {{ color: white; font-weight: 800; font-size: 9px; }}
+            .{i}-bar {{ background-color: rgba(0, 0, 0, 0.30); min-height: 18px; }}
+            .{i}-barlabel {{ color: white; font-weight: 800; font-size: 8px; }}
             .{i}-card {{ {card} }}
-            .{i}-time {{ {font} font-size: {size:.1f}px; color: {colour('clock-color', 'rgba(255,255,255,0.85)')}; }}
-            .{i}-date {{ font-size: {LAYOUT_DATE.get(layout, 30) * SCALE:.1f}px; font-weight: 600;
+            .{i}-time {{ {font} font-size: {size:.1f}px; {shadow}
+                color: {colour('clock-color', '#67e8f9' if neon else 'rgba(255,255,255,0.85)')}; }}
+            .{i}-date {{ font-size: {layout['date'] * SCALE:.1f}px; font-weight: 600;
                 color: {colour('date-color', 'rgba(255,255,255,0.65)')}; }}
+            .{i}-tagline {{ font-size: 6px; font-weight: 600; color: rgba(255,255,255,0.8); }}
             .{i}-pill {{ font-size: 7px; font-weight: 600; color: white; background-color: rgba(255,255,255,0.14);
                 border-radius: 99px; padding: 1px 6px; }}
-            .{i}-greeting {{ font-size: 8px; font-weight: 600; color: rgba(255,255,255,0.88); }}
+            .{i}-greeting {{ font-size: 7px; font-weight: 600; color: rgba(255,255,255,0.88); }}
+            .{i}-name {{ font-size: 7px; font-weight: 700; color: white; }}
             .{i}-field {{ font-size: 7px; color: rgba(255,255,255,0.7); background-color: rgba(255,255,255,0.16);
                 border-radius: 99px; padding: 2px 10px; }}
+            image.{i}-avatar {{ border-radius: 999px; }}
             picture.{i}-round {{ border-radius: 999px; }}
         """)
+        self.logo.set_css_classes([f"{i}-round"] if self.round else [])
 
 
 # ----------------------------------------------------------------- rows
@@ -380,17 +455,30 @@ def wallpaper_studio(window):
     page.add(sound)
 
     clock = Adw.PreferencesGroup(title="Clock Styler")
-    clock.add(combo_row(s, "lock-clock-layout", "Layout", [("sonoma-center", "Sonoma Center Giant"),
-                                                          ("sequoia-compact", "macOS Sequoia Compact"),
-                                                          ("minimal-left", "Minimalist Left-Aligned"),
-                                                          ("vertical-stacked", "Vertical Stacked")]))
-    clock.add(combo_row(s, "clock-style", "Style", [("sonoma-bold", "Sonoma Bold Rounded"),
-                                                   ("cupertino-thin", "Cupertino Thin"),
-                                                   ("digital", "Classic Digital"), ("custom", "Custom Font")]))
+    clock.add(combo_row(s, "lock-clock-layout", "Layout", [("sonoma-center", "Sonoma Classic Center"),
+                                                          ("sequoia-split", "Sequoia Split (Clock Left, Widgets Right)"),
+                                                          ("vertical-stacked", "Cyberpunk Vertical Stack"),
+                                                          ("corner-hud", "Minimalist Corner HUD"),
+                                                          ("glass-framed", "Glass Card Framed")]))
+    clock.add(combo_row(s, "clock-style", "Typography", [("sf-rounded-heavy", "SF Pro Rounded Heavy"),
+                                                        ("jetbrains-mono", "JetBrains Mono Tech"),
+                                                        ("editorial-serif", "Editorial Serif"),
+                                                        ("futura-geometric", "Futura Geometric"),
+                                                        ("sonoma-bold", "Sonoma Bold Rounded"),
+                                                        ("cupertino-thin", "Cupertino Thin"),
+                                                        ("digital", "Classic Digital"), ("custom", "Custom System Font")]))
+    clock.add(scale_row(s, "lock-clock-glow", "Glow &amp; Shadow", 0, 100, 5, lambda v: f"{round(v)} %"))
+    clock.add(combo_row(s, "lock-date-format", "Date Format", [("full", "Monday, November 9"), ("short", "Mon, Nov 9"),
+                                                              ("numeric", "Numeric (your locale)"),
+                                                              ("iso", "ISO (2026-11-09)")]))
     clock.add(colour_row(s, "clock-color", "Clock Colour"))
     clock.add(colour_row(s, "date-color", "Date Colour"))
     clock.add(scale_row(s, "dim-opacity", "Scrim", 0, 85, 5, lambda v: f"{round(v)} %"))
     clock.add(switch_row(s, "lock-glass-card", "Glass Card Behind the Clock"))
+    clock.add(scale_row(s, "lock-card-opacity", "Glass Card Opacity", 10, 90, 2, lambda v: f"{round(v)} %"))
+    tagline = Adw.EntryRow(title="Tagline Under the Clock", text=s.get_string("lock-tagline"), show_apply_button=True)
+    tagline.connect("apply", lambda e: s.set_string("lock-tagline", e.get_text().strip()))
+    clock.add(tagline)
     greeting = Adw.EntryRow(title="Greeting or Quote Above the Password Field", text=s.get_string("lock-greeting"),
                             show_apply_button=True)
     greeting.connect("apply", lambda e: s.set_string("lock-greeting", e.get_text().strip()))
@@ -432,18 +520,27 @@ def topbar_studio(window):
 
     app = Adw.PreferencesGroup(title="App indicator")
     app.add(switch_row(s, "show-app-indicator", "App Indicator"))
-    app.add(switch_row(s, "app-indicator-animate", "Fade Animation",
-                       "Fades and shrinks away on an empty desktop, grows back with the next app"))
     page.add(app)
 
     dock = Adw.PreferencesGroup(title="Dock")
     if engine:
-        dock.add(combo_row(engine, "dock-style", "Look", [("obsidian-glass", "Obsidian Glass"),
-                                                         ("cupertino-frost", "Cupertino Frost"),
-                                                         ("spider-glow", "Spider Glow"), ("minimal-flat", "Minimal Flat")]))
-        dock.add(scale_row(engine, "dock-opacity", "Translucency", 15, 90, 1, lambda v: f"{round(v)} %", "pct",
-                           subtitle="How solid Obsidian Glass's tint is"))
-        dock.add(scale_row(engine, "dock-icon-size", "Icon Size", 36, 56, 2, lambda v: f"{round(v)} px"))
+        dock.add(combo_row(engine, "dock-style", "Theme", [("obsidian-glass", "Obsidian Frosted Glass"),
+                                                          ("crystal-clear", "Crystal Clear Translucent"),
+                                                          ("tahoe-pill", "macOS Tahoe Pill"),
+                                                          ("cyber-neon", "Cyberpunk Neon Edge"),
+                                                          ("floating-icons", "Minimal Floating Icons (No Backplate)"),
+                                                          ("cupertino-frost", "Cupertino Frost"),
+                                                          ("spider-glow", "Spider Glow"), ("minimal-flat", "Minimal Flat")]))
+        dock.add(scale_row(engine, "dock-icon-size", "Icon Size", 36, 68, 2, lambda v: f"{round(v)} px"))
+        dock.add(scale_row(engine, "dock-hover-scale", "Magnification", 1.0, 1.5, 0.02,
+                           lambda v: "Off" if v < 1.005 else f"{v:.2f}x", "d", subtitle="Only the icon under the pointer"))
+        dock.add(switch_row(engine, "dock-focused-raise", "Raise the Focused App",
+                            "The app you're in sits a little higher and larger, with a soft glow"))
+        dock.add(scale_row(engine, "dock-opacity", "Glass Opacity", 10, 95, 1, lambda v: f"{round(v)} %", "pct"))
+        dock.add(scale_row(engine, "dock-corner-radius", "Corner Radius", 12, 32, 1, lambda v: f"{round(v)} px"))
+        dock.add(combo_row(engine, "dock-indicator-style", "Running Indicator", [("glowing-dot", "Glowing Dot"),
+                                                                                ("wide-pill", "Wide Pill Dash"),
+                                                                                ("underline", "Subtle Underline")]))
     else:
         dock.set_description("MK Shell Engine isn't installed: run ./sync.sh (mk sync) once.")
     page.add(dock)

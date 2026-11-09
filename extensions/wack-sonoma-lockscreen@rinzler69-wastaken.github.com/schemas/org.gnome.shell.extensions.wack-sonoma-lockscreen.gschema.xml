@@ -324,7 +324,7 @@
       <description>The lock screen fades in from 1.04x to its size as the screen locks.</description>
     </key>
     <key name="clock-style" type="s">
-      <choices><choice value="sonoma-bold"/><choice value="cupertino-thin"/><choice value="digital"/><choice value="custom"/></choices>
+      <choices><choice value="sonoma-bold"/><choice value="cupertino-thin"/><choice value="digital"/><choice value="sf-rounded-heavy"/><choice value="jetbrains-mono"/><choice value="editorial-serif"/><choice value="futura-geometric"/><choice value="custom"/></choices>
       <default>'sonoma-bold'</default>
       <summary>Clock style</summary>
       <description>sonoma-bold, cupertino-thin, digital, or custom (clock-font).</description>
@@ -506,16 +506,11 @@
       <summary>Round custom logo</summary>
       <description>A custom picture is cropped to a circle, like an avatar.</description>
     </key>
-    <key name="app-indicator-animate" type="b">
-      <default>true</default>
-      <summary>App indicator animations</summary>
-      <description>The pill fades and shrinks away on an empty desktop and grows back with the next app.</description>
-    </key>
     <key name="lock-clock-layout" type="s">
-      <choices><choice value="sonoma-center"/><choice value="sequoia-compact"/><choice value="minimal-left"/><choice value="vertical-stacked"/></choices>
+      <choices><choice value="sonoma-center"/><choice value="sequoia-split"/><choice value="vertical-stacked"/><choice value="corner-hud"/><choice value="glass-framed"/><choice value="sequoia-compact"/><choice value="minimal-left"/></choices>
       <default>'sonoma-center'</default>
       <summary>Clock layout</summary>
-      <description>sonoma-center (giant, centred), sequoia-compact (smaller, higher), minimal-left (left-aligned), vertical-stacked (hours over minutes).</description>
+      <description>sonoma-center (Sonoma Classic Center), sequoia-split (the clock left, the widgets right), vertical-stacked (Cyberpunk Vertical Stack: hours over minutes), corner-hud (Minimalist Corner HUD: small, top left), glass-framed (centred in a glass card); also sequoia-compact and minimal-left.</description>
     </key>
     <key name="lock-glass-card" type="b">
       <default>false</default>
@@ -526,6 +521,29 @@
       <default>''</default>
       <summary>Greeting above the password field</summary>
       <description>A line of your own (a greeting or a quote) above the password field; empty: none.</description>
+    </key>
+
+    <!-- MK v19 -->
+    <key name="lock-clock-glow" type="i">
+      <range min="0" max="100"/>
+      <default>0</default>
+      <summary>Clock glow (%)</summary>
+      <description>A soft glow and drop shadow behind the time, 0 (none) to 100.</description>
+    </key>
+    <key name="lock-card-opacity" type="i">
+      <range min="10" max="90"/>
+      <default>34</default>
+      <summary>Glass card opacity (%)</summary>
+    </key>
+    <key name="lock-date-format" type="s">
+      <choices><choice value="full"/><choice value="short"/><choice value="numeric"/><choice value="iso"/></choices>
+      <default>'full'</default>
+      <summary>Date format</summary>
+      <description>full (Monday, November 9), short (Mon, Nov 9), numeric (09/11/2026, your locale's order), iso (2026-11-09).</description>
+    </key>
+    <key name="lock-tagline" type="s">
+      <default>''</default>
+      <summary>Tagline under the clock</summary>
     </key>
   </schema>
 </schemalist>

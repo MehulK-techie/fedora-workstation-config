@@ -31,6 +31,11 @@ const PIN_KINDS = [['all', 'All pinned'], ['text', 'Code & text'], ['images', 'S
 const DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'clipboard']);
 const STORE = GLib.build_filenamev([DIR, 'history.json']);
 const VIEW = GLib.build_filenamev([DIR, 'view.json']);   // the switches: {pinned, foldImages, hide_pinned_in_stream}
+// Picking an entry (here, or on the calendar's clipboard shelf) never reorders the history:
+// every entry keeps its place, and the one on the clipboard now carries a "Selected" badge.
+// The pick is written to view.json (selected, selected_at) before the clipboard changes, so
+// the copy it causes isn't taken for a new one.
+const PICK_GRACE_MS = 3000;
 const KEEP = 60;
 const MAX_TEXT = 100000;  // characters; longer copies are kept cut short
 const SECRET_HINT = 'x-kde-passwordManagerHint';
@@ -123,6 +128,8 @@ export class ClipboardHistory {
             if (PIN_KINDS.some(([k]) => k === saved.pinned))
                 view.pinned = saved.pinned;
             view.foldImages = saved.foldImages === true;
+            view.selected = saved.selected ?? null;
+            view.selected_at = saved.selected_at ?? 0;
             // Starred entries now sit on top of the history; a view.json from before
             // that (no pinned_on_top) had them hidden there, so they show again once.
             if (saved.pinned_on_top)
@@ -171,7 +178,23 @@ export class ClipboardHistory {
         }
     }
 
+    // the entry picked from the history (here or on the calendar's shelf) a moment ago?
+    _picked(match) {
+        try {
+            const [ok, bytes] = GLib.file_get_contents(VIEW);
+            const view = ok ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+            const item = this._items.find(match);
+            if (item && view.selected === item.id && Date.now() - (view.selected_at ?? 0) < PICK_GRACE_MS) {
+                this._selected = item.id;
+                return true;
+            }
+        } catch {}
+        return false;
+    }
+
     _toTop(match, make) {
+        if (this._picked(match))
+            return;                          // (picked from the list: it keeps its place)
         const old = this._items.find(match);
         this._items = this._items.filter(i => i !== old);
         const item = old ?? make();
@@ -561,7 +584,9 @@ export class ClipboardHistory {
     }
 
     _card(item, folded = false) {
-        const card = new St.BoxLayout({style_class: `mk-clip-card${item.pinned ? ' pinned' : ''}${folded ? ' folded' : ''}`});
+        const selected = item.id === (this._selected ?? this._view.selected);
+        const card = new St.BoxLayout({style_class: `mk-clip-card${item.pinned ? ' pinned' : ''}${folded ? ' folded' : ''}` +
+            `${selected ? ' mk-clip-selected' : ''}`});
         const main = new St.Button({style_class: 'mk-clip-main', can_focus: true, x_expand: true,
             x_align: Clutter.ActorAlign.FILL});
         if (item.image && folded) {                    // one line: a small swatch, what it is and its size
@@ -594,6 +619,14 @@ export class ClipboardHistory {
             main.set_child(column);
             column.add_child(content);
             column.add_child(new St.Label({text: item.tags.map(t => `#${t}`).join('  '), style_class: 'mk-clip-tags'}));
+        }
+        if (selected) {
+            const content = main.get_child();
+            const holder = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
+            main.set_child(holder);
+            holder.add_child(content);
+            holder.add_child(new St.Label({text: '✓ Selected', style_class: 'mk-clip-selected-badge',
+                x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.START}));
         }
         main.connect('clicked', () => this._copy(item));
         main.connect('key-press-event', (_a, event) => this._cardKey(main, item, event));
@@ -702,6 +735,10 @@ export class ClipboardHistory {
     }
 
     _copy(item, paste = false) {
+        // the pick first, so the copy it causes keeps the entry where it is
+        this._view.selected = item.id;
+        this._view.selected_at = Date.now();
+        this._saveView();
         if (item.image) {
             try {
                 const [, data] = GLib.file_get_contents(item.image);
@@ -712,7 +749,7 @@ export class ClipboardHistory {
         } else {
             this._clipboard.set_text(St.ClipboardType.CLIPBOARD, item.text);
         }
-        this._toTop(i => i === item, () => item);
+        this._selected = item.id;            // (no reordering: the badge moves instead)
         this._hide();
         if (paste)
             this._pasteInto(this._target);
@@ -726,7 +763,7 @@ export class ClipboardHistory {
             if (target && !target.has_focus())
                 Main.activateWindow(target);
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 60, () => {
-                const seat = Clutter.get_default_backend().get_default_seat();
+                const seat = (global.stage.get_context?.().get_backend() ?? Clutter.get_default_backend()).get_default_seat();   // (GNOME 51: no get_default_backend)
                 this._keyboard ??= seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
                 const keys = TERMINALS.test(target?.get_wm_class() ?? '')
                     ? [Clutter.KEY_Control_L, Clutter.KEY_Shift_L, Clutter.KEY_v] : [Clutter.KEY_Control_L, Clutter.KEY_v];

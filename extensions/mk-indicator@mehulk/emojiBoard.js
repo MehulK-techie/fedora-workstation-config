@@ -176,7 +176,7 @@ export class EmojiBoard {
         }
         // The app doesn't take input-method text: paste it instead.
         St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, ch);
-        const seat = Clutter.get_default_backend().get_default_seat();
+        const seat = (global.stage.get_context?.().get_backend() ?? Clutter.get_default_backend()).get_default_seat();   // (GNOME 51)
         this._keyboard ??= seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
         const terminal = TERMINALS.test(target?.get_wm_class() ?? '');
         const t = GLib.get_monotonic_time();

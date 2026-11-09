@@ -71,19 +71,40 @@
         <choice value="cupertino-frost"/>
         <choice value="spider-glow"/>
         <choice value="minimal-flat"/>
+        <choice value="crystal-clear"/>
+        <choice value="tahoe-pill"/>
+        <choice value="cyber-neon"/>
+        <choice value="floating-icons"/>
       </choices>
       <default>'obsidian-glass'</default>
       <summary>Dock style</summary>
-      <description>obsidian-glass: translucent dark smoke. cupertino-frost: bright diffused glass. spider-glow: a dark core with a red laser edge. minimal-flat: a solid dark shelf, no border or blur.</description>
+      <description>obsidian-glass: Obsidian Frosted Glass. crystal-clear: Crystal Clear Translucent. tahoe-pill: macOS Tahoe Pill (fully round ends). cyber-neon: Cyberpunk Neon Edge. floating-icons: Minimal Floating Icons (no backplate). Also cupertino-frost, spider-glow, minimal-flat.</description>
     </key>
     <key name="dock-opacity" type="d">
-      <range min="0.15" max="0.90"/>
+      <range min="0.10" max="0.95"/>
       <default>0.46</default>
-      <summary>Dock translucency</summary>
-      <description>How solid the obsidian-glass dock's tint is: 0.15 nearly clear, 0.90 nearly solid.</description>
+      <summary>Dock glass opacity</summary>
+      <description>How solid the glass styles' tint is (obsidian-glass, crystal-clear, tahoe-pill, cyber-neon): 0.10 nearly clear, 0.95 nearly solid.</description>
+    </key>
+    <key name="dock-corner-radius" type="i">
+      <range min="12" max="32"/>
+      <default>22</default>
+      <summary>Dock corner radius (px)</summary>
+      <description>The shelf's corners (the Tahoe pill is always fully round).</description>
+    </key>
+    <key name="dock-focused-raise" type="b">
+      <default>true</default>
+      <summary>Raise the focused app</summary>
+      <description>The app you're working in sits a little higher and larger (1.12x, 5 px up) with a soft glow; the others stay at rest.</description>
+    </key>
+    <key name="dock-indicator-style" type="s">
+      <choices><choice value="glowing-dot"/><choice value="wide-pill"/><choice value="underline"/></choices>
+      <default>'glowing-dot'</default>
+      <summary>Running indicator</summary>
+      <description>glowing-dot, wide-pill (a short dash), underline (a thin line).</description>
     </key>
     <key name="dock-icon-size" type="i">
-      <range min="36" max="56"/>
+      <range min="36" max="68"/>
       <default>40</default>
       <summary>Dock icon size (px)</summary>
       <description>The icons' size at rest; they grow under the pointer (dock-hover-scale).</description>
@@ -92,7 +113,7 @@
       <range min="1.00" max="1.50"/>
       <default>1.32</default>
       <summary>Dock magnification</summary>
-      <description>How much the icon right under the pointer grows (and it lifts 12 px); icons nearby grow less, on a smooth bell that reaches 120 px. 1.00: none.</description>
+      <description>How much the icon right under the pointer grows (and it lifts 12 px); only that one icon, so the dock never shifts. 1.00: off.</description>
     </key>
     <key name="dock-hide-ms" type="i">
       <range min="60" max="1500"/>

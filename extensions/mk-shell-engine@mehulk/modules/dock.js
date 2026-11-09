@@ -1,10 +1,15 @@
 // MK Shell Engine: the MK dock. A floating glass shelf at the bottom of the
 // primary monitor: your favourite apps, then running ones, then Show Apps.
-//   - icons swell on a smooth bell under the pointer: 1.32x and a 12 px lift
-//     right under it, easing off with distance to nothing at 120 px (a
-//     cosine curve, so there are no steps); Show Apps never grows
-//   - a dot under each running app (two for several windows), in the accent
+//   - only the icon right under the pointer grows (dock-hover-scale, 1.32x by
+//     default, and a 12 px lift, a quick 120 ms spring), so the dock never
+//     shifts; the app you're in sits raised (1.12x, 5 px up) while you work in
+//     it (dock-focused-raise); Show Apps never grows
+//   - an indicator under each running app (two for several windows): a glowing
+//     dot, a short dash or an underline (dock-indicator-style), in your accent
 //     colour for the app you're using
+//   - looks (dock-style): Obsidian Frosted Glass, Crystal Clear, Tahoe Pill,
+//     Cyberpunk Neon Edge, Minimal Floating Icons (and three older ones), with
+//     dock-opacity and dock-corner-radius
 //   - click: open, focus, or (the app you're in) minimize; middle-click: a new
 //     window; scroll: cycle the app's windows; right-click: New Window,
 //     Keep in Dock, Quit, Force Quit
@@ -41,7 +46,7 @@ const EDGE_DELAY = 70;         // the pointer rests on the bottom edge this long
 // a little (1.08x); every other icon stays as it is. Each icon glides to its
 // size in 120 ms (ease-out cubic) as the pointer sweeps across, and only
 // when its own size changes, so a sweep never restarts anyone else's glide.
-const LIFT = 12, GLIDE = 120, RADIUS = 120;     // the bell's reach, px from the pointer
+const LIFT = 12, GLIDE = 120;     // the hovered icon lifts 12 px, in 120 ms
 
 export class Dock {
     constructor(settings) {
@@ -49,7 +54,8 @@ export class Dock {
         this._actor = null;
         this._unwatch = watch(() => this._sync());
         this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::dock-hide-ms',
-            'changed::dock-reveal-ms', 'changed::blur', 'changed::dock-style', 'changed::dock-opacity'].map(
+            'changed::dock-reveal-ms', 'changed::blur', 'changed::dock-style', 'changed::dock-opacity',
+            'changed::dock-corner-radius', 'changed::dock-indicator-style'].map(
             signal => settings.connect(signal, () => this._sync(true)));
         this._sync();
     }
@@ -94,8 +100,16 @@ export class Dock {
         this._actor = new St.BoxLayout({style_class: `mk-dock mk-dock-${style}`, reactive: true, track_hover: true,
             y_align: Clutter.ActorAlign.END});
         this._actor.set_pivot_point(0.5, 1);
-        if (style === 'obsidian-glass')
-            this._actor.style = `background-color: rgba(18, 20, 30, ${this._settings.get_double('dock-opacity').toFixed(2)});`;
+        // the glass styles' tint follows dock-opacity; the corners dock-corner-radius (Tahoe: round ends)
+        const op = this._settings.get_double('dock-opacity');
+        this._radius = style === 'tahoe-pill' ? 32 : this._settings.get_int('dock-corner-radius');
+        const tint = {'obsidian-glass': `rgba(18, 20, 30, ${op.toFixed(2)})`,
+            'crystal-clear': `rgba(255, 255, 255, ${(op * 0.36).toFixed(2)})`,
+            'tahoe-pill': `rgba(28, 30, 40, ${op.toFixed(2)})`,
+            'cyber-neon': `rgba(8, 10, 22, ${Math.max(op, 0.5).toFixed(2)})`}[style];
+        this._actor.style = `${tint ? `background-color: ${tint}; ` : ''}border-radius: ${this._radius}px;`;
+        this._indicator = this._settings.get_string('dock-indicator-style');
+        this._connect(this._settings, 'changed::dock-focused-raise', () => this._settle());
         // the icons only take the pointer once the dock is (nearly) back in place: a hidden
         // dock never shows a name or grows an icon (it used to, from just under the screen's edge)
         this._actor.connect('notify::translation-y', () => {
@@ -134,8 +148,9 @@ export class Dock {
             this._settle();
             this._queueDodge(600);
         });
-        if (blurAllowed(this._settings) && style !== 'minimal-flat')    // (flat: solid, nothing to see through)
-            this._unblur = addWallpaperGlass(this._actor, this._chrome, DOCK_GLASS, 22);
+        // (flat: solid, floating icons: no shelf at all; nothing to see through either way)
+        if (blurAllowed(this._settings) && style !== 'minimal-flat' && style !== 'floating-icons')
+            this._unblur = addWallpaperGlass(this._actor, this._chrome, DOCK_GLASS, this._radius);
         this._menus = new PopupMenu.PopupMenuManager(this._actor);
 
         const appSystem = Shell.AppSystem.get_default();
@@ -143,7 +158,11 @@ export class Dock {
         this._connect(appSystem, 'app-state-changed', () => this._queueFill());
         this._connect(appSystem, 'installed-changed', () => this._queueFill());
         this._connect(AppFavorites.getAppFavorites(), 'changed', () => this._queueFill());
-        this._connect(tracker, 'notify::focus-app', () => this._paintBars());
+        this._connect(tracker, 'notify::focus-app', () => {
+            this._paintBars();
+            if (!this._actor.hover)
+                this._settle();          // the focused app's icon rises, the last one settles
+        });
         this._connect(global.display, 'notify::focus-window', () => this._followFocus());
         this._connect(global.workspace_manager, 'active-workspace-changed', () => {
             this._queueFill();
@@ -429,7 +448,8 @@ export class Dock {
             // a small glowing dot pops in under each running app (two for several windows);
             // the app you're using gets its dot in your accent colour
             const dot = colour => {
-                const w = new St.Widget({style_class: 'mk-dock-bar', style: `background-color: ${colour}; box-shadow: 0 0 6px ${colour};`,
+                const w = new St.Widget({style_class: `mk-dock-bar mk-dock-bar-${this._indicator ?? 'glowing-dot'}`,
+                    style: `background-color: ${colour}; box-shadow: 0 0 6px ${colour};`,
                     pivot_point: new Graphene.Point({x: 0.5, y: 0.5}), scale_x: 0, scale_y: 0, opacity: 0});
                 item.bars.add_child(w);
                 w.ease({scale_x: 1, scale_y: 1, opacity: 255, duration: 220, mode: Clutter.AnimationMode.EASE_OUT_BACK});
@@ -452,27 +472,35 @@ export class Dock {
 
     _magnify(pointerX) {
         const items = this._items ?? [];
-        // each icon by how far its centre (at rest) is from the pointer: a cosine bell,
-        // 1 right under it, 0 from RADIUS on
+        // only the icon right under the pointer grows (a quick spring, 120 ms); the rest keep
+        // their resting state, so nothing moves sideways (scaling never changes the layout)
         const [dockX] = this._actor.get_transformed_position();
+        const under = items.find(it => !it.isAppGrid && pointerX >= dockX + it.button.x &&
+            pointerX < dockX + it.button.x + it.button.width);
         items.forEach(it => {
-            const d = Math.abs(pointerX - (dockX + it.button.x + it.button.width / 2));
-            const bell = it.isAppGrid || d >= RADIUS ? 0 : 0.5 * (1 + Math.cos(Math.PI * d / RADIUS));
-            const scale = Math.round((1 + (this._hover - 1) * bell) * 100) / 100;      // (steps of 0.01)
-            if (it.target === scale)
+            const [scale, lift] = it === under && this._hover > 1.001 ? [this._hover, LIFT] : this._rest(it);
+            const key = `${scale}/${lift}`;
+            if (it.target === key)
                 return;
-            it.target = scale;
-            it.icon.ease({scale_x: scale, scale_y: scale, translation_y: -Math.round(LIFT * bell),
-                duration: GLIDE, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            it.target = key;
+            it.icon.ease({scale_x: scale, scale_y: scale, translation_y: -lift,
+                duration: GLIDE, mode: it === under ? Clutter.AnimationMode.EASE_OUT_BACK : Clutter.AnimationMode.EASE_OUT_CUBIC});
         });
         return Clutter.EVENT_PROPAGATE;
+    }
+
+    // an icon at rest: the focused app's raised a little (1.12x, 5 px up), every other at 1x
+    _rest(item) {
+        const focus = Shell.WindowTracker.get_default().focus_app;
+        return this._settings.get_boolean('dock-focused-raise') && item.app && item.app === focus ? [1.12, 5] : [1, 0];
     }
 
     _settle() {
         const ease = {duration: 150, mode: Clutter.AnimationMode.EASE_OUT_CUBIC};
         for (const item of this._items ?? []) {
-            item.target = 1;
-            item.icon.ease({scale_x: 1, scale_y: 1, translation_y: 0, ...ease});
+            const [scale, lift] = this._rest(item);
+            item.target = `${scale}/${lift}`;
+            item.icon.ease({scale_x: scale, scale_y: scale, translation_y: -lift, ...ease});
         }
         this._tooltip(null);
     }

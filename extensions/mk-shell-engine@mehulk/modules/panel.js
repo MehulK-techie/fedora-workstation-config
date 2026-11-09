@@ -247,6 +247,108 @@ class LogoButton {
     }
 }
 
+// The left of the bar as separate floating islands, 6 px apart: the brand (the Finder
+// logo, a divider, Places), the workspace dots, and the app you're in (the suite's app
+// pill is a capsule of its own; the engine's app button gets an island here). Each is a
+// frosted backdrop behind the left box, as wide as its buttons, following them as they
+// move, come and go (the left box itself paints nothing).
+const ISLAND_GROUPS = [
+    ['wack-finder', 'mk-logo', 'wack-logo-menu', '@divider', 'wack-places', 'places-menu'],
+    ['wack-workspace-button', 'activities'],
+    ['mk-active-app'],
+];
+
+class LeftIslands {
+    constructor(settings, divider) {
+        this._divider = divider;
+        this._backdrops = ISLAND_GROUPS.map(() => {
+            const b = new St.Widget({style_class: 'mk-left-island', reactive: false, visible: false});
+            Main.layoutManager.uiGroup.insert_child_below(b, Main.layoutManager.panelBox);
+            return b;
+        });
+        this._unglass = blurAllowed(settings)
+            ? this._backdrops.map(b => addWallpaperGlass(b, b, PANEL_GLASS, ISLAND_RADIUS)) : [];
+        const box = Main.layoutManager.panelBox;
+        this._ids = [
+            [Main.panel._leftBox, Main.panel._leftBox.connect('notify::allocation', () => this.queue())],
+            [Main.panel, Main.panel.connect('notify::visible', () => this.queue())],
+            [box, box.connect('notify::translation-y', () => this.queue())],
+            [box, box.connect('notify::opacity', () => this.queue())],
+            [box, box.connect('notify::visible', () => this.queue())],
+        ];
+        this._watched = new Map();      // each button followed: actor -> its signal ids
+        this.queue();
+    }
+
+    // a button's own moves move its island too; a button that goes is simply forgotten
+    _watch(actor) {
+        if (this._watched.has(actor))
+            return;
+        this._watched.set(actor, [actor.connect('notify::allocation', () => this.queue()),
+            actor.connect('destroy', () => this._watched.delete(actor))]);
+    }
+
+    queue() {
+        if (this._later)
+            return;
+        this._later = global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
+            this._later = 0;
+            this._sync();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _actors(group) {
+        const area = Main.panel.statusArea, left = Main.panel._leftBox;
+        return group.map(name => (name === '@divider' ? this._divider : area[name]?.container))
+            .filter(a => a && a.get_parent() === left && a.visible);
+    }
+
+    _sync() {
+        const shown = Main.panel.visible && Main.layoutManager.panelBox.visible;
+        ISLAND_GROUPS.forEach((group, i) => {
+            const b = this._backdrops[i];
+            const actors = this._actors(group).filter(a => a !== this._divider);
+            for (const a of this._actors(group))
+                this._watch(a);
+            if (!shown || !actors.length) {
+                b.hide();
+                return;
+            }
+            let x1 = Infinity, x2 = -Infinity, y1 = Infinity, y2 = -Infinity;
+            for (const a of this._actors(group)) {
+                const e = a.get_transformed_extents();
+                if (![e.origin.x, e.size.width].every(Number.isFinite) || e.size.width <= 0)
+                    continue;
+                x1 = Math.min(x1, e.origin.x);
+                x2 = Math.max(x2, e.origin.x + e.size.width);
+                y1 = Math.min(y1, e.origin.y);
+                y2 = Math.max(y2, e.origin.y + e.size.height);
+            }
+            if (!Number.isFinite(x1)) {
+                b.hide();
+                return;
+            }
+            b.set_position(Math.round(x1), Math.round(y1) + 3);
+            b.set_size(Math.round(x2 - x1), Math.max(1, Math.round(y2 - y1) - 6));
+            b.opacity = Main.layoutManager.panelBox.get_paint_opacity();
+            b.show();
+        });
+    }
+
+    destroy() {
+        if (this._later)
+            global.compositor.get_laters().remove(this._later);
+        for (const [a, id] of this._ids)
+            a.disconnect(id);
+        for (const [a, ids] of this._watched)
+            ids.forEach(id => a.disconnect(id));
+        this._watched.clear();
+        this._unglass.forEach(off => off());
+        this._backdrops.forEach(b => b.destroy());
+    }
+}
+
 // The top bar's menus as floating glass (Finder, Places, the app's menu, and what
 // other extensions add): 8 px below the bar, at least 6 px from the screen's edge,
 // centred under their button where there's room, frosted over what's behind while
@@ -622,7 +724,7 @@ export class Panel {
         const style = this._settings.get_string('top-bar-style');
         panel.add_style_class_name(style === 'edge' ? 'mk-edge' : 'mk-islands');
         if (blurAllowed(this._settings)) {
-            const glass = style === 'edge' ? [panel] : [panel._leftBox, panel._centerBox, panel._rightBox];
+            const glass = style === 'edge' ? [panel] : [panel._centerBox, panel._rightBox];  // (the left: LeftIslands)
             this._unblur = glass.map(actor => addWallpaperGlass(actor, Main.layoutManager.panelBox, PANEL_GLASS,
                 style === 'edge' ? 0 : ISLAND_RADIUS));
         }
@@ -648,6 +750,13 @@ export class Panel {
             console.error(`mk-shell-engine: tray fold: ${e.message}`);
         }
         this._orderLeft();
+        if (style !== 'edge') {
+            try {
+                this._islands = new LeftIslands(this._settings, this._divider);
+            } catch (e) {
+                console.error(`mk-shell-engine: left islands: ${e.message}`);
+            }
+        }
         // something added to the left later (WACK Shell's logo button after a settings change,
         // Places switched on): put the island back in order
         this._leftId = Main.panel._leftBox.connect('child-added', () => this._queueOrder());
@@ -802,12 +911,16 @@ export class Panel {
         if (area['mk-active-app'])
             area['mk-active-app'].container.visible = !shown('wack-app-indicator');
         const order = [area['wack-finder']?.container, area['mk-logo']?.container, area['wack-logo-menu']?.container,
-            area['wack-places']?.container, area['places-menu']?.container, this._divider,
+            this._divider, area['wack-places']?.container, area['places-menu']?.container,
             area['wack-workspace-button']?.container, area.activities?.container,
             area['wack-app-indicator']?.container, area['mk-active-app']?.container]
             .filter(a => a && a.get_parent() === left);
         order.forEach((actor, i) => left.set_child_at_index(actor, i));
-        this._divider.visible = true;
+        // the divider sits inside the brand island, between the logo and Places (when both show)
+        const placesShown = ['wack-places', 'places-menu'].some(n => shown(n) && area[n].container.visible);
+        const logoShown = ['wack-finder', 'mk-logo', 'wack-logo-menu'].some(n => shown(n) && area[n].container.visible);
+        this._divider.visible = placesShown && logoShown;
+        this._islands?.queue();
         // the dots sit in a slot of their own size (64 px for WACK's button): the active dot morphs inside it, the
         // capsule never moves (it shifted while swiping between workspaces)
         const dots = dotsItem;
@@ -831,6 +944,8 @@ export class Panel {
         if (this._orderIdle)
             GLib.source_remove(this._orderIdle);
         this._orderIdle = 0;
+        this._islands?.destroy();
+        this._islands = null;
         this._divider?.destroy();
         this._divider = null;
         if (this._dots)

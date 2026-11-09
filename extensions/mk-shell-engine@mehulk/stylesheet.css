@@ -44,6 +44,16 @@
 .mk-dock-item:focus { background-color: rgba(255, 255, 255, 0.10); }
 .mk-dock-bars { height: 4px; margin-top: 3px; spacing: 3px; }
 .mk-dock-bar { width: 5px; height: 5px; border-radius: 99px; }
+.mk-dock-bar.mk-dock-bar-wide-pill { width: 14px; height: 4px; border-radius: 2px; }
+.mk-dock-bar.mk-dock-bar-underline { width: 20px; height: 2px; border-radius: 1px; }
+/* the new looks (the tint and corners come from dock-opacity and dock-corner-radius) */
+.mk-dock.mk-dock-crystal-clear { border: 1px solid rgba(255, 255, 255, 0.34); border-top-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.30); }
+.mk-dock.mk-dock-tahoe-pill { padding: 6px 16px; border: 1px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(255, 255, 255, 0.45); box-shadow: 0 16px 38px rgba(0, 0, 0, 0.5); }
+.mk-dock.mk-dock-cyber-neon { border: 1px solid rgba(34, 211, 238, 0.85); box-shadow: 0 0 18px 1px rgba(217, 70, 239, 0.45); }
+.mk-dock.mk-dock-cyber-neon .mk-dock-separator { background-color: rgba(217, 70, 239, 0.7); }
+.mk-dock.mk-dock-floating-icons { background-color: transparent; border: none; box-shadow: none; }
 .mk-dock-separator { width: 1px; height: 32px; margin: 0 8px; border-radius: 1px; background-color: rgba(255, 255, 255, 0.20); }
 .mk-dock-grid { color: rgba(242, 246, 255, 0.88); }
 .mk-dock-tooltip { color: #f5f7fb; font-size: 0.86em; font-weight: 600; padding: 5px 12px; border-radius: 10px;
@@ -136,6 +146,19 @@
 .mk-island-divider { width: 1px; height: 16px; margin: 0 2px; background-color: rgba(255, 255, 255, 0.18); }
 .mk-tray-fold { padding: 0 6px; }
 #panel.mk-islands #panelLeft { margin-left: 0; padding-left: 6px; spacing: 6px; }   /* snug to the bezel (after the islands' margin, so it wins) */
+/* the left: no single capsule around everything; each group is an island of its own (panel.js
+   LeftIslands draws one frosted backdrop per group, 6 px apart) */
+#panel.mk-islands #panelLeft { background-color: transparent; border: none; padding: 0 0 0 4px; }
+.mk-left-island { background-color: rgba(16, 18, 24, 0.58); border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top-color: rgba(255, 255, 255, 0.28); border-bottom-color: rgba(0, 0, 0, 0.18); border-radius: 12px; }
+/* the suite's app pill: one clean capsule of its own, same glass as the islands */
+#panel.mk-islands .wack-app-pill { height: 26px; padding: 0 12px; border-radius: 12px;
+  background-color: rgba(16, 18, 24, 0.58); border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top-color: rgba(255, 255, 255, 0.28); }
+#panel.mk-islands .panel-button.wack-app-indicator:hover .wack-app-pill { background-color: rgba(36, 38, 46, 0.66); }
+#panel.mk-islands .panel-button.wack-app-indicator:hover, #panel.mk-islands .panel-button.wack-app-indicator:active,
+#panel.mk-islands .panel-button.wack-app-indicator:checked { background-color: transparent; }
+#panel.mk-islands .panel-button.wack-finder { padding: 0 10px 0 6px; }
 #panel.mk-islands #panelRight { margin-right: 4px; spacing: 2px; }
 #panel.mk-islands #panelRight .panel-button { padding: 0 7px; }
 

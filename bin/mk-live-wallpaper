@@ -29,7 +29,8 @@ lock screen's video slows to a stop and dissolves into the desktop.
 
   mk-live-wallpaper run FILE [--once] [--audio VOL] [--hwaccel vaapi|none]
                                           the player (the extension starts it);
-                                          stdin: play, pause, decelerate MS, volume VOL, quit
+                                          stdin: play, pause, decelerate MS, volume VOL,
+                                          fade VOL MS (a smooth ramp), quit
 """
 import json
 import os
@@ -130,6 +131,7 @@ def player(path, once=False, audio=None, hwaccel=None):
         else:
             # sound on (the extension's switch): the default output, at the slider's volume
             Gst.util_set_object_arg(playbin, "flags", "video+audio+deinterlace+soft-colorbalance")
+            state["level"] = audio
             playbin.set_property("volume", linear(audio))
         state["pipeline"] = playbin
         bus = playbin.get_bus()
@@ -179,11 +181,36 @@ def player(path, once=False, audio=None, hwaccel=None):
             pipeline.set_state(Gst.State.PLAYING)
         elif words[0] == "volume" and len(words) > 1 and audio is not None:
             try:
-                pipeline.set_property("volume", linear(words[1]))
+                state["fade"] = state.get("fade", 0) + 1   # (stops a ramp under way)
+                state["level"] = min(1.0, max(0.0, float(words[1])))
+                pipeline.set_property("volume", linear(state["level"]))
+            except ValueError:
+                pass
+        elif words[0] == "fade" and len(words) > 2 and audio is not None:
+            try:
+                fade_to(float(words[1]), int(words[2]))
             except ValueError:
                 pass
         elif words[0] == "decelerate":
             decelerate(int(words[1]) if len(words) > 1 else 600)
+
+    def fade_to(target, ms):
+        # a smooth ramp, as heard (the slider's scale), from where it is now, in 20 ms steps
+        target = min(1.0, max(0.0, target))
+        start = state.get("level", target if audio is None else audio)
+        token = state["fade"] = state.get("fade", 0) + 1
+        steps = max(1, ms // 20)
+        count = [0]
+
+        def step():
+            if token != state["fade"]:
+                return False
+            count[0] += 1
+            t = min(1.0, count[0] / steps)
+            state["level"] = start + (target - start) * t
+            state["pipeline"].set_property("volume", linear(state["level"]))
+            return t < 1.0
+        GLib.timeout_add(20, step)
 
     def set_rate(rate):
         state["rate"] = rate

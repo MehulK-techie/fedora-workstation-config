@@ -11,6 +11,11 @@
 // the overview and the dock), clicks passing through, covering the primary
 // monitor. Paused under a full-screen window and while the screen is locked.
 // Silent unless desktop-audio-enabled: no audio stream is opened at all then.
+// With sound on, it's only heard while you're looking at the desktop itself:
+// unlocked, no overview, and no window showing on this workspace (all closed or
+// minimized). A window appearing or taking focus, the overview or the lock fade
+// it out (250 ms); back on the bare desktop it fades in (300 ms) to the slider's
+// level. Another player playing mutes it too (audio-auto-mute-on-other-media).
 //
 // The player takes commands on stdin (play, pause, decelerate MS, volume V,
 // quit) and quits when it closes; one that stops on its own is restarted up to
@@ -135,11 +140,24 @@ export class DesktopWallpaper {
         ];
         this._ids = [
             [global.display, global.display.connect('in-fullscreen-changed', () => this._syncPlaying())],
+            // the desktop showing or not: focus, windows coming, going, minimized, other workspaces
+            [global.display, global.display.connect('notify::focus-window', () => this._queueVolume())],
+            [global.display, global.display.connect('window-created', () => this._queueVolume())],
+            [global.window_manager, global.window_manager.connect('minimize', () => this._queueVolume())],
+            [global.window_manager, global.window_manager.connect('unminimize', () => this._queueVolume())],
+            [global.window_manager, global.window_manager.connect('map', () => this._queueVolume())],
+            [global.window_manager, global.window_manager.connect('destroy', () => this._queueVolume())],
+            [global.workspace_manager, global.workspace_manager.connect('active-workspace-changed', () => this._queueVolume())],
+            [Main.overview, Main.overview.connect('showing', () => this._queueVolume())],
+            [Main.overview, Main.overview.connect('hidden', () => this._queueVolume())],
             [Main.layoutManager, Main.layoutManager.connect('monitors-changed', () => this._fit())],
-            [Main.sessionMode, Main.sessionMode.connect('updated', () => this._syncPlaying())],
+            [Main.sessionMode, Main.sessionMode.connect('updated', () => {
+                this._syncPlaying();
+                this._queueVolume();
+            })],
         ];
         this._media = new MediaWatcher();
-        this._media.connect('changed', () => this._syncVolume());
+        this._media.connect('changed', () => this._queueVolume());
         this._start();
     }
 
@@ -159,15 +177,46 @@ export class DesktopWallpaper {
         this._player.start(path, args);
     }
 
-    // the slider's volume; nothing while another player is playing (with auto-mute on)
-    _volume() {
-        const muted = this._settings.get_boolean('audio-auto-mute-on-other-media') && this._media?.anyPlaying;
-        return muted ? 0 : this._settings.get_double('desktop-audio-volume');
+    // Is the bare desktop what you're looking at? Unlocked, no overview, and no window
+    // showing on this workspace (the wallpaper's own window aside)
+    _onDesktop() {
+        if (Main.sessionMode.isLocked || Main.overview.visible)
+            return false;
+        const ws = global.workspace_manager.get_active_workspace();
+        return !global.display.list_all_windows().some(w =>
+            w !== this._player.win && !w.minimized && w.showing_on_its_workspace?.() !== false &&
+            !w.skip_taskbar && w.get_window_type() !== Meta.WindowType.DESKTOP &&
+            (w.located_on_workspace?.(ws) ?? w.get_workspace() === ws));
     }
 
-    _syncVolume() {
-        if (this.audio && this._player.win)
-            this._player.send(`volume ${this._volume().toFixed(2)}`);
+    // the slider's volume on the bare desktop; nothing anywhere else, or while another
+    // player is playing (with auto-mute on)
+    _volume() {
+        const muted = this._settings.get_boolean('audio-auto-mute-on-other-media') && this._media?.anyPlaying;
+        return muted || !this._onDesktop() ? 0 : this._settings.get_double('desktop-audio-volume');
+    }
+
+    _queueVolume() {
+        if (this._volIdle || !this.audio)
+            return;
+        this._volIdle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._volIdle = 0;
+            this._syncVolume(true);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // FADE: a smooth ramp (out 250 ms, in 300 ms) rather than a jump (the slider moving)
+    _syncVolume(fade = false) {
+        if (!this.audio || !this._player.win)
+            return;
+        const level = this._volume();
+        if (!fade) {
+            this._player.send(`volume ${level.toFixed(2)}`);
+        } else if (level !== this._level) {
+            this._player.send(`fade ${level.toFixed(2)} ${level < (this._level ?? 1) ? 250 : 300}`);
+        }
+        this._level = level;
     }
 
     _place(win) {
@@ -207,6 +256,8 @@ export class DesktopWallpaper {
     }
 
     destroy() {
+        if (this._volIdle)
+            GLib.source_remove(this._volIdle);
         for (const id of this._setIds)
             this._settings.disconnect(id);
         for (const [object, id] of this._ids)

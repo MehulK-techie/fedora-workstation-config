@@ -11,24 +11,38 @@
 // the overview and the dock), clicks passing through, covering the primary
 // monitor. Paused under a full-screen window and while the screen is locked.
 // Silent unless desktop-audio-enabled: no audio stream is opened at all then.
-// With sound on, it's only heard while you're looking at the desktop itself:
-// unlocked, no overview, and no window showing on this workspace (all closed or
-// minimized). A window appearing or taking focus, the overview or the lock fade
-// it out (250 ms); back on the bare desktop it fades in (300 ms) to the slider's
-// level. Another player playing mutes it too (audio-auto-mute-on-other-media).
+// With sound on, two ways (wallpaper-background-play, Quick Settings' "Wallpaper
+// Bg Play" tile):
+//   off (the default): heard only on the bare desktop (unlocked, no overview, no
+//     window showing on this workspace). A window showing or taking focus fades it
+//     out over 400 ms (20 ms steps) and then pauses it; back on the bare desktop it
+//     plays and fades in over 350 ms to the slider's level. Another player playing
+//     mutes it too (audio-auto-mute-on-other-media).
+//   on: it plays on under your windows, sound and all, and steps aside only for
+//     other media: an MPRIS player or any other app's sound stream playing
+//     (otherMedia.js) fades it out over 400 ms; 600 ms after that goes quiet it
+//     fades back in over 350 ms.
+// Top-bar menus (Quick Settings, the calendar, Finder, stats) never pause it.
+//
+// The picture: a clone of the player's window, the size of the whole monitor, in
+// the background layer (under the top bar and the dock, to the bottom edge), the
+// window itself kept out of sight: GNOME holds windows to the work area, the
+// clone doesn't care.
 //
 // The player takes commands on stdin (play, pause, decelerate MS, volume V,
 // quit) and quits when it closes; one that stops on its own is restarted up to
 // 3 times.
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import { MediaWatcher } from './media.js';
+import { OtherMedia } from './otherMedia.js';
 
 const PLAYER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-live-wallpaper']);
 const LOG = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-live-wallpaper.log']);
 const KEYS = ['desktop-wallpaper-path', 'desktop-hwaccel', 'desktop-audio-enabled'];
+const FADE_OUT = 400, FADE_IN = 350;
 
 const usable = path => typeof path === 'string' && path !== '' && GLib.file_test(path, GLib.FileTest.IS_REGULAR);
 
@@ -137,6 +151,7 @@ export class DesktopWallpaper {
             ...KEYS.map(k => settings.connect(`changed::${k}`, () => this._start())),
             settings.connect('changed::desktop-audio-volume', () => this._syncVolume()),
             settings.connect('changed::audio-auto-mute-on-other-media', () => this._syncVolume()),
+            settings.connect('changed::wallpaper-background-play', () => this._queueVolume()),
         ];
         this._ids = [
             [global.display, global.display.connect('in-fullscreen-changed', () => this._syncPlaying())],
@@ -156,19 +171,18 @@ export class DesktopWallpaper {
                 this._queueVolume();
             })],
         ];
-        this._watchMenus();
-        // (menus that join the bar later: Places, other extensions' buttons)
-        this._menuTimer = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 5, () => {
-            this._watchMenus();
-            return GLib.SOURCE_CONTINUE;
-        });
-        this._media = new MediaWatcher();
+        this._media = new OtherMedia();
         this._media.connect('changed', () => this._queueVolume());
         this._start();
     }
 
     get audio() {
         return this._settings.get_boolean('desktop-audio-enabled');
+    }
+
+    // Background Play: sound on, and on under your windows too
+    get _background() {
+        return this.audio && this._settings.get_boolean('wallpaper-background-play');
     }
 
     _start() {
@@ -198,8 +212,13 @@ export class DesktopWallpaper {
     // the slider's volume on the bare desktop; nothing anywhere else, or while another
     // player is playing (with auto-mute on)
     _volume() {
-        const muted = this._settings.get_boolean('audio-auto-mute-on-other-media') && this._media?.anyPlaying;
-        return muted || !this._onDesktop() ? 0 : this._settings.get_double('desktop-audio-volume');
+        const level = this._settings.get_double('desktop-audio-volume');
+        if (Main.sessionMode.isLocked)
+            return 0;
+        if (this._background)
+            return this._media?.playing ? 0 : level;
+        const muted = this._settings.get_boolean('audio-auto-mute-on-other-media') && this._media?.playing;
+        return muted || !this._onDesktop() ? 0 : level;
     }
 
     // (the name stays: it's called on every change that decides whether you're on the desktop;
@@ -209,25 +228,13 @@ export class DesktopWallpaper {
             return;
         this._volIdle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
             this._volIdle = 0;
+            this._syncPlaying();                     // (play first, so a fade-in is heard from its start)
             this._syncVolume(true);
-            this._syncPlaying();
             return GLib.SOURCE_REMOVE;
         });
     }
 
-    // every top-bar menu (Quick Settings, the calendar, stats, Finder...): while one is open the
-    // video stops decoding, so the menu opens on a quiet GPU
-    _watchMenus() {
-        this._menuIds ??= new Map();
-        for (const item of Object.values(Main.panel.statusArea)) {
-            const menu = item?.menu;
-            if (!menu?.connect || this._menuIds.has(menu))
-                continue;
-            this._menuIds.set(menu, menu.connect('open-state-changed', () => this._syncPlaying()));
-        }
-    }
-
-    // FADE: a smooth ramp (out 250 ms, in 300 ms) rather than a jump (the slider moving)
+    // FADE: a smooth ramp (out 400 ms, in 350 ms, 20 ms steps) rather than a jump (the slider moving)
     _syncVolume(fade = false) {
         if (!this.audio || !this._player.win)
             return;
@@ -235,7 +242,7 @@ export class DesktopWallpaper {
         if (!fade) {
             this._player.send(`volume ${level.toFixed(2)}`);
         } else if (level !== this._level) {
-            this._player.send(`fade ${level.toFixed(2)} ${level < (this._level ?? 1) ? 250 : 300}`);
+            this._player.send(`fade ${level.toFixed(2)} ${level < (this._level ?? 1) ? FADE_OUT : FADE_IN}`);
         }
         this._level = level;
     }
@@ -245,6 +252,7 @@ export class DesktopWallpaper {
         this._sizeWin = win;
         this._sizeId = win.connect('size-changed', () => this._scale());
         this._fit();
+        this._cover(win);
         this._syncPlaying();
         this._syncVolume();
     }
@@ -257,6 +265,35 @@ export class DesktopWallpaper {
             return;
         win.move_resize_frame(true, m.x, m.y, m.width, m.height);
         this._scale();
+        this._clone?.set_position(m.x, m.y);
+        this._clone?.set_size(m.width, m.height);
+    }
+
+    // The picture on screen: a clone of the window, as big as the monitor (physical geometry,
+    // not the work area), at the top of the background layer: under every window, the top
+    // bar and the dock, down to the bottom edge. The window itself is drawn only through it.
+    _cover(win) {
+        this._uncover();
+        const actor = win.get_compositor_private(), m = Main.layoutManager.primaryMonitor;
+        const layer = Main.layoutManager._backgroundGroup;
+        if (!actor || !m || !layer)
+            return;
+        this._clone = new Clutter.Clone({source: actor, reactive: false});
+        this._clone.set_position(m.x, m.y);
+        this._clone.set_size(m.width, m.height);
+        layer.add_child(this._clone);                // (above the still backgrounds)
+        actor.opacity = 0;                           // (a clone paints its source at full opacity)
+        this._coverActor = actor;
+        actor.connectObject('destroy', () => this._uncover(), this);
+    }
+
+    _uncover() {
+        if (this._coverActor) {
+            this._coverActor.disconnectObject(this);
+            this._coverActor.opacity = 255;
+        }
+        this._clone?.destroy();
+        this._clone = this._coverActor = null;
     }
 
     _scale() {
@@ -268,34 +305,42 @@ export class DesktopWallpaper {
         actor.set_scale(m.width / f.width, m.height / f.height);
     }
 
-    // paused under a full-screen window and while locked; playing again the moment that ends
-    // It plays only while you can see it: the bare desktop, or the overview (where it's the
-    // backdrop). A window showing, a full-screen one, the lock screen or an open top-bar menu
-    // pause it, on the frame it's on (no decoding at all), and it carries on from there.
+    // Paused under a full-screen window and while locked. Otherwise it plays while you can see
+    // it (the bare desktop, or the overview, where it's the backdrop), or, with Background
+    // Play, while you can hear it (under your windows, with no other media playing). Top-bar
+    // menus never pause it. With sound on, a pause waits for the 400 ms fade-out first.
     _syncPlaying() {
         if (!this._player.win)
             return;                                  // (no commands before its window)
         const m = Main.layoutManager.primaryIndex;
-        const covered = !Main.overview.visible && !this._onDesktop();
+        const seen = Main.overview.visible || this._onDesktop();
+        const heard = this._background && !this._media?.playing;
         const hidden = Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m)) ||
-            covered || [...(this._menuIds?.keys() ?? [])].some(menu => menu.isOpen);
+            !(seen || heard);
         const want = hidden ? 'pause' : 'play';
-        if (want !== this._playState) {
-            this._playState = want;
+        if (want === this._playState)
+            return;
+        this._playState = want;
+        if (this._pauseTimer) {
+            GLib.source_remove(this._pauseTimer);
+            this._pauseTimer = 0;
+        }
+        if (want === 'pause' && this.audio && !Main.sessionMode.isLocked) {
+            this._pauseTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FADE_OUT, () => {
+                this._pauseTimer = 0;
+                if (this._playState === 'pause')
+                    this._player.send('pause');
+                return GLib.SOURCE_REMOVE;
+            });
+        } else {
             this._player.send(want);
         }
     }
 
     destroy() {
-        if (this._volIdle)
-            GLib.source_remove(this._volIdle);
-        if (this._menuTimer)
-            GLib.source_remove(this._menuTimer);
-        for (const [menu, id] of this._menuIds ?? []) {
-            try {
-                menu.disconnect(id);
-            } catch {}                           // (its button went first)
-        }
+        for (const id of [this._volIdle, this._pauseTimer].filter(Boolean))
+            GLib.source_remove(id);
+        this._uncover();
         for (const id of this._setIds)
             this._settings.disconnect(id);
         for (const [object, id] of this._ids)

@@ -541,6 +541,11 @@
       <summary>Date format</summary>
       <description>full (Monday, November 9), short (Mon, Nov 9), numeric (09/11/2026, your locale's order), iso (2026-11-09).</description>
     </key>
+    <key name="wallpaper-background-play" type="b">
+      <default>false</default>
+      <summary>Background Play (smart media pause)</summary>
+      <description>The live wallpaper's sound plays on under your windows, fading out (400 ms) while any other app plays media and back in (350 ms) once that stops; off: heard only on the bare desktop.</description>
+    </key>
     <key name="lock-tagline" type="s">
       <default>''</default>
       <summary>Tagline under the clock</summary>

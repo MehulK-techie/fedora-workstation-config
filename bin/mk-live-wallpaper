@@ -99,6 +99,9 @@ def player(path, once=False, audio=None, hwaccel=None):
     except (ValueError, ImportError):
         GstAudio = None
 
+    # its sound stream's name, so the wallpaper never counts as "other media" (otherMedia.js)
+    GLib.set_application_name("MK Live Wallpaper")
+    GLib.set_prgname("mk-live-wallpaper")
     app = Gtk.Application(application_id=None)
     state = {"pipeline": None, "loop": not once, "rate": 1.0, "decel": 0}
     is_image = Path(path).suffix.lower() in IMAGE_EXT

@@ -15,6 +15,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { MediaWatcher } from './media.js';
 import { powerActions } from './power.js';
+import { underClock } from './clockStack.js';
 
 const KEYS = ['lock-status-pill', 'lock-weather', 'lock-media-controls', 'lock-power-button', 'compact-notifications',
     'show-hibernate', 'lock-clock-layout'];
@@ -22,9 +23,9 @@ const NOTIF_SHOWN = 3;
 
 // ----- battery and weather
 class StatusPill {
-    constructor(settings) {
+    constructor(settings, styleClass = 'wack-status-pill') {
         this._settings = settings;
-        this.actor = new St.BoxLayout({style_class: 'wack-status-pill', x_align: Clutter.ActorAlign.CENTER,
+        this.actor = new St.BoxLayout({style_class: styleClass, x_align: Clutter.ActorAlign.CENTER,
             reactive: false});
         this._batIcon = new St.Icon({icon_size: 14, style_class: 'wack-status-icon'});
         this._batLabel = new St.Label({style_class: 'wack-status-text', y_align: Clutter.ActorAlign.CENTER});
@@ -149,7 +150,7 @@ class NowPlaying {
 
 // ----- the power button, bottom right (an inline menu: popups can't float above the lock screen)
 class PowerButton {
-    // Two pieces on the lock screen: the 42 px round button, 24 px from the bottom-right
+    // Two pieces on the lock screen: the 44 px round button, 24 px from the bottom-right
     // corner, and a 170 px card of actions just above it (its bottom 78 px up). The actions go
     // straight to systemd-logind (power.js powerActions): GNOME's own power dialogs can't open
     // while the screen is locked, which is why these buttons used to do nothing.
@@ -176,8 +177,13 @@ class PowerButton {
             });
             this._list.add_child(b);
         }
+        // one 18 px icon, centred in a 44 px frosted circle (never a label, never a second icon)
+        group.get_children().filter(a => a.has_style_class_name?.('wack-lock-power-button') ||
+            a.has_style_class_name?.('wack-lock-power-menu')).forEach(a => a.destroy());
         this._toggle = new St.Button({style_class: 'wack-lock-power-button', can_focus: true, reactive: true,
-            track_hover: true, accessible_name: 'Power', child: new St.Icon({icon_name: 'system-shutdown-symbolic', icon_size: 18})});
+            track_hover: true, accessible_name: 'Power', width: 44, height: 44,
+            child: new St.Icon({icon_name: 'system-shutdown-symbolic', icon_size: 18,
+                x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, x_expand: true, y_expand: true})});
         this._toggle.connect('clicked', () => {
             this._list.visible = !this._list.visible;
             this._place();
@@ -205,6 +211,82 @@ class PowerButton {
         this._list.destroy();
         this._toggle.destroy();
         this._list = this._toggle = this.actor = null;
+    }
+}
+
+// ----- "Click or press a key to unlock": out of sight until the pointer moves
+// GNOME fades the hint in after 4 s of idling; here it's the other way round: it fades in
+// (180 ms) when the mouse moves, out again after 2.5 s without movement, and at once on Esc.
+const HINT_IN = 180, HINT_IDLE = 2500;
+
+class HintFader {
+    constructor(hint) {
+        this._hint = hint;
+        this._ease = hint.ease;                          // (GNOME's own idle fade-in is ignored)
+        hint.ease = () => {};
+        hint.remove_all_transitions();
+        hint.opacity = 0;
+        this._eventId = global.stage.connect('captured-event', (_s, event) => {
+            const type = event.type();
+            if (type === Clutter.EventType.MOTION)
+                this._show();
+            else if (type === Clutter.EventType.KEY_PRESS && event.get_key_symbol() === Clutter.KEY_Escape)
+                this._fade(0);
+            return Clutter.EVENT_PROPAGATE;
+        });
+        // (and Mutter's idle monitor, which sees every device: active again -> in, 2.5 s idle -> out)
+        this._idleMonitor = global.backend.get_core_idle_monitor();
+        this._idleId = this._idleMonitor.add_idle_watch(HINT_IDLE, () => {
+            this._fade(0);
+            this._armActive();
+        });
+        this._armActive();
+    }
+
+    _armActive() {
+        if (this._activeId || !this._idleMonitor)
+            return;
+        this._activeId = this._idleMonitor.add_user_active_watch(() => {
+            this._activeId = 0;                          // (a watch like this fires once)
+            this._show();
+        });
+    }
+
+    _fade(opacity) {
+        if (!this._hint)
+            return;
+        this._ease.call(this._hint, {opacity, duration: HINT_IN, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        if (opacity === 0 && this._timer) {
+            GLib.source_remove(this._timer);
+            this._timer = 0;
+        }
+    }
+
+    _show() {
+        if (!this._hint)
+            return;
+        if (this._hint.opacity < 255)
+            this._fade(255);
+        if (this._timer)
+            GLib.source_remove(this._timer);
+        this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, HINT_IDLE, () => {
+            this._timer = 0;
+            this._fade(0);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    destroy() {
+        global.stage.disconnect(this._eventId);
+        for (const id of [this._idleId, this._activeId].filter(Boolean))
+            this._idleMonitor.remove_watch(id);
+        this._idleMonitor = null;
+        if (this._timer)
+            GLib.source_remove(this._timer);
+        try {
+            delete this._hint.ease;                      // (back to Clutter's own)
+        } catch {}
+        this._hint = null;
     }
 }
 
@@ -316,18 +398,37 @@ export class LockWidgets {
         }
         // the battery and weather row: always in the clock's own stack, right under the time
         // (never floating on its own beside it)
+        // (in the column right under the time: clockStack.js; the tagline first, then this row)
+        const stack = underClock(clock._time) ?? clock;
         if (s.get_boolean('lock-status-pill')) {
             this._pill = new StatusPill(s);
-            const time = clock._time ? clock.get_children().indexOf(clock._time) : -1;
-            clock.insert_child_at_index(this._pill.actor, time >= 0 ? time + 1 : clock.get_n_children());
+            const kids = stack.get_children();
+            const tag = kids.findIndex(a => a.has_style_class_name?.('wack-tagline'));
+            const time = kids.indexOf(clock._time);
+            stack.insert_child_at_index(this._pill.actor, Math.max(tag, time) + 1);
         }
         if (s.get_boolean('lock-media-controls')) {
             this._media = new NowPlaying();
-            (split ? this._column : clock).add_child(this._media.actor);                          // under the time
+            (split ? this._column : stack).add_child(this._media.actor);                          // under the time
+        }
+        // the same battery and weather, small, in the top-right corner (16 px down, 24 px in)
+        if (s.get_boolean('lock-status-pill')) {
+            this._corner = new StatusPill(s, 'wack-status-cluster');
+            const group = shield._lockDialogGroup ?? dialog;
+            group.add_child(this._corner.actor);
+            const place = () => {
+                const m = Main.layoutManager.primaryMonitor;
+                if (m && this._corner?.actor)
+                    this._corner.actor.set_position(m.x + m.width - 24 - this._corner.actor.width, m.y + 16);
+            };
+            this._corner.actor.connect('notify::size', place);
+            place();
         }
         if (s.get_boolean('lock-power-button')) {
             this._power = new PowerButton(s, shield._lockDialogGroup ?? dialog);
         }
+        if (clock._hint)
+            this._hint = new HintFader(clock._hint);
         if (s.get_boolean('compact-notifications'))
             this._notifs = new CompactNotifications(dialog);
     }
@@ -336,7 +437,7 @@ export class LockWidgets {
         if (this._retry)
             GLib.source_remove(this._retry);
         this._retry = 0;
-        for (const part of ['_pill', '_media', '_power', '_notifs']) {
+        for (const part of ['_pill', '_corner', '_hint', '_media', '_power', '_notifs']) {
             try {
                 this[part]?.destroy();
             } catch (e) {

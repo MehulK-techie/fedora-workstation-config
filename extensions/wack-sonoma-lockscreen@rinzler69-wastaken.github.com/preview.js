@@ -230,9 +230,8 @@ export class LivePreview {
             time = time.replace(':', '\n');
         this._time.label = time;
         this._date.label = now.format(DATES[s.get_string('lock-date-format')] ?? DATES.full);
-        const tagline = s.get_string('lock-tagline').trim();
-        this._tagline.label = tagline;
-        this._tagline.visible = tagline !== '';
+        this._tagline.label = s.get_string('lock-tagline').trim() ||
+            s.get_string('cupertino-lockscreen-message-text').trim() || 'MK Workstation';
         const pill = s.get_boolean('lock-status-pill');
         this._pill.visible = pill;                     // (always under the time, never on its own)
         this._column.visible = Boolean(layout.split);
@@ -259,8 +258,8 @@ export class LivePreview {
             `${layout.neon ? `rgba(34,211,238,${(glow / 100).toFixed(2)})` : `rgba(0,0,0,${(0.2 + glow / 160).toFixed(2)})`};` : '';
         const scrim = s.get_int('dim-opacity') / 100;
         const card = s.get_boolean('lock-glass-card') || layout.card
-            ? `background-color: rgba(18,20,30,${(s.get_int('lock-card-opacity') / 100).toFixed(2)}); ` +
-              'border: 1px solid rgba(255,255,255,0.16); border-radius: 10px; padding: 6px 14px;'
+            ? `background-color: rgba(16,20,32,${(s.get_int('lock-card-opacity') / 100).toFixed(2)}); ` +
+              'border: 1px solid rgba(255,255,255,0.24); border-radius: 10px; padding: 6px 14px;'
             : 'background: none; border: none; padding: 0;';
         this._css.load_from_string(`
             .mkp-frame { border-radius: 10px; }

@@ -39,6 +39,7 @@ import SonomaPart from './sonoma.js';
 import LivePart from './live.js';
 import * as LoginManager from 'resource:///org/gnome/shell/misc/loginManager.js';
 import { LockWidgets } from './lockWidgets.js';
+import { clockAlign, clockBlock, clockCard, underClock } from './clockStack.js';
 import { TopBar, QuickSettingsHibernate } from './topbar.js';
 import { DesktopWallpaper } from './desktop.js';
 import { MediaWatcher } from './media.js';
@@ -46,7 +47,8 @@ import { WeatherService } from './weather.js';
 
 const STYLE_KEYS = ['dim-opacity', 'clock-style', 'clock-font', 'clock-color', 'date-color', 'clock-offset',
     'show-notifications', 'show-avatar', 'hide-fingerprint-hint', 'zero-lag-lock', 'lock-clock-layout', 'lock-glass-card',
-    'lock-greeting', 'lock-clock-glow', 'lock-card-opacity', 'lock-date-format', 'lock-tagline'];
+    'lock-greeting', 'lock-clock-glow', 'lock-card-opacity', 'lock-date-format', 'lock-tagline',
+    'cupertino-lockscreen-message-text'];
 // the clock's layout presets: the time's size, the date's, how far up
 // the clock's layout presets: the time's size, the date's, how far up; where it sits (center,
 // left: 96 px in from the left, corner: the top-left corner); a glass card of its own; a glow
@@ -310,7 +312,7 @@ export default class WackSonomaLiveLockscreen extends Extension {
             // own style (it rewrites the time's colour and weight as it samples the wallpaper)
             this._timeStyle = `${layout.time ? `font-size: ${layout.time}px; ` : ''}${font}${colour ? ` color: ${colour};` : ''}${shadow}`;
             this._clockLift = s.get_int('clock-offset') + layout.lift;
-            this._layoutClock(clockBox, time, date, layout);
+            this._layoutClock(clockBlock(time), time, date, layout);
         }
         if (date) {
             const colour = s.get_string('date-color');
@@ -319,7 +321,7 @@ export default class WackSonomaLiveLockscreen extends Extension {
         }
         this._overWack(clockBox, time, date);
         this._greet(dialog);
-        this._tag(clockBox);
+        this._tag(time ? underClock(time) : null);
         this._formatDate(date);
         this._avatar(dialog);
         if (!time)
@@ -354,18 +356,19 @@ export default class WackSonomaLiveLockscreen extends Extension {
     }
 
     // The clock's layout (LAYOUTS): its place (centred, 96 px in from the left, or the
-    // top-left corner), hours over minutes for the stack; the glass card behind it all
-    // (the clock box holds the date, the time, the tagline, the pill and Now Playing)
+    // top-left corner), hours over minutes for the stack; the glass card behind it all.
+    // BLOCK is what holds the whole clock: WACK's wrapper (the date, the time, and the
+    // column under it with the tagline, the pill and Now Playing; clockStack.js)
     _layoutClock(block, time, date, layout) {
-        if (!block?.add_style_class_name)
+        if (!block)
             return;
         const s = this._settings, name = s.get_string('lock-clock-layout');
-        if (s.get_boolean('lock-glass-card') || layout.card) {
-            block.add_style_class_name('wack-glass-card');
-            block.set_style(`background-color: rgba(18, 20, 30, ${(s.get_int('lock-card-opacity') / 100).toFixed(2)});`);
-        } else {
-            block.remove_style_class_name('wack-glass-card');
-            block.set_style(null);
+        const card = s.get_boolean('lock-glass-card') || layout.card;
+        const tint = `background-color: rgba(16, 20, 32, ${(s.get_int('lock-card-opacity') / 100).toFixed(2)});`;
+        if (!clockCard(time, card, tint) && block.add_style_class_name) {
+            // (GNOME's own clock box: the card is its background)
+            (card ? block.add_style_class_name : block.remove_style_class_name).call(block, 'wack-glass-card');
+            block.set_style(card ? tint : null);
         }
         const left = layout.place !== 'center';
         for (const a of [time, date])
@@ -375,10 +378,12 @@ export default class WackSonomaLiveLockscreen extends Extension {
             this._unlayoutClock();
             this._clockBlock = block;
             this._clockTime = time;
+            this._clockDate = date;
             this._blockId = block.connect('notify::allocation', () => this._placeClock());
             this._timeId = time.clutter_text.connect('notify::text', () => this._stackTime());
         }
         time.clutter_text.line_alignment = left ? 0 : 1;       // Pango.Alignment LEFT / CENTER
+        clockAlign(time, left);
         this._placeClock();
         if (name === 'vertical-stacked')
             this._stackTime();
@@ -400,9 +405,19 @@ export default class WackSonomaLiveLockscreen extends Extension {
         this._placing = true;
         const m = Main.layoutManager.primaryMonitor;
         const place = (LAYOUTS[this._settings.get_string('lock-clock-layout')] ?? LAYOUTS['sonoma-center']).place;
-        const [x, y] = block.get_transformed_position();
-        block.translation_x = m && place !== 'center' ? Math.round(m.x + (place === 'corner' ? 64 : 96) - (x - block.translation_x)) : 0;
-        block.translation_y = m && place === 'corner' ? Math.round(m.y + 56 - (y - block.translation_y)) : (this._clockLift ?? 0);
+        // (measured on the time and date themselves: WACK's wrapper is as wide as the screen;
+        // and never while WACK slides the clock away for the password field)
+        if (!block.get_transition?.('translation-y') && !block.get_transition?.('scale-x')) {
+            const labels = [this._clockTime, this._clockDate].filter(a => a?.get_parent() === block);
+            const x = Math.min(...labels.map(a => a.get_transformed_position()[0]));
+            const y = Math.min(...labels.map(a => a.get_transformed_position()[1]));
+            const tx = m && place !== 'center' ? Math.round(m.x + (place === 'corner' ? 64 : 96) - (x - block.translation_x)) : 0;
+            const ty = m && place === 'corner' ? Math.round(m.y + 56 - (y - block.translation_y)) : (this._clockLift ?? 0);
+            if (Number.isFinite(tx) && Number.isFinite(ty)) {
+                block.translation_x = tx;
+                block.translation_y = ty;
+            }
+        }
         this._placing = false;
     }
 
@@ -430,10 +445,11 @@ export default class WackSonomaLiveLockscreen extends Extension {
             apply();
     }
 
-    // a tagline under the time
+    // a tagline under the time, always: yours, else the Cupertino message, else the workstation's name
     _tag(clockBox) {
-        const text = this._settings.get_string('lock-tagline').trim();
-        if (!text || !clockBox?.add_child) {
+        const text = this._settings.get_string('lock-tagline').trim() ||
+            this._settings.get_string('cupertino-lockscreen-message-text').trim() || 'MK Workstation';
+        if (!clockBox?.add_child) {
             this._tagline?.destroy();
             this._tagline = null;
             return;
@@ -445,7 +461,8 @@ export default class WackSonomaLiveLockscreen extends Extension {
                 if (this._tagline === l)
                     this._tagline = null;
             });
-            const after = clockBox._time ? clockBox.get_children().indexOf(clockBox._time) + 1 : clockBox.get_n_children();
+            // first under the time (in GNOME's own clock box: right after the time)
+            const after = clockBox._time ? clockBox.get_children().indexOf(clockBox._time) + 1 : 0;
             clockBox.insert_child_at_index(this._tagline, after);
         }
         this._tagline.text = text;
@@ -504,7 +521,7 @@ export default class WackSonomaLiveLockscreen extends Extension {
                 this._clockTime.clutter_text.disconnect(this._timeId);
         } catch {}                          // (gone with the lock screen)
         this._blockId = this._timeId = 0;
-        this._clockBlock = this._clockTime = null;
+        this._clockBlock = this._clockTime = this._clockDate = null;
     }
 
     // a line of your own above the password field

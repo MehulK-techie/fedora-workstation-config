@@ -252,9 +252,8 @@ class Preview(Gtk.Frame):
         text = now.strftime("%I:%M").lstrip("0") if twelve else now.strftime("%H:%M")
         self.time.set_label(text.replace(":", "\n") if layout.get("stack") else text)
         self.date.set_label(now.strftime(DATES.get(s.get_string("lock-date-format"), DATES["full"]).replace("{day}", str(now.day))))
-        tagline = s.get_string("lock-tagline").strip()
-        self.tagline.set_label(tagline)
-        self.tagline.set_visible(bool(tagline))
+        self.tagline.set_label(s.get_string("lock-tagline").strip()
+                               or s.get_string("cupertino-lockscreen-message-text").strip() or "MK Workstation")
         pill = s.get_boolean("lock-status-pill")
         self.pill.set_visible(pill)                    # (always under the time, never on its own)
         self.column.set_visible(bool(layout.get("split")))
@@ -277,8 +276,8 @@ class Preview(Gtk.Frame):
         glow = max(s.get_int("lock-clock-glow"), 45 if neon else 0)
         shadow = (f"text-shadow: 0 {glow / 60:.1f}px {1 + glow * 0.06:.1f}px "
                   + (f"rgba(34,211,238,{glow / 100:.2f});" if neon else f"rgba(0,0,0,{0.2 + glow / 160:.2f});")) if glow else ""
-        card = (f"background-color: rgba(18,20,30,{s.get_int('lock-card-opacity') / 100:.2f}); "
-                "border: 1px solid rgba(255,255,255,0.16); border-radius: 10px; padding: 6px 14px;") \
+        card = (f"background-color: rgba(16,20,32,{s.get_int('lock-card-opacity') / 100:.2f}); "
+                "border: 1px solid rgba(255,255,255,0.24); border-radius: 10px; padding: 6px 14px;") \
             if s.get_boolean("lock-glass-card") or layout.get("card") else "background: none; border: none; padding: 0;"
         i = self.id
         self.css.load_from_string(f"""

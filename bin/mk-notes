@@ -1476,6 +1476,14 @@ class FreeCanvasImage(Gtk.Box):
 
         # Floating Image Toolbar: [ Snap Left | Center | Snap Right | Crop & Filter | Delete ]
         self.toolbar = Gtk.Box(spacing=3, halign=Gtk.Align.CENTER, css_classes=["mk-img-bar"], visible=False)
+        # Google Docs' "In line with text": the picture moves with the line it sits on (Enter above
+        # it pushes it down, Backspace pulls it up); off, it stays where it's put on the page
+        self.flow_btn = Gtk.ToggleButton(icon_name="format-text-wrap-symbolic", css_classes=["flat"],
+                                         active=self.data.get("flow") == "text",
+                                         tooltip_text="Move with text (on) or fixed on the page (off)")
+        self.flow_btn.connect("toggled", lambda b: self.win.set_image_flow(self, b.get_active()))
+        self.toolbar.append(self.flow_btn)
+        self.toolbar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
         snap_l = Gtk.Button(icon_name="format-justify-left-symbolic", tooltip_text="Snap Left", css_classes=["flat"])
         snap_l.connect("clicked", lambda *_: self._snap_x("left"))
         self.toolbar.append(snap_l)
@@ -3000,10 +3008,18 @@ PDF_FONTS = {"title": "Sans Heavy 22", "h1": "Sans Bold 18", "h2": "Sans Bold 15
              "h3": "Sans Semi-Bold 13", "body": "Sans 11"}
 
 
-def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_img_fn, stickies=(), tables=(), pads=()):
+def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_img_fn, stickies=(), tables=(), pads=(),
+                      geometry=None):
     """Render a note to PDF with Cairo (no print dialog). LINES: (Pango markup,
-    kind) pairs from NotesWindow._export_lines; kind picks the font. STICKIES
-    (the note's sticky notes) come after the text as coloured callout cards."""
+    kind[, y]) from NotesWindow._export_lines; kind picks the font. STICKIES
+    (the note's sticky notes) come after the text as coloured callout cards.
+
+    With GEOMETRY ({"page_w", "stride", "left"}: the editor's sheet width, the
+    distance from one sheet's top to the next, the text's left margin, in page
+    units) it's what you see: every line, picture (its size and turn) and table
+    where it sits on its sheet, sheet for sheet, A4 being the sheet's shape. Only
+    the note's own content: no title or "Last edited / Exported" line on the page
+    (the title stays in the file's properties)."""
     PAGE_W, PAGE_H = 595.0, 842.0
     MARGIN = 48.0
     CONTENT_W = PAGE_W - 2 * MARGIN
@@ -3034,54 +3050,26 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
         PangoCairo.show_layout(cr, layout)
         y += h + space_after
 
-    draw_text_block(GLib.markup_escape_text(title), "Sans Bold 20", color=(0.06, 0.09, 0.18), space_after=4.0)
-    draw_text_block(GLib.markup_escape_text(meta_line), "Sans 9", color=(0.42, 0.45, 0.52), space_after=12.0)
-    cr.set_source_rgba(0.2, 0.25, 0.35, 0.25)
-    cr.set_line_width(1.0)
-    cr.move_to(MARGIN, y - 6)
-    cr.line_to(PAGE_W - MARGIN, y - 6)
-    cr.stroke()
-    y += 6
-
-    for markup, kind in lines:
-        if not markup.strip():
-            y += 6.0
-            continue
-        heading = kind != "body"
-        if heading:
-            y += 6.0
-        draw_text_block(markup, PDF_FONTS[kind], space_after=8.0 if heading else 5.0)
-
-    for item in images_meta:
+    def image_surface(item, tw):
+        """The picture, at most 2 pixels per point (sharp in print), as a Cairo surface."""
         img_path = resolve_img_fn(item.get("name", ""))
         if not (img_path and Path(img_path).is_file()):
-            continue
+            return None
         try:
-            # GdkPixbuf reads JPEG, WebP and the rest; Cairo itself only PNG.
             pix = GdkPixbuf.Pixbuf.new_from_file(str(img_path))
-            tw = min(CONTENT_W, float(item.get("w", 380)) * 0.72)
-            th = min(PAGE_H - 2 * MARGIN, float(item.get("h", pix.get_height() * (tw / pix.get_width()))) * 0.72)
-            if pix.get_width() > tw * 2:  # 2 pixels per point is sharp in print; more only bloats the file
-                pix = pix.scale_simple(round(tw * 2), max(1, round(th * 2)), GdkPixbuf.InterpType.BILINEAR)
+            if pix.get_width() > tw * 2:
+                pix = pix.scale_simple(round(tw * 2), max(1, round(pix.get_height() * tw * 2 / pix.get_width())),
+                                       GdkPixbuf.InterpType.BILINEAR)
             _ok, png = pix.save_to_bufferv("png", [], [])
-            surf = cairo.ImageSurface.create_from_png(io.BytesIO(png))
+            return cairo.ImageSurface.create_from_png(io.BytesIO(png))
         except (GLib.Error, cairo.Error):
-            continue
-        iw, ih = surf.get_width(), surf.get_height()
-        if iw > 0 and ih > 0:
-            ensure_space(th + 14.0)
-            cr.save()
-            cr.translate(MARGIN, y)
-            cr.scale(tw / iw, th / ih)
-            cr.set_source_surface(surf, 0, 0)
-            cr.paint()
-            cr.restore()
-            y += th + 14.0
+            return None
 
-    for tdata in tables:  # each table as a ruled grid, scaled to the page width
+    def draw_table(tdata):
+        nonlocal y
         rows, widths = tdata.get("rows") or [], tdata.get("col_w") or []
         if not rows:
-            continue
+            return
         k = min(1.0, CONTENT_W / max(1.0, float(sum(widths))))
         cws = [w * k for w in widths]
         for r, row in enumerate(rows):
@@ -3111,6 +3099,90 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
                 x += cws[c]
             y += row_h
         y += 14.0
+
+    if geometry:
+        # what you see: everything on its sheet at its place (page units -> points)
+        sc = PAGE_W / float(geometry["page_w"])
+        stride = float(geometry["stride"])
+        left = float(geometry["left"]) * sc
+        text_w = PAGE_W - 2 * left
+        placed = []
+        for line in lines:
+            if len(line) > 2 and line[0].strip():
+                page = int(line[2] // stride)
+                placed.append((page, line[2] - page * stride, "text", line))
+        for item in images_meta:
+            ey = float(item.get("y", 0.0))
+            page = int(ey // stride)
+            placed.append((page, ey - page * stride, "image", item))
+        for tdata in tables:
+            ey = float(tdata.get("y", 0.0))
+            page = int(ey // stride)
+            placed.append((page, ey - page * stride, "table", tdata))
+        placed.sort(key=lambda p: (p[0], p[1]))
+        page_now = 0
+        for page, py, kind, what in placed:
+            while page_now < page:
+                cr.show_page()
+                page_now += 1
+            if kind == "text":
+                layout = PangoCairo.create_layout(cr)
+                layout.set_width(int(text_w * Pango.SCALE))
+                layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+                layout.set_font_description(Pango.FontDescription(PDF_FONTS.get(what[1], PDF_FONTS["body"])))
+                layout.set_markup(what[0], -1)
+                cr.set_source_rgb(0.1, 0.12, 0.16)
+                cr.move_to(left, py * sc)
+                PangoCairo.show_layout(cr, layout)
+            elif kind == "image":
+                tw, th = float(what.get("w", 380)) * sc, float(what.get("h", 0)) * sc
+                surf = image_surface(what, tw)
+                if surf is None or surf.get_width() <= 0:
+                    continue
+                if th <= 0:
+                    th = tw * surf.get_height() / surf.get_width()
+                cr.save()
+                cr.translate(float(what.get("x", 56.0)) * sc + tw / 2, py * sc + th / 2)
+                cr.rotate(math.radians(float(what.get("angle", 0) or 0)))
+                cr.translate(-tw / 2, -th / 2)
+                cr.scale(tw / surf.get_width(), th / surf.get_height())
+                cr.set_source_surface(surf, 0, 0)
+                cr.paint()
+                cr.restore()
+            else:
+                y = py * sc
+                draw_table(what)
+        y = PAGE_H - MARGIN if placed else MARGIN      # (callouts and sticky notes start on a new sheet)
+        lines, images_meta, tables = [], [], []
+
+    for markup, kind, *_y in lines:
+        if not markup.strip():
+            y += 6.0
+            continue
+        heading = kind != "body"
+        if heading:
+            y += 6.0
+        draw_text_block(markup, PDF_FONTS[kind], space_after=8.0 if heading else 5.0)
+
+    for item in images_meta:     # (flow mode: the pictures after the text)
+        tw = min(CONTENT_W, float(item.get("w", 380)) * 0.72)
+        surf = image_surface(item, tw)
+        if surf is None:
+            continue
+        iw, ih = surf.get_width(), surf.get_height()
+        if iw > 0 and ih > 0:
+            th = min(PAGE_H - 2 * MARGIN, float(item.get("h", ih * tw / iw)) * 0.72)
+            ensure_space(th + 14.0)
+            cr.save()
+            cr.translate(MARGIN, y)
+            cr.scale(tw / iw, th / ih)
+            cr.set_source_surface(surf, 0, 0)
+            cr.paint()
+            cr.restore()
+            y += th + 14.0
+
+    for tdata in tables:
+        draw_table(tdata)
 
     for sticky in stickies:
         text = (sticky.get("text") or "").strip()
@@ -4159,6 +4231,14 @@ class NotesWindow(Adw.ApplicationWindow):
         win_keys = Gtk.EventControllerKey()
         win_keys.connect("key-pressed", self._on_window_key_pressed)
         self.add_controller(win_keys)
+        # one history for everything: Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z undo and redo text, pictures
+        # (added, moved, resized, turned, deleted), text boxes, sticky notes and ink, in the order done
+        self._journal, self._journal_redo, self._obj_last, self._restoring = [], [], None, False
+        self.buffer.connect("changed", self._queue_flow)
+        undo_keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        undo_keys.connect("key-pressed", self._on_undo_key)
+        self.add_controller(undo_keys)
+        self.buffer.connect("changed", lambda *_: None if self._restoring or self.loading else self._journal_redo.clear())
         # a lasso selection takes Delete before the text under it does
         lasso_keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.CAPTURE)
         lasso_keys.connect("key-pressed", self._on_lasso_key)
@@ -4213,6 +4293,152 @@ class NotesWindow(Adw.ApplicationWindow):
         keep = adj.get_value()
         self.view.grab_focus()
         GLib.idle_add(lambda: (adj.set_value(keep), False)[1])
+
+    # ---------- pictures that move with the text
+    def _line_y(self, it):
+        """The top of IT's line, in page units (the same as a picture's y)."""
+        y, _h = self.view.get_line_yrange(it)
+        return (y + self.view.get_top_margin()) / max(0.5, self.zoom)
+
+    def _anchor_image(self, widget):
+        """Pin WIDGET to the line its top sits on: a mark there, and its distance below that line."""
+        if widget.data.get("flow") != "text":
+            return
+        z = max(0.5, self.zoom)
+        it, _top = self.view.get_line_at_y(max(0, round(widget.data.get("y", 0) * z - self.view.get_top_margin())))
+        it.set_line_offset(0)
+        mark = getattr(widget, "flow_mark", None)
+        if mark is None or mark.get_deleted():
+            widget.flow_mark = self.buffer.create_mark(None, it, True)
+        else:
+            self.buffer.move_mark(widget.flow_mark, it)
+        widget.data["anchor"] = it.get_offset()
+        widget.data["dy"] = round(widget.data.get("y", 0) - self._line_y(it), 1)
+
+    def set_image_flow(self, widget, with_text):
+        widget.data["flow"] = "text" if with_text else "fixed"
+        if with_text:
+            self._anchor_image(widget)
+        self.dirty = True
+        self.save_note_meta()
+
+    def _queue_flow(self, *_):
+        if getattr(self, "loading", False) or getattr(self, "_flow_id", 0):
+            return
+        # (a moment later: the text view lays its lines out first)
+        self._flow_id = GLib.timeout_add(40, self._flow_images)
+
+    def _flow_images(self):
+        """Pictures that move with the text: back on their line, as far below it as before."""
+        self._flow_id = 0
+        z = max(0.5, self.zoom)
+        for w in self.canvas_images:
+            mark = getattr(w, "flow_mark", None)
+            if w.data.get("flow") != "text" or mark is None or mark.get_deleted() or w.selected and \
+                    getattr(w, "drag_mode", None):
+                continue
+            it = self.buffer.get_iter_at_mark(mark)
+            it.set_line_offset(0)
+            y = round(self._line_y(it) + w.data.get("dy", 0), 1)
+            w.data["anchor"] = it.get_offset()
+            if abs(y - w.data.get("y", 0)) >= 0.5:
+                w.data["y"] = y
+                self.canvas_fixed.move(w, round(w.data.get("x", 56.0) * z), round(y * z))
+        self.ensure_page_height_for_images()
+        return GLib.SOURCE_REMOVE
+
+    def _anchor_all_images(self):
+        """After loading: each moving picture's mark, at its saved line."""
+        end = self.buffer.get_end_iter().get_offset()
+        for w in self.canvas_images:
+            if w.data.get("flow") != "text":
+                continue
+            if "anchor" in w.data and 0 <= int(w.data["anchor"]) <= end:
+                it = self.buffer.get_iter_at_offset(int(w.data["anchor"]))
+                w.flow_mark = self.buffer.create_mark(None, it, True)
+            else:
+                self._anchor_image(w)
+
+    # ---------- one history (text + objects)
+    def _obj_snapshot(self):
+        return json.dumps([[dict(w.data) for w in self.canvas_images], [dict(w.data) for w in self.sticky_notes],
+                           [dict(w.data) for w in self.pinned_stickies], list(self.ink_canvas.strokes)], default=str)
+
+    def _plain_text(self):
+        return self.buffer.get_text(self.buffer.get_start_iter(), self.buffer.get_end_iter(), True)
+
+    def _journal_objects(self):
+        """Called whenever the note's objects are saved: a change since the last time goes on
+        the history (what they were, and the text as it was then)."""
+        now = self._obj_snapshot()
+        if self._restoring or self._obj_last is None:
+            self._obj_last = now
+            return
+        if now != self._obj_last:
+            self._journal.append((self._obj_last, self._plain_text()))
+            del self._journal[:-200]
+            self._journal_redo.clear()
+            self._obj_last = now
+
+    def _journal_reset(self):
+        self._journal, self._journal_redo = [], []
+        self._obj_last = self._obj_snapshot()
+
+    def _restore_objects(self, snapshot):
+        images, stickies, pads, strokes = json.loads(snapshot)
+        self._restoring = True
+        try:
+            self._rebuild_canvas_objects(images, stickies, pads)
+            self.ink_canvas.strokes = strokes
+            self.ink_canvas.queue_draw()
+            self.dirty = True
+            self.save_note_meta()
+        finally:
+            self._restoring = False
+        self._obj_last = self._obj_snapshot()
+
+    def undo_all(self):
+        """Ctrl+Z: the latest change, text or object. The newest object change waits until the
+        text is back to what it was when that change was made; until then, text steps undo."""
+        if self._journal and self._plain_text() == self._journal[-1][1]:
+            snap, text = self._journal.pop()
+            self._journal_redo.append((self._obj_snapshot(), text))
+            self._restore_objects(snap)
+            return True
+        if self.buffer.get_can_undo():
+            self._restoring = True
+            try:
+                self.buffer.undo()
+            finally:
+                self._restoring = False
+            return True
+        return False
+
+    def redo_all(self):
+        """Ctrl+Y / Ctrl+Shift+Z: an undone object change first when the text is where it was
+        undone, otherwise the text's own redo."""
+        if self._journal_redo and self._plain_text() == self._journal_redo[-1][1]:
+            snap, text = self._journal_redo.pop()
+            self._journal.append((self._obj_snapshot(), text))
+            self._restore_objects(snap)
+            return True
+        if self.buffer.get_can_redo():
+            self._restoring = True
+            try:
+                self.buffer.redo()
+            finally:
+                self._restoring = False
+            return True
+        return False
+
+    def _on_undo_key(self, _ctrl, keyval, _code, state):
+        if not state & Gdk.ModifierType.CONTROL_MASK or keyval not in (Gdk.KEY_z, Gdk.KEY_Z, Gdk.KEY_y, Gdk.KEY_Y):
+            return False
+        focus = self.get_focus()
+        if isinstance(focus, Gtk.Text) or (focus is not None and focus is not self.view and isinstance(focus, Gtk.TextView)):
+            return False                     # (a search box or another field: its own undo)
+        redo = keyval in (Gdk.KEY_y, Gdk.KEY_Y) or bool(state & Gdk.ModifierType.SHIFT_MASK)
+        return self.redo_all() if redo else self.undo_all()
 
     def _on_window_key_pressed(self, _ctrl, keyval, _code, _state):
         if keyval == Gdk.KEY_Escape and (chosen := [t for t in self.table_items if t.selected]):
@@ -4404,6 +4630,10 @@ class NotesWindow(Adw.ApplicationWindow):
         menu(Gtk.Label(label="Lists ▾"), [("• Bullets", lambda: self.toggle_line_prefix("• ")),
                                      ("1. Numbers", lambda: self.toggle_line_prefix("1. ")),
                                      ("☐ Checklist", lambda: self.toggle_line_prefix("☐ "))], "Lists")
+        menu(Gtk.Label(label="Align ▾"), [("Left", lambda: self.align_lines(None)),
+                                     ("Centre", lambda: self.align_lines("align-center")),
+                                     ("Right", lambda: self.align_lines("align-right")),
+                                     ("Justify", lambda: self.align_lines("align-justify"))], "Alignment")
         # link: the selection becomes [words](address)
         link_box = Gtk.Box(spacing=4, margin_top=6, margin_bottom=6, margin_start=6, margin_end=6)
         url = Gtk.Entry(placeholder_text="https://…", width_chars=28)
@@ -4980,6 +5210,10 @@ class NotesWindow(Adw.ApplicationWindow):
         add_tag("italic", style=Pango.Style.ITALIC)
         add_tag("underline", underline=Pango.Underline.SINGLE)
         add_tag("strike", strikethrough=True)
+        # paragraph alignment (whole lines; saved with the note like any other style)
+        add_tag("align-center", justification=Gtk.Justification.CENTER)
+        add_tag("align-right", justification=Gtk.Justification.RIGHT)
+        add_tag("align-justify", justification=Gtk.Justification.FILL)
         code_bg = Gdk.RGBA()
         code_bg.parse("rgba(127, 127, 140, 0.22)")
         add_tag("mono", family="Monospace", background_rgba=code_bg)  # inline code: a soft badge
@@ -5275,6 +5509,25 @@ class NotesWindow(Adw.ApplicationWindow):
     def _sync_ribbon_state(self):
         it = self.buffer.get_iter_at_mark(self.buffer.get_insert())
         self._sync_ribbon_from_iter(it)
+
+    def align_lines(self, tag_name):
+        """The selected lines (or the cursor's) aligned: None = left, else an align-* tag."""
+        buf = self.buffer
+        bounds = buf.get_selection_bounds()
+        start, end = (bounds[0], bounds[1]) if bounds else (buf.get_iter_at_mark(buf.get_insert()),) * 2
+        start = start.copy()
+        start.set_line_offset(0)
+        end = end.copy()
+        if not end.ends_line():
+            end.forward_to_line_end()
+        buf.begin_user_action()
+        for name in ("align-center", "align-right", "align-justify"):
+            buf.remove_tag_by_name(name, start, end)
+        if tag_name:
+            buf.apply_tag_by_name(tag_name, start, end)
+        buf.end_user_action()
+        self.dirty = True
+        self.save_note_meta()
 
     def toggle_line_prefix(self, prefix):
         cursor = self.buffer.get_iter_at_mark(self.buffer.get_insert())
@@ -5747,12 +6000,19 @@ class NotesWindow(Adw.ApplicationWindow):
     def save_note_meta(self):
         if not self.rel or self.loading:
             return
+        if not self._restoring:
+            for w in self.canvas_images:
+                mark = getattr(w, "flow_mark", None)
+                if w.data.get("flow") == "text" and (mark is None or mark.get_deleted() or w.selected):
+                    self._anchor_image(w)            # (new, or moved by hand: pinned to its line)
+        self._journal_objects()
         f = self._meta_file(self.rel)
         if not f:
             return
         spans = []
         table = self.buffer.get_tag_table()
         tag_names = ["bold", "italic", "underline", "strike", "mono", "pdf-chip", "h1", "h2", "h3", "title",
+                     "align-center", "align-right", "align-justify",
                      *(h[0] for h in HIGHLIGHTS),
                      "comment-mark"]
         table.foreach(lambda t: t.get_property("name") and t.get_property("name").startswith("fg-") and tag_names.append(t.get_property("name")))
@@ -5969,6 +6229,8 @@ class NotesWindow(Adw.ApplicationWindow):
                 GLib.timeout_add(300, join_text)
             self.ink_canvas.strokes = list(meta.get("strokes", []))
             self.loading = False
+            GLib.timeout_add(60, lambda: (self._anchor_all_images(), False)[1])
+            self._journal_reset()
 
         self._rebuild_comments_panel()
         self.comments_toggle.set_active(bool(self.comments))
@@ -6019,6 +6281,8 @@ class NotesWindow(Adw.ApplicationWindow):
 
         self._apply_z_order()
         self.ensure_page_height_for_images()
+        if not getattr(self, "loading", False):
+            self._anchor_all_images()
 
     # ---------- pages
     def page_width(self):
@@ -6213,6 +6477,7 @@ class NotesWindow(Adw.ApplicationWindow):
                 pass
             self.selected_img = None
             self.dirty = True
+            self.save_note_meta()            # (on the history: Ctrl+Z brings it back)
             self.save_note_meta()
             self._save_now()
 
@@ -6471,7 +6736,7 @@ class NotesWindow(Adw.ApplicationWindow):
         path = self.vault.path(rel)
         scroll_y = self.page_scroll.get_vadjustment().get_value() / max(0.5, self.zoom)
         item = {"name": name, "x": 56.0, "y": max(80.0, round(scroll_y + 90.0)), "w": 400.0, "angle": 0,
-                "z": self._next_z()}
+                "z": self._next_z(), "flow": "text"}
         widget = FreeCanvasImage(path, item, self)
         self.canvas_fixed.put(widget, round(item["x"] * self.zoom), round(item["y"] * self.zoom))
         self.canvas_images.append(widget)
@@ -7244,7 +7509,9 @@ class NotesWindow(Adw.ApplicationWindow):
                         attrs.append(f'foreground="#{name[3:]}"')
                 parts.append(f"<span {' '.join(attrs)}>{text}</span>" if attrs else text)
                 it = nxt
-            out.append(("".join(parts), kind))
+            # where the line sits on the sheets (page units), for the PDF's exact layout
+            y_buf, _h = self.view.get_line_yrange(self.buffer.get_iter_at_line(n)[1])
+            out.append(("".join(parts), kind, (y_buf + self.view.get_top_margin()) / max(0.5, self.zoom)))
         return out
 
     def _export_job(self, out_path, fmt):
@@ -7273,7 +7540,10 @@ class NotesWindow(Adw.ApplicationWindow):
         stickies = [dict(st.data) for st in self.sticky_notes]
         tables = [dict(t.data, **self._table_page_xy(t)) for t in self._live_tables()]
         pads = [dict(p.data) for p in self.pinned_stickies] if self.export_pads.get_active() else []
-        return lambda: export_pdf_direct(title, meta, lines, imgs, out_path, resolve, stickies, tables, pads)
+        z = max(0.5, self.zoom)
+        page_w = self.page_width() / z
+        geometry = {"page_w": page_w, "stride": page_w * 1.414 + PAGE_GAP, "left": self.view.get_left_margin() / z}
+        return lambda: export_pdf_direct(title, meta, lines, imgs, out_path, resolve, stickies, tables, pads, geometry)
 
     def _do_export(self, out_path, fmt):
         self._export_job(out_path, fmt)()

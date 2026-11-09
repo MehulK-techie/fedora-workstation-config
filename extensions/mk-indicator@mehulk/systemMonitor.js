@@ -365,8 +365,8 @@ class Row {
     }
 }
 
-const PILL_W = 96;         // the pill's fixed width while it shows figures
-const READOUT_W = 78;      // (the readout's share before the theme is known)
+const PILL_W = 118;        // the pill's width while it shows figures (fits 100% · 99°C whole)
+const READOUT_W = 80;      // (the readout's share before the theme is known)
 
 // One small glass tile of the card: a name, a figure, a thin bar.
 class Tile {
@@ -425,6 +425,7 @@ export class SystemMonitor {
         this._dots.add_child(this._loadDot);
         this._readout = new St.Label({style_class: 'mk-monitor-readout', y_align: Clutter.ActorAlign.CENTER,
             width: 0, opacity: 0, clip_to_allocation: true});
+        this._readout.clutter_text.ellipsize = 0;            // Pango.EllipsizeMode.NONE: never "72% · 55…"
         this._dots.add_child(this._readout);
         box.add_child(this._dots);
         box.add_child(this._spark);
@@ -456,22 +457,6 @@ export class SystemMonitor {
         grid.add_child(this._net);
         card.add_child(grid);
         menu.addMenuItem(card);
-        this._powerItem = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
-        const modes = new St.BoxLayout({style_class: 'mk-monitor-modes', x_expand: true});
-        this._modeButtons = [['power-saver', 'Saver', 'power-profile-power-saver-symbolic'],
-            ['balanced', 'Balanced', 'power-profile-balanced-symbolic'],
-            ['performance', 'Performance', 'power-profile-performance-symbolic']].map(([id, label, icon]) => {
-            const inner = new St.BoxLayout({style: 'spacing: 6px;', x_align: Clutter.ActorAlign.CENTER});
-            inner.add_child(new St.Icon({icon_name: icon, icon_size: 14}));
-            inner.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
-            const b = new St.Button({child: inner, style_class: 'mk-monitor-mode', toggle_mode: true, x_expand: true, can_focus: true});
-            b.connect('clicked', () => this._setPower(id));
-            modes.add_child(b);
-            return [id, b];
-        });
-        this._powerItem.add_child(modes);
-        menu.addMenuItem(this._powerItem);
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         // Free cached memory: no password (mk-drop-caches' polkit action);
         // the item shows how much came back for a few seconds. Power modes
         // live in GNOME's Quick Settings; the speed test is its own app.
@@ -579,7 +564,9 @@ export class SystemMonitor {
             const chrome = node.get_horizontal_padding() + node.get_border_width(St.Side.LEFT) +
                 node.get_border_width(St.Side.RIGHT) + node.get_length('spacing') +
                 this._loadDot.get_preferred_width(-1)[1];
-            return Math.max(40, Math.round(PILL_W - chrome));
+            // never cut short: a wider reading than the slot widens it (it doesn't ellipsize)
+            const natural = Math.ceil(this._readout.clutter_text.get_preferred_width(-1)[1]);
+            return Math.max(Math.round(PILL_W - chrome), natural);
         } catch {
             return READOUT_W;               // (not styled yet)
         }
@@ -595,8 +582,8 @@ export class SystemMonitor {
         const open = this._conf.COMPACT === 'pulse' || this._button.hover || this._button.menu.isOpen;
         this._dots.style_class = this._conf.COMPACT === 'pulse' ? 'mk-monitor-dots mk-pulse' : 'mk-monitor-dots';
         // (measured from the text itself: once a width is set, the label reports that width as its own)
-        // a fixed width (the whole pill 96 px), the figures centred in tabular digits: 6 % or
-        // 100 %, nothing beside it moves
+        // a fixed width (the whole pill 118 px), the figures centred in tabular digits: 6 % or
+        // 100 %, nothing beside it moves, nothing is cut short
         const natural = this._readoutWidth();
         if (open === this._readoutOpen) {
             if (open && !this._readout.get_transition('width'))
@@ -631,7 +618,6 @@ export class SystemMonitor {
         const wifi = wirelessUp();
         this._netIcon.icon_name = wifi ? 'network-wireless-symbolic' : 'network-wired-symbolic';
         this._netLabel.text = `${wifi ? 'Wi-Fi' : 'Network'}   ↓ ${fmtRate(s.down)}   ↑ ${fmtRate(s.up)}`;
-        this._syncPower();
     }
 
     _stop(pid, name) {
@@ -643,31 +629,6 @@ export class SystemMonitor {
         } catch (e) {
             console.warn(`mk-indicator: stop ${pid}: ${e.message}`);
         }
-    }
-
-    // Power mode, from power-profiles-daemon (or tuned-ppd) over D-Bus, read and set without blocking
-    _powerCall(method, args, cb) {
-        Gio.DBus.system.call('org.freedesktop.UPower.PowerProfiles', '/org/freedesktop/UPower/PowerProfiles',
-            'org.freedesktop.DBus.Properties', method, args, null, Gio.DBusCallFlags.NONE, 2000, null, (c, res) => {
-                try {
-                    cb?.(c.call_finish(res));
-                } catch (e) {
-                    this._powerItem.visible = false;          // no power-profiles service: no row
-                }
-            });
-    }
-
-    _syncPower() {
-        this._powerCall('Get', new GLib.Variant('(ss)', ['org.freedesktop.UPower.PowerProfiles', 'ActiveProfile']), r => {
-            const now = r.deep_unpack()[0].deep_unpack();
-            for (const [id, b] of this._modeButtons)
-                b.checked = id === now;
-        });
-    }
-
-    _setPower(id) {
-        this._powerCall('Set', new GLib.Variant('(ssv)', ['org.freedesktop.UPower.PowerProfiles', 'ActiveProfile',
-            new GLib.Variant('s', id)]), () => this._syncPower());
     }
 
     _freeMemory() {

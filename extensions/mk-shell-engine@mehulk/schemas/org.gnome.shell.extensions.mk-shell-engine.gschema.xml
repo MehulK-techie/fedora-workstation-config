@@ -107,11 +107,6 @@
       <summary>Frosted glass behind each icon</summary>
       <description>Each dock icon on a small pane of frosted glass (8 % white, a 16 % edge, 14 px corners, a soft shadow); the running dots glow in the glow colour.</description>
     </key>
-    <key name="dock-hide-on-desktop" type="b">
-      <default>false</default>
-      <summary>Hide the dock on a clean desktop</summary>
-      <description>With no window focused (the bare desktop and its live wallpaper), the dock slides down out of sight; the bottom edge brings it back.</description>
-    </key>
     <key name="dock-indicator-style" type="s">
       <choices><choice value="glowing-dot"/><choice value="wide-pill"/><choice value="underline"/></choices>
       <default>'glowing-dot'</default>

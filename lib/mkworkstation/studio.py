@@ -580,8 +580,6 @@ def topbar_studio(window):
                             "The app you're in sits a little higher and larger, with a soft glow"))
         dock.add(switch_row(engine, "dock-icon-glass", "Frosted Glass Icons",
                             "Each icon on a small pane of frosted glass"))
-        dock.add(switch_row(engine, "dock-hide-on-desktop", "Hide Dock on Clean Desktop",
-                            "Out of sight while no window is focused; the bottom edge brings it back"))
         dock.add(scale_row(engine, "dock-opacity", "Glass Opacity", 10, 95, 1, lambda v: f"{round(v)} %", "pct"))
         dock.add(scale_row(engine, "dock-corner-radius", "Corner Radius", 12, 32, 1, lambda v: f"{round(v)} px"))
         dock.add(combo_row(engine, "dock-indicator-style", "Running Indicator", [("glowing-dot", "Glowing Dot"),

@@ -144,14 +144,24 @@ export default class MKShellEngine extends Extension {
             go();
         });
         this._bootWait = id;
+        // (and never left invisible: should startup-complete not come, it all shows after 4 s)
+        this._bootSafety = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 4000, () => {
+            this._bootSafety = 0;
+            if (this._bootWait) {
+                Main.layoutManager.disconnect(this._bootWait);
+                this._bootWait = 0;
+                go();
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _endBootFade() {
         if (this._bootWait)
             Main.layoutManager.disconnect(this._bootWait);
-        if (this._bootId)
-            GLib.source_remove(this._bootId);
-        this._bootWait = this._bootId = 0;
+        for (const id of [this._bootId, this._bootSafety].filter(Boolean))
+            GLib.source_remove(id);
+        this._bootWait = this._bootId = this._bootSafety = 0;
         for (const actor of [Main.layoutManager.panelBox, this._dock?._chrome].filter(Boolean)) {
             actor.opacity = 255;
             actor.translation_y = 0;
@@ -160,7 +170,7 @@ export default class MKShellEngine extends Extension {
 
     _stopParts() {
         this._running = false;
-        if (this._bootWait || this._bootId)
+        if (this._bootWait || this._bootId || this._bootSafety)
             this._endBootFade();
         for (const part of this._parts.reverse()) {
             try {

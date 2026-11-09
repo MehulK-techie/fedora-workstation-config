@@ -128,78 +128,116 @@ class Finder {
         const menu = this.button.menu, actions = SystemActions.getDefault(), s = this._settings;
         menu.removeAll();
         menu.box.add_style_class_name('wack-finder-menu');
-        // the header card: which machine this is, how long it's been up, how much memory is in use
-        const head = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'wack-finder-head-item'});
-        const card = new St.BoxLayout({style_class: 'wack-finder-head', x_expand: true});
-        card.add_child(new St.Icon({icon_name: 'fedora-logo-icon', icon_size: 28, y_align: Clutter.ActorAlign.CENTER}));
-        const text = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, y_align: Clutter.ActorAlign.CENTER,
-            x_expand: true});
-        text.add_child(new St.Label({text: 'MehulK Workstation', style_class: 'wack-finder-head-title'}));
-        text.add_child(new St.Label({text: `${GLib.get_os_info('NAME') || 'Fedora'} ${GLib.get_os_info('VERSION_ID') || ''} · GNOME`.trim(),
-            style_class: 'wack-finder-head-sub'}));
-        card.add_child(text);
-        this._stats = new St.Label({style_class: 'wack-finder-head-pill', y_align: Clutter.ActorAlign.CENTER});
-        card.add_child(this._stats);
-        head.add_child(card);
-        menu.addMenuItem(head);
-        this._statsId ??= menu.connect('open-state-changed', (_m, open) => open && this._syncStats());
-
-        menu.addAction('About This Workstation', () => launchApp('gnome-system-panel.desktop', 'org.gnome.Settings.desktop'));
-        menu.addAction('MK Command Centre…', () => run([GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-control-center'])]));
-        menu.addAction('System Settings…', () => launchApp('org.gnome.Settings.desktop'));
-        menu.addAction('App Store…', () => launchApp('org.gnome.Software.desktop'));
-        menu.addAction('Extension Settings…', () => launchApp('com.mattjakeman.ExtensionManager.desktop',
-            'org.gnome.Extensions.desktop'));
-        menu.addAction('System Monitor', () => launchApp('org.gnome.SystemMonitor.desktop',
-            'gnome-system-monitor.desktop', 'io.missioncenter.MissionCenter.desktop'));
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-
-        // the footer: quiet monochrome pills with their whole names, two rows of three
-        const foot = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'wack-finder-foot-item'});
-        const rows = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'wack-finder-foot', x_expand: true});
-        const power = [
-            ['Lock Screen', () => actions.activateLockScreen()],
-            ['Sleep', () => sleep(s)],
-            ...(s.get_boolean('show-hibernate') ? [['Hibernate', () => hibernate()]] : []),
-            ['Restart…', () => actions.activateRestart()],
-            ['Shut Down…', () => actions.activatePowerOff()],
-            ['Log Out…', () => actions.activateLogout()],
-        ];
-        let line = null;
-        power.forEach(([label, act], i) => {
-            if (i % 3 === 0) {
-                line = new St.BoxLayout({style_class: 'wack-finder-foot-row', x_expand: true});
-                rows.add_child(line);
+        this._accels = [];
+        // a plain list, as on a Mac's  menu; each row shows its keyboard shortcut (live) on the right
+        const row = (label, act, shortcut = null) => {
+            const item = menu.addAction(label, act);
+            if (shortcut) {
+                const accel = new St.Label({style_class: 'wack-finder-accel', x_expand: true,
+                    x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.CENTER});
+                item.add_child(accel);
+                this._accels.push([accel, shortcut]);
             }
-            const b = new St.Button({label, style_class: 'wack-finder-action', can_focus: true, x_expand: true});
-            b.connect('clicked', () => {
-                menu.close();
-                act();
-            });
-            line.add_child(b);
-        });
-        foot.add_child(rows);
-        menu.addMenuItem(foot);
+            return item;
+        };
+        row('About This Workstation', () => launchApp('gnome-system-panel.desktop', 'org.gnome.Settings.desktop'));
+        row('MK Command Centre…', () => run([GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-control-center'])]),
+            {command: /mk-c(enter|ontrol-center)\b/});
+        row('System Settings…', () => launchApp('org.gnome.Settings.desktop'), {media: 'control-center'});
+        row('App Store…', () => launchApp('org.gnome.Software.desktop'));
+        row('Extension Settings…', () => launchApp('com.mattjakeman.ExtensionManager.desktop', 'org.gnome.Extensions.desktop'));
+        row('System Monitor', () => launchApp('org.gnome.SystemMonitor.desktop', 'gnome-system-monitor.desktop',
+            'io.missioncenter.MissionCenter.desktop'), {command: /gnome-system-monitor|missioncenter/});
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        row('Sleep', () => sleep(s), {command: /systemctl suspend|loginctl suspend/});
+        if (s.get_boolean('show-hibernate'))
+            row('Hibernate', () => hibernate(), {command: /mk-hibernate|systemctl hibernate/});
+        row('Restart…', () => actions.activateRestart(), {command: /--reboot\b/, media: 'reboot'});
+        row('Shut Down…', () => actions.activatePowerOff(), {command: /--power-off\b/, media: 'power'});
+        row('Log Out…', () => actions.activateLogout(), {media: 'logout'});
+        this._shortcuts ??= new Shortcuts(() => this._syncAccels());
+        this._syncAccels();
     }
 
-    // the header's pill: uptime and memory in use, read as the menu opens
-    _syncStats() {
-        try {
-            const up = Number(new TextDecoder().decode(GLib.file_get_contents('/proc/uptime')[1]).split(' ')[0]);
-            const mem = Object.fromEntries(new TextDecoder().decode(GLib.file_get_contents('/proc/meminfo')[1])
-                .split('\n').map(l => l.match(/^(\w+):\s+(\d+)/)).filter(Boolean).map(m => [m[1], Number(m[2])]));
-            const h = Math.floor(up / 3600), m = Math.floor(up % 3600 / 60);
-            const gb = v => (v / 1048576).toFixed(1);
-            this._stats.text = `up ${h ? `${h}h ` : ''}${m}m · ${gb(mem.MemTotal - mem.MemAvailable)}/${gb(mem.MemTotal)} GB`;
-        } catch {
-            this._stats.text = '';
+    _syncAccels() {
+        for (const [label, want] of this._accels ?? []) {
+            const accel = this._shortcuts.find(want);
+            label.text = accel ? formatAccel(accel) : '';
+            label.visible = label.text !== '';
         }
     }
 
     destroy() {
         this._ids.forEach(id => this._settings.disconnect(id));
+        this._shortcuts?.destroy();
         this.button.destroy();
     }
+}
+
+// The keyboard shortcuts GNOME and MK set for the Finder's actions: GNOME's own media keys
+// (Settings, Log Out, Power Off...) and the custom shortcuts (found by their command: System
+// Monitor, Sleep, Restart, Shut Down...). ONCHANGE runs whenever any of them changes, so the
+// labels in the menu always show what the keys really are.
+const MEDIA = 'org.gnome.settings-daemon.plugins.media-keys';
+
+class Shortcuts {
+    constructor(onChange) {
+        this._onChange = onChange;
+        this._media = new Gio.Settings({schema_id: MEDIA});
+        this._mediaId = this._media.connect('changed', (_s, key) => {
+            if (key === 'custom-keybindings')
+                this._watchCustom();
+            this._onChange();
+        });
+        this._custom = [];
+        this._watchCustom();
+    }
+
+    _watchCustom() {
+        for (const [settings, id] of this._custom)
+            settings.disconnect(id);
+        this._custom = this._media.get_strv('custom-keybindings').map(path => {
+            const settings = new Gio.Settings({schema_id: `${MEDIA}.custom-keybinding`, path});
+            return [settings, settings.connect('changed', () => this._onChange())];
+        });
+    }
+
+    // the first shortcut for WANT ({media: key} and / or {command: RegExp}), or null
+    find(want) {
+        if (want.media) {
+            try {
+                const keys = this._media.get_strv(want.media).filter(Boolean);
+                if (keys.length)
+                    return keys[0];
+            } catch {}                        // (a key this GNOME doesn't have)
+        }
+        if (want.command) {
+            for (const [settings] of this._custom) {
+                if (want.command.test(settings.get_string('command')) && settings.get_string('binding'))
+                    return settings.get_string('binding');
+            }
+        }
+        return null;
+    }
+
+    destroy() {
+        this._media.disconnect(this._mediaId);
+        for (const [settings, id] of this._custom)
+            settings.disconnect(id);
+        this._custom = [];
+    }
+}
+
+// "<Control><Alt>Delete" -> "Ctrl + Alt + Del", "<Super>comma" -> "Super + ,"
+const KEY_NAMES = {comma: ',', period: '.', slash: '/', backslash: '\\', semicolon: ';', minus: '-', equal: '=',
+    space: 'Space', Return: 'Enter', Escape: 'Esc', Delete: 'Del', BackSpace: 'Backspace', Page_Down: 'PgDn',
+    Page_Up: 'PgUp', Left: '←', Right: '→', Up: '↑', Down: '↓', Print: 'PrtSc', Tab: 'Tab'};
+export function formatAccel(accel) {
+    const mods = [...accel.matchAll(/<(\w+)>/g)].map(m => ({Control: 'Ctrl', Primary: 'Ctrl', Alt: 'Alt', Shift: 'Shift',
+        Super: 'Super', Meta: 'Super'})[m[1]] ?? m[1]);
+    const key = accel.replace(/<\w+>/g, '');
+    const name = KEY_NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key);
+    return [...mods, name].join(' + ');
 }
 
 // ----- Places

@@ -405,25 +405,10 @@
 .wack-finder-label { font-weight: bold; }
 .wack-places-box { spacing: 6px; }
 .wack-topbar-menu { -boxpointer-gap: 8px; }
-/* the Finder menu: a header card, the items, a footer of quiet monochrome pills */
-.wack-finder-menu { min-width: 300px; }
-.wack-finder-head-item { padding: 6px 8px 8px; }
-.wack-finder-head-item:hover { background-color: transparent; }
-.wack-finder-head { spacing: 10px; padding: 10px 12px; border-radius: 12px;
-  background-color: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); }
-.wack-finder-head-title { font-weight: 700; }
-.wack-finder-head-sub { font-size: 0.82em; color: rgba(255, 255, 255, 0.6); }
-.wack-finder-head-pill { font-size: 0.78em; font-weight: 600; font-feature-settings: "tnum"; padding: 3px 9px;
-  border-radius: 999px; background-color: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.8); }
-.wack-finder-foot-item { padding: 4px 8px 6px; }
-.wack-finder-foot-item:hover { background-color: transparent; }
-.wack-finder-foot { spacing: 6px; }
-.wack-finder-foot-row { spacing: 6px; }
-.wack-finder-action { padding: 6px 8px; border-radius: 999px; font-size: 0.86em; font-weight: 600;
-  color: rgba(255, 255, 255, 0.88); background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08); }
-.wack-finder-action:hover, .wack-finder-action:focus { background-color: rgba(255, 255, 255, 0.10); }
-.wack-finder-action:active { background-color: rgba(255, 255, 255, 0.16); }
+/* the Finder menu: a plain list; each row's keyboard shortcut on the right, quiet */
+.wack-finder-menu { min-width: 280px; }
+.wack-finder-accel { font-size: 0.84em; font-feature-settings: "tnum"; color: rgba(255, 255, 255, 0.45);
+  padding-left: 24px; }
 #panel .panel-button.wack-finder { padding: 0 8px; -natural-hpadding: 0; -minimum-hpadding: 0; }
 .wack-finder-round { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18); }
 .wack-app-indicator { -natural-hpadding: 4px; -minimum-hpadding: 4px; }

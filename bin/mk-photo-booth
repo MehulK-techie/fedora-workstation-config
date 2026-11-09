@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# mk-photo-booth: MK Photo Booth (the same app as camera-controls, Super+C).
+exec "$(dirname "$(readlink -f "$0")")/camera-controls" "$@"

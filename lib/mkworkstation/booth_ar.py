@@ -50,9 +50,11 @@ from mkworkstation import photo  # noqa: E402
 
 YUNET = "/usr/local/share/mk-face/face_detection_yunet_2023mar.onnx"
 AR_LOOKS = {"ar-hearts": "Love Hearts AR", "ar-hand-hearts": "Hand Heart Burst", "ar-crown": "Golden Crown",
-            "ar-halo": "Neon Halo", "ar-orbit": "Emoji Orbit", "ar-spidey": "Spidey-Sense"}
-FRAMES = {"frame-strip": "4-Shot Photo Strip", "frame-polaroid": "Polaroid + Date", "frame-sweetheart": "Sweetheart Pink",
-          "frame-neon": "Cyberpunk Neon HUD", "frame-35mm": "Vintage 35mm"}
+            "ar-halo": "Angel Halo", "ar-orbit": "Emoji Orbit", "ar-spidey": "Spidey-Sense", "ar-cat": "Cat Ears",
+            "ar-bunny": "Bunny Ears", "ar-thug": "Pixel Thug Shades", "ar-thought": "Thought Cloud"}
+FRAMES = {"frame-polaroid": "Polaroid Classic Instant", "frame-strip": "4-Cut Life4Cuts Strip",
+          "frame-35mm": "Vintage Film 35mm", "frame-comic": "Spider-Verse Comic Panel", "frame-neon": "Neon Cyberpunk HUD",
+          "frame-matte": "Elegant Gallery Matte", "frame-sweetheart": "Sweetheart Pink"}
 DEFAULT_FACE = (0.5, 0.42, 0.24, 0.38, 0.0)       # cx, cy, w, h (0-1 of the frame), roll (radians)
 
 
@@ -63,6 +65,7 @@ class Tracker:
     def __init__(self):
         self.det = None
         self.face = None             # (cx, cy, w, h, roll), smoothed
+        self.eyes = None             # ((right x, y), (left x, y)), smoothed: the sunglasses' line
         self.missed = 0
         self.hands = []              # [(x, y)] raised hands
         self.bursts = []             # [(t0, x, y, big)]
@@ -92,11 +95,15 @@ class Tracker:
             new = (fx + fw / 2, fy + fh / 2, fw, fh, roll)
             k = 0.5 if self.face else 1.0                     # (a quick ease, no jitter)
             self.face = tuple(a + (b - a) * k for a, b in zip(self.face or new, new))
+            eyes = (f[4] / sw, f[5] / sh, f[6] / sw, f[7] / sh)
+            old = self.eyes and (*self.eyes[0], *self.eyes[1])
+            e = tuple(a + (b - a) * k for a, b in zip(old or eyes, eyes))
+            self.eyes = ((e[0], e[1]), (e[2], e[3]))
             self.missed = 0
         else:
             self.missed += 1
             if self.missed > 12:
-                self.face = None
+                self.face = self.eyes = None
         self._hands(small, now)
 
     def _hands(self, small, now):
@@ -309,6 +316,83 @@ def _spidey(cr, cx, cy, fw, fh, w, t):
             cr.new_path()
 
 
+def _ears(cr, cx, base, fw, roll, kind):
+    """Two ears on top of the head, tilting with it."""
+    cr.save()
+    cr.translate(cx, base)
+    cr.rotate(roll)
+    for side in (-1, 1):
+        cr.save()
+        cr.translate(side * fw * 0.3, 0)
+        if kind == "cat":
+            s = fw * 0.36
+            cr.rotate(side * 0.18)
+            for scale, rgb in ((1.0, (0.18, 0.16, 0.2)), (0.58, (1.0, 0.62, 0.72))):
+                cr.new_path()
+                cr.move_to(-s / 2 * scale, 0)
+                cr.line_to(0, -s * scale * 1.05)
+                cr.line_to(s / 2 * scale, 0)
+                cr.close_path()
+                cr.set_source_rgb(*rgb)
+                cr.fill()
+        else:
+            cr.rotate(side * 0.12)
+            for sx, sy, rgb in ((fw * 0.11, fw * 0.42, (0.98, 0.97, 0.97)), (fw * 0.055, fw * 0.32, (1.0, 0.7, 0.78))):
+                cr.save()
+                cr.translate(0, -fw * 0.4)
+                cr.scale(sx, sy)
+                cr.arc(0, 0, 1, 0, 2 * math.pi)
+                cr.restore()
+                cr.set_source_rgb(*rgb)
+                cr.fill()
+        cr.restore()
+    cr.restore()
+
+
+def _shades(cr, x, y, eye_gap, roll):
+    """Pixel-art "deal with it" shades, on the line through both eyes."""
+    px = max(2.0, eye_gap / 6)                      # one "pixel" of the shades
+    rows = ["XXXXXXXXXXXXXXXXXXXX",
+            ".XWWXXXXX..XWWXXXXX.",
+            ".XWXXXXXX..XWXXXXXX.",
+            "..XXXXXX....XXXXXX..",
+            "...XXXX......XXXX..."]
+    cr.save()
+    cr.translate(x, y)
+    cr.rotate(roll)
+    cr.translate(-len(rows[0]) * px / 2, -px * 1.5)
+    for r, row in enumerate(rows):
+        for c, ch in enumerate(row):
+            if ch == ".":
+                continue
+            cr.rectangle(c * px, r * px, px + 0.5, px + 0.5)
+            cr.set_source_rgb(*((1, 1, 1) if ch == "W" else (0.03, 0.03, 0.05)))
+            cr.fill()
+    cr.restore()
+
+
+def _thought(cr, x, y, fw, t):
+    """A thought cloud above the head: small bubbles leading up to it, "..." inside."""
+    bob = math.sin(t * 2) * fw * 0.02
+    for k, (dx, dy, r) in enumerate(((-0.55, 0.42, 0.05), (-0.42, 0.28, 0.075))):
+        cr.arc(x + dx * fw, y + dy * fw + bob, r * fw, 0, 2 * math.pi)
+        cr.set_source_rgba(1, 1, 1, 0.95)
+        cr.fill_preserve()
+        cr.set_source_rgba(0, 0, 0, 0.35)
+        cr.set_line_width(max(1.0, fw * 0.012))
+        cr.stroke()
+    puffs = ((-0.22, 0, 0.2), (0, -0.1, 0.24), (0.24, -0.02, 0.2), (0.08, 0.1, 0.2), (-0.12, 0.1, 0.18))
+    for outline in (True, False):
+        for dx, dy, r in puffs:
+            cr.arc(x + dx * fw, y + dy * fw + bob, r * fw + (fw * 0.012 if outline else 0), 0, 2 * math.pi)
+            cr.set_source_rgba(*((0, 0, 0, 0.35) if outline else (1, 1, 1, 0.97)))
+            cr.fill()
+    for i in range(3):
+        cr.arc(x + (i - 1) * fw * 0.12, y + bob, fw * 0.03, 0, 2 * math.pi)
+        cr.set_source_rgb(0.25, 0.25, 0.3)
+        cr.fill()
+
+
 def render(img, key, tracker, t=None):
     """IMG (PIL RGB) with the AR effect KEY, placed from TRACKER (or the usual spot)."""
     t = time.monotonic() if t is None else t
@@ -334,6 +418,18 @@ def render(img, key, tracker, t=None):
             a = t * 1.3 + i * 2 * math.pi / n
             depth = 0.75 + 0.25 * math.sin(a)
             _emoji(cr, e, cx + math.cos(a) * fw * 0.75, top - fh * 0.12 + math.sin(a) * fh * 0.14, fw * 0.24 * depth)
+    elif key == "ar-cat":
+        _ears(cr, cx, top + fh * 0.08, fw, roll, "cat")
+    elif key == "ar-bunny":
+        _ears(cr, cx, top + fh * 0.05, fw, roll, "bunny")
+    elif key == "ar-thug":
+        if tracker and tracker.eyes:
+            (rx, ry), (lx, ly) = tracker.eyes
+            _shades(cr, (rx + lx) / 2 * w, (ry + ly) / 2 * h, math.hypot((lx - rx) * w, (ly - ry) * h), roll)
+        else:
+            _shades(cr, cx, cy - fh * 0.12, fw * 0.42, roll)
+    elif key == "ar-thought":
+        _thought(cr, cx + fw * 0.75, top - fh * 0.25, fw, t)
     elif key == "ar-spidey":
         _spidey(cr, cx, cy, fw, fh, w, t)
         layout = PangoCairo.create_layout(cr)
@@ -369,9 +465,10 @@ def frame(img, key, stamp=None, shots=None):
     """IMG framed by KEY (a FRAMES key). STAMP: the date for the Polaroid; SHOTS: the four
     photos of a strip (the live preview passes none and shows the strip's look)."""
     if key == "frame-35mm":
-        return photo.film_frame(img)[0]
+        return photo.film_frame(img, ratio=img.width / max(1, img.height))[0]
     if key == "frame-polaroid":
-        framed, _photo_box, (cx, cy, cw, ch) = photo.polaroid_frame(img)
+        # the card widens to the camera's own shape: nothing of the picture is cut off
+        framed, _photo_box, (cx, cy, cw, ch) = photo.polaroid_frame(img, ratio=img.width / max(1, img.height))
         surface, buf = _surface(framed)
         cr = cairo.Context(surface)
         _text(cr, stamp or time.strftime("%d %b %Y"), cx + cw * 0.96, cy + ch * 0.55, cw * 0.06, (0.2, 0.18, 0.22),
@@ -379,6 +476,8 @@ def frame(img, key, stamp=None, shots=None):
         return _image(surface, buf)
     if key == "frame-strip":
         return strip(shots or [img])
+    if key == "frame-matte":
+        return photo.matte_frame(img, ratio=img.width / max(1, img.height))[0]
     w, h = img.size
     surface, buf = _surface(img)
     cr = cairo.Context(surface)
@@ -399,6 +498,32 @@ def frame(img, key, stamp=None, shots=None):
             for (x, y) in ((u * w, b / 2), ((1 - u) * w, h - b / 2), (b / 2, (u + 0.5 / n) * h), (w - b / 2, (u + 0.5 / n) * h)):
                 heart(cr, x, y, b * 0.75, (1, 1, 1), 0.9)
         _text(cr, "♥ with love", w / 2, h - b * 2.2, w * 0.035, (1, 1, 1), "Pacifico, Z003, Sans Bold Italic")
+    elif key == "frame-comic":
+        # a comic panel: a thick ink border, halftone dots in two corners, a caption box
+        b = max(6, w * 0.022)
+        cr.set_source_rgb(0.04, 0.04, 0.06)
+        cr.rectangle(0, 0, w, h)
+        cr.rectangle(b, b, w - 2 * b, h - 2 * b)
+        cr.set_fill_rule(cairo.FILL_RULE_EVEN_ODD)
+        cr.fill()
+        cr.set_fill_rule(cairo.FILL_RULE_WINDING)
+        step = max(5, w * 0.014)
+        for (ox, oy, sx, sy, rgb) in ((b, b, 1, 1, (0.9, 0.12, 0.2)), (w - b, h - b, -1, -1, (0.15, 0.45, 0.95))):
+            for i in range(9):
+                for j in range(9 - i):
+                    cr.arc(ox + sx * (i + 0.5) * step, oy + sy * (j + 0.5) * step, step * 0.32 * (1 - (i + j) / 10), 0,
+                           2 * math.pi)
+                    cr.set_source_rgba(*rgb, 0.85)
+                    cr.fill()
+        cw, ch = w * 0.3, w * 0.055
+        cr.rectangle(b * 1.6, b * 1.6, cw, ch)
+        cr.set_source_rgb(1.0, 0.92, 0.3)
+        cr.fill_preserve()
+        cr.set_source_rgb(0.04, 0.04, 0.06)
+        cr.set_line_width(max(2, w * 0.004))
+        cr.stroke()
+        _text(cr, "MEANWHILE...", b * 1.6 + cw / 2, b * 1.6 + ch / 2, ch * 0.5, (0.05, 0.05, 0.08),
+              "Bangers, Impact, Sans Bold")
     elif key == "frame-neon":
         rows = buf[::3]                                # scanlines: every third row a little darker
         rows[..., :3] = (rows[..., :3] * 0.78).astype(np.uint8)

@@ -22,6 +22,12 @@ import random
 
 from PIL import Image, ImageChops, ImageEnhance, ImageFilter, ImageOps
 
+try:                                  # (faster warps when OpenCV is there; Pillow otherwise)
+    import cv2 as _cv2
+    import numpy as _np
+except ImportError:
+    _cv2 = _np = None
+
 FILTERS = {}
 
 
@@ -103,19 +109,47 @@ def popart(img):
     return out
 
 
+_MESHES = {}
+
+
 def _warp(img, source, grid=32):
     """IMG remapped: each output point (x, y) shows the source at
     source(x, y, w, h). A mesh of GRID x GRID quads (Pillow interpolates
-    inside each), so smooth warps stay smooth at any size."""
+    inside each), so smooth warps stay smooth at any size. The mesh depends only
+    on the warp and the size, so it's worked out once and reused (the live
+    preview asks for the same one 30 times a second)."""
     src = rgb(img)
     w, h = src.size
-    mesh = []
-    for gy in range(grid):
-        for gx in range(grid):
-            x0, x1 = w * gx / grid, w * (gx + 1) / grid
-            y0, y1 = h * gy / grid, h * (gy + 1) / grid
-            quad = (*source(x0, y0, w, h), *source(x0, y1, w, h), *source(x1, y1, w, h), *source(x1, y0, w, h))
-            mesh.append(((round(x0), round(y0), round(x1), round(y1)), quad))
+    key = (source.__code__, tuple(c.cell_contents for c in source.__closure__ or ()), w, h, grid)
+    if _cv2 is not None:
+        # OpenCV: the warp sampled on the grid's corners once, spread to every pixel (two float
+        # maps, made once per warp and size), then one remap a frame: ~10x faster than the mesh
+        maps = _MESHES.get(("cv2",) + key)
+        if maps is None:
+            xs = [w * gx / grid for gx in range(grid + 1)]
+            ys = [h * gy / grid for gy in range(grid + 1)]
+            pts = [[source(x, y, w, h) for x in xs] for y in ys]
+            mx = _np.array([[p[0] for p in row] for row in pts], _np.float32)
+            my = _np.array([[p[1] for p in row] for row in pts], _np.float32)
+            maps = (_cv2.resize(mx, (w, h), interpolation=_cv2.INTER_LINEAR),
+                    _cv2.resize(my, (w, h), interpolation=_cv2.INTER_LINEAR))
+            if len(_MESHES) > 96:
+                _MESHES.clear()
+            _MESHES[("cv2",) + key] = maps
+        out = _cv2.remap(_np.asarray(src), maps[0], maps[1], _cv2.INTER_LINEAR, borderMode=_cv2.BORDER_REFLECT)
+        return Image.fromarray(out, "RGB")
+    mesh = _MESHES.get(key)
+    if mesh is None:
+        mesh = []
+        for gy in range(grid):
+            for gx in range(grid):
+                x0, x1 = w * gx / grid, w * (gx + 1) / grid
+                y0, y1 = h * gy / grid, h * (gy + 1) / grid
+                quad = (*source(x0, y0, w, h), *source(x0, y1, w, h), *source(x1, y1, w, h), *source(x1, y0, w, h))
+                mesh.append(((round(x0), round(y0), round(x1), round(y1)), quad))
+        if len(_MESHES) > 96:
+            _MESHES.clear()
+        _MESHES[key] = mesh
     return src.transform((w, h), Image.Transform.MESH, mesh, Image.Resampling.BICUBIC)
 
 

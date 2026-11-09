@@ -375,6 +375,13 @@ class Booth(Adw.ApplicationWindow):
                                            tooltip_text="Mirror the preview and the photo, like a mirror")
         self.mirror_btn.connect("toggled", lambda b: setattr(self, "mirror", b.get_active()))
         head.pack_end(self.mirror_btn)
+        # fullscreen (F11): the viewfinder and the gallery fill the screen; Esc or F11 again leaves
+        self.full_btn = Gtk.ToggleButton(icon_name="view-fullscreen-symbolic", tooltip_text="Fullscreen (F11)")
+        self.full_btn.connect("toggled", lambda b: self.fullscreen() if b.get_active() else self.unfullscreen())
+        self.connect("notify::fullscreened", lambda w, _p: self.full_btn.get_active() != w.is_fullscreen()
+                     and self.full_btn.set_active(w.is_fullscreen()))
+        head.pack_end(self.full_btn)
+        self.set_resizable(True)
         view.add_top_bar(head)
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         self.stack.add_named(self._camera_page(), "camera")
@@ -684,7 +691,21 @@ class Booth(Adw.ApplicationWindow):
             else:
                 self.tile_next = 0
             return GLib.SOURCE_REMOVE
-        self.preview.set_paintable(to_texture(render_look(small, self.look, self.tracker)))
+        # the look is worked out on a worker thread (the window never waits on a filter);
+        # a frame that comes while one is still being worked on is skipped, never queued
+        if not getattr(self, "_rendering", False):
+            self._rendering = True
+            look, tracker = self.look, self.tracker
+
+            def work(img=small):
+                try:
+                    out = render_look(img, look, tracker)
+                except Exception as e:                  # noqa: BLE001 (a filter failing: show the frame as it is)
+                    print(f"photo booth: {look}: {e}", file=sys.stderr)
+                    out = img
+                texture = to_texture(out)
+                GLib.idle_add(lambda: (setattr(self, "_rendering", False), self.preview.set_paintable(texture), False)[2])
+            threading.Thread(target=work, daemon=True).start()
         if now - getattr(self, "last_thumbs", 0) > 0.5:     # the looks strip, twice a second
             self.last_thumbs = now
             tiny = small.resize((THUMB_W, round(THUMB_W * small.height / small.width)), Image.Resampling.BILINEAR)
@@ -1362,6 +1383,12 @@ class Booth(Adw.ApplicationWindow):
         Gio.AppInfo.launch_default_for_uri(OUT_DIR.as_uri(), None)
 
     def _on_key(self, _c, keyval, _code, _state):
+        if keyval == Gdk.KEY_F11:
+            self.full_btn.set_active(not self.is_fullscreen())
+            return True
+        if keyval == Gdk.KEY_Escape and self.is_fullscreen() and self.stack.get_visible_child_name() == "camera":
+            self.full_btn.set_active(False)
+            return True
         focus = self.get_focus()
         if focus and (focus is self.look_search or focus.is_ancestor(self.look_search)):
             return False  # typing in the looks search: Space and G are letters there

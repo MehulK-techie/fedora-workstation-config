@@ -23,9 +23,9 @@ const NOTIF_SHOWN = 3;
 
 // ----- battery and weather
 class StatusPill {
-    constructor(settings, styleClass = 'wack-status-pill') {
+    constructor(settings) {
         this._settings = settings;
-        this.actor = new St.BoxLayout({style_class: styleClass, x_align: Clutter.ActorAlign.CENTER,
+        this.actor = new St.BoxLayout({style_class: 'wack-status-pill', x_align: Clutter.ActorAlign.CENTER,
             reactive: false});
         this._batIcon = new St.Icon({icon_size: 14, style_class: 'wack-status-icon'});
         this._batLabel = new St.Label({style_class: 'wack-status-text', y_align: Clutter.ActorAlign.CENTER});
@@ -411,19 +411,6 @@ export class LockWidgets {
             this._media = new NowPlaying();
             (split ? this._column : stack).add_child(this._media.actor);                          // under the time
         }
-        // the same battery and weather, small, in the top-right corner (16 px down, 24 px in)
-        if (s.get_boolean('lock-status-pill')) {
-            this._corner = new StatusPill(s, 'wack-status-cluster');
-            const group = shield._lockDialogGroup ?? dialog;
-            group.add_child(this._corner.actor);
-            const place = () => {
-                const m = Main.layoutManager.primaryMonitor;
-                if (m && this._corner?.actor)
-                    this._corner.actor.set_position(m.x + m.width - 24 - this._corner.actor.width, m.y + 16);
-            };
-            this._corner.actor.connect('notify::size', place);
-            place();
-        }
         if (s.get_boolean('lock-power-button')) {
             this._power = new PowerButton(s, shield._lockDialogGroup ?? dialog);
         }
@@ -437,7 +424,7 @@ export class LockWidgets {
         if (this._retry)
             GLib.source_remove(this._retry);
         this._retry = 0;
-        for (const part of ['_pill', '_corner', '_hint', '_media', '_power', '_notifs']) {
+        for (const part of ['_pill', '_hint', '_media', '_power', '_notifs']) {
             try {
                 this[part]?.destroy();
             } catch (e) {

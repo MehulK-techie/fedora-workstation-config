@@ -432,14 +432,6 @@
 .wack-status-text { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.92); }
 .wack-status-sep { color: rgba(255, 255, 255, 0.5); }
 .wack-status-icon { color: rgba(255, 255, 255, 0.92); }
-/* the same battery and weather, top right (lockWidgets.js places it 16 px down, 24 px in) */
-.wack-status-cluster {
-  padding: 4px 12px;
-  spacing: 6px;
-  border-radius: 999px;
-  background-color: rgba(16, 20, 32, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.24);
-}
 
 .wack-now-playing {
   margin-top: 18px;

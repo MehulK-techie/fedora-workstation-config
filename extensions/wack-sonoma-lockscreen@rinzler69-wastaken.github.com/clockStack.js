@@ -37,20 +37,25 @@ function place(wrapper) {
         x2 = Math.max(x2, x + w);
         y2 = Math.max(y2, y + h);
     };
+    // (measured from natural sizes, not allocations, which can still be a layout behind when
+    // this runs: the card never sits off-centre for a frame or for good)
+    const left = wrapper._mk.left;
+    const across = (nat, at) => (left ? at : (wrapper.width - nat) / 2);
     for (const child of wrapper.get_children()) {
         if (child === card || child === under || !child.visible)
             continue;
-        // (a label as wide as the screen: only its text counts)
         const [, nat] = child.get_preferred_width(-1);
-        const w = Math.min(child.width, nat), x = child.x + (child.width - w) / 2;
-        take(x, child.y, w, child.height);
+        const [, natH] = child.get_preferred_height(nat);
+        take(across(nat, child.x), child.y, nat, Math.max(child.height, natH));
     }
+    let widest = 0;
     for (const child of under.get_children()) {
-        if (!child.visible)
-            continue;
-        const box = child.get_allocation_box();
-        take(under.x + box.x1, under.y + box.y1, box.x2 - box.x1, box.y2 - box.y1);
+        if (child.visible)
+            widest = Math.max(widest, child.get_preferred_width(-1)[1]);
     }
+    const [, columnH] = under.get_preferred_height(under.width);
+    if (widest > 0)
+        take(left ? under.x : (wrapper.width - widest) / 2, under.y, widest, columnH);
     if (x1 === Infinity)
         return;
     card.set_position(Math.round(x1 - PAD_X), Math.round(y1 - PAD_Y));

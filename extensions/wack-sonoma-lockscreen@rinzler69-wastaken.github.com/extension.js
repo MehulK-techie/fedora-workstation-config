@@ -45,6 +45,7 @@ import { DesktopWallpaper } from './desktop.js';
 import { MediaWatcher } from './media.js';
 import { WeatherService } from './weather.js';
 
+const UNLOCK_FADE = 450;              // ms: the unlock crossfade, picture and sound together
 const STYLE_KEYS = ['dim-opacity', 'clock-style', 'clock-font', 'clock-color', 'date-color', 'clock-offset',
     'show-notifications', 'show-avatar', 'hide-fingerprint-hint', 'zero-lag-lock', 'lock-clock-layout', 'lock-glass-card',
     'lock-greeting', 'lock-clock-glow', 'lock-card-opacity', 'lock-date-format', 'lock-tagline',
@@ -641,8 +642,9 @@ export default class WackSonomaLiveLockscreen extends Extension {
             group.remove_all_transitions();              // (GNOME's slide, and its completion)
             group.translation_y = 0;
             group.set_pivot_point(0.5, 0.5);
+            // the crossfade: the lock screen (the video in it) and its sound go together, 450 ms
             const duration = animate && preset !== 'none' && St.Settings.get().enable_animations
-                ? self._settings.get_int('animation-duration') : 0;
+                ? (preset === 'crossfade' ? UNLOCK_FADE : self._settings.get_int('animation-duration')) : 0;
             group.ease({opacity: 0, ...(preset === 'zoom' ? {scale_x: 1.06, scale_y: 1.06} : {}),
                 duration, mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
                 onComplete: () => {
@@ -661,6 +663,9 @@ export default class WackSonomaLiveLockscreen extends Extension {
         const player = this._live?._player;
         if (!player)
             return;
+        // the sound ramps down as the picture fades (mpv's own fade: 450 ms, core/mpv_player_process.js)
+        if (this._settings.get_string('unlock-animation') !== 'none')
+            player.pause?.();
         if (this._settings.get_string('unlock-animation') !== 'slow-stop')
             return;
         const duration = this._settings.get_int('animation-duration');

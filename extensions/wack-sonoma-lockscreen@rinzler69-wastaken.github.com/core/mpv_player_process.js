@@ -25,7 +25,7 @@ Gio._promisify(Gio.OutputStream.prototype, 'write_bytes_async', 'write_bytes_fin
 
 // This number is meant to match the animation
 // duration of lockscreen widgets + some ipc overhead
-const FADE_DURATION_MS = 240;   // MK: the sound ramps down as the lock screen crossfades away
+const FADE_DURATION_MS = 450;   // MK: the sound ramps down with the 450 ms unlock crossfade
 
 // Profile names as defined in external/mpv.conf
 const PROFILE_NAMES = {

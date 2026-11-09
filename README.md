@@ -122,7 +122,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - **Window switcher:** Alt+Tab and three-finger swipes open a compact card of live windows at once; 1–9 sends a window to that desktop
 - **Top bar:** a system monitor (CPU, GPU, memory, disk activity, temperatures in °C) with an internet speed test (also `mk speedtest`), and a media tile for Spotify or any player (album art, seek, choose speakers)
 - **Locks:** `mk lock app Settings` makes an app ask for your fingerprint first; `mk lock ~/Private` encrypts a folder that opens only after the same check and closes when the screen locks; manage them in the MK Control Center (`mk center`) or right-click a folder in Files
-- **MK Control Center:** quick actions, every `mk` command as a card, MK Lock and the security check in one window
+- **MK Command Centre** (`mk-control-center`, `mk center`): quick actions, every `mk` command as a card, MK Lock and the security check in one window, plus two studios: **Wallpaper & Sonoma Lockscreen** (a live 16:9 preview, desktop and lock screen media, sound and volume, clock layout, style and colour, scrim, glass card, greeting) and **Top Bar, Logo & Dock** (a round custom logo 14-30 px, the app indicator's fade, the dock's translucency)
 - **App Nap:** when memory runs short, apps you left minimized for a while are paused and wake the moment you switch back
 - **Accounts:** `mk users add NAME` for a second person (their own settings and face), `mk guest on` for a Guest login that starts empty every time
 - **Tour:** `mk tour` (or the Control Center) walks through the desktop, with a button to try each thing
@@ -168,7 +168,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | Terminal | btop, fastfetch, fzf, ripgrep, zoxide, ncdu, just, chezmoi, 7-Zip, unrar |
 | Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, Loupe (images), Kamoso, Media Writer |
 
-**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Magic Lamp (genie minimize), Impatience (25% faster animations), AppIndicator (tray icons), Caffeine (keep awake), and MK's own top-bar extension (system monitor, welcome light, focus timer, Alt+Tab glide, wallpaper accent). MK also ships **WACK Sonoma Live Lockscreen** (off until you switch it on): the lock screen above, the desktop's live wallpaper with optional sound, Finder (Fedora logo), an icon-only Places menu and the app indicator in the top bar, and Hibernate in the Finder menu, Quick Settings and on the lock screen (hibernation needs a one-time `sudo scripts/setup-hibernate.sh`, and doesn't work while Secure Boot is on).
+**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Magic Lamp (genie minimize), Impatience (25% faster animations), AppIndicator (tray icons), Caffeine (keep awake), and MK's own top-bar extension (system monitor, welcome light, focus timer, Alt+Tab glide, wallpaper accent). MK also ships **MehulK Workstation & Sonoma Suite** (formerly WACK Sonoma Live Lockscreen; off until you switch it on): the lock screen above, the desktop's live wallpaper with optional sound, Finder (Fedora logo), an icon-only Places menu and the app indicator in the top bar, and Hibernate in the Finder menu, Quick Settings and on the lock screen (real hibernation needs a one-time `sudo scripts/setup-hibernate.sh` and doesn't work while Secure Boot is on; until then the Hibernate buttons sleep instead, keeping everything open in memory, and say so).
 
 ---
 
@@ -223,8 +223,8 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | | `Super+1…9` | Open the 1st…9th dock app |
 | | `Ctrl+Shift+Esc` | System Monitor |
 | | `Super+V` · `Super+.` | Clipboard history · emoji |
-| **Screenshots** | `Print` (`Fn+PrtSc`) · `Super+Shift+3` | Whole screen, instantly |
-| | `Shift+Print` · `Super+Shift+S` · `Super+Shift+4` | **Select an area** (or a window) |
+| **Screenshots** | `Shift+Print` · `Super+Shift+3` · Quick Settings › Screenshot | Whole screen, instantly |
+| | `Print` (`Fn+PrtSc`) · `Super+Shift+S` · `Super+Shift+4` | **Select an area** (or a window) |
 | | `Alt+Print` | Current window |
 | | `Super+Shift+C` · `Super+Alt+T` | Copy text from the screen (OCR) |
 | | `Super+Return` | Scratchpad (the Companion) |
@@ -243,7 +243,7 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | | 3 fingers ↑/↓ · 4 fingers ↑/↓ | Overview (Mission Control) · maximize / restore the window |
 | | 3-finger pinch · 4-finger pinch | Volume · show desktop (pinch again to bring windows back) |
 
-Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboard. `Ctrl+Alt+←/→` is left free for Zen Browser.
+Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboard. From a terminal or a script: `mk-screenshot --instant` or `--area` (through the desktop's screenshot portal, which asks once whether to allow it). `Ctrl+Alt+←/→` is left free for Zen Browser.
 
 ---
 

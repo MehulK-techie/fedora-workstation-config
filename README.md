@@ -53,7 +53,8 @@ cd ~/fedora-workstation-config && git pull && ./sync.sh
 - **Screenshots like Windows:** PrtSc takes the whole screen at once (saved and copied); Super+Shift+S, drag an area, and it's taken the moment you let go. The notification has Open Viewer, Annotate Markup and Delete.
 - **Dock:** only the icon under the pointer grows, the app you're in sits raised on a soft tile in the glow colour you pick (Spider-Red by default).
 - **Live wallpaper:** edge to edge, under the top bar and the dock to the bottom of the screen; menus never pause it. Its volume slider sits in Quick Settings right under the speaker's. Sound fades out (400 ms) when you switch to an app and back in (350 ms) on the desktop, or turn on **Wallpaper Bg Play** in Quick Settings to keep it playing under your apps: it fades out by itself while YouTube, Spotify or anything else plays, and comes back when they stop.
-- **Dock:** optional frosted glass behind each icon, and "Hide Dock on Clean Desktop" (Command Centre › Dock) to leave the wallpaper unobstructed.
+- **Dock:** optional frosted glass behind each icon (Command Centre › Dock); the dock and the top bar always show, in place, over the live wallpaper.
+- **Workspaces:** switching slides your windows over the live wallpaper, which stays put and keeps playing.
 - **Photo Booth:** 43 live looks including AR (hearts that burst from your hands, a crown, halo, cat or bunny ears, pixel shades, a thought cloud) and real frames (Polaroid, 4-cut strip, 35mm film, comic panel, neon HUD, gallery matte), fullscreen with F11.
 
 ## Cheat sheet

@@ -72,21 +72,22 @@ closes it without saving.
 | Tables, code, dividers | Use the buttons |
 | Edit or read | Ctrl+E. In the reading view you can tick checkboxes and click links and tags |
 
-## The tool island
+## The toolbar
 
-The tools sit in one rounded island above the page, in three modes; only
-the one you're in shows, so nothing scrolls sideways even on a 1366 px
-screen with both sidebars open:
+One rounded toolbar above the page (no mode bar above it). It shows the
+writing tools, then **Insert Table**, then two buttons that swap the
+writing tools for others (click again to come back):
 
-- **✍️ Ink**: Pen (▾ colours and thickness), Highlighter (▾ below), Eraser,
-  Lasso, Undo / Redo stroke, Clear page, Shapes, Laser pointer. Picking Ink
-  turns drawing on; the other modes turn it off (your strokes stay).
-  While inking, one key picks a tool: **P** pen, **H** highlighter,
-  **E** eraser, **L** lasso, **T** a new text box.
-- **📝 Type**: paragraph style, bold, italic, underline, strikethrough, text
-  highlight, text colour, clear formatting, bullets, numbers, checklist,
-  divider.
-- **➕ Insert**: Insert Table, Text Box, Sticky, text box colour, picture or
+- **📝 Writing tools** (always there to start with): paragraph style, bold,
+  italic, underline, strikethrough, text highlight, text colour, clear
+  formatting, bullets, numbers, checklist, divider.
+- **Insert Table**: a 3 x 3 table at the cursor, at once.
+- **✍️ Pen button** (Ink): Pen (▾ colours and thickness), Highlighter
+  (▾ below), Eraser, Lasso, Undo / Redo stroke, Clear page, Shapes, Laser
+  pointer. It turns drawing on; clicking it again turns drawing off (your
+  strokes stay). While inking, one key picks a tool: **P** pen,
+  **H** highlighter, **E** eraser, **L** lasso, **T** a new text box.
+- **➕ Plus button** (Insert): Text Box, Sticky, text box colour, picture or
   PDF, screenshot, comment, link, mind map, grid paper, 🧮 scratchpad.
 
 Zoom (− 100 % +) and *Page X of Y* share a small pill at the bottom right.
@@ -111,8 +112,9 @@ straight bar behind the line.
   connector), basic shapes (rectangle, rounded rectangle, oval, triangle,
   diamond) and graphs (X–Y axes with ticks, a 4-quadrant grid, 3D axes),
   picked from one menu, drawn by dragging.
-- **Tables** (Insert › Insert Table): one click drops a 3 x 3 table in
-  the middle of the view; its arrow opens a grid to pick up to 8 x 8.
+- **Tables** (Insert Table): one click drops a 3 x 3 table where the
+  cursor is; + Row and + Column on the table (shown while the pointer is
+  over it) make it bigger.
 
 - **Paste:** Ctrl+V pastes an image from the clipboard (screenshots, "Copy
   image" in a browser), read fresh with `wl-paste`, or files copied in Files. A copied file path or
@@ -168,15 +170,17 @@ straight bar behind the line.
 
 ## Tables, comments, stickies and pages
 
-- **Tables** (Insert Table: 3 x 3 in the middle of the view; its arrow: a
-  grid up to 8 x 8, click a square): sized to the page and selected.
+- **Tables** (Insert Table: 3 x 3 at the cursor; + Row and + Column on
+  the table while the pointer is over it): sized to the page and selected.
   Drag ⠿ Move table anywhere on the page (smoothly); a selected table has
   8 blue handles: corners resize both ways, edges one; drag the line between two columns (⟷) to trade width between
   them. One click in a cell types there; cells wrap and a row grows to its
   tallest cell. ▼ adds or deletes rows and columns, or the table; Tab walks
   the cells (Shift+Tab back) and adds a row from the last one. ⠿ and ▼ show
-  while the pointer is over the table. A click anywhere outside it, or Esc,
-  lets go of the table (Esc puts the cursor on the line below). Tables are kept with the note,
+  while the pointer is over the table. Esc in a cell selects the whole table
+  (a 2 px blue ring): **Delete** or **Backspace** then removes it, and
+  Ctrl+Z brings it back with everything typed in it; Esc again (or a click
+  outside it) lets go of the table and puts the cursor on the line below. Tables are kept with the note,
   plus a Markdown copy at the end of the file for other apps. Tables from
   older MK Notes move onto the page where their line was.
 - **Comments** open as a slim card in the right margin; click highlighted

@@ -44,14 +44,15 @@ cd ~/fedora-workstation-config && git pull && ./sync.sh
 
 | | |
 | :---: | :---: |
-| <img src="docs/assets/screens/finder-menu.jpg" width="420"><br><sub>**Finder menu**: your system at a glance, then Lock, Sleep, Hibernate, Restart, Shut Down and Log Out in quiet pills</sub> | <img src="docs/assets/screens/calendar.jpg" width="420"><br><sub>**Click the clock**: weather by the date, a clipboard shelf that never reshuffles, a daily checklist, Focus 25m</sub> |
+| <img src="docs/assets/screens/finder-menu.jpg" width="420"><br><sub>**Finder menu**: a plain list (About, Command Centre, Settings, App Store, Extensions, System Monitor, then Sleep, Hibernate, Restart, Shut Down, Log Out), each with its keyboard shortcut on the right</sub> | <img src="docs/assets/screens/calendar.jpg" width="420"><br><sub>**Click the clock**: weather by the date, a clipboard shelf that never reshuffles, a daily checklist, Focus 25m</sub> |
 | <img src="docs/assets/screens/command-centre.jpg" width="420"><br><sub>**MK Command Centre**: a live preview that stays beside every setting (lock screen, wallpaper, logo, dock glow)</sub> | <img src="docs/assets/screens/notes-editor.jpg" width="420"><br><sub>**MK Notes**: Google Docs-style flow, pictures move with your text, one Ctrl+Z for everything, exact PDFs</sub> |
 
 - **Top bar:** one frosted glass capsule (round logo, Places, your workspaces) and the app you're in beside it; a steady stats pill (CPU and temperature) that never jiggles the bar.
-- **Lock screen:** a Sonoma-style clock over a live video or picture, five layouts, the battery and weather under the time, and a power button whose Sleep, Hibernate, Restart and Shut Down go straight to the system (they work while locked).
+- **Lock screen:** a Sonoma-style clock over a live video or picture, five layouts, a tagline and the battery and weather right under the time (and again, small, in the top-right corner), "Click or press a key to unlock" only after you move the mouse, and a round power button whose Sleep, Hibernate, Restart and Shut Down go straight to the system (they work while locked).
 - **Weather everywhere:** Open-Meteo (no account, no key), for where you are; the last reading shows at once after a reboot.
 - **Screenshots like Windows:** PrtSc takes the whole screen at once (saved and copied); Super+Shift+S, drag an area, and it's taken the moment you let go. The notification has Open Viewer, Annotate Markup and Delete.
-- **Dock:** only the icon under the pointer grows, the app you're in sits a little raised, and you pick the glow colour (Spider-Red by default).
+- **Dock:** only the icon under the pointer grows, the app you're in sits raised on a soft tile in the glow colour you pick (Spider-Red by default).
+- **Live wallpaper:** plays only while you see the desktop (paused under windows and open menus); its own volume slider sits in Quick Settings under sound and brightness.
 - **Photo Booth:** 43 live looks including AR (hearts that burst from your hands, a crown, halo, cat or bunny ears, pixel shades, a thought cloud) and real frames (Polaroid, 4-cut strip, 35mm film, comic panel, neon HUD, gallery matte), fullscreen with F11.
 
 ## Cheat sheet
@@ -159,7 +160,7 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - Daily background check that tells you when a new version of this repo is available
 - **Shortcuts window (Super+/):** every shortcut and gesture, live, each marked working, clashing, unset or broken; click to change keys, + to add your own commands, Reset to go back
 - **MK Notes (Super+N):** notes on A4 pages that grow as you write (Page X of Y), real tables (resize columns, add rows with Tab, move them), rich text, comments in the margin, sticky notes with colours and layer order, pictures with Word-style rotation and resizing, shapes and graphs, drawing, PDFs attached or laid out as printouts, notebooks, links and a mind map, PDF and Word export, locks with auto-lock, and encrypted phone sync. Saved as Markdown files. See [docs/NOTES.md](docs/NOTES.md)
-- **A private lock screen:** no notifications (GNOME's lock-screen notifications stay off; switch them on in Settings and they show as compact pills) and no screenshots while locked. With WACK Sonoma Live Lockscreen switched on: the Sonoma clock, a live video behind it (silent unless you turn its sound on), battery and weather under the date, a Now Playing card with Previous / Play / Next (Sonoma Lock Screen › Now Playing switches it off), and a power button with Hibernate
+- **A private lock screen:** no notifications (GNOME's lock-screen notifications stay off; switch them on in Settings and they show as compact pills) and no screenshots while locked. With WACK Sonoma Live Lockscreen switched on: the Sonoma clock, a live video behind it (silent unless you turn its sound on), battery and weather under the time (and in the top-right corner), a Now Playing card with Previous / Play / Next (Sonoma Lock Screen › Now Playing switches it off), and a power button with Hibernate
 - **MK Control Center and tour:** quick actions, every `mk` command as a card, MK Lock, face and fingerprint enrollment in windows, the security check; a six-slide tour (from the Control Center)
 - **Companion (Super+Shift+N):** notes you can pin, reorder and fold away; a task list you tick off and pin; one click to MK Notes or the focus timer
 - **Reminders:** on any note or task, in 10 min, at 18:00, or every day; they fire even with the Companion closed, with Open and Snooze
@@ -306,7 +307,7 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 - *Lock screen:* the layout buttons under the preview, then Clock Styler for font, colour, glow, date format and a tagline.
 - *Logo and dock:* the Top Bar tab: your own picture as a round logo (14-30 px), the dock theme, glass opacity, corners, running-dot style and **Glow Colour**.
 
-**Using Notes.** Select text for the floating toolbar (fonts, bold, colours, lists, alignment). Paste or insert a picture; it moves with the line it sits on (click it, then the wrap button, to pin it to the page instead). Ctrl+Z undoes text and pictures alike; Export › PDF gives exactly what you see, without a title or date header.
+**Using Notes.** Select text for the floating toolbar (fonts, bold, colours, lists, alignment). Paste or insert a picture; it moves with the line it sits on (click it, then the wrap button, to pin it to the page instead). Ctrl+Z undoes text, pictures and deleted tables alike. Insert Table drops a 3 x 3 table; Esc in a cell selects the table, Delete removes it. Export › PDF lays everything out top to bottom in the order it sits on the page (text never runs under a picture), without a title or date header.
 
 **Using Photo Booth.** Pick a look in the strip (or press G to see all of them live), press Space or the red button. With the 4-Cut Strip it takes four, a second apart. F11 for fullscreen.
 

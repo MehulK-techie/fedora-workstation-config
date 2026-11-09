@@ -1,23 +1,75 @@
 <div align="center">
 
-# MK Workstation
+# MehulK Workstation v20.0
 
-**One command turns a fresh Fedora Workstation into a fast, keyboard-first, fully equipped GNOME desktop, and keeps it that way.**
+**One command turns a fresh Fedora Workstation into a fast, good-looking, keyboard-first GNOME desktop, and keeps it that way.**
+Coming from Windows or macOS? You'll feel at home in minutes: a Finder menu, a Mac-style dock, Windows-style snapping and screenshots.
 
-![Fedora](https://img.shields.io/badge/Tested_on-Fedora_44-blue?logo=fedora)
-![GNOME](https://img.shields.io/badge/Desktop-GNOME_50_(Wayland)-blue?logo=gnome)
+![Fedora](https://img.shields.io/badge/Tested_on-Fedora_45-blue?logo=fedora)
+![GNOME](https://img.shields.io/badge/Desktop-GNOME_51_(Wayland)-blue?logo=gnome)
 [![ShellCheck](https://github.com/MehulK-techie/fedora-workstation-config/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/MehulK-techie/fedora-workstation-config/actions/workflows/shellcheck.yml)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-[Quick start](#quick-start) · [Overview (PDF)](docs/MK-Workstation-Overview.pdf) · [All features](docs/FEATURES.md) · [Guide](docs/GUIDE.md) · [Hardware](docs/HARDWARE.md) · [Customize](docs/CUSTOMIZING.md) · [Reference](docs/REFERENCE.md)
+[Start here](#start-here-3-minutes) · [What's new](#whats-new-in-v200) · [Cheat sheet](#cheat-sheet) · [Beginner's guide](#beginners-guide-and-troubleshooting) · [All features](docs/FEATURES.md) · [Guide](docs/GUIDE.md) · [Reference](docs/REFERENCE.md)
 
-<img src="docs/assets/screens/welcome.jpg" alt="MK Workstation: the greeting after login, with pinned tasks and the next reminder" width="900">
+<img src="docs/assets/screens/desktop.jpg" alt="MehulK Workstation: the glass top bar, the dock and the default Fedora wallpaper" width="900">
 
-<sub>The overview on an HP ENVY x360 13 running MK Workstation. Wallpaper: Fedora 44 default (CC BY-SA 4.0).</sub>
-
-**New here? [The 14-slide overview (PDF)](docs/MK-Workstation-Overview.pdf) explains stock Fedora and what this adds.**
+<sub>MehulK Workstation v20.0 on GNOME 51. Wallpaper: GNOME's default.</sub>
 
 </div>
+
+---
+
+## Start here (3 minutes)
+
+**New install.** On a fresh Fedora Workstation, open the Terminal app and paste:
+
+```bash
+sudo dnf install -y git && git clone https://github.com/MehulK-techie/fedora-workstation-config.git ~/fedora-workstation-config && cd ~/fedora-workstation-config && sudo ./setup.sh
+```
+
+Log out and back in when it finishes: that's it. (`setup.sh` installs the apps and drivers as root, then runs `sync.sh` as you to set up the desktop.)
+
+**Already using it? Upgrade** to the latest, any time:
+
+```bash
+cd ~/fedora-workstation-config && git pull && ./sync.sh
+```
+
+`sync.sh` is safe to run as often as you like: it never duplicates anything and keeps your own changes. It updates the extensions, apps, shortcuts, audio rules and Blur my Shell settings. New system packages come from `sudo ./setup.sh`, which is safe to run again too.
+
+---
+
+## What's new in v20.0
+
+| | |
+| :---: | :---: |
+| <img src="docs/assets/screens/finder-menu.jpg" width="420"><br><sub>**Finder menu**: your system at a glance, then Lock, Sleep, Hibernate, Restart, Shut Down and Log Out in quiet pills</sub> | <img src="docs/assets/screens/calendar.jpg" width="420"><br><sub>**Click the clock**: weather by the date, a clipboard shelf that never reshuffles, a daily checklist, Focus 25m</sub> |
+| <img src="docs/assets/screens/command-centre.jpg" width="420"><br><sub>**MK Command Centre**: a live preview that stays beside every setting (lock screen, wallpaper, logo, dock glow)</sub> | <img src="docs/assets/screens/notes-editor.jpg" width="420"><br><sub>**MK Notes**: Google Docs-style flow, pictures move with your text, one Ctrl+Z for everything, exact PDFs</sub> |
+
+- **Top bar:** one frosted glass capsule (round logo, Places, your workspaces) and the app you're in beside it; a steady stats pill (CPU and temperature) that never jiggles the bar.
+- **Lock screen:** a Sonoma-style clock over a live video or picture, five layouts, the battery and weather under the time, and a power button whose Sleep, Hibernate, Restart and Shut Down go straight to the system (they work while locked).
+- **Weather everywhere:** Open-Meteo (no account, no key), for where you are; the last reading shows at once after a reboot.
+- **Screenshots like Windows:** PrtSc takes the whole screen at once (saved and copied); Super+Shift+S, drag an area, and it's taken the moment you let go. The notification has Open Viewer, Annotate Markup and Delete.
+- **Dock:** only the icon under the pointer grows, the app you're in sits a little raised, and you pick the glow colour (Spider-Red by default).
+- **Photo Booth:** 43 live looks including AR (hearts that burst from your hands, a crown, halo, cat or bunny ears, pixel shades, a thought cloud) and real frames (Polaroid, 4-cut strip, 35mm film, comic panel, neon HUD, gallery matte), fullscreen with F11.
+
+## Cheat sheet
+
+| Do this | Press |
+| :--- | :--- |
+| Screenshot of the whole screen (saved and copied) | `PrtSc` |
+| Screenshot of an area (taken as you let go) | `Super+Shift+S` |
+| Snap a window left / right · maximize · restore | `Super+←` / `Super+→` · `Super+↑` · `Super+↓` |
+| Lock the screen | `Super+L` |
+| Every shortcut, live and editable | `Super+/` |
+| Notes · Companion (tasks, reminders) | `Super+N` · `Super+Shift+N` |
+| Add a reminder from anywhere | `Super+Alt+A` |
+| Clipboard history · emoji | `Super+V` · `Super+.` |
+| Photo Booth | `Super+C` |
+| Switch apps · all windows | `Super+Tab` · `Alt+Tab` |
+
+The full table is under [Keyboard shortcuts](#keyboard-shortcuts).
 
 ---
 
@@ -244,6 +296,28 @@ Press **Super+/** for the Shortcuts window: it always matches your keyboard, sho
 | | 3-finger pinch · 4-finger pinch | Volume · show desktop (pinch again to bring windows back) |
 
 Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboard. From a terminal or a script: `mk-screenshot --instant` or `--area` (through the desktop's screenshot portal, which asks once whether to allow it). `Ctrl+Alt+←/→` is left free for Zen Browser.
+
+---
+
+## Beginner's guide and troubleshooting
+
+**Changing how things look.** Open **MK Command Centre** (Finder menu › MK Command Centre…, or `mk-control-center`). The live preview on the left follows every change you make on the right.
+- *Live wallpaper:* Studio › Media › Desktop / Lock Screen › Choose…: any video, GIF or picture. Sound is off unless you turn it on, and it only plays while you're on the bare desktop.
+- *Lock screen:* the layout buttons under the preview, then Clock Styler for font, colour, glow, date format and a tagline.
+- *Logo and dock:* the Top Bar tab: your own picture as a round logo (14-30 px), the dock theme, glass opacity, corners, running-dot style and **Glow Colour**.
+
+**Using Notes.** Select text for the floating toolbar (fonts, bold, colours, lists, alignment). Paste or insert a picture; it moves with the line it sits on (click it, then the wrap button, to pin it to the page instead). Ctrl+Z undoes text and pictures alike; Export › PDF gives exactly what you see, without a title or date header.
+
+**Using Photo Booth.** Pick a look in the strip (or press G to see all of them live), press Space or the red button. With the 4-Cut Strip it takes four, a second apart. F11 for fullscreen.
+
+**Something's wrong?**
+| Problem | Fix |
+| :--- | :--- |
+| A new feature doesn't show up after `./sync.sh` | Log out and back in: GNOME loads extension code at login. |
+| No sound from apps | `./scripts/setup-audio.sh` (no sudo), then try again. |
+| Hibernate just sleeps | Real hibernation needs `sudo scripts/setup-hibernate.sh`, and Secure Boot must be off; until then the button sleeps and says so. |
+| Weather shows nothing | It needs the internet once (MK Command Centre › Studio › Clock Styler › Live Weather is on by default); after that the last reading shows even offline. |
+| Anything else | `mk doctor` checks the whole system and tells you the fix. `mk restore` undoes the last sync. |
 
 ---
 

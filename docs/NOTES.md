@@ -326,3 +326,15 @@ same key.
 - Sync over the internet. Sync works on the same Wi-Fi only.
 - Password-locked notes.
 - Plugins and Canvas (a whiteboard of cards).
+
+## v20: Google Docs-style pictures, one undo, exact PDFs
+
+- **Pictures move with the text.** A new picture is pinned to the line it sits on: type
+  above it and it moves down, delete lines and it comes back up. The wrap button on its
+  toolbar switches it to "fixed on the page" (and back).
+- **One Ctrl+Z for everything.** Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z undo and redo text and
+  formatting, and pictures (added, moved, resized, turned, deleted), text boxes, sticky
+  notes and ink, in the order you did them.
+- **Align** in the floating selection toolbar: left, centre, right, justify (saved with the note).
+- **PDF export is what you see:** every line, picture (size and turn) and table where it sits
+  on its sheet, sheet for sheet; no title or "Last edited / Exported" line on the page.

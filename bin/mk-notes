@@ -285,10 +285,7 @@ popover.mk-sel-card button:hover { background: rgba(255, 255, 255, 0.1); }
 .mk-island button, .mk-island menubutton > button { color: #e5e7eb; transition: all 120ms ease; }
 .mk-island button:hover, .mk-island menubutton > button:hover { background: rgba(255, 255, 255, 0.08); }
 .mk-island dropdown > button { color: #e5e7eb; }
-.mk-modes button { padding: 4px 10px; font-weight: 600; }
-.mk-modes button:checked { background: alpha(@accent_bg_color, 0.85); color: white; }
-.mk-sticky-tool { padding: 4px 12px; border-radius: 8px; font-weight: 600; background: alpha(#fef08a, 0.22); }
-.mk-sticky-tool:hover { background: alpha(#fef08a, 0.36); }
+.mk-island > button:checked { background: alpha(@accent_bg_color, 0.85); color: white; }
 .mk-tool:checked { background: rgba(255, 255, 255, 0.10);
                    box-shadow: inset 0 -3px 0 @accent_bg_color; }  /* the pill under the tool in use */
 .mk-zoom-pill { background: alpha(black, 0.55); color: white; border-radius: 99px; padding: 1px 6px; }
@@ -1137,6 +1134,7 @@ class TableItem(Gtk.Box):
         self.active = (0, 0)
         self.anchor = None
         self.selected = False
+        self.set_focusable(True)          # (selected as a whole: Delete / Backspace removes it)
         self.grid = Gtk.Grid(css_classes=["mk-table-grid"])
         # The selection frame: 8 handles (corners scale both ways, edges one;
         # the left and top ones move the table too), shown while selected.
@@ -1280,8 +1278,9 @@ class TableItem(Gtk.Box):
         self.win._queue_save_meta()
 
     def _key(self, _ctl, keyval, _code, state, r, c):
-        if keyval == Gdk.KEY_Escape:                  # out of the table, back to the text below it
-            self.win.leave_table(self)
+        if keyval == Gdk.KEY_Escape:     # out of the cell: the whole table is selected (Delete removes
+            self.grab_focus()            # it, Esc again goes back to the text below it)
+            self.select(True)
             return True
         if keyval not in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
             return False
@@ -1329,7 +1328,7 @@ class TableItem(Gtk.Box):
             widths.pop(c)
             focus = (r, min(c, len(rows[0]) - 1))
         elif what == "table-del":
-            self.win.remove_table(self)
+            self.win.delete_table(self)
             return
         self.build(focus)
         self.win._queue_save_meta()
@@ -3016,10 +3015,11 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
 
     With GEOMETRY ({"page_w", "stride", "left"}: the editor's sheet width, the
     distance from one sheet's top to the next, the text's left margin, in page
-    units) it's what you see: every line, picture (its size and turn) and table
-    where it sits on its sheet, sheet for sheet, A4 being the sheet's shape. Only
-    the note's own content: no title or "Last edited / Exported" line on the page
-    (the title stays in the file's properties)."""
+    units) every line, picture and table goes in the order it sits on the
+    sheets, one after the other down the page (a strict cursor: nothing
+    overlaps), pictures at their size from the editor. Only the note's own
+    content: no title or "Last edited / Exported" line on the page (the title
+    stays in the file's properties)."""
     PAGE_W, PAGE_H = 595.0, 842.0
     MARGIN = 48.0
     CONTENT_W = PAGE_W - 2 * MARGIN
@@ -3101,58 +3101,68 @@ def export_pdf_direct(title, meta_line, lines, images_meta, out_path, resolve_im
         y += 14.0
 
     if geometry:
-        # what you see: everything on its sheet at its place (page units -> points)
+        # One strict vertical flow, in the order things sit on the sheets: each block is measured,
+        # goes to a new page if it won't fit, is drawn at the cursor, and the cursor moves past
+        # it before the next one; so text and pictures never overlap. Pictures keep their size
+        # from the editor (scaled to the page; never wider than the text), their place across.
         sc = PAGE_W / float(geometry["page_w"])
-        stride = float(geometry["stride"])
-        left = float(geometry["left"]) * sc
-        text_w = PAGE_W - 2 * left
-        placed = []
+        left = MARGIN
+        text_w = CONTENT_W
+        blocks = []
         for line in lines:
-            if len(line) > 2 and line[0].strip():
-                page = int(line[2] // stride)
-                placed.append((page, line[2] - page * stride, "text", line))
+            if len(line) > 2:
+                blocks.append((float(line[2]), 0, "text", line))
         for item in images_meta:
-            ey = float(item.get("y", 0.0))
-            page = int(ey // stride)
-            placed.append((page, ey - page * stride, "image", item))
+            blocks.append((float(item.get("y", 0.0)), 1, "image", item))
         for tdata in tables:
-            ey = float(tdata.get("y", 0.0))
-            page = int(ey // stride)
-            placed.append((page, ey - page * stride, "table", tdata))
-        placed.sort(key=lambda p: (p[0], p[1]))
-        page_now = 0
-        for page, py, kind, what in placed:
-            while page_now < page:
-                cr.show_page()
-                page_now += 1
+            blocks.append((float(tdata.get("y", 0.0)), 1, "table", tdata))
+        blocks.sort(key=lambda b: (b[0], b[1]))
+        LINE_GAP, IMAGE_GAP = 4.0, 16.0
+        for _ey, _order, kind, what in blocks:
             if kind == "text":
+                markup, style = what[0], what[1]
+                if not markup.strip():
+                    y += 8.0                                  # (an empty line: a little space)
+                    continue
                 layout = PangoCairo.create_layout(cr)
                 layout.set_width(int(text_w * Pango.SCALE))
                 layout.set_wrap(Pango.WrapMode.WORD_CHAR)
-                layout.set_font_description(Pango.FontDescription(PDF_FONTS.get(what[1], PDF_FONTS["body"])))
-                layout.set_markup(what[0], -1)
+                layout.set_font_description(Pango.FontDescription(PDF_FONTS.get(style, PDF_FONTS["body"])))
+                layout.set_markup(markup, -1)
+                _ink, logical = layout.get_pixel_extents()
+                ensure_space(logical.height)
+                if style != "body" and y > MARGIN:
+                    y += 6.0
                 cr.set_source_rgb(0.1, 0.12, 0.16)
-                cr.move_to(left, py * sc)
+                cr.move_to(left, y)
                 PangoCairo.show_layout(cr, layout)
+                y += logical.height + LINE_GAP
             elif kind == "image":
-                tw, th = float(what.get("w", 380)) * sc, float(what.get("h", 0)) * sc
+                want_w = float(what.get("w", 380)) * sc
+                tw = min(text_w, want_w)
                 surf = image_surface(what, tw)
                 if surf is None or surf.get_width() <= 0:
                     continue
-                if th <= 0:
-                    th = tw * surf.get_height() / surf.get_width()
+                ratio = (float(what["h"]) / float(what.get("w", 1))) if what.get("h") and what.get("w") \
+                    else surf.get_height() / surf.get_width()
+                th = tw * ratio
+                if th > PAGE_H - 2 * MARGIN:                  # (taller than a page: fit it)
+                    th = PAGE_H - 2 * MARGIN
+                    tw = th / ratio
+                ensure_space(th)
+                x = min(max(left, MARGIN + (float(what.get("x", 56.0)) - float(geometry["left"])) * sc),
+                        left + text_w - tw)
                 cr.save()
-                cr.translate(float(what.get("x", 56.0)) * sc + tw / 2, py * sc + th / 2)
+                cr.translate(x + tw / 2, y + th / 2)
                 cr.rotate(math.radians(float(what.get("angle", 0) or 0)))
                 cr.translate(-tw / 2, -th / 2)
                 cr.scale(tw / surf.get_width(), th / surf.get_height())
                 cr.set_source_surface(surf, 0, 0)
                 cr.paint()
                 cr.restore()
+                y += th + IMAGE_GAP
             else:
-                y = py * sc
                 draw_table(what)
-        y = PAGE_H - MARGIN if placed else MARGIN      # (callouts and sticky notes start on a new sheet)
         lines, images_meta, tables = [], [], []
 
     for markup, kind, *_y in lines:
@@ -3873,12 +3883,11 @@ class NotesWindow(Adw.ApplicationWindow):
         div_btn = Gtk.Button(label="─── Divider", icon_name="list-remove-symbolic", tooltip_text="Insert Section Divider Line", css_classes=["flat"])
         div_btn.connect("clicked", lambda *_: self.insert_divider_line())
         ribbon.append(div_btn)
-        # Insert Table: one click drops a 3 x 3 table in the middle of the
-        # view; the arrow opens the grid to pick another size
-        table_btn = Adw.SplitButton(child=Adw.ButtonContent(icon_name="mk-table-symbolic", label="Insert Table"),
-                                    tooltip_text="Insert a 2 x 2 table", dropdown_tooltip="Pick the table's size",
-                                    css_classes=["flat"], popover=self._table_picker())
-        table_btn.connect("clicked", lambda *_: self.insert_table(2, 2, centre=True))
+        # Insert Table: one click drops a 3 x 3 table where the cursor is; rows and
+        # columns are added with the table's own + Row / + Column (shown on hover)
+        table_btn = Gtk.Button(child=Adw.ButtonContent(icon_name="mk-table-symbolic", label="Insert Table"),
+                               tooltip_text="Insert a 3 x 3 table", css_classes=["flat"])
+        table_btn.connect("clicked", lambda *_: self.insert_table(3, 3, centre=True))
 
         ribbon.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL, margin_start=2, margin_end=2))
 
@@ -4013,7 +4022,7 @@ class NotesWindow(Adw.ApplicationWindow):
             "type": kids[at(self.style_drop):at(div_btn) + 1],
             "ink": [self.ink_bar, Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), self.shapes_toggle,
                     self.laser_toggle],
-            "insert": [table_btn, text_btn, self._insert_sticky_btn(), kids[at(text_btn) + 1],   # (then text colour)
+            "insert": [text_btn, self._insert_sticky_btn(), kids[at(text_btn) + 1],   # (then text colour)
                        Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), img_btn, shot_btn, comment_btn,
                        link_btn, map_btn, Gtk.Separator(orientation=Gtk.Orientation.VERTICAL),
                        self.grid_toggle, scratch],
@@ -4028,27 +4037,29 @@ class NotesWindow(Adw.ApplicationWindow):
                     wdg.set_margin_end(2)
                 deck.append(wdg)
             self.deck_stack.add_named(deck, name)
-        switch = Gtk.Box(css_classes=["linked", "mk-modes"])
-        self.mode_btns, group = {}, None
-        for name, label, icon, tip in (("ink", "Ink", "input-tablet-symbolic", "Pen, highlighter, eraser, lasso, shapes (P H E L)"),
-                                       ("type", "Type", "text-editor-symbolic", "Paragraph styles, bold, italic, lists"),
-                                       ("insert", "Insert", "list-add-symbolic", "Table, text box, picture, PDF")):
-            b = Gtk.ToggleButton(child=Adw.ButtonContent(icon_name=icon, label=label), tooltip_text=tip,
-                                 group=group, active=name == "type")
-            group = group or b
-            b.connect("toggled", lambda btn, n=name: btn.get_active() and self._set_mode(n))
-            self.mode_btns[name] = b
-            switch.append(b)
-        # the modes above, the deck below: each fits a 1366 px screen with the sidebars open
-        island = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.CENTER,
-                         css_classes=["mk-island"])
-        top = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
-        top.append(switch)
-        self._sticky_tool.set_child(Adw.ButtonContent(icon_name="mail-attachment-symbolic", label="Sticky Note"))
-        self._sticky_tool.set_css_classes(["mk-sticky-tool"])
-        top.append(self._sticky_tool)
-        island.append(top)
+        # One toolbar, no Ink / Type / Insert switch above it: the Type tools show; the
+        # pen (or P H E L) brings the Ink tools, and the Insert tools are one ▸ away.
+        self.mode_btns = {}
+        island = Gtk.Box(spacing=4, halign=Gtk.Align.CENTER, css_classes=["mk-island"])
+        pen = Gtk.ToggleButton(icon_name="input-tablet-symbolic", css_classes=["flat"],
+                               tooltip_text="Ink: pen, highlighter, eraser, lasso, shapes (P H E L)")
+        more = Gtk.ToggleButton(icon_name="list-add-symbolic", css_classes=["flat"],
+                                tooltip_text="Insert: text box, sticky note, picture, screenshot, link, map")
+
+        def flip(btn, other, name):          # (one or neither on: off again shows the Type tools)
+            if btn.get_active():
+                other.set_active(False)
+                self._set_mode(name)
+            elif not other.get_active():
+                self._set_mode("type")
+        pen.connect("toggled", flip, more, "ink")
+        more.connect("toggled", flip, pen, "insert")
+        self.mode_btns = {"ink": pen, "insert": more}
         island.append(self.deck_stack)
+        island.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+        island.append(table_btn)
+        island.append(pen)
+        island.append(more)
         self.deck_stack.set_visible_child_name("type")
         ribbon_outer.append(island)
         self._zoom_widgets = (z_out, self.zoom_lbl_btn, z_in)   # into the floating pill, bottom right
@@ -4400,6 +4411,9 @@ class NotesWindow(Adw.ApplicationWindow):
     def undo_all(self):
         """Ctrl+Z: the latest change, text or object. The newest object change waits until the
         text is back to what it was when that change was made; until then, text steps undo."""
+        if self._journal and self._journal[-1][0] == "table" and self._plain_text() == self._journal[-1][-1]:
+            self._journal_redo.append(self._table_step(self._journal.pop(), undo=True))
+            return True
         if self._journal and self._plain_text() == self._journal[-1][1]:
             snap, text = self._journal.pop()
             self._journal_redo.append((self._obj_snapshot(), text))
@@ -4417,6 +4431,10 @@ class NotesWindow(Adw.ApplicationWindow):
     def redo_all(self):
         """Ctrl+Y / Ctrl+Shift+Z: an undone object change first when the text is where it was
         undone, otherwise the text's own redo."""
+        if self._journal_redo and self._journal_redo[-1][0] == "table" and \
+                self._plain_text() == self._journal_redo[-1][-1]:
+            self._journal.append(self._table_step(self._journal_redo.pop(), undo=False))
+            return True
         if self._journal_redo and self._plain_text() == self._journal_redo[-1][1]:
             snap, text = self._journal_redo.pop()
             self._journal.append((self._obj_snapshot(), text))
@@ -4432,6 +4450,14 @@ class NotesWindow(Adw.ApplicationWindow):
         return False
 
     def _on_undo_key(self, _ctrl, keyval, _code, state):
+        focus = self.get_focus()
+        if isinstance(focus, TableItem) and focus.selected and not state & Gdk.ModifierType.CONTROL_MASK:
+            if keyval in (Gdk.KEY_Delete, Gdk.KEY_KP_Delete, Gdk.KEY_BackSpace):
+                self.delete_table(focus)
+                return True
+            if keyval == Gdk.KEY_Escape:
+                self.leave_table(focus)
+                return True
         if not state & Gdk.ModifierType.CONTROL_MASK or keyval not in (Gdk.KEY_z, Gdk.KEY_Z, Gdk.KEY_y, Gdk.KEY_Y):
             return False
         focus = self.get_focus()
@@ -4894,55 +4920,6 @@ class NotesWindow(Adw.ApplicationWindow):
             self.toast.add_toast(Adw.Toast(title="Laser pointer on: drag on the note to point", timeout=2))
         self.ink_canvas.set_ink_mode(active)
 
-    def _table_picker(self):
-        """A Word/OneNote-style grid: hover to size the table (up to 8 x 8),
-        click to insert it."""
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=8, margin_bottom=8,
-                      margin_start=8, margin_end=8)
-        label = Gtk.Label(label="Insert a table", css_classes=["heading"])
-        area = Gtk.DrawingArea(content_width=8 * 22, content_height=8 * 22)
-        hover = [0, 0]  # columns, rows
-
-        def draw(_a, cr, _w, _h):
-            fg = area.get_color()
-            for r in range(8):
-                for c in range(8):
-                    lit = c < hover[0] and r < hover[1]
-                    cr.rectangle(c * 22 + 2, r * 22 + 2, 18, 18)
-                    if lit:
-                        cr.set_source_rgba(0.21, 0.52, 0.89, 0.55)
-                        cr.fill_preserve()
-                    cr.set_source_rgba(fg.red, fg.green, fg.blue, 0.85 if lit else 0.3)
-                    cr.set_line_width(1)
-                    cr.stroke()
-        area.set_draw_func(draw)
-
-        def moved(_c, x, y):
-            cell = (min(8, int(x // 22) + 1), min(8, int(y // 22) + 1))
-            if list(cell) != hover:
-                hover[:] = cell
-                label.set_label(f"{cell[0]} x {cell[1]} table")
-                area.queue_draw()
-        motion = Gtk.EventControllerMotion()
-        motion.connect("motion", moved)
-        area.add_controller(motion)
-        click = Gtk.GestureClick()
-
-        def pressed(_g, _n, x, y):
-            # sized from where the click is, not the last motion: a tap
-            # with no hover before it still inserts
-            moved(None, x, y)
-            pop.popdown()
-            self.insert_table(*hover, centre=True)
-        click.connect("pressed", pressed)
-        area.add_controller(click)
-        box.append(label)
-        box.append(area)
-        pop = Gtk.Popover(child=box)
-        pop.connect("closed", lambda *_: (hover.__setitem__(slice(None), [0, 0]), label.set_label("Insert a table"),
-                                          area.queue_draw()))
-        return pop
-
     def _table_menu(self):
         """Right-click items for the Markdown table under the cursor."""
         menu = Gio.Menu()
@@ -5128,11 +5105,14 @@ class NotesWindow(Adw.ApplicationWindow):
         self.table_items = []
 
     def remove_table(self, widget):
+        """Take WIDGET out of the note; True when its line went too."""
+        joined = False
         if widget.anchor is not None and not widget.anchor.get_deleted():
             it = self.buffer.get_iter_at_child_anchor(widget.anchor)
             end = it.copy()
             end.forward_char()
-            if end.ends_line() and not end.is_end():
+            joined = end.ends_line() and not end.is_end()
+            if joined:
                 end.forward_char()           # (and the line it had to itself)
             self.buffer.delete(it, end)
         elif widget.get_parent() is self.canvas_fixed:
@@ -5141,6 +5121,47 @@ class NotesWindow(Adw.ApplicationWindow):
             self.table_items.remove(widget)
         self.dirty = True
         self.save_note_meta()
+        return joined
+
+    def delete_table(self, widget):
+        """Delete / Backspace on a selected table (or ▼ Delete table): gone, and on the
+        Ctrl+Z history, which puts it back where it was, with what was typed in it."""
+        if widget.anchor is None or widget.anchor.get_deleted():
+            self.remove_table(widget)
+            return
+        offset = self.buffer.get_iter_at_child_anchor(widget.anchor).get_offset()
+        data = json.loads(json.dumps(widget.data))
+        joined = self.remove_table(widget)
+        self.buffer.place_cursor(self.buffer.get_iter_at_offset(offset))
+        self.view.grab_focus()
+        self._journal.append(("table", data, offset, joined, self._plain_text()))
+        del self._journal[:-200]
+        self._journal_redo.clear()
+
+    def _table_step(self, entry, undo):
+        """Undo (put the table back) or redo (take it away again) a table deletion."""
+        _kind, data, offset, joined, _text = entry
+        self._restoring = True
+        try:
+            if undo:
+                where = self.buffer.get_iter_at_offset(offset)
+                widget = self._add_table(json.loads(json.dumps(data)), where)
+                if joined:
+                    after = self.buffer.get_iter_at_child_anchor(widget.anchor)
+                    after.forward_char()
+                    self.buffer.insert(after, "\n")
+                widget.select(True)
+                self.dirty = True
+                self.save_note_meta()
+            else:
+                for t in self.table_items:
+                    if t.anchor is not None and not t.anchor.get_deleted() and \
+                            self.buffer.get_iter_at_child_anchor(t.anchor).get_offset() == offset:
+                        self.remove_table(t)
+                        break
+        finally:
+            self._restoring = False
+        return (_kind, data, offset, joined, self._plain_text())
 
     def move_table(self, widget, window_point):
         """Re-anchor WIDGET before the line under WINDOW_POINT (window coordinates)."""

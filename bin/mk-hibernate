@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
-# mk-hibernate: hibernate now (the Hibernate buttons in the Finder menu, Quick
-# Settings and the lock screen run this).
+# mk-hibernate: the Hibernate buttons (Finder menu, Quick Settings, lock screen).
 #
-#   mk-hibernate            hibernate; if this computer can't, suspend-then-hibernate,
-#                           then hybrid-sleep; if none works, say how to set it up
+#   mk-hibernate            write files out (sync), lock the screen, then:
+#                           - real hibernation when this computer can (a disk swap and
+#                             resume= set up, logind says yes, no Secure Boot lockdown):
+#                             everything saved to disk, the power goes off;
+#                           - otherwise sleep (suspend to RAM): every app, tab and file
+#                             stays open in memory and is back the moment you open the
+#                             lid or press power. Sleep needs a little power: on a flat
+#                             battery what's in memory is lost (a notification says so).
 #   mk-hibernate --check    what logind allows here (no sleeping)
 #
-# Hibernating needs a disk swap at least the size of your RAM and the kernel's
-# resume= setting: set them up once with  sudo scripts/setup-hibernate.sh
+# Real hibernation is set up once with  sudo scripts/setup-hibernate.sh  (it can't
+# work while Secure Boot keeps the kernel locked down).
 # Attempts are logged to ~/.cache/mk-hibernate.log.
 set -uo pipefail
 
@@ -26,29 +31,49 @@ lockdown() {
     [[ -r /sys/kernel/security/lockdown ]] && grep -qE '\[(integrity|confidentiality)\]' /sys/kernel/security/lockdown
 }
 
+disk_ready() {
+    local answer
+    answer=$(can CanHibernate)
+    [[ "$answer" == yes || "$answer" == challenge ]] && grep -q 'resume=' /proc/cmdline && ! lockdown
+}
+
 if [[ "${1:-}" == "--check" ]]; then
     printf 'Hibernate:                 %s\n' "$(can CanHibernate)"
     printf 'Suspend, then hibernate:   %s\n' "$(can CanSuspendThenHibernate)"
     printf 'Hybrid sleep:              %s\n' "$(can CanHybridSleep)"
-    if lockdown; then
-        echo "Kernel lockdown is on (Secure Boot): the kernel refuses to hibernate while it is."
+    printf 'Sleep (RAM):               %s\n' "$(can CanSuspend)"
+    grep -q 'resume=' /proc/cmdline || echo "No resume= on the kernel command line (sudo scripts/setup-hibernate.sh)."
+    lockdown && echo "Kernel lockdown is on (Secure Boot): the kernel refuses to hibernate while it is."
+    if disk_ready; then
+        echo "The Hibernate buttons hibernate to disk."
+    else
+        echo "The Hibernate buttons sleep instead (apps stay in memory; it needs a little power)."
     fi
     exit 0
 fi
 
-for pair in CanHibernate:hibernate CanSuspendThenHibernate:suspend-then-hibernate CanHybridSleep:hybrid-sleep; do
-    answer=$(can "${pair%%:*}")
-    if [[ "$answer" == "yes" || "$answer" == "challenge" ]]; then
-        log "systemctl ${pair#*:} (logind: $answer)"
-        if systemctl "${pair#*:}"; then
-            exit 0
-        fi
-        log "systemctl ${pair#*:} failed"
-    fi
-done
+sync
+loginctl lock-session 2>/dev/null || true
+sleep 0.4                          # (the lock screen up, the live wallpaper paused, before going down)
 
-reason="no disk swap big enough, or no resume= kernel setting"
-lockdown && reason="kernel lockdown (Secure Boot) forbids hibernation"
-log "can't hibernate: $reason. Set it up once with: sudo scripts/setup-hibernate.sh"
-echo "This computer can't hibernate yet ($reason). Set it up once with: sudo scripts/setup-hibernate.sh" >&2
+if disk_ready; then
+    log "systemctl hibernate"
+    systemctl hibernate && exit 0
+    log "systemctl hibernate failed: sleeping instead"
+fi
+
+reason="hibernation isn't set up here"
+lockdown && reason="Secure Boot keeps the kernel from hibernating"
+log "sleep instead of hibernate ($reason)"
+if command -v notify-send > /dev/null; then
+    notify-send --app-name="MK Workstation" --icon=weather-clear-night-symbolic \
+        "Slept instead of hibernating" \
+        "$reason, so the computer slept: everything stayed open in memory. Sleep needs a little power: on a flat battery it would be lost." \
+        2>/dev/null || true
+fi
+if systemctl suspend; then
+    exit 0
+fi
+log "systemctl suspend failed"
+echo "Couldn't hibernate or sleep ($reason; logind refused to suspend)." >&2
 exit 1

@@ -37,10 +37,22 @@ import * as Actions from './appActions.js';
 const MARGIN = 4;              // the dock's gap above the screen's bottom edge
 const SINK = 14;               // how far it sinks as it fades for the overview (px, doubled)
 const OVERVIEW_OUT = 260, OVERVIEW_IN = 360;
-const EDGE_DELAY = 40;         // the pointer rests on the bottom edge this long before the dock comes back
-const FADE_OUT = 200;          // ms: fading out (EASE_OUT_QUAD) as a window overlaps it
-const FADE_IN = 220;           // ms: fading back in (EASE_OUT_CUBIC)
-const FADE_SCALE = 0.95;       // the size it shrinks to as it fades out (from its bottom middle)
+const EDGE_DELAY = 120;        // the pointer rests on the bottom edge this long before the dock comes back
+// dock-animation-style: how it goes away (a window overlaps it) and comes back
+//   fade-scale     Soft Fade: opacity with a gentle 0.94x, 200 ms, ease-out cubic
+//   elastic-slide  Elastic Slide: down off the screen and back up with a little spring (260 ms, ease-out back)
+//   magnetic-wave  Magnetic Wave: pops in and out (220 ms); the icons near the pointer swell as a wave
+//   instant-glass  Instant Glass: a plain 110 ms fade, no motion; the app you're in sits 4 px up
+const SHOW_HIDE = {
+    'fade-scale': {hide: {opacity: 0, scale: 0.94, slide: false, ms: 200, mode: 'EASE_OUT_CUBIC'},
+        show: {ms: 200, mode: 'EASE_OUT_CUBIC'}},
+    'elastic-slide': {hide: {opacity: 255, scale: 1, slide: true, ms: 220, mode: 'EASE_OUT_CUBIC'},
+        show: {ms: 260, mode: 'EASE_OUT_BACK'}},
+    'magnetic-wave': {hide: {opacity: 0, scale: 0.85, slide: false, ms: 220, mode: 'EASE_IN_BACK'},
+        show: {ms: 220, mode: 'EASE_OUT_BACK'}},
+    'instant-glass': {hide: {opacity: 0, scale: 1, slide: false, ms: 110, mode: 'EASE_OUT_QUAD'},
+        show: {ms: 110, mode: 'EASE_OUT_QUAD'}},
+};
 const EDGE = 4;                // px: the bottom-edge strip that brings it back
 
 // The parabola: HOVER at the pointer, falling to 1 a little over one icon
@@ -60,7 +72,7 @@ export class Dock {
         this._unwatch = watch(() => this._sync());
         this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::blur', 'changed::dock-style', 'changed::dock-opacity',
             'changed::dock-corner-radius', 'changed::dock-indicator-style', 'changed::dock-glow-color',
-            'changed::dock-icon-glass'].map(
+            'changed::dock-icon-glass', 'changed::dock-animation-style'].map(
             signal => settings.connect(signal, () => this._sync(true)));
         this._sync();
     }
@@ -94,6 +106,7 @@ export class Dock {
     _build() {
         this._size = this._settings.get_int('dock-icon-size');
         this._hover = this._settings.get_double('dock-hover-scale');
+        this._style = this._settings.get_string('dock-animation-style');
         this._ids = [];
         this._appIds = [];
         this._hidden = false;
@@ -133,7 +146,14 @@ export class Dock {
         // whenever it re-checks), which would undo hiding the dock for the
         // overview; so it tracks this holder, and the dock inside it is ours.
         this._chrome = new Clutter.Actor({layout_manager: new Clutter.BinLayout()});
-        this._chrome.add_child(this._actor);
+        // Two layers: the trigger (this._track) takes the pointer and never moves or scales (its
+        // size is the pill's layout size, which no transform changes); the pill inside it
+        // (this._actor) does all the fading, sliding and magnifying. So hovering never flickers:
+        // an animation can't pull the dock out from under the pointer and set off a leave.
+        this._track = new St.Widget({layout_manager: new Clutter.BinLayout(), reactive: true, track_hover: true,
+            name: 'mk-dock-track'});
+        this._track.add_child(this._actor);
+        this._chrome.add_child(this._track);
         Main.layoutManager.addChrome(this._chrome, {trackFullscreen: true});
         // the bottom edge: resting on it brings the dock back while it's hidden
         this._edge = new St.Widget({reactive: true, height: EDGE, opacity: 0, visible: false});
@@ -155,7 +175,9 @@ export class Dock {
         });
 
         this._actor.connect('motion-event', (_a, event) => this._magnify(event.get_coords()[0]));
-        this._actor.connect('leave-event', () => {
+        this._track.connect('notify::hover', () => {
+            if (this._track.hover)
+                return;
             this._settle();
             this._queueDodge(300);               // (the pointer gone: away again if a window still overlaps)
         });
@@ -171,7 +193,7 @@ export class Dock {
         this._connect(AppFavorites.getAppFavorites(), 'changed', () => this._queueFill());
         this._connect(tracker, 'notify::focus-app', () => {
             this._paintBars();
-            if (!this._actor.hover)
+            if (!this._track?.hover)
                 this._settle();          // the focused app's icon rises, the last one settles
         });
         this._connect(global.display, 'notify::focus-window', () => this._followFocus());
@@ -491,10 +513,19 @@ export class Dock {
         const [dockX] = this._actor.get_transformed_position();
         const under = items.find(it => !it.isAppGrid && pointerX >= dockX + it.button.x &&
             pointerX < dockX + it.button.x + it.button.width);
+        // Magnetic Wave: the icons near the pointer swell too, falling off with distance
+        const wave = this._style === 'magnetic-wave' && this._hover > 1.001;
         items.forEach(it => {
             if (it.gone)
                 return;
-            const [scale, lift] = it === under && this._hover > 1.001 ? [this._hover, LIFT] : this._rest(it);
+            let [scale, lift] = it === under && this._hover > 1.001 ? [this._hover, LIFT] : this._rest(it);
+            if (wave && !it.isAppGrid) {
+                const centre = dockX + it.button.x + it.button.width / 2;
+                const k = Math.exp(-(((pointerX - centre) / (it.button.width * 1.25)) ** 2));
+                const [restScale, restLift] = this._rest(it);
+                scale = Math.round((restScale + (this._hover - 1) * k) * 100) / 100;
+                lift = Math.round(Math.max(restLift, LIFT * k));
+            }
             const key = `${scale}/${lift}`;
             if (it.target === key)
                 return;
@@ -512,7 +543,9 @@ export class Dock {
     }
 
     _rest(item) {
-        return this._focused(item) ? [1.15, 6] : [1, 0];      // the app you're in: up 6 px (180 ms)
+        if (!this._focused(item))
+            return [1, 0];
+        return this._style === 'instant-glass' ? [1.08, 4] : [1.15, 6];   // the app you're in: up 6 px (180 ms)
     }
 
     // the glow colour as "R, G, B"
@@ -641,7 +674,7 @@ export class Dock {
     _dodge() {
         if (!this._actor || this._gone || this._inOverview)
             return;
-        if (this._actor.hover || this._menus.activeMenu)
+        if (this._track.hover || this._menus.activeMenu)
             return;                                         // never away from under the pointer
         this._slide(this._covered());
     }
@@ -668,17 +701,20 @@ export class Dock {
         } else if (!this._inOverview) {
             this._actor.show();
         }
-        // a fade with a slight shrink towards its bottom middle (no slide, no box left behind);
-        // ease() retargets one already under way from where it is, so a quick out-then-in never jumps
-        this._actor.ease({opacity: hide ? 0 : 255, scale_x: hide ? FADE_SCALE : 1, scale_y: hide ? FADE_SCALE : 1,
-            translation_y: 0, duration: hide ? FADE_OUT : FADE_IN,
-            mode: hide ? Clutter.AnimationMode.EASE_OUT_QUAD : Clutter.AnimationMode.EASE_OUT_CUBIC,
+        // the chosen preset (dock-animation-style), from its bottom middle; ease() retargets one
+        // already under way from where it is, so a quick out-then-in never jumps
+        const preset = SHOW_HIDE[this._style] ?? SHOW_HIDE['fade-scale'];
+        const out = preset.hide, step = hide ? out : preset.show;
+        this._actor.ease({opacity: hide ? out.opacity : 255, scale_x: hide ? out.scale : 1, scale_y: hide ? out.scale : 1,
+            translation_y: hide && out.slide ? Math.round(this._actor.height + MARGIN + 20) : 0,
+            duration: step.ms, mode: Clutter.AnimationMode[step.mode],
             // gone altogether once it has faded: nothing left to hit-test, only the edge strip
             onStopped: done => {
                 if (done && hide && this._hidden && this._actor && !this._gone)
                     this._actor.hide();
             }});
         this._actor.reactive = !hide;
+        this._track.reactive = !hide;
         if (!hide && !this._inOverview && this._actor.translation_y < 10)
             this._setPointerable(true);
     }

@@ -307,6 +307,28 @@ class Preview(Gtk.Frame):
 
 
 # ----------------------------------------------------------------- rows
+def choice_buttons(s, key, title, choices):
+    """A row of linked buttons, one per choice; the one in the setting is pressed (live both ways)."""
+    row = Adw.ActionRow(title=title)
+    box = Gtk.Box(css_classes=["linked"], valign=Gtk.Align.CENTER)
+    buttons, group = {}, None
+    for value, label in choices:
+        b = Gtk.ToggleButton(label=label, group=group)
+        group = group or b
+        b.connect("toggled", lambda btn, v=value: btn.get_active() and s.get_string(key) != v and s.set_string(key, v))
+        buttons[value] = b
+        box.append(b)
+
+    def show(*_):
+        b = buttons.get(s.get_string(key))
+        if b and not b.get_active():
+            b.set_active(True)
+    show()
+    s.connect(f"changed::{key}", show)
+    row.add_suffix(box)
+    return row
+
+
 def switch_row(s, key, title, subtitle=""):
     row = Adw.SwitchRow(title=title, subtitle=subtitle)
     s.bind(key, row, "active", Gio.SettingsBindFlags.DEFAULT)
@@ -581,6 +603,9 @@ def topbar_studio(window):
                            lambda v: "Off" if v < 1.005 else f"{v:.2f}x", "d", subtitle="Only the icon under the pointer"))
         dock.add(switch_row(engine, "dock-focused-raise", "Raise the Focused App",
                             "The app you're in sits a little higher and larger, with a soft glow"))
+        dock.add(choice_buttons(engine, "dock-animation-style", "Dock Animation",
+                                [("fade-scale", "Soft Fade"), ("elastic-slide", "Elastic Slide"),
+                                 ("magnetic-wave", "Magnetic Wave"), ("instant-glass", "Instant Glass")]))
         dock.add(switch_row(engine, "dock-icon-glass", "Frosted Glass Icons",
                             "Each icon on a small pane of frosted glass"))
         dock.add(scale_row(engine, "dock-opacity", "Glass Opacity", 10, 95, 1, lambda v: f"{round(v)} %", "pct"))

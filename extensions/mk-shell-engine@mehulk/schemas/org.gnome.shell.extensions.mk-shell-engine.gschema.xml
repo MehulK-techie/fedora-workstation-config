@@ -102,6 +102,12 @@
       <summary>Raise the focused app</summary>
       <description>The app you're working in sits a little higher and larger (1.15x, 9 px up) on a tile in the glow colour; the others stay at rest.</description>
     </key>
+    <key name="dock-animation-style" type="s">
+      <choices><choice value="fade-scale"/><choice value="elastic-slide"/><choice value="magnetic-wave"/><choice value="instant-glass"/></choices>
+      <default>'fade-scale'</default>
+      <summary>Dock animation</summary>
+      <description>How the dock goes away when a window overlaps it and comes back: fade-scale (Soft Fade), elastic-slide (Elastic Slide), magnetic-wave (Magnetic Wave: the icons near the pointer swell too), instant-glass (Instant Glass).</description>
+    </key>
     <key name="dock-icon-glass" type="b">
       <default>false</default>
       <summary>Frosted glass behind each icon</summary>

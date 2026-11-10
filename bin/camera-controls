@@ -103,6 +103,9 @@ EMOJI = {"Faces": "😀😂🤣😍🥰😎🤩😜🤪😇🥳😏😴🤯🥺�
          "Reactions": "🔥💯✨🎉🎊💥💫⭐🌟💖💔😱🙈🤡👑🏆",
          "Symbols": "❤️🧡💛💚💙💜🖤🤍✅❌⚡☀️🌙🌈🎵🎈🍕🌸🦄"}
 THUMB_W = 112  # the looks strip's live thumbnails
+STRIP_SIZE = (96, 54)  # the strip's tiles are worked out from the frame shrunk once to this
+STRIP_FPS = 15         # passes a second, on a worker thread (the viewfinder runs at the camera's rate)
+STRIP_BATCH = 6        # tiles a pass, round robin
 STICKERS = "😀😂😍🥳😎🤩😜🥰🤪😇👻🤖👑🎉🎈🎂🌈⭐✨🔥💖💯👍✌️🙌🍕🍿🌸🦄🐶🐱"
 COLORS = [("White", (1, 1, 1)), ("Black", (0.08, 0.08, 0.1)), ("Pink", (1, 0.35, 0.65)),
           ("Yellow", (1, 0.85, 0.15)), ("Blue", (0.25, 0.6, 1)), ("Green", (0.3, 0.9, 0.45)),
@@ -432,7 +435,10 @@ class Booth(Adw.ApplicationWindow):
         overlay.add_overlay(self.flash)
         overlay.add_overlay(self.countdown)
 
-        side = self._adjust_panel()
+        # (scrolling, so its height never sets the window's: a window whose smallest size is taller
+        # than the screen can't be maximized, which greyed the button out on a 125 % laptop screen)
+        side = Gtk.ScrolledWindow(child=self._adjust_panel(), hscrollbar_policy=Gtk.PolicyType.NEVER,
+                                  propagate_natural_width=True, vexpand=True)
         revealer = Gtk.Revealer(child=side, transition_type=Gtk.RevealerTransitionType.SLIDE_LEFT)
         self.adjust_btn.bind_property("active", revealer, "reveal-child", 0)
         top = Gtk.Box()
@@ -706,13 +712,36 @@ class Booth(Adw.ApplicationWindow):
                 texture = to_texture(out)
                 GLib.idle_add(lambda: (setattr(self, "_rendering", False), self.preview.set_paintable(texture), False)[2])
             threading.Thread(target=work, daemon=True).start()
-        if now - getattr(self, "last_thumbs", 0) > 0.5:     # the looks strip, twice a second
+        # The looks strip, decoupled from the viewfinder: the frame shrunk ONCE to 96 x 54, the
+        # tiles' looks worked out on a worker thread at about 15 a second (a few tiles a pass,
+        # round robin), only the finished pictures handed to the window. The viewfinder never
+        # waits on the strip (it used to redo every tile on the main loop twice a second).
+        if now - getattr(self, "last_thumbs", 0) > 1 / STRIP_FPS and not getattr(self, "_strip_busy", False):
             self.last_thumbs = now
-            tiny = small.resize((THUMB_W, round(THUMB_W * small.height / small.width)), Image.Resampling.BILINEAR)
-            for key, pic in self.look_thumbs.items():
-                if not self.look_buttons[key].get_visible():
-                    continue
-                pic.set_paintable(to_texture(render_look(tiny, key, self.tracker)))
+            visible = [(k, pic) for k, pic in self.look_thumbs.items() if self.look_buttons[k].get_visible()]
+            if visible:
+                self._strip_busy = True
+                tiny = small.resize(STRIP_SIZE, Image.Resampling.BILINEAR)
+                start = getattr(self, "strip_next", 0) % len(visible)
+                batch = [visible[(start + i) % len(visible)] for i in range(min(STRIP_BATCH, len(visible)))]
+                self.strip_next = start + len(batch)
+                tracker = self.tracker
+
+                def strip_work():
+                    done = []
+                    for key, pic in batch:
+                        try:
+                            done.append((pic, to_texture(render_look(tiny, key, tracker))))
+                        except Exception:              # noqa: BLE001 (one tile failing leaves it as it was)
+                            pass
+
+                    def hand_over():
+                        for pic, texture in done:
+                            pic.set_paintable(texture)
+                        self._strip_busy = False
+                        return GLib.SOURCE_REMOVE
+                    GLib.idle_add(hand_over, priority=GLib.PRIORITY_LOW)
+                threading.Thread(target=strip_work, daemon=True).start()
         return GLib.SOURCE_REMOVE
 
     def _set_grid(self, on):

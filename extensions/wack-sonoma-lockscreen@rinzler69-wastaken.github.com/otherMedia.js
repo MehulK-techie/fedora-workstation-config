@@ -1,7 +1,7 @@
 // MK: is something else playing sound? For the live wallpaper's Background Play,
 // which steps aside (fades out) while another app plays and comes back after.
 //
-// Two sources, either is enough:
+// Two sources, and it takes both:
 //   - MPRIS players (media.js): any with PlaybackStatus 'Playing' (Spotify, a browser
 //     tab with media keys, VLC...), the wallpaper's and the lock screen's own left out
 //   - the sound server's playback streams (PipeWire through Gvc, as GNOME's volume
@@ -17,8 +17,11 @@ import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 import { MediaWatcher } from './media.js';
 
 const DEBOUNCE = 600;
-// the wallpaper's own player (bin/mk-live-wallpaper names its stream) and the lock screen's video
-const OWN = /live.?wallpaper|LiveLockScreen|wack.?sonoma/i;
+// never "other media": the wallpaper's own player (bin/mk-live-wallpaper names its stream; the
+// processes it could show up as), the lock screen's video, and sound filters (the B&O speaker
+// tuning's own stream, "Speaker (B&O tuning)", is always open: counting it muted the wallpaper
+// for good whenever "Mute While Other Media Plays" was on)
+const OWN = /live.?wallpaper|LiveLockScreen|wack.?sonoma|\bmpv\b|gst-launch|\bgjs\b|GtkVideo|clutter|B&O tuning|bang.?olufsen|filter-chain|easyeffects/i;
 
 export class OtherMedia extends Signals.EventEmitter {
     constructor() {
@@ -74,8 +77,13 @@ export class OtherMedia extends Signals.EventEmitter {
         return !OWN.test(who);
     }
 
+    // Another app playing: a media player saying so (MPRIS, PlaybackStatus Playing) AND a sound
+    // stream of someone else's open on the sound server. Both, so neither a player that only
+    // claims to play nor a stream left open by a paused app (or a filter) ever mutes the wallpaper.
     get rawPlaying() {
-        return this._mpris.anyPlaying || [...this._streams.keys()].some(s => {
+        if (!this._mpris.anyPlaying)
+            return false;
+        return [...this._streams.keys()].some(s => {
             try {
                 return OtherMedia._audible(s);
             } catch {

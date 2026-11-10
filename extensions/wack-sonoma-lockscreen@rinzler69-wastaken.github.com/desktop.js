@@ -11,15 +11,11 @@
 // the overview and the dock), clicks passing through, covering the primary
 // monitor. Paused under a full-screen window and while the screen is locked.
 // Silent unless desktop-audio-enabled: no audio stream is opened at all then.
-// With sound on, two ways (wallpaper-background-play, Quick Settings' "Wallpaper
-// Bg Play" tile):
-//   off (the default): heard only on the bare desktop (unlocked, no overview, no normal
-//     window showing on this workspace). A window showing fades the sound out over
-//     350 ms (20 ms steps); back on the bare desktop it fades in over 350 ms to the
-//     slider's level. Another player playing mutes it too (audio-auto-mute-on-other-media).
-//   on: it's heard under your windows too, and steps aside only for other media: an
-//     MPRIS player or any other app's sound stream playing (otherMedia.js) fades it out;
-//     600 ms after that goes quiet it fades back in.
+// With sound on, it's heard at the Desktop Volume whenever you're logged in, windows open or not. Silent while
+// locked; and while another app plays media (an MPRIS player playing AND its sound stream
+// open: otherMedia.js, which never counts the wallpaper itself or a sound filter) when Mute
+// While Other Media Plays or Wallpaper Bg Play is on: out over 350 ms (20 ms steps), back
+// in over 350 ms, 600 ms after the other media goes quiet.
 // The video itself streams on all the while (windows, menus, the overview); it pauses
 // only while the screen is locked or a window is full screen.
 //
@@ -262,14 +258,16 @@ export class DesktopWallpaper {
 
     // the slider's volume on the bare desktop; nothing anywhere else, or while another
     // player is playing (with auto-mute on)
+    // Command Centre's Desktop Video Sound (desktop-audio-enabled), Desktop Volume
+    // (desktop-audio-volume) and Mute While Other Media Plays (audio-auto-mute-on-other-media):
+    // with the sound on it's heard at that volume all the time you're logged in, windows open
+    // or not; silent only while locked, or while another app plays media (with that switch, or
+    // Quick Settings' Wallpaper Bg Play, on).
     _volume() {
-        const level = this._settings.get_double('desktop-audio-volume');
         if (Main.sessionMode.isLocked)
             return 0;
-        if (this._background)
-            return this._media?.playing ? 0 : level;
-        const muted = this._settings.get_boolean('audio-auto-mute-on-other-media') && this._media?.playing;
-        return muted || !this._onDesktop() ? 0 : level;
+        const yieldToMedia = this._settings.get_boolean('audio-auto-mute-on-other-media') || this._background;
+        return yieldToMedia && this._media?.playing ? 0 : this._settings.get_double('desktop-audio-volume');
     }
 
     // (the name stays: it's called on every change that decides whether you're on the desktop;
@@ -326,8 +324,10 @@ export class DesktopWallpaper {
             return;
         win.move_resize_frame(true, m.x, m.y, m.width, m.height);
         this._scale();
-        this._clone?.set_position(m.x, m.y);
+        this._frame?.set_position(m.x, m.y);
+        this._frame?.set_size(m.width, m.height);
         this._clone?.set_size(m.width, m.height);
+        this._unbar();
     }
 
     // The picture on screen: a clone of the window, as big as the monitor (physical geometry,
@@ -342,16 +342,20 @@ export class DesktopWallpaper {
         // one live wallpaper, ever: a copy left by an earlier player (or extension run) goes first
         for (const old of layer.get_children().filter(c => c.name === CLONE_NAME))
             old.destroy();
-        this._clone = new Clutter.Clone({source: actor, reactive: false, name: CLONE_NAME, clip_to_allocation: true});
-        this._clone.set_position(m.x, m.y);
-        this._clone.set_size(m.width, m.height);    // (the physical monitor; the window fills it, COVER)
-        layer.insert_child_at_index(this._clone, 0);
+        // a frame the size of the physical monitor that clips, holding the copy of the video (which
+        // fills it, COVER, and is zoomed past any black bars encoded in the video: _unbar)
+        this._frame = new Clutter.Actor({name: CLONE_NAME, reactive: false, clip_to_allocation: true,
+            x: m.x, y: m.y, width: m.width, height: m.height});
+        this._clone = new Clutter.Clone({source: actor, reactive: false, width: m.width, height: m.height});
+        this._frame.add_child(this._clone);
+        layer.insert_child_at_index(this._frame, 0);
+        this._watchState();
         // GNOME's still wallpaper on that monitor turns fully transparent while the video shows,
         // so nothing of it can show through anywhere (under the dock, at an edge, between frames);
         // a new one (the still wallpaper changed) is caught as it's added. Back when it stops.
         this._stills = new Set();
         const still = child => {
-            if (child === this._clone || !(child instanceof Meta.BackgroundActor))
+            if (child === this._frame || !(child instanceof Meta.BackgroundActor))
                 return;
             if (child.monitor !== undefined && child.monitor !== Main.layoutManager.primaryIndex)
                 return;
@@ -375,6 +379,37 @@ export class DesktopWallpaper {
         actor.connectObject('destroy', () => this._uncover(), this);
     }
 
+    // Black letterbox bands encoded in the video (the player measures them: bars [top, bottom] in
+    // $XDG_RUNTIME_DIR/mk-live-wallpaper.json): the picture is zoomed and centred just enough
+    // that they fall outside the monitor, so no black bar ever shows (at most 1.4x).
+    _watchState() {
+        const file = Gio.File.new_for_path(GLib.build_filenamev([GLib.get_user_runtime_dir(), 'mk-live-wallpaper.json']));
+        this._stateFile = file;
+        this._stateMonitor = file.get_parent().monitor_directory(Gio.FileMonitorFlags.NONE, null);
+        this._stateMonitor.connect('changed', (_m, f) => f.equal(file) && this._unbar());
+        this._unbar();
+    }
+
+    _unbar() {
+        const clone = this._clone, m = Main.layoutManager.primaryMonitor;
+        if (!clone || !m)
+            return;
+        let top = 0, bottom = 0;
+        try {
+            const info = JSON.parse(new TextDecoder().decode(this._stateFile.load_contents(null)[1]));
+            const want = this._settings.get_string('desktop-wallpaper-path').replace(/^~(?=\/)/, GLib.get_home_dir());
+            if (info.path === want && Array.isArray(info.bars))
+                [top, bottom] = info.bars.map(v => Math.min(0.3, Math.max(0, Number(v) || 0)));
+        } catch {}
+        if (top + bottom < 0.01)
+            top = bottom = 0;                        // (a hair of dark edge: left as it is)
+        const zoom = Math.min(1.4, 1 / Math.max(0.5, 1 - top - bottom));
+        const centre = top + (1 - top - bottom) / 2;  // the picture's middle, as a fraction of the height
+        clone.set_pivot_point(0.5, centre);
+        clone.set_scale(zoom, zoom);
+        clone.translation_y = Math.round((0.5 - centre) * m.height);
+    }
+
     _uncover() {
         unpinWorkspaces();
         Main.layoutManager._backgroundGroup?.disconnectObject(this);
@@ -388,9 +423,11 @@ export class DesktopWallpaper {
             this._coverActor.disconnectObject(this);
             this._coverActor.opacity = 255;
         }
+        this._stateMonitor?.cancel();
+        this._stateMonitor = null;
         this._clone?.disconnectObject(this);
-        this._clone?.destroy();
-        this._clone = this._coverActor = null;
+        this._frame?.destroy();                      // (and the copy in it)
+        this._frame = this._clone = this._coverActor = null;
     }
 
     _scale() {

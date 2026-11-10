@@ -940,6 +940,9 @@ dconf write /org/gnome/shell/extensions/blur-my-shell/panel/static-blur false
 dconf write /org/gnome/shell/extensions/blur-my-shell/panel/override-background true
 dconf write /org/gnome/shell/extensions/blur-my-shell/panel/override-background-dynamically true
 dconf write /org/gnome/shell/extensions/blur-my-shell/panel/style-panel 0
+# and no Dash to Dock blur: MK's dock isn't Dash to Dock, and that pass only ever left a
+# rectangle of blurred still wallpaper where a dock would be
+dconf write /org/gnome/shell/extensions/blur-my-shell/dash-to-dock/blur false
 
 # 8. Modern Modal Dialog Styling (written once; re-runs don't append again)
 SHELL_CSS="$HOME/.config/gnome-shell/gnome-shell.css"

@@ -22,7 +22,7 @@ static-blur=true
 pipeline='pipeline_default'
 
 [dash-to-dock]
-blur=true
+blur=false
 override-background=true
 pipeline='pipeline_default'
 static-blur=true

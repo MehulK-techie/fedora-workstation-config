@@ -13,6 +13,7 @@ MK Shell Engine: org.gnome.shell.extensions.mk-shell-engine), and the shell
 follows at once, so this window, Extension Manager and `mk-live-wallpaper`
 always agree. There's one wallpaper player: the suite's.
 """
+import json
 import re
 import subprocess
 from datetime import datetime
@@ -378,6 +379,51 @@ def scale_row(s, key, title, lo, hi, step, fmt, kind="i", subtitle=""):
     return row
 
 
+def desktop_sound_status(s):
+    """What the desktop wallpaper's sound is doing right now, asked of the sound server itself
+    (the player's stream, "MK Live Wallpaper"), every 2 s while the window is open."""
+    row = Adw.ActionRow(title="Status", subtitle="…")
+    row.add_css_class("property")
+
+    def state():
+        if not s.get_boolean("desktop-audio-enabled"):
+            return "Off: the desktop video plays without opening any sound stream"
+        if not s.get_string("desktop-wallpaper-path"):
+            return "No desktop video chosen (Media › Desktop)"
+        try:
+            info = json.loads((Path(GLib.get_user_runtime_dir()) / "mk-live-wallpaper.json").read_text())
+            if info.get("audio") is False:
+                return "This video has no sound track"
+        except (OSError, ValueError):
+            pass
+        try:
+            out = subprocess.run(["pactl", "-f", "json", "list", "sink-inputs"], capture_output=True, text=True,
+                                 timeout=2).stdout
+            streams = [x for x in json.loads(out or "[]")
+                       if x.get("properties", {}).get("application.name") == "MK Live Wallpaper"]
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            return "On (the sound server didn't answer)"
+        if not streams:
+            return "On: starting…"
+        x = streams[0]
+        level = max((int(str(v.get("value_percent", "0")).rstrip("%") or 0) for v in x.get("volume", {}).values()),
+                    default=0)
+        if x.get("mute") or level == 0 or x.get("corked"):
+            return "Quiet for now (an app covers the desktop, the screen's locked, or other media plays)"
+        return f"Active (PipeWire sink · {level} %)"
+
+    def update():
+        if row.get_root() is None:
+            return GLib.SOURCE_REMOVE              # (the window closed)
+        row.set_subtitle(state())
+        return GLib.SOURCE_CONTINUE
+    s.connect("changed::desktop-audio-enabled", lambda *_: update())
+    s.connect("changed::desktop-wallpaper-path", lambda *_: update())
+    row.connect("map", lambda *_: update())
+    GLib.timeout_add_seconds(2, lambda: update() if row.get_mapped() or row.get_root() else GLib.SOURCE_REMOVE)
+    return row
+
+
 def file_row(window, s, key, title, types, none, folder):
     row = Adw.ActionRow(title=title)
 
@@ -409,7 +455,17 @@ def file_row(window, s, key, title, types, none, folder):
         dialog.open(window, None, done)
     choose.connect("clicked", pick)
     clear = Gtk.Button(icon_name="edit-clear-symbolic", valign=Gtk.Align.CENTER, css_classes=["flat"], tooltip_text="Clear")
-    clear.connect("clicked", lambda _b: s.set_string(key, ""))
+    def do_clear(_b):
+        if key == "desktop-wallpaper-path":         # (cleared on purpose: the shell mustn't put it back)
+            note = Path(GLib.get_user_config_dir()) / "mk" / "wallpaper.json"
+            try:
+                data = json.loads(note.read_text())
+                data["desktop"] = ""
+                note.write_text(json.dumps(data, indent=2))
+            except (OSError, ValueError):
+                pass
+        s.set_string(key, "")
+    clear.connect("clicked", do_clear)
     row.add_suffix(choose)
     row.add_suffix(clear)
     return row
@@ -510,8 +566,9 @@ def wallpaper_studio(window):
     media.add(lock_file)
     page.add(media)
 
-    sound = Adw.PreferencesGroup(title="Sound", description="Off: no audio stream is opened at all.")
+    sound = Adw.PreferencesGroup(title="Sound")
     sound.add(switch_row(s, "desktop-audio-enabled", "Desktop Video Sound"))
+    sound.add(desktop_sound_status(s))
     vol = scale_row(s, "desktop-audio-volume", "Desktop Volume", 0, 100, 1, lambda v: f"{round(v)} %", "pct")
     s.bind("desktop-audio-enabled", vol, "sensitive", Gio.SettingsBindFlags.GET)
     sound.add(vol)

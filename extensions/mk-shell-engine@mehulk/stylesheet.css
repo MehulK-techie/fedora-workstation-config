@@ -295,3 +295,6 @@
 .mk-cal-queue-struck { color: rgba(255, 255, 255, 0.45); }
 .mk-cal-remove { padding: 3px; border-radius: 999px; color: rgba(255, 255, 255, 0.6); }
 .mk-cal-remove:hover { background-color: rgba(239, 68, 68, 0.35); color: white; }
+/* Quick Settings header: MK Command Centre's emblem beside GNOME's Settings gear (never a second gear) */
+.quick-settings-system-item .mk-centre-button { margin-left: 4px; }
+.mk-centre-emblem { icon-size: 16px; color: -st-accent-color; }

@@ -251,8 +251,15 @@ export class ControlCenter {
             const id = item.connect('notify::visible', () => item.visible && (item.visible = false));
             this._headerHidden.push([item, id]);
         }
-        this._centre = new St.Button({style_class: 'icon-button', can_focus: true, accessible_name: 'MK Command Centre',
-            child: new St.Icon({icon_name: 'applications-system-symbolic'})});
+        // MK's emblem, not a second gear beside GNOME's Settings (applications-system draws as one);
+        // and only ever one of it (a header left from before a lock goes first)
+        row.get_children().filter(c => c.accessible_name === 'MK Command Centre').forEach(c => c.destroy());
+        const emblem = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'mk-emblem-symbolic.svg']);
+        const icon = GLib.file_test(emblem, GLib.FileTest.EXISTS)
+            ? new St.Icon({gicon: Gio.FileIcon.new(Gio.File.new_for_path(emblem)), style_class: 'mk-centre-emblem'})
+            : new St.Icon({icon_name: 'preferences-desktop-appearance-symbolic'});
+        this._centre = new St.Button({style_class: 'icon-button mk-centre-button', can_focus: true,
+            accessible_name: 'MK Command Centre', child: icon});
         this._centre.connect('clicked', () => {
             Main.panel.closeQuickSettings?.();
             try {

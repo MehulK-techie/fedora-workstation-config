@@ -87,7 +87,7 @@ else
 fi
 
 # ----- 2. /etc/fstab (a low priority: zram stays the swap used day to day)
-if grep -qE "^[[:space:]]*$SWAPFILE[[:space:]]" /etc/fstab; then
+if grep -qE "^[[:space:]]*${SWAPFILE}[[:space:]]" /etc/fstab; then
     echo "fstab: already lists the swap file"
 else
     backup /etc/fstab

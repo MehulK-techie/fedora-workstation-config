@@ -1051,6 +1051,7 @@ fi
 
 # 8c. Terminal helpers (alert-when-done): ~/.bashrc sources the installed copy, added once
 install -Dm644 "$SCRIPT_DIR/config/bashrc_mk.sh" "$HOME/.config/mk-workstation/bashrc_mk.sh"
+# shellcheck disable=SC2016  # (written into ~/.bashrc as it is: $HOME expands when bash reads it)
 BASHRC_LINE='[ -f "$HOME/.config/mk-workstation/bashrc_mk.sh" ] && . "$HOME/.config/mk-workstation/bashrc_mk.sh"'
 if ! grep -qF "mk-workstation/bashrc_mk.sh" "$HOME/.bashrc" 2>/dev/null; then
     printf '\n# MK Workstation terminal helpers\n%s\n' "$BASHRC_LINE" >> "$HOME/.bashrc"

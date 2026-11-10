@@ -103,6 +103,7 @@ EMOJI = {"Faces": "😀😂🤣😍🥰😎🤩😜🤪😇🥳😏😴🤯🥺�
          "Reactions": "🔥💯✨🎉🎊💥💫⭐🌟💖💔😱🙈🤡👑🏆",
          "Symbols": "❤️🧡💛💚💙💜🖤🤍✅❌⚡☀️🌙🌈🎵🎈🍕🌸🦄"}
 THUMB_W = 112  # the looks strip's live thumbnails
+CARD_THUMB = (88, 60)  # every look card's picture, exactly: a look of another shape is fitted inside
 STRIP_SIZE = (96, 54)  # the strip's tiles are worked out from the frame shrunk once to this
 STRIP_FPS = 15         # passes a second, on a worker thread (the viewfinder runs at the camera's rate)
 STRIP_BATCH = 6        # tiles a pass, round robin
@@ -125,10 +126,11 @@ CSS = b"""
 .mk-booth-shutter { min-width: 64px; min-height: 64px; border-radius: 32px; padding: 0;
                     background: #ff4757; color: white; border: 4px solid alpha(white, 0.85); }
 .mk-booth-sticker { font-size: 22px; padding: 2px 6px; min-width: 36px; }
-.mk-booth-look { padding: 4px; border-radius: 12px; }
+.mk-booth-look { padding: 6px; border-radius: 12px; min-height: 0; }
 .mk-booth-look picture { border-radius: 8px; }
 .mk-booth-look label { font-size: 0.8em; font-weight: 600; }
-.mk-booth-look:checked { background: alpha(@accent_bg_color, 0.35); box-shadow: inset 0 0 0 2px @accent_color; }
+.mk-booth-look:checked { padding: 6px; border-radius: 12px; min-height: 0;
+  background: alpha(@accent_bg_color, 0.35); box-shadow: inset 0 0 0 2px @accent_color; }
 .mk-booth-photo { border-radius: 12px; }
 .mk-booth-bar { background: alpha(#10121a, 0.72); border-radius: 22px; border: 1px solid alpha(white, 0.08);
                 padding: 8px 14px; }
@@ -199,7 +201,20 @@ def set_control(dev, name, value):
 
 
 # ---------------------------------------------------------------- drawing helpers
+def card_fit(img):
+    """IMG fitted (whole, centred) into a transparent CARD_THUMB picture: a look card's picture is
+    always that size, so a tall frame (the 4-cut strip) can never stretch its card."""
+    img = img.convert("RGBA")
+    img.thumbnail(CARD_THUMB, Image.Resampling.BILINEAR)
+    out = Image.new("RGBA", CARD_THUMB, (0, 0, 0, 0))
+    out.paste(img, ((CARD_THUMB[0] - img.width) // 2, (CARD_THUMB[1] - img.height) // 2))
+    return out
+
+
 def to_texture(img):
+    if img.mode == "RGBA":                     # (a card's picture: transparent around a fitted look)
+        data = GLib.Bytes.new(img.tobytes())
+        return Gdk.MemoryTexture.new(img.width, img.height, Gdk.MemoryFormat.R8G8B8A8, data, img.width * 4)
     img = img.convert("RGB")
     data = GLib.Bytes.new(img.tobytes())
     return Gdk.MemoryTexture.new(img.width, img.height, Gdk.MemoryFormat.R8G8B8, data, img.width * 3)
@@ -469,14 +484,16 @@ class Booth(Adw.ApplicationWindow):
         self.look_thumbs = {}
         for key, label in ALL_LOOKS:
             # a card: the look live on a small copy of the camera, and its name
-            card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            thumb = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, width_request=THUMB_W,
-                                height_request=round(THUMB_W * 0.66), can_shrink=True)
+            # (every card the same size: the picture is always CARD_THUMB, a tall frame fitted inside it)
+            card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER, vexpand=False)
+            thumb = Gtk.Picture(content_fit=Gtk.ContentFit.CONTAIN, width_request=CARD_THUMB[0],
+                                height_request=CARD_THUMB[1], can_shrink=True, hexpand=False, vexpand=False,
+                                halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
             card.append(thumb)
             card.append(Gtk.Label(label=label, ellipsize=3, max_width_chars=14))
             self.look_thumbs[key] = thumb
             b = Gtk.ToggleButton(child=card, css_classes=["flat", "mk-booth-look"], active=key is None,
-                                 tooltip_text=label)
+                                 tooltip_text=label, valign=Gtk.Align.CENTER, vexpand=False)
             b.label_text = label
             if group:
                 b.set_group(group)
@@ -731,7 +748,7 @@ class Booth(Adw.ApplicationWindow):
                     done = []
                     for key, pic in batch:
                         try:
-                            done.append((pic, to_texture(render_look(tiny, key, tracker))))
+                            done.append((pic, to_texture(card_fit(render_look(tiny, key, tracker)))))
                         except Exception:              # noqa: BLE001 (one tile failing leaves it as it was)
                             pass
 

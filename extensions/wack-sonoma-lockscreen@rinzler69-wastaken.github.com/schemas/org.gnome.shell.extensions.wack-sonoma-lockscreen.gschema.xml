@@ -532,7 +532,7 @@
     </key>
     <key name="lock-card-opacity" type="i">
       <range min="10" max="90"/>
-      <default>58</default>
+      <default>60</default>
       <summary>Glass card opacity (%)</summary>
     </key>
     <key name="lock-date-format" type="s">

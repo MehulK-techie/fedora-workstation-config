@@ -15,7 +15,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { MediaWatcher } from './media.js';
 import { powerActions } from './power.js';
-import { underClock } from './clockStack.js';
+import { glowColour, underClock } from './clockStack.js';
 
 const KEYS = ['lock-status-pill', 'lock-weather', 'lock-media-controls', 'lock-power-button', 'compact-notifications',
     'show-hibernate', 'lock-clock-layout'];
@@ -23,9 +23,11 @@ const NOTIF_SHOWN = 3;
 
 // ----- battery and weather
 class StatusPill {
-    constructor(settings) {
+    // ONLY: 'battery' or 'weather' for one of them alone (Sequoia's widget cards), else both
+    constructor(settings, {only = null, styleClass = 'wack-status-pill'} = {}) {
         this._settings = settings;
-        this.actor = new St.BoxLayout({style_class: 'wack-status-pill', x_align: Clutter.ActorAlign.CENTER,
+        this._only = only;
+        this.actor = new St.BoxLayout({style_class: styleClass, x_align: Clutter.ActorAlign.CENTER,
             reactive: false});
         this._batIcon = new St.Icon({icon_size: 14, style_class: 'wack-status-icon'});
         this._batLabel = new St.Label({style_class: 'wack-status-text', y_align: Clutter.ActorAlign.CENTER});
@@ -65,12 +67,12 @@ class StatusPill {
             const charging = prop('State') === 1;
             this._batLabel.text = `${pct}%${charging ? ', charging' : ''}`;
         }
-        this._batIcon.visible = this._batLabel.visible = Boolean(hasBattery);
+        this._batIcon.visible = this._batLabel.visible = Boolean(hasBattery) && this._only !== 'weather';
 
         const temp = this._settings.get_boolean('lock-weather') ? this._settings.get_string('weather-cache-text') : '';
         if (temp)
             this._wIcon.icon_name = this._settings.get_string('weather-cache-icon');
-        this._wIcon.visible = this._wLabel.visible = temp !== '';
+        this._wIcon.visible = this._wLabel.visible = temp !== '' && this._only !== 'battery';
         this._wLabel.text = temp;
         this._sep.visible = this._batLabel.visible && this._wLabel.visible;
         this.actor.visible = this._batLabel.visible || this._wLabel.visible;
@@ -487,7 +489,7 @@ export class LockWidgets {
             const place = () => {
                 const m = Main.layoutManager.primaryMonitor;
                 if (m && this._column)
-                    this._column.set_position(m.x + m.width - this._column.width - 96, m.y + Math.round(m.height * 0.28));
+                    this._column.set_position(m.x + m.width - this._column.width - 80, m.y + Math.round(m.height * 0.28));
             };
             this._column.connect('notify::size', place);
             place();
@@ -495,13 +497,38 @@ export class LockWidgets {
         // the battery and weather row: always in the clock's own stack, right under the time
         // (never floating on its own beside it)
         // (in the column right under the time: clockStack.js; the tagline first, then this row)
+        // (Sequoia: weather and battery as cards of their own in the right-hand column instead)
         const stack = underClock(clock._time) ?? clock;
-        if (s.get_boolean('lock-status-pill')) {
+        if (s.get_boolean('lock-status-pill') && split) {
+            this._weatherCard = new StatusPill(s, {only: 'weather', styleClass: 'wack-split-card'});
+            this._batteryCard = new StatusPill(s, {only: 'battery', styleClass: 'wack-split-card'});
+            this._column.add_child(this._weatherCard.actor);
+            this._column.add_child(this._batteryCard.actor);
+        } else if (s.get_boolean('lock-status-pill')) {
             this._pill = new StatusPill(s);
             const kids = stack.get_children();
             const tag = kids.findIndex(a => a.has_style_class_name?.('wack-tagline'));
             const time = kids.indexOf(clock._time);
             stack.insert_child_at_index(this._pill.actor, Math.max(tag, time) + 1);
+        }
+        // Cyberpunk: a HUD line under the stacked clock, [ 13:45:07 ] BAT 97% · 22°C, in the glow colour
+        if (s.get_string('lock-clock-layout') === 'vertical-stacked') {
+            const neon = glowColour();
+            this._hud = new St.Label({style_class: 'wack-hud-telemetry', x_align: Clutter.ActorAlign.CENTER,
+                style: `color: ${neon.hex}; text-shadow: 0 0 8px rgba(${neon.rgb}, 0.65);`});
+            stack.add_child(this._hud);
+            const tick = () => {
+                const now = GLib.DateTime.new_now_local();
+                const bits = [];
+                if (this._pill?._batLabel.visible)
+                    bits.push(`BAT ${this._pill._batLabel.text.replace(', charging', '+')}`);
+                if (this._pill?._wLabel.visible)
+                    bits.push(this._pill._wLabel.text.split(' ')[0]);
+                this._hud.text = `[ ${now.format('%H:%M:%S')} ]${bits.length ? `   ${bits.join('  ·  ')}` : ''}`;
+                return GLib.SOURCE_CONTINUE;
+            };
+            tick();
+            this._hudTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, tick);
         }
         if (s.get_boolean('lock-media-controls')) {
             this._media = new NowPlaying();
@@ -520,7 +547,14 @@ export class LockWidgets {
         if (this._retry)
             GLib.source_remove(this._retry);
         this._retry = 0;
-        for (const part of ['_pill', '_hint', '_media', '_power', '_notifs']) {
+        if (this._hudTimer)
+            GLib.source_remove(this._hudTimer);
+        this._hudTimer = 0;
+        try {
+            this._hud?.destroy();
+        } catch {}                                   // (gone with the lock screen)
+        this._hud = null;
+        for (const part of ['_pill', '_weatherCard', '_batteryCard', '_hint', '_media', '_power', '_notifs']) {
             try {
                 this[part]?.destroy();
             } catch (e) {

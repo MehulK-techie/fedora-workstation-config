@@ -28,6 +28,7 @@
 // the desktop wallpaper; while locked the top bar pieces go (the desktop video
 // pauses) and the lock screen parts run, as each upstream extension did alone.
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import Shell from 'gi://Shell';
 import GLib from 'gi://GLib';
 import Pango from 'gi://Pango';
@@ -39,7 +40,7 @@ import SonomaPart from './sonoma.js';
 import LivePart from './live.js';
 import * as LoginManager from 'resource:///org/gnome/shell/misc/loginManager.js';
 import { LockWidgets } from './lockWidgets.js';
-import { clockAlign, clockBlock, clockCard, underClock } from './clockStack.js';
+import { clockAlign, clockBlock, clockCard, glowColour, underClock } from './clockStack.js';
 import { TopBar, QuickSettingsHibernate } from './topbar.js';
 import { DesktopWallpaper } from './desktop.js';
 import { MediaWatcher } from './media.js';
@@ -54,10 +55,16 @@ const STYLE_KEYS = ['dim-opacity', 'clock-style', 'clock-font', 'clock-color', '
 // the clock's layout presets: the time's size, the date's, how far up; where it sits (center,
 // left: 96 px in from the left, corner: the top-left corner); a glass card of its own; a glow
 const LAYOUTS = {
-    'sonoma-center': {time: 0, date: 0, lift: 0, place: 'center'},
-    'sequoia-split': {time: 104, date: 26, lift: 0, place: 'left'},
-    'vertical-stacked': {time: 112, date: 24, lift: -24, place: 'center', neon: true},
-    'corner-hud': {time: 64, date: 18, lift: 0, place: 'corner'},
+    // Sonoma: 88 pt (117 px), bold and tight; the date above, the tagline and the pill under it
+    'sonoma-center': {time: 117, date: 0, lift: 0, place: 'center', extra: 'font-weight: 700; letter-spacing: -2px;'},
+    // Sequoia: the date and the time 80 px in from the left; the widget cards 80 px from the right
+    'sequoia-split': {time: 104, date: 26, lift: 0, place: 'left', inset: 80},
+    // Cyberpunk: hours over minutes in a mono face, lit in the dock's glow colour, a HUD line under it
+    'vertical-stacked': {time: 112, date: 24, lift: -24, place: 'center', neon: true,
+        extra: 'font-family: "JetBrains Mono", "Oswald", "Fira Code", monospace; font-weight: 800; letter-spacing: 2px;'},
+    // Corner HUD: small, 48 px from the bottom-left corner; the rest of the screen left clear
+    'corner-hud': {time: 56, date: 16, lift: 0, place: 'corner', inset: 48},
+    // Glass Card: the whole clock stack in one deep frosted pane
     'glass-framed': {time: 112, date: 26, lift: 0, place: 'center', card: true},
     'sequoia-compact': {time: 84, date: 22, lift: -48, place: 'center'},
     'minimal-left': {time: 96, date: 24, lift: 0, place: 'left'},
@@ -304,14 +311,16 @@ export default class WackSonomaLiveLockscreen extends Extension {
             let font = CLOCK_FONTS[style] ?? '';
             if (style === 'custom' && s.get_string('clock-font'))
                 font = fontToCss(s.get_string('clock-font'));
-            const colour = s.get_string('clock-color') || (layout.neon ? '#67e8f9' : '');
-            // a glow / drop shadow (the cyberpunk stack glows cyan by itself)
+            // the cyberpunk stack glows in the dock's glow colour (MK Shell Engine's dock-glow-color)
+            const neon = layout.neon ? glowColour() : null;
+            const colour = s.get_string('clock-color') || (neon ? neon.hex : '');
             const glow = Math.max(s.get_int('lock-clock-glow'), layout.neon ? 45 : 0);
             const shadow = glow ? ` text-shadow: 0 ${Math.round(glow / 25)}px ${Math.round(4 + glow * 0.3)}px ` +
-                `${layout.neon ? `rgba(34, 211, 238, ${(glow / 100).toFixed(2)})` : `rgba(0, 0, 0, ${(0.2 + glow / 160).toFixed(2)})`};` : '';
-            // the layout's size first, so a custom font's own size still wins; laid over WACK's
+                `${neon ? `rgba(${neon.rgb}, ${(glow / 100).toFixed(2)})` : `rgba(0, 0, 0, ${(0.2 + glow / 160).toFixed(2)})`};` : '';
+            // the layout's size and face first, so a custom font's own still wins; laid over WACK's
             // own style (it rewrites the time's colour and weight as it samples the wallpaper)
-            this._timeStyle = `${layout.time ? `font-size: ${layout.time}px; ` : ''}${font}${colour ? ` color: ${colour};` : ''}${shadow}`;
+            this._timeStyle = `${layout.time ? `font-size: ${layout.time}px; ` : ''}${layout.extra && style !== 'custom' ? `${layout.extra} ` : ''}` +
+                `${font}${colour ? ` color: ${colour};` : ''}${shadow}`;
             this._clockLift = s.get_int('clock-offset') + layout.lift;
             this._layoutClock(clockBlock(time), time, date, layout);
         }
@@ -412,8 +421,16 @@ export default class WackSonomaLiveLockscreen extends Extension {
             const labels = [this._clockTime, this._clockDate].filter(a => a?.get_parent() === block);
             const x = Math.min(...labels.map(a => a.get_transformed_position()[0]));
             const y = Math.min(...labels.map(a => a.get_transformed_position()[1]));
-            const tx = m && place !== 'center' ? Math.round(m.x + (place === 'corner' ? 64 : 96) - (x - block.translation_x)) : 0;
-            const ty = m && place === 'corner' ? Math.round(m.y + 56 - (y - block.translation_y)) : (this._clockLift ?? 0);
+            const inset = (LAYOUTS[this._settings.get_string('lock-clock-layout')] ?? {}).inset ?? 96;
+            const tx = m && place !== 'center' ? Math.round(m.x + inset - (x - block.translation_x)) : 0;
+            // the corner: the whole stack (date, time, the column under it) 48 px off the bottom-left
+            let ty = this._clockLift ?? 0;
+            if (m && place === 'corner') {
+                const column = underClock(this._clockTime);
+                const [, cy] = column?.get_transformed_position?.() ?? [0, y];
+                const bottom = column && column !== block ? cy + column.height : y + this._clockTime.height;
+                ty = Math.round(m.y + m.height - inset - (bottom - y) - (y - block.translation_y));
+            }
             if (Number.isFinite(tx) && Number.isFinite(ty)) {
                 block.translation_x = tx;
                 block.translation_y = ty;

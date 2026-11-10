@@ -28,10 +28,10 @@ const FONTS = {
 };
 // the lock screen's layouts (extension.js LAYOUTS): sizes and places
 const LAYOUTS = {
-    'sonoma-center': {time: 128, date: 30, place: 'center'},
-    'sequoia-split': {time: 104, date: 26, place: 'left', split: true},
+    'sonoma-center': {time: 117, date: 30, place: 'center'},
+    'sequoia-split': {time: 104, date: 26, place: 'left', split: true, inset: 80},
     'vertical-stacked': {time: 112, date: 24, place: 'center', stack: true, neon: true},
-    'corner-hud': {time: 64, date: 18, place: 'corner'},
+    'corner-hud': {time: 56, date: 16, place: 'corner', inset: 48},
     'glass-framed': {time: 112, date: 26, place: 'center', card: true},
     'sequoia-compact': {time: 84, date: 22, place: 'center'},
     'minimal-left': {time: 96, date: 24, place: 'left'},
@@ -218,8 +218,11 @@ export class LivePreview {
         const layout = LAYOUTS[name] ?? LAYOUTS['sonoma-center'];
         const left = layout.place !== 'center';
         this._clock.halign = left ? Gtk.Align.START : Gtk.Align.CENTER;
-        this._clock.margin_start = left ? Math.round((layout.place === 'corner' ? 64 : 96) * SCALE) + 8 : 0;
-        this._clock.margin_top = layout.place === 'corner' ? 22 : name === 'sequoia-compact' ? 24 : 30;
+        this._clock.margin_start = left ? Math.round((layout.inset ?? 96) * SCALE) + 8 : 0;
+        // (the corner HUD sits at the bottom left)
+        this._clock.valign = layout.place === 'corner' ? Gtk.Align.END : Gtk.Align.START;
+        this._clock.margin_bottom = layout.place === 'corner' ? Math.round(48 * SCALE) + 8 : 0;
+        this._clock.margin_top = layout.place === 'corner' ? 0 : name === 'sequoia-compact' ? 24 : 30;
         for (const label of [this._date, this._time, this._tagline])
             label.halign = left ? Gtk.Align.START : Gtk.Align.CENTER;
         this._time.justify = left ? Gtk.Justification.LEFT : Gtk.Justification.CENTER;
@@ -233,9 +236,9 @@ export class LivePreview {
         this._tagline.label = s.get_string('lock-tagline').trim() ||
             s.get_string('cupertino-lockscreen-message-text').trim() || 'MK Workstation';
         const pill = s.get_boolean('lock-status-pill');
-        this._pill.visible = pill;                     // (always under the time, never on its own)
+        this._pill.visible = pill && !layout.split;    // (Sequoia: cards in the right-hand column)
         this._column.visible = Boolean(layout.split);
-        this._colPill.visible = false;
+        this._colPill.visible = pill && Boolean(layout.split);
         this._colMedia.visible = s.get_boolean('lock-media-controls');
         const greeting = s.get_string('lock-greeting').trim();
         this._greeting.label = greeting;

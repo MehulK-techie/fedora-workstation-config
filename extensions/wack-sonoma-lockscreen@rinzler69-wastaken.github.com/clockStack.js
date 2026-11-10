@@ -6,10 +6,12 @@
 // column inside WACK's wrapper, right under the time, and the glass card is a pane
 // behind the whole block (date, time and that column), sized to it.
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import St from 'gi://St';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const GAP = 6;                         // between the time and the column under it
-const PAD_X = 48, PAD_Y = 24;          // the card's padding around the block
+const PAD_X = 56, PAD_Y = 28;          // the card's padding around the block
 
 // WACK's wrapper, when the time is in one (null: still in GNOME's own clock box)
 function wrapperOf(time) {
@@ -122,3 +124,28 @@ export function clockCard(time, on, style = null) {
     place(time.get_parent());
     return true;
 }
+
+// MK Shell Engine's dock-glow-color (#rrggbb), for the cyberpunk layout's neon; cyan without it
+let engineSettings;
+export function glowColour() {
+    try {
+        if (engineSettings === undefined) {
+            engineSettings = null;
+            const dir = Main.extensionManager.lookup('mk-shell-engine@mehulk')?.dir?.get_child('schemas');
+            if (dir?.query_exists(null)) {
+                const src = Gio.SettingsSchemaSource.new_from_directory(dir.get_path(),
+                    Gio.SettingsSchemaSource.get_default(), false);
+                const schema = src.lookup('org.gnome.shell.extensions.mk-shell-engine', false);
+                if (schema?.has_key('dock-glow-color'))
+                    engineSettings = new Gio.Settings({settings_schema: schema});
+            }
+        }
+    } catch {
+        engineSettings = null;
+    }
+    const hex = engineSettings?.get_string('dock-glow-color') ?? '';
+    const ok = /^#[0-9a-f]{6}$/i.test(hex) ? hex : '#22d3ee';
+    const n = parseInt(ok.slice(1), 16);
+    return {hex: ok, rgb: `${n >> 16}, ${(n >> 8) & 255}, ${n & 255}`};
+}
+

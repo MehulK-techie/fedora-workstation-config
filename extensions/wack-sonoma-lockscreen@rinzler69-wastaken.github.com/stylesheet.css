@@ -485,7 +485,7 @@
   border-radius: 16px;
   background-color: rgba(18, 20, 30, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
 }
 .wack-lock-power-item { padding: 8px 14px; border-radius: 9px; color: white; }
 .wack-lock-power-item:hover, .wack-lock-power-item:focus { background-color: rgba(255, 255, 255, 0.14); }
@@ -508,11 +508,11 @@
 
 /* ===== MK v18: the lock screen's glass card and greeting ===== */
 .wack-glass-card {
-  padding: 24px 48px;
+  padding: 28px 56px;
   border-radius: 28px;
-  background-color: rgba(16, 20, 32, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  background-color: rgba(16, 20, 32, 0.60);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.40);
 }
 .wack-greeting {
   margin-bottom: 14px;
@@ -537,3 +537,24 @@
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
 }
 .wack-split-column { spacing: 14px; }
+/* Sequoia's widget cards (weather, battery) in the right-hand column */
+.wack-split-card {
+  min-width: 220px;
+  padding: 14px 20px;
+  spacing: 10px;
+  border-radius: 20px;
+  background-color: rgba(18, 22, 32, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+.wack-split-card .wack-status-text { font-size: 17px; }
+.wack-split-card .wack-status-icon { icon-size: 20px; }
+/* Cyberpunk's HUD line under the stacked clock (its colour: the dock's glow colour) */
+.wack-hud-telemetry {
+  margin-top: 10px;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  font-feature-settings: "tnum";
+}

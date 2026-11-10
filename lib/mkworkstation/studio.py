@@ -62,10 +62,10 @@ def _exists(path):
 
 # ----------------------------------------------------------------- the preview
 LAYOUTS = {
-    "sonoma-center": {"time": 128, "date": 30, "place": "center"},
-    "sequoia-split": {"time": 104, "date": 26, "place": "left", "split": True},
+    "sonoma-center": {"time": 117, "date": 30, "place": "center"},
+    "sequoia-split": {"time": 104, "date": 26, "place": "left", "split": True, "inset": 80},
     "vertical-stacked": {"time": 112, "date": 24, "place": "center", "stack": True, "neon": True},
-    "corner-hud": {"time": 64, "date": 18, "place": "corner"},
+    "corner-hud": {"time": 56, "date": 16, "place": "corner", "inset": 48},
     "glass-framed": {"time": 112, "date": 26, "place": "center", "card": True},
     "sequoia-compact": {"time": 84, "date": 22, "place": "center"},
     "minimal-left": {"time": 96, "date": 24, "place": "left"},
@@ -242,8 +242,11 @@ class Preview(Gtk.Frame):
         layout = LAYOUTS.get(name, LAYOUTS["sonoma-center"])
         left = layout["place"] != "center"
         self.clock.set_halign(Gtk.Align.START if left else Gtk.Align.CENTER)
-        self.clock.set_margin_start(round((64 if layout["place"] == "corner" else 96) * SCALE) + 8 if left else 0)
-        self.clock.set_margin_top(22 if layout["place"] == "corner" else 24 if name == "sequoia-compact" else 30)
+        self.clock.set_margin_start(round(layout.get("inset", 96) * SCALE) + 8 if left else 0)
+        corner = layout["place"] == "corner"                 # (the corner HUD sits at the bottom left)
+        self.clock.set_valign(Gtk.Align.END if corner else Gtk.Align.START)
+        self.clock.set_margin_bottom(round(48 * SCALE) + 8 if corner else 0)
+        self.clock.set_margin_top(0 if corner else 24 if name == "sequoia-compact" else 30)
         for label in (self.date, self.time, self.tagline):
             label.set_halign(Gtk.Align.START if left else Gtk.Align.CENTER)
         self.time.set_justify(Gtk.Justification.LEFT if left else Gtk.Justification.CENTER)
@@ -255,9 +258,9 @@ class Preview(Gtk.Frame):
         self.tagline.set_label(s.get_string("lock-tagline").strip()
                                or s.get_string("cupertino-lockscreen-message-text").strip() or "MK Workstation")
         pill = s.get_boolean("lock-status-pill")
-        self.pill.set_visible(pill)                    # (always under the time, never on its own)
+        self.pill.set_visible(pill and not layout.get("split"))   # (Sequoia: cards in the right-hand column)
         self.column.set_visible(bool(layout.get("split")))
-        self.col_pill.set_visible(False)
+        self.col_pill.set_visible(pill and bool(layout.get("split")))
         self.col_media.set_visible(s.get_boolean("lock-media-controls"))
         greeting = s.get_string("lock-greeting").strip()
         self.greeting.set_label(greeting)

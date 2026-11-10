@@ -79,10 +79,11 @@
 /* (only while Blur my Shell is off: with it on, its dynamic blur paints the bar's background) */
 #panel.mk-islands.mk-clear { background-color: transparent !important; box-shadow: none !important; border: none !important; }
 #panel.mk-edge { box-shadow: none !important; }
+/* the three capsules: 28 px tall (2 px off the 32 px bar), 12 px in at the sides, a 1 px
+   hairline edge and deep frosted glass */
 #panel.mk-islands #panelLeft, #panel.mk-islands #panelCenter, #panel.mk-islands #panelRight {
-  background-color: rgba(16, 18, 24, 0.58); border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top-color: rgba(255, 255, 255, 0.28); border-bottom-color: rgba(0, 0, 0, 0.18);
-  border-radius: 12px; margin: 3px 8px; padding: 0 4px; }
+  background-color: rgba(15, 18, 26, 0.72); border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px; margin: 2px 8px; padding: 0 12px; }
 /* (no drop shadow on the islands: it makes GNOME paint them larger than they are, and the glass's
    rounded corners would no longer line up with the borders) */
 #panel.mk-edge { background-color: rgba(14, 16, 22, 0.74); border-bottom: 1px solid rgba(255, 255, 255, 0.10); }
@@ -157,13 +158,11 @@
    LeftIslands draws one frosted backdrop per group, 6 px apart) */
 #panel.mk-islands #panelLeft { background-color: transparent; border: none; padding: 0 0 0 4px; spacing: 8px; }
 /* the top-left glass block: logo, Places and the dots in one frosted pill */
-.mk-left-island { background-color: rgba(18, 22, 32, 0.62); border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top-color: rgba(255, 255, 255, 0.30); border-radius: 999px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.30); }
+.mk-left-island { height: 28px; padding: 0 12px; background-color: rgba(15, 18, 26, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px; }
 /* the suite's app pill: one clean capsule of its own, same glass as the block */
-#panel.mk-islands .wack-app-pill { height: 26px; padding: 0 12px; border-radius: 999px;
-  background-color: rgba(18, 22, 32, 0.62); border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top-color: rgba(255, 255, 255, 0.30); }
+#panel.mk-islands .wack-app-pill { height: 28px; padding: 0 12px; border-radius: 999px;
+  background-color: rgba(15, 18, 26, 0.72); border: 1px solid rgba(255, 255, 255, 0.16); }
 #panel.mk-islands .panel-button.wack-app-indicator:hover .wack-app-pill { background-color: rgba(36, 38, 46, 0.66); }
 #panel.mk-islands .panel-button.wack-app-indicator:hover, #panel.mk-islands .panel-button.wack-app-indicator:active,
 #panel.mk-islands .panel-button.wack-app-indicator:checked { background-color: transparent; }
@@ -295,6 +294,3 @@
 .mk-cal-queue-struck { color: rgba(255, 255, 255, 0.45); }
 .mk-cal-remove { padding: 3px; border-radius: 999px; color: rgba(255, 255, 255, 0.6); }
 .mk-cal-remove:hover { background-color: rgba(239, 68, 68, 0.35); color: white; }
-/* Quick Settings header: MK Command Centre's emblem beside GNOME's Settings gear (never a second gear) */
-.quick-settings-system-item .mk-centre-button { margin-left: 4px; }
-.mk-centre-emblem { icon-size: 16px; color: -st-accent-color; }

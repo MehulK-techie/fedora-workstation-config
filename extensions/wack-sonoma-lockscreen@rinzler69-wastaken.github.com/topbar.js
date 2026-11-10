@@ -2,7 +2,7 @@
 //   [Fedora + Finder] [Places] [divider] [workspace dots] [App Indicator]
 //   Finder         the system menu: a row of power buttons (Shut Down, Restart,
 //                  Hibernate, Sleep, Lock, Log Out), then About This System,
-//                  System Settings, App Store, Extension Settings, System
+//                  System Settings, App Store, System
 //                  Monitor. Logo presets: fedora-blue (Fedora's own logo, in its
 //                  #51a2da), fedora-mono, mk, apple, custom, none.
 //   Places         an icon (a label with places-show-text): Home, Desktop,
@@ -145,7 +145,6 @@ class Finder {
             {command: /mk-c(enter|ontrol-center)\b/});
         row('System Settings…', () => launchApp('org.gnome.Settings.desktop'), {media: 'control-center'});
         row('App Store…', () => launchApp('org.gnome.Software.desktop'));
-        row('Extension Settings…', () => launchApp('com.mattjakeman.ExtensionManager.desktop', 'org.gnome.Extensions.desktop'));
         row('System Monitor', () => launchApp('org.gnome.SystemMonitor.desktop', 'gnome-system-monitor.desktop',
             'io.missioncenter.MissionCenter.desktop'), {command: /gnome-system-monitor|missioncenter/});
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());

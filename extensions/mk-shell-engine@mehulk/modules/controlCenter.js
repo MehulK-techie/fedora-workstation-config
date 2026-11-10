@@ -31,8 +31,8 @@ import { addWallpaperGlass, desktopCopy } from './blur.js';
 const ORDER = ['NMWirelessToggle', 'BluetoothToggle', 'PowerProfilesToggle', 'NightLightToggle',
     'DoNotDisturbToggle', 'RfkillToggle', 'MkMicToggle', 'MkWallpaperBgPlayToggle', 'CaffeineToggle'];
 // the header row's buttons that leave (GNOME's own classes)
-const HEADER_GONE = /ScreenshotItem|LockItem|ShutdownItem/;
-const CENTRE = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-control-center']);
+// (Screenshot, Settings and Lock stay; Shut Down lives in the Finder menu)
+const HEADER_GONE = /ShutdownItem/;
 
 // Wallpaper Bg Play: the live wallpaper's sound plays on under your windows and steps aside
 // (fades out) while other media plays (the Suite's wallpaper-background-play; its desktop.js)
@@ -239,11 +239,8 @@ export class ControlCenter {
             return;
         }
         this._headerHidden = [];
-        let settings = null;
         for (const item of row.get_children()) {
             const name = `${item.constructor.name} ${item.constructor.$gtype?.name ?? ''}`;
-            if (/SettingsItem/.test(name))
-                settings = item;
             if (!HEADER_GONE.test(name))
                 continue;
             item.visible = false;
@@ -251,27 +248,9 @@ export class ControlCenter {
             const id = item.connect('notify::visible', () => item.visible && (item.visible = false));
             this._headerHidden.push([item, id]);
         }
-        // MK's emblem, not a second gear beside GNOME's Settings (applications-system draws as one);
-        // and only ever one of it (a header left from before a lock goes first)
+        // (no MK Command Centre button here: it's in the Finder menu, with System Settings; one
+        // left by an earlier version goes)
         row.get_children().filter(c => c.accessible_name === 'MK Command Centre').forEach(c => c.destroy());
-        const emblem = GLib.build_filenamev([GLib.get_user_data_dir(), 'mk-workstation', 'mk-emblem-symbolic.svg']);
-        const icon = GLib.file_test(emblem, GLib.FileTest.EXISTS)
-            ? new St.Icon({gicon: Gio.FileIcon.new(Gio.File.new_for_path(emblem)), style_class: 'mk-centre-emblem'})
-            : new St.Icon({icon_name: 'preferences-desktop-appearance-symbolic'});
-        this._centre = new St.Button({style_class: 'icon-button mk-centre-button', can_focus: true,
-            accessible_name: 'MK Command Centre', child: icon});
-        this._centre.connect('clicked', () => {
-            Main.panel.closeQuickSettings?.();
-            try {
-                Gio.Subprocess.new([CENTRE], Gio.SubprocessFlags.NONE);
-            } catch (e) {
-                Main.notify('MK Command Centre', e.message);
-            }
-        });
-        if (settings)
-            row.insert_child_above(this._centre, settings);
-        else
-            row.add_child(this._centre);
     }
 
     _unheader() {
@@ -284,8 +263,6 @@ export class ControlCenter {
             } catch {}
         }
         this._headerHidden = [];
-        this._centre?.destroy();
-        this._centre = null;
     }
 
     // the toggles in ORDER, where the first of them was (sliders and the rest stay put)

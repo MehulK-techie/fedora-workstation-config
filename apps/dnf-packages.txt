@@ -107,3 +107,16 @@ python3-opencv
 python3-numpy
 mpv
 gstreamer1-plugin-gtk4
+
+# v27: what MK's own tools call, listed so a fresh laptop gets it too
+# (pw-dump / pactl / wpctl: the B&O speaker tuning, audio setup; sensors: the stats pill's
+# temperature; JetBrains Mono: the Cyberpunk lock layout; cairo: Photo Booth and Notes;
+# the good / bad-free GStreamer sets: the live wallpaper's VA-API decoding)
+pipewire-utils
+pulseaudio-utils
+wireplumber
+lm_sensors
+jetbrains-mono-fonts-all
+python3-cairo
+gstreamer1-plugins-good
+gstreamer1-plugins-bad-free

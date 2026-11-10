@@ -36,7 +36,7 @@ Log out and back in when it finishes: that's it. (`setup.sh` installs the apps a
 cd ~/fedora-workstation-config && git pull && ./sync.sh
 ```
 
-`sync.sh` is safe to run as often as you like: it never duplicates anything and keeps your own changes. It updates the extensions, apps, shortcuts, audio rules and Blur my Shell settings. New system packages come from `sudo ./setup.sh`, which is safe to run again too.
+`sync.sh` is safe to run as often as you like: it never duplicates anything and keeps your own changes. It also makes the folders MK uses (Pictures/Screenshots, Videos/Wallpapers, ~/.config/mk) and ends by naming any package MK needs that isn't installed yet; `./sync.sh --check-deps` does just that check. Nothing in the repo is tied to one account: personal paths are stored as `__USER_HOME__` and filled in for whoever runs it. It updates the extensions, apps, shortcuts, audio rules and Blur my Shell settings. New system packages come from `sudo ./setup.sh`, which is safe to run again too.
 
 ---
 

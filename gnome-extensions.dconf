@@ -548,7 +548,7 @@ enable-unblank=false
 esc-to-sleep=true
 lockscreen-mode='wack'
 lockscreen-wallpaper-enable=true
-lockscreen-wallpaper-path='/home/mehulkumar/Pictures/Camera/Screenshot 2025-07-03 212052.png'
+lockscreen-wallpaper-path='__USER_HOME__/Pictures/Camera/Screenshot 2025-07-03 212052.png'
 prompt-animation='fade'
 unblank-on-ac-only=true
 

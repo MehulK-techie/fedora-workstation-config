@@ -13,6 +13,32 @@ if [[ $EUID -eq 0 ]]; then
     exit 1
 fi
 
+# What MK's tools need from Fedora (apps/dnf-packages.txt, which `sudo ./setup.sh` installs):
+# sync runs as you and never installs system packages itself, it names what's missing.
+# `./sync.sh --check-deps` does only this; a normal sync ends with it.
+check_deps() {
+    local manifest="$SCRIPT_DIR/apps/dnf-packages.txt" missing=()
+    [[ -f "$manifest" ]] || return 0
+    mapfile -t wanted < <(grep -vE '^\s*(#|$)' "$manifest")
+    # one rpm call for the lot; a package can also be provided under another name (whatprovides)
+    while read -r line; do
+        [[ "$line" =~ ^package\ (.+)\ is\ not\ installed$ ]] || continue
+        pkg="${BASH_REMATCH[1]}"
+        rpm -q --whatprovides "$pkg" &>/dev/null || missing+=("$pkg")
+    done < <(rpm -q "${wanted[@]}" 2>/dev/null || true)
+    if (( ${#missing[@]} )); then
+        echo "    [*] Packages MK uses that aren't installed (${#missing[@]}): ${missing[*]}"
+        echo "        Install them with: sudo ./setup.sh   (or: sudo dnf install ${missing[*]})"
+        return 1
+    fi
+    echo "    [+] Every package MK uses is installed (${#wanted[@]} checked)"
+}
+if [[ "${1:-}" == "--check-deps" ]]; then
+    echo "==> Checking packages..."
+    check_deps
+    exit $?
+fi
+
 # Reach the session bus even when started from a TTY, over SSH, or by setup.sh.
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
@@ -1061,6 +1087,13 @@ dedupe_custom_shortcuts() {
 }
 dedupe_custom_shortcuts
 
+# The folders MK's tools save to and read from, on any account (made if missing)
+mkdir -p "$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")/Screenshots" \
+    "$(xdg-user-dir VIDEOS 2>/dev/null || echo "$HOME/Videos")/Wallpapers" \
+    "$HOME/.config/mk" "$HOME/.local/bin" "$HOME/.config/pipewire/pipewire.conf.d"
+
+echo "==> Checking packages..."
+check_deps || true
 echo "✔ Workstation configurations synchronized."
 if (( NEW_EXTENSIONS )); then
     echo "  New extensions were installed: log out and back in to load them."

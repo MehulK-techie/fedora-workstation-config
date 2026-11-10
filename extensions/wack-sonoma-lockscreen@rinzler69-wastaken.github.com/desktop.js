@@ -15,7 +15,7 @@
 // Bg Play" tile):
 //   off (the default): heard only on the bare desktop (unlocked, no overview, no normal
 //     window showing on this workspace). A window showing fades the sound out over
-//     300 ms (20 ms steps); back on the bare desktop it fades in over 300 ms to the
+//     350 ms (20 ms steps); back on the bare desktop it fades in over 350 ms to the
 //     slider's level. Another player playing mutes it too (audio-auto-mute-on-other-media).
 //   on: it's heard under your windows too, and steps aside only for other media: an
 //     MPRIS player or any other app's sound stream playing (otherMedia.js) fades it out;
@@ -42,7 +42,8 @@ import { OtherMedia } from './otherMedia.js';
 const PLAYER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-live-wallpaper']);
 const LOG = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-live-wallpaper.log']);
 const KEYS = ['desktop-wallpaper-path', 'desktop-hwaccel', 'desktop-audio-enabled'];
-const FADE_OUT = 300, FADE_IN = 300;          // ms: the sound's ramps, out and in
+const FADE_OUT = 350, FADE_IN = 350;          // ms: the sound's ramps, out and in
+const CLONE_NAME = 'mk-live-wallpaper';       // the one live wallpaper in the background layer
 
 // Switching workspaces (Super+PageUp/PageDown, a swipe, the grid): GNOME slides a copy of
 // each workspace, every one on a still background of its own, made fresh for the switch
@@ -294,7 +295,7 @@ export class DesktopWallpaper {
         });
     }
 
-    // FADE: a smooth ramp (300 ms each way, 20 ms steps) rather than a jump (the slider moving)
+    // FADE: a smooth ramp (350 ms each way, 20 ms steps) rather than a jump (the slider moving)
     _syncVolume(fade = false) {
         if (!this.audio || !this._player.win)
             return;
@@ -338,10 +339,27 @@ export class DesktopWallpaper {
         const layer = Main.layoutManager._backgroundGroup;
         if (!actor || !m || !layer)
             return;
-        this._clone = new Clutter.Clone({source: actor, reactive: false});
+        // one live wallpaper, ever: a copy left by an earlier player (or extension run) goes first
+        for (const old of layer.get_children().filter(c => c.name === CLONE_NAME))
+            old.destroy();
+        this._clone = new Clutter.Clone({source: actor, reactive: false, name: CLONE_NAME, clip_to_allocation: true});
         this._clone.set_position(m.x, m.y);
-        this._clone.set_size(m.width, m.height);
-        layer.add_child(this._clone);                // (above the still backgrounds)
+        this._clone.set_size(m.width, m.height);    // (the physical monitor; the window fills it, COVER)
+        layer.insert_child_at_index(this._clone, 0);
+        // GNOME's still wallpaper on that monitor turns fully transparent while the video shows,
+        // so nothing of it can show through anywhere (under the dock, at an edge, between frames);
+        // a new one (the still wallpaper changed) is caught as it's added. Back when it stops.
+        this._stills = new Set();
+        const still = child => {
+            if (child === this._clone || !(child instanceof Meta.BackgroundActor))
+                return;
+            if (child.monitor !== undefined && child.monitor !== Main.layoutManager.primaryIndex)
+                return;
+            child.opacity = 0;
+            this._stills.add(child);
+        };
+        layer.get_children().forEach(still);
+        layer.connectObject('child-added', (_l, child) => still(child), this);
         // permanent: nothing (focus, a window, a theme) gets to hide or dim it; behind windows it
         // stays as it is, at most paused on its frame
         const keep = () => {
@@ -359,6 +377,13 @@ export class DesktopWallpaper {
 
     _uncover() {
         unpinWorkspaces();
+        Main.layoutManager._backgroundGroup?.disconnectObject(this);
+        for (const child of this._stills ?? []) {
+            try {
+                child.opacity = 255;
+            } catch {}                               // (replaced and gone already)
+        }
+        this._stills = null;
         if (this._coverActor) {
             this._coverActor.disconnectObject(this);
             this._coverActor.opacity = 255;
@@ -378,7 +403,7 @@ export class DesktopWallpaper {
     }
 
     // Paused only while locked or under a full-screen window. Between your windows and the
-    // desktop the video streams on, frame after frame: only its sound ramps (300 ms).
+    // desktop the video streams on, frame after frame: only its sound ramps (350 ms).
     _hidden() {
         const m = Main.layoutManager.primaryIndex;
         return Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m));

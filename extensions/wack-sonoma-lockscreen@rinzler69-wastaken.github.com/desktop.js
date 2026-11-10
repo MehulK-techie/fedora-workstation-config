@@ -11,13 +11,15 @@
 // the overview and the dock), clicks passing through, covering the primary
 // monitor. Paused under a full-screen window and while the screen is locked.
 // Silent unless desktop-audio-enabled: no audio stream is opened at all then.
-// With sound on, it's heard at the Desktop Volume whenever you're logged in, windows open or not. Silent while
-// locked; and while another app plays media (an MPRIS player playing AND its sound stream
-// open: otherMedia.js, which never counts the wallpaper itself or a sound filter) when Mute
-// While Other Media Plays or Wallpaper Bg Play is on: out over 350 ms (20 ms steps), back
-// in over 350 ms, 600 ms after the other media goes quiet.
-// The video itself streams on all the while (windows, menus, the overview); it pauses
-// only while the screen is locked or a window is full screen.
+// Quick Settings' Wallpaper Bg Play (wallpaper-background-play) decides:
+//   off (the default): video and sound only on the clean desktop. An app window covering it
+//     fades the sound out (350 ms) and then pauses the decoding altogether (no CPU, no GPU:
+//     the last frame stays up); back on the bare desktop it plays on and fades in (300 ms).
+//     Mute While Other Media Plays silences it there too while another app plays.
+//   on: it plays on under your apps, sound and all, and fades out and pauses only while another
+//     app plays media (an MPRIS player playing AND its sound stream open: otherMedia.js, which
+//     never counts the wallpaper itself or a sound filter), 600 ms after which it comes back.
+// Locked, or under a full-screen window: paused. Top-bar menus never pause it.
 //
 // The picture: a clone of the player's window, the size of the whole monitor, in
 // the background layer (under the top bar and the dock, to the bottom edge), the
@@ -38,7 +40,7 @@ import { OtherMedia } from './otherMedia.js';
 const PLAYER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-live-wallpaper']);
 const LOG = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-live-wallpaper.log']);
 const KEYS = ['desktop-wallpaper-path', 'desktop-hwaccel', 'desktop-audio-enabled'];
-const FADE_OUT = 350, FADE_IN = 350;          // ms: the sound's ramps, out and in
+const FADE_OUT = 350, FADE_IN = 300;          // ms: the sound's ramps, out and in
 const CLONE_NAME = 'mk-live-wallpaper';       // the one live wallpaper in the background layer
 
 // Switching workspaces (Super+PageUp/PageDown, a swipe, the grid): GNOME slides a copy of
@@ -226,10 +228,6 @@ export class DesktopWallpaper {
         return this._settings.get_boolean('desktop-audio-enabled');
     }
 
-    // Background Play: sound on, and on under your windows too
-    get _background() {
-        return this.audio && this._settings.get_boolean('wallpaper-background-play');
-    }
 
     _start() {
         const path = this._settings.get_string('desktop-wallpaper-path').replace(/^~(?=\/)/, GLib.get_home_dir());
@@ -266,8 +264,17 @@ export class DesktopWallpaper {
     _volume() {
         if (Main.sessionMode.isLocked)
             return 0;
-        const yieldToMedia = this._settings.get_boolean('audio-auto-mute-on-other-media') || this._background;
-        return yieldToMedia && this._media?.playing ? 0 : this._settings.get_double('desktop-audio-volume');
+        const level = this._settings.get_double('desktop-audio-volume');
+        if (this._bgPlay)                            // under your apps too; never over other media
+            return this._media?.playing ? 0 : level;
+        if (!this._onDesktop())                      // Bg Play off: the clean desktop only
+            return 0;
+        return this._settings.get_boolean('audio-auto-mute-on-other-media') && this._media?.playing ? 0 : level;
+    }
+
+    // Quick Settings' Wallpaper Bg Play (wallpaper-background-play)
+    get _bgPlay() {
+        return this._settings.get_boolean('wallpaper-background-play');
     }
 
     // (the name stays: it's called on every change that decides whether you're on the desktop;
@@ -441,9 +448,17 @@ export class DesktopWallpaper {
 
     // Paused only while locked or under a full-screen window. Between your windows and the
     // desktop the video streams on, frame after frame: only its sound ramps (350 ms).
+    // Paused (decoding stopped: no CPU, no GPU; the last frame held, so the picture stays) while
+    // locked or under a full-screen window, and: with Bg Play off, whenever an app window covers
+    // the desktop (it plays again the moment you're back on the bare desktop, or in the
+    // overview); with Bg Play on, only while other media plays. A pause waits for the sound's fade.
     _hidden() {
         const m = Main.layoutManager.primaryIndex;
-        return Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m));
+        if (Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m)))
+            return true;
+        if (this._bgPlay)
+            return Boolean(this._media?.playing);
+        return !Main.overview.visible && !this._onDesktop();
     }
 
     // would the next sync pause it, or bring its sound down?

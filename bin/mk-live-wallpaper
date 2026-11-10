@@ -127,6 +127,17 @@ def player(path, once=False, audio=None, hwaccel=None):
             sink.set_property("sink", gtksink)
         playbin.set_property("uri", Gst.filename_to_uri(path))
         playbin.set_property("video-sink", sink)
+        # light in the background: a software decoder (when the graphics card can't) on 2 threads,
+        # the demuxer's queues held to 25 MiB (a wallpaper never needs more read ahead)
+        def element_setup(_bin, element):
+            factory = element.get_factory()
+            name = factory.get_name() if factory else ""
+            if name.startswith("avdec_") and element.find_property("max-threads"):
+                element.set_property("max-threads", 2)
+            elif name == "multiqueue":
+                element.set_property("max-size-bytes", 25 * 1024 * 1024)
+                element.set_property("max-size-buffers", 0)
+        playbin.connect("element-setup", element_setup)
         # at most 30 frames a second (a 50 or 60 fps video drops the rest, evenly): half the
         # repaints for GNOME Shell, which draws the wallpaper (and any blur over it) per frame.
         # No caps filter: the decoder's frames stay in GPU memory (DMA-BUF), never copied out.

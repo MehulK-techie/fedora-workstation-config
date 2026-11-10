@@ -316,6 +316,17 @@ function run(argv, done) {
     }
 }
 
+// ~/.config/mk/wallpaper.json's note of the desktop video, emptied (desktop.js restores a desktop
+// video that was emptied while the note still named it)
+function forgetDesktopNote() {
+    const path = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk', 'wallpaper.json']);
+    try {
+        const note = JSON.parse(new TextDecoder().decode(GLib.file_get_contents(path)[1]));
+        note.desktop = '';
+        GLib.file_set_contents(path, JSON.stringify(note, null, 2));
+    } catch {}
+}
+
 function fileRow(window, s, key, title, types, none, folder) {
     const row = new Adw.ActionRow({title});
     const show = () => {
@@ -344,7 +355,11 @@ function fileRow(window, s, key, title, types, none, folder) {
     });
     const clear = new Gtk.Button({icon_name: 'edit-clear-symbolic', valign: Gtk.Align.CENTER, css_classes: ['flat'],
         tooltip_text: 'Clear'});
-    clear.connect('clicked', () => s.set_string(key, ''));
+    clear.connect('clicked', () => {
+        if (key === 'desktop-wallpaper-path')
+            forgetDesktopNote();                  // (cleared on purpose: desktop.js mustn't put it back)
+        s.set_string(key, '');
+    });
     row.add_suffix(choose);
     row.add_suffix(clear);
     return row;

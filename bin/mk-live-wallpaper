@@ -425,6 +425,7 @@ def main(argv):
         for where in (("desktop", "lockscreen") if which == "all" else (which,)):
             if where == "desktop":
                 conf["desktop"] = ""
+                write_conf(conf)                  # (first: the shell restores a path emptied behind its back)
                 lock_set("desktop-wallpaper-path", "")
             elif where == "lockscreen":
                 lock_set("background-video-path", "")

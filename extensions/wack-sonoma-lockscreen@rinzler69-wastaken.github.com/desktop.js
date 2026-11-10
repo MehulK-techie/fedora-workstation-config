@@ -92,6 +92,24 @@ function unpinWorkspaces() {
     pin.saved = null;
 }
 
+// ~/.config/mk/wallpaper.json, shared with bin/mk-live-wallpaper and MK Command Centre
+const NOTE = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk', 'wallpaper.json']);
+function readNote() {
+    try {
+        return JSON.parse(new TextDecoder().decode(GLib.file_get_contents(NOTE)[1])) ?? {};
+    } catch {
+        return {};
+    }
+}
+function writeNote(note) {
+    try {
+        GLib.mkdir_with_parents(GLib.path_get_dirname(NOTE), 0o755);
+        GLib.file_set_contents(NOTE, JSON.stringify(note, null, 2));
+    } catch (e) {
+        console.warn(`wack-sonoma-lockscreen: ${NOTE}: ${e.message}`);
+    }
+}
+
 const usable = path => typeof path === 'string' && path !== '' && GLib.file_test(path, GLib.FileTest.IS_REGULAR);
 
 // One player process and its window. onWindow(win) once the window is shown.
@@ -200,6 +218,7 @@ export class DesktopWallpaper {
             settings.connect('changed::desktop-audio-volume', () => this._syncVolume()),
             settings.connect('changed::audio-auto-mute-on-other-media', () => this._syncVolume()),
             settings.connect('changed::wallpaper-background-play', () => this._queueVolume()),
+            settings.connect('changed::desktop-wallpaper-path', () => this._guardPath()),
         ];
         this._ids = [
             [global.display, global.display.connect('in-fullscreen-changed', () => this._syncPlaying())],
@@ -221,7 +240,27 @@ export class DesktopWallpaper {
         ];
         this._media = new OtherMedia();
         this._media.connect('changed', () => this._queueVolume());
+        this._guardPath();
         this._start();
+    }
+
+    // Your desktop video, kept: the chosen file is also noted in ~/.config/mk/wallpaper.json, and
+    // MK's own ways of clearing it (Command Centre's and the settings window's Clear buttons,
+    // `mk-live-wallpaper off`) clear that note first. So if the setting turns up empty while the
+    // note still names a file that's there, it wasn't you: it's put back, and the journal says so.
+    _guardPath() {
+        const path = this._settings.get_string('desktop-wallpaper-path');
+        const note = readNote();
+        if (path) {
+            if (note.desktop !== path)
+                writeNote({...note, desktop: path});
+            return;
+        }
+        if (note.desktop && usable(note.desktop)) {
+            console.warn(`wack-sonoma-lockscreen: desktop-wallpaper-path was emptied by something other than MK's ` +
+                `Clear buttons or mk-live-wallpaper off; restoring ${note.desktop}`);
+            this._settings.set_string('desktop-wallpaper-path', note.desktop);
+        }
     }
 
     get audio() {
@@ -316,7 +355,11 @@ export class DesktopWallpaper {
     _place(win) {
         this._playState = null;                      // (a new player: tell it, whatever the last one was told)
         this._sizeWin = win;
-        this._sizeId = win.connect('size-changed', () => this._scale());
+        this._sizeId = win.connect('size-changed', () => {
+            this._scale();
+            this._unbar();
+        });
+        this._posId = win.connect('position-changed', () => this._unbar());
         this._fit();
         this._cover(win);
         this._syncPlaying();
@@ -410,9 +453,24 @@ export class DesktopWallpaper {
         } catch {}
         if (top + bottom < 0.01)
             top = bottom = 0;                        // (a hair of dark edge: left as it is)
+        // The window's visible frame (not its whole buffer, which can carry invisible margins: a
+        // client-side shadow area) is what fills the monitor; any margin lands outside the clipping
+        // frame, so no strip of what's underneath (black, or GNOME's still wallpaper) ever shows.
+        const win = this._player.win, f = win?.get_frame_rect(), b = win?.get_buffer_rect();
+        let x = 0, y = 0, w = m.width, h = m.height;
+        if (f && b && f.width > 0 && f.height > 0 && b.width > 0 && b.height > 0) {
+            const kx = m.width / f.width, ky = m.height / f.height;
+            x = -(f.x - b.x) * kx;
+            y = -(f.y - b.y) * ky;
+            w = b.width * kx;
+            h = b.height * ky;
+        }
+        clone.set_position(Math.round(x), Math.round(y));
+        clone.set_size(Math.round(w), Math.round(h));
+        // then zoomed past any black bands in the video, about the picture's middle
         const zoom = Math.min(1.4, 1 / Math.max(0.5, 1 - top - bottom));
         const centre = top + (1 - top - bottom) / 2;  // the picture's middle, as a fraction of the height
-        clone.set_pivot_point(0.5, centre);
+        clone.set_pivot_point((m.width / 2 - x) / w, (centre * m.height - y) / h);
         clone.set_scale(zoom, zoom);
         clone.translation_y = Math.round((0.5 - centre) * m.height);
     }
@@ -500,9 +558,9 @@ export class DesktopWallpaper {
             object.disconnect(id);
         this._media.destroy();
         this._media = null;
-        if (this._sizeWin && this._sizeId) {
+        for (const id of [this._sizeId, this._posId].filter(Boolean)) {
             try {
-                this._sizeWin.disconnect(this._sizeId);
+                this._sizeWin?.disconnect(id);
             } catch {}
         }
         this._player.destroy();

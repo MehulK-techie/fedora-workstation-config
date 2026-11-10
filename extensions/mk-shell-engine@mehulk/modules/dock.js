@@ -37,14 +37,14 @@ import * as Actions from './appActions.js';
 const MARGIN = 4;              // the dock's gap above the screen's bottom edge
 const SINK = 14;               // how far it sinks as it fades for the overview (px, doubled)
 const OVERVIEW_OUT = 260, OVERVIEW_IN = 360;
-const EDGE_DELAY = 120;        // the pointer rests on the bottom edge this long before the dock comes back
+const EDGE_DELAY = 100;        // the pointer rests on the bottom edge this long before the dock comes back
 // dock-animation-style: how it goes away (a window overlaps it) and comes back
-//   fade-scale     Soft Fade: opacity with a gentle 0.94x, 200 ms, ease-out cubic
+//   fade-scale     Soft Fade: opacity with a gentle 0.95x, 200 ms, ease-out cubic
 //   elastic-slide  Elastic Slide: down off the screen and back up with a little spring (260 ms, ease-out back)
 //   magnetic-wave  Magnetic Wave: pops in and out (220 ms); the icons near the pointer swell as a wave
 //   instant-glass  Instant Glass: a plain 110 ms fade, no motion; the app you're in sits 4 px up
 const SHOW_HIDE = {
-    'fade-scale': {hide: {opacity: 0, scale: 0.94, slide: false, ms: 200, mode: 'EASE_OUT_CUBIC'},
+    'fade-scale': {hide: {opacity: 0, scale: 0.95, slide: false, ms: 200, mode: 'EASE_OUT_CUBIC'},
         show: {ms: 200, mode: 'EASE_OUT_CUBIC'}},
     'elastic-slide': {hide: {opacity: 255, scale: 1, slide: true, ms: 220, mode: 'EASE_OUT_CUBIC'},
         show: {ms: 260, mode: 'EASE_OUT_BACK'}},
@@ -647,7 +647,7 @@ export class Dock {
     _queueDodge(delay = 0) {
         if (this._dodgeId)
             GLib.source_remove(this._dodgeId);
-        this._dodgeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay || 60, () => {
+        this._dodgeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay || 100, () => {
             this._dodgeId = 0;
             this._dodge();
             return GLib.SOURCE_REMOVE;

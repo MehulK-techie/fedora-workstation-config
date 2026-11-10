@@ -16,7 +16,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { BURN_MY_WINDOWS, isActive, watch } from './conflicts.js';
 
-const OPEN = 170, CLOSE = 130, FADE_IN = 100;
+const OPEN = 220, CLOSE = 130, FADE_IN = 100;   // ms: opening eases out (cubic) over 220
 const clamp = p => Math.min(1, Math.max(0, p));
 const lerp = (a, b, t) => a + (b - a) * t;
 const easeOutCubic = p => 1 - (1 - p) ** 3;

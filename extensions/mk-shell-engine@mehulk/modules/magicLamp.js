@@ -20,7 +20,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { MAGIC_LAMP, isActive, watch } from './conflicts.js';
 
-const MINIMIZE = 210, UNMINIMIZE = 210, DISSOLVE = 60;
+const MINIMIZE = 220, UNMINIMIZE = 220, DISSOLVE = 60;   // ms (ease-out cubic)
 
 const clamp = p => Math.min(1, Math.max(0, p));
 const lerp = (a, b, t) => a + (b - a) * t;

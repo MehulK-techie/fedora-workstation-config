@@ -212,7 +212,7 @@ export function addWallpaperGlass(target, anchor, glass, radius = 0, source = Ma
     const ids = [];
     for (let a = target; a && a !== layer; a = a.get_parent()) {
         for (const signal of ['notify::allocation', 'notify::translation-x', 'notify::translation-y',
-            'notify::opacity', 'notify::mapped', 'notify::visible'])
+            'notify::scale-x', 'notify::scale-y', 'notify::opacity', 'notify::mapped', 'notify::visible'])
             ids.push([a, a.connect(signal, queue)]);
     }
     ids.push([global.display, global.display.connect('in-fullscreen-changed', queue)]);

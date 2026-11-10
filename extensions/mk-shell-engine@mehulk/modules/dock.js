@@ -13,9 +13,10 @@
 //   - click: open, focus, or (the app you're in) minimize; middle-click: a new
 //     window; scroll: cycle the app's windows; right-click: New Window,
 //     Keep in Dock, Quit, Force Quit
-//   - intellihide: fully shown on a clean desktop; it slides off the bottom of the screen
-//     (220 ms) as soon as any window on this workspace overlaps its spot, and slides back
-//     up while the pointer rests on the bottom 4 px of the screen (or is on it)
+//   - intellihide: fully shown on a clean desktop; it fades out (200 ms, shrinking to 0.95x
+//     from its bottom middle, then taking no clicks) as soon as any window on this workspace
+//     overlaps its spot, and fades back in (220 ms) while the pointer rests on the bottom 4 px
+//     of the screen (or is on it)
 // Everything follows GNOME's signals (apps starting and stopping, favourites,
 // focus, windows moving): nothing polls. Stands aside while Dash to Dock is on.
 import Clutter from 'gi://Clutter';
@@ -37,7 +38,9 @@ const MARGIN = 4;              // the dock's gap above the screen's bottom edge
 const SINK = 14;               // how far it sinks as it fades for the overview (px, doubled)
 const OVERVIEW_OUT = 260, OVERVIEW_IN = 360;
 const EDGE_DELAY = 40;         // the pointer rests on the bottom edge this long before the dock comes back
-const SLIDE = 220;             // ms: sliding down off the screen and back up (EASE_OUT_CUBIC)
+const FADE_OUT = 200;          // ms: fading out (EASE_OUT_QUAD) as a window overlaps it
+const FADE_IN = 220;           // ms: fading back in (EASE_OUT_CUBIC)
+const FADE_SCALE = 0.95;       // the size it shrinks to as it fades out (from its bottom middle)
 const EDGE = 4;                // px: the bottom-edge strip that brings it back
 
 // The parabola: HOVER at the pointer, falling to 1 a little over one icon
@@ -509,7 +512,7 @@ export class Dock {
     }
 
     _rest(item) {
-        return this._focused(item) ? [1.15, 9] : [1, 0];
+        return this._focused(item) ? [1.15, 6] : [1, 0];      // the app you're in: up 6 px (180 ms)
     }
 
     // the glow colour as "R, G, B"
@@ -665,9 +668,11 @@ export class Dock {
         } else if (!this._inOverview) {
             this._actor.show();
         }
-        // (ease() retargets a slide already under way from where it is, so a quick hide-then-show never jumps)
-        this._actor.ease({translation_y: hide ? this._hiddenY() : 0, opacity: 255,
-            duration: SLIDE, mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+        // a fade with a slight shrink towards its bottom middle (no slide, no box left behind);
+        // ease() retargets one already under way from where it is, so a quick out-then-in never jumps
+        this._actor.ease({opacity: hide ? 0 : 255, scale_x: hide ? FADE_SCALE : 1, scale_y: hide ? FADE_SCALE : 1,
+            translation_y: 0, duration: hide ? FADE_OUT : FADE_IN,
+            mode: hide ? Clutter.AnimationMode.EASE_OUT_QUAD : Clutter.AnimationMode.EASE_OUT_CUBIC,
             // gone altogether once it has faded: nothing left to hit-test, only the edge strip
             onStopped: done => {
                 if (done && hide && this._hidden && this._actor && !this._gone)
@@ -678,9 +683,9 @@ export class Dock {
             this._setPointerable(true);
     }
 
-    // slid right off the bottom of the screen: its height and 24 px more
+    // (it fades where it is: never moved down)
     _hiddenY() {
-        return this._hidden ? Math.round(this._actor.height + MARGIN + 24) : 0;
+        return 0;
     }
 
     // GNOME's overview has a dash of its own along the bottom (Dash to Dock used

@@ -125,18 +125,6 @@
       <summary>Dock magnification</summary>
       <description>How much the icon right under the pointer grows (and it lifts 12 px); only that one icon, so the dock never shifts. 1.00: off.</description>
     </key>
-    <key name="dock-hide-ms" type="i">
-      <range min="60" max="1500"/>
-      <default>480</default>
-      <summary>Dock: fade-away time (ms)</summary>
-      <description>How long the dock takes to fade away when a window covers it. 140 for a snappy dock.</description>
-    </key>
-    <key name="dock-reveal-ms" type="i">
-      <range min="60" max="1500"/>
-      <default>360</default>
-      <summary>Dock: come-back time (ms)</summary>
-      <description>How long it takes to come back. 130 for a snappy dock.</description>
-    </key>
     <key name="blur" type="b">
       <default>true</default>
       <summary>Native blur</summary>
@@ -162,11 +150,6 @@
       <default>true</default>
       <summary>Active app in the top bar</summary>
       <description>The focused app's icon (in its own colours) and name, with a menu for its window.</description>
-    </key>
-    <key name="autohide-top-bar" type="b">
-      <default>false</default>
-      <summary>Hide the top bar</summary>
-      <description>While a window has focus the top bar glides away; the top edge, an empty desktop or the overview bring it back. Windows get its space while this is on.</description>
     </key>
     <key name="tray-collapsed" type="b">
       <default>true</default>

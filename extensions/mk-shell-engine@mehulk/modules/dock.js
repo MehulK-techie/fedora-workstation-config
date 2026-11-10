@@ -13,15 +13,14 @@
 //   - click: open, focus, or (the app you're in) minimize; middle-click: a new
 //     window; scroll: cycle the app's windows; right-click: New Window,
 //     Keep in Dock, Quit, Force Quit
-//   - it steps down out of the way when a window covers its spot, and comes
-//     back when the pointer touches the bottom edge
+//   - it always stays where it is, fully shown: no auto-hide, no edge to wake it (it only
+//     makes way for the overview, and GNOME hides it under a full-screen window)
 // Everything follows GNOME's signals (apps starting and stopping, favourites,
 // focus, windows moving): nothing polls. Stands aside while Dash to Dock is on.
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Graphene from 'gi://Graphene';
 import GObject from 'gi://GObject';
-import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -33,10 +32,8 @@ import { accentRGB, onAccentChanged } from './colour.js';
 import * as Actions from './appActions.js';
 
 const MARGIN = 4;              // the dock's gap above the screen's bottom edge
-// fading away and back: dock-hide-ms / dock-reveal-ms (480 / 360 by default: slow and soft, never a jump)
-const SINK = 14;               // how far it sinks while it fades (px): a fade with a hint of movement
+const SINK = 14;               // how far it sinks as it fades for the overview (px, doubled)
 const OVERVIEW_OUT = 260, OVERVIEW_IN = 360;
-const EDGE_DELAY = 70;         // the pointer rests on the bottom edge this long before the dock comes back
 
 // The parabola: HOVER at the pointer, falling to 1 a little over one icon
 // away; the neighbour one icon away lands on HOVER minus 56 % of the growth
@@ -53,8 +50,7 @@ export class Dock {
         this._settings = settings;
         this._actor = null;
         this._unwatch = watch(() => this._sync());
-        this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::dock-hide-ms',
-            'changed::dock-reveal-ms', 'changed::blur', 'changed::dock-style', 'changed::dock-opacity',
+        this._settingsIds = ['changed::dock', 'changed::dock-icon-size', 'changed::dock-hover-scale', 'changed::blur', 'changed::dock-style', 'changed::dock-opacity',
             'changed::dock-corner-radius', 'changed::dock-indicator-style', 'changed::dock-glow-color',
             'changed::dock-icon-glass'].map(
             signal => settings.connect(signal, () => this._sync(true)));
@@ -90,11 +86,8 @@ export class Dock {
     _build() {
         this._size = this._settings.get_int('dock-icon-size');
         this._hover = this._settings.get_double('dock-hover-scale');
-        this._hideMs = this._settings.get_int('dock-hide-ms');
-        this._revealMs = this._settings.get_int('dock-reveal-ms');
         this._ids = [];
         this._appIds = [];
-        this._hidden = false;
         this._pointerable = true;
         // its look (dock-style): obsidian-glass, cupertino-frost, spider-glow or minimal-flat
         const style = this._settings.get_string('dock-style');
@@ -122,7 +115,7 @@ export class Dock {
         // the icons only take the pointer once the dock is (nearly) back in place: a hidden
         // dock never shows a name or grows an icon (it used to, from just under the screen's edge)
         this._actor.connect('notify::translation-y', () => {
-            if (!this._hidden && !this._inOverview && this._actor.translation_y < 10)
+            if (!this._inOverview && this._actor.translation_y < 10)
                 this._setPointerable(true);
         });
         this._actor.connect('destroy', () => (this._gone = true));     // (GNOME Shell quitting takes it down first)
@@ -133,30 +126,9 @@ export class Dock {
         this._chrome = new Clutter.Actor({layout_manager: new Clutter.BinLayout()});
         this._chrome.add_child(this._actor);
         Main.layoutManager.addChrome(this._chrome, {trackFullscreen: true});
-        // the bottom edge: resting on it brings the dock back while it's hidden
-        this._edge = new St.Widget({reactive: true, height: 2, opacity: 0, visible: false});
-        Main.uiGroup.add_child(this._edge);
-        this._edge.connect('enter-event', () => {
-            if (this._fullscreen())
-                return;                  // never during a full-screen video or game
-            this._edgeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, EDGE_DELAY, () => {
-                this._edgeId = 0;
-                if (!this._fullscreen())
-                    this._reveal();
-                return GLib.SOURCE_REMOVE;
-            });
-        });
-        this._edge.connect('leave-event', () => {
-            if (this._edgeId)
-                GLib.source_remove(this._edgeId);
-            this._edgeId = 0;
-        });
 
         this._actor.connect('motion-event', (_a, event) => this._magnify(event.get_coords()[0]));
-        this._actor.connect('leave-event', () => {
-            this._settle();
-            this._queueDodge(600);
-        });
+        this._actor.connect('leave-event', () => this._settle());
         // (flat: solid, floating icons: no shelf at all; nothing to see through either way)
         if (blurAllowed(this._settings) && style !== 'minimal-flat' && style !== 'floating-icons')
             this._unblur = addWallpaperGlass(this._actor, this._chrome, DOCK_GLASS, this._radius);
@@ -173,14 +145,7 @@ export class Dock {
                 this._settle();          // the focused app's icon rises, the last one settles
         });
         this._connect(global.display, 'notify::focus-window', () => this._followFocus());
-        this._connect(global.workspace_manager, 'active-workspace-changed', () => {
-            this._queueFill();
-            this._queueDodge();
-        });
-        this._connect(global.window_manager, 'minimize', () => this._queueDodge());
-        this._connect(global.window_manager, 'unminimize', () => this._queueDodge());
-        this._connect(global.window_manager, 'map', () => this._queueDodge());
-        this._connect(global.window_manager, 'destroy', () => this._queueDodge());
+        this._connect(global.workspace_manager, 'active-workspace-changed', () => this._queueFill());
         // a window asking for you (a finished download, a message): its app hops twice
         for (const signal of ['window-demands-attention', 'window-marks-urgent']) {
             if (!GObject.signal_lookup(signal, global.display.constructor))
@@ -191,13 +156,6 @@ export class Dock {
                     this._bounce(app, 2, false);
             });
         }
-        this._connect(global.display, 'in-fullscreen-changed', () => {
-            if (this._fullscreen()) {             // straight away, and the edge stops listening
-                this._edge.visible = false;
-                this._slide(true);
-            }
-            this._queueDodge();
-        });
         this._connect(Main.layoutManager, 'monitors-changed', () => this._place());
         // Super / the overview: the dock fades away (the overview has its own dash) and comes back after
         this._connect(Main.overview, 'showing', () => this._overview(true));
@@ -540,7 +498,7 @@ export class Dock {
 
     // Is the dock really there (not hidden, not in the overview, not fading)?
     _showing() {
-        return !this._hidden && !this._inOverview && this._actor?.visible && this._actor.opacity >= 200;
+        return !this._inOverview && this._actor?.visible && this._actor.opacity >= 200;
     }
 
     // every icon taking the pointer, or none (a hidden dock: no hover, no names, no hit-testing)
@@ -590,102 +548,15 @@ export class Dock {
         const [, h] = this._actor.get_preferred_height(w);
         this._rect = {x: Math.round(m.x + (m.width - w) / 2), y: m.y + m.height - h - MARGIN, width: w, height: h};
         this._chrome.set_position(this._rect.x, this._rect.y);
-        this._edge.set_position(m.x, m.y + m.height - 2);
-        this._edge.width = m.width;
-        this._queueDodge();
     }
 
     _followFocus() {
         for (const [object, id] of this._focusIds ?? [])
             object.disconnect(id);
         this._focusIds = [];
-        const win = global.display.focus_window;
-        if (win) {
-            for (const signal of ['position-changed', 'size-changed'])
-                this._focusIds.push([win, win.connect(signal, () => this._queueDodge())]);
-        }
         this._paintBars();
-        this._queueDodge();
     }
 
-    _queueDodge(delay = 0) {
-        if (this._dodgeId)
-            GLib.source_remove(this._dodgeId);
-        this._dodgeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay || 60, () => {
-            this._dodgeId = 0;
-            this._dodge();
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
-    // Is any window on this desktop over the dock's spot? (Never on the bare desktop: there the
-    // dock always shows, in place, over the live wallpaper.)
-    _covered() {
-        if (!this._rect)
-            return false;
-        const ws = global.workspace_manager.get_active_workspace();
-        const primary = Main.layoutManager.primaryIndex;
-        const {x, y, width, height} = this._rect;
-        return ws.list_windows().some(w => {
-            if (w.minimized || w.get_monitor() !== primary || w.skip_taskbar ||
-                w.window_type !== Meta.WindowType.NORMAL && w.window_type !== Meta.WindowType.DIALOG)
-                return false;
-            const f = w.get_frame_rect();
-            return f.x < x + width && f.x + f.width > x && f.y < y + height && f.y + f.height > y;
-        });
-    }
-
-    _dodge() {
-        if (!this._actor || this._gone || this._inOverview)
-            return;
-        if (this._actor.hover || this._menus.activeMenu)
-            return;                                         // never away from under the pointer
-        this._slide(this._covered());
-    }
-
-    // Is the dock's monitor showing a full-screen window (or is the focused window full screen)?
-    _fullscreen() {
-        return global.display.get_monitor_in_fullscreen(Main.layoutManager.primaryIndex) ||
-            !!global.display.focus_window?.is_fullscreen();
-    }
-
-    _reveal() {
-        this._slide(false);
-        this._queueDodge(1500);            // and away again if the pointer doesn't come onto it
-    }
-
-    _slide(hide) {
-        if (hide === this._hidden)
-            return;
-        this._hidden = hide;
-        this._edge.visible = hide && !this._fullscreen() && !this._inOverview;
-        if (hide) {
-            this._setPointerable(false);
-            this._tooltip(null);
-        } else if (!this._inOverview) {
-            this._actor.show();
-        }
-        // (ease() retargets a slide already under way from where it is, so a quick hide-then-show never jumps)
-        this._actor.ease({translation_y: hide ? this._hiddenY() : 0, opacity: hide ? 0 : 255,
-            duration: hide ? this._hideMs : this._revealMs,
-            mode: hide ? Clutter.AnimationMode.EASE_IN_OUT_QUAD : Clutter.AnimationMode.EASE_OUT_CUBIC,
-            // gone altogether once it has faded: nothing left to hit-test, only the edge strip
-            onStopped: done => {
-                if (done && hide && this._hidden && this._actor && !this._gone)
-                    this._actor.hide();
-            }});
-        this._actor.reactive = !hide;
-        if (!hide && !this._inOverview && this._actor.translation_y < 10)
-            this._setPointerable(true);
-    }
-
-    _hiddenY() {
-        return this._hidden ? SINK : 0;
-    }
-
-    // GNOME's overview has a dash of its own along the bottom (Dash to Dock used
-    // to take its place): with the engine's dock it would be a second dock, so
-    // it's folded away (no height, so the desktops get the room) while this runs.
     _hideOverviewDash(hide) {
         const dash = Main.overview.dash;
         if (!dash)
@@ -705,32 +576,24 @@ export class Dock {
         if (showing) {
             this._tooltip(null);
             this._setPointerable(false);
-            this._edge.visible = false;
             this._actor.reactive = false;
             // down and out of the way: the overview's own dash and the desktops are all yours
             this._actor.ease({opacity: 0, translation_y: SINK * 2, duration: OVERVIEW_OUT,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onStopped: done => done && this._inOverview && this._actor?.hide()});
         } else {
-            if (!this._hidden)
-                this._actor.show();
-            if (!this._hidden) {
-                this._actor.reactive = true;
-                this._actor.ease({opacity: 255, translation_y: 0, duration: OVERVIEW_IN, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
-            } else {
-                this._actor.translation_y = this._hiddenY();
-                this._edge.visible = !this._fullscreen();
-            }
-            this._queueDodge(250);
+            this._actor.show();
+            this._actor.reactive = true;
+            this._actor.ease({opacity: 255, translation_y: 0, duration: OVERVIEW_IN, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         }
     }
 
     // ----- taking it down -----
 
     _teardown() {
-        for (const id of [this._fillId, this._dodgeId, this._edgeId])
-            id && GLib.source_remove(id);
-        this._fillId = this._dodgeId = this._edgeId = 0;
+        if (this._fillId)
+            GLib.source_remove(this._fillId);
+        this._fillId = 0;
         for (const [object, id] of [...this._ids ?? [], ...this._focusIds ?? []])
             object.disconnect(id);
         this._ids = this._focusIds = [];
@@ -743,13 +606,12 @@ export class Dock {
         this._unblur = null;
         this._menus = null;
         if (!this._gone) {
-            this._edge?.destroy();
             if (this._chrome?.get_parent())
                 Main.layoutManager.removeChrome(this._chrome);
             this._chrome?.destroy();        // (and the dock in it)
         }
         this._chrome = null;
-        this._actor = this._edge = null;
+        this._actor = null;
         this._appIds = [];
     }
 

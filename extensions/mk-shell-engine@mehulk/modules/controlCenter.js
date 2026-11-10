@@ -175,11 +175,41 @@ export class ControlCenter {
         qs.menu.addItem(slider, 2);
         this._wallSlider = slider;
         this._wallSettings = s;
+        // Shown only for a live wallpaper you can hear: its sound on, a video set, and that video
+        // with a sound track (the player says so in $XDG_RUNTIME_DIR/mk-live-wallpaper.json).
+        // Otherwise Quick Settings keeps just GNOME's own sliders. Decided as the menu opens (and
+        // while it's closed), so muting from the slider never pulls it out from under the pointer.
+        const state = Gio.File.new_for_path(GLib.build_filenamev([GLib.get_user_runtime_dir(), 'mk-live-wallpaper.json']));
+        this._wallMonitor = state.get_parent().monitor_directory(Gio.FileMonitorFlags.NONE, null);
+        this._wallState = state;
+        const later = () => !qs.menu.isOpen && this._syncWallVisible();
+        this._wallIds.push(
+            [this._wallMonitor, this._wallMonitor.connect('changed', (_m, file) => file.equal(state) && later())],
+            [s, s.connect('changed::desktop-audio-enabled', later)],
+            [s, s.connect('changed::desktop-wallpaper-path', later)],
+            [qs.menu, qs.menu.connect('open-state-changed', (_m, open) => open && this._syncWallVisible())]);
+        this._syncWallVisible();
         // right under the speaker's volume (then the microphone and brightness), again whenever
         // the grid changes: GNOME adds its own sliders a moment after starting up
         const grid = qs.menu._grid;
         this._wallIds.push([grid, grid.connect('child-added', () => this._placeWallSlider())]);
         this._placeWallSlider();
+    }
+
+    _syncWallVisible() {
+        const s = this._wallSettings, slider = this._wallSlider;
+        if (!s || !slider)
+            return;
+        const path = s.get_string('desktop-wallpaper-path').replace(/^~(?=\/)/, GLib.get_home_dir());
+        let audible = false;
+        if (s.get_boolean('desktop-audio-enabled') && path) {
+            try {
+                const [, bytes] = this._wallState.load_contents(null);
+                const info = JSON.parse(new TextDecoder().decode(bytes));
+                audible = info.path === path && info.audio === true;
+            } catch {}                                   // (no player yet: nothing to hear)
+        }
+        slider.visible = audible;
     }
 
     _placeWallSlider() {
@@ -330,6 +360,8 @@ export class ControlCenter {
         for (const [obj, id] of this._wallIds ?? [])
             obj.disconnect(id);
         this._wallIds = null;
+        this._wallMonitor?.cancel();
+        this._wallMonitor = null;
         this._wallSlider?.destroy();
         this._wallSlider = null;
         this._original.clear();

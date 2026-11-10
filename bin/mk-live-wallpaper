@@ -92,8 +92,9 @@ def write_conf(conf):
 def player(path, once=False, audio=None, hwaccel=None):
     import gi
     gi.require_version("Gtk", "4.0")
+    gi.require_version("Gdk", "4.0")
     gi.require_version("Gst", "1.0")
-    from gi.repository import GLib, Gst, Gtk
+    from gi.repository import Gdk, GLib, Gst, Gtk
     try:
         gi.require_version("GstAudio", "1.0")
         from gi.repository import GstAudio
@@ -164,6 +165,8 @@ def player(path, once=False, audio=None, hwaccel=None):
             if t == Gst.MessageType.ASYNC_DONE and not state.get("reported"):
                 state["reported"] = True
                 report(playbin.get_property("n-audio") > 0)
+                for seconds in (3, 8, 20):
+                    GLib.timeout_add_seconds(seconds, lambda: measure_bars() and False)
             if t == Gst.MessageType.ASYNC_DONE and state["loop"] and not state.get("segmented"):
                 state["segmented"] = True             # (gapless looping: segment seeks, no flush between)
                 segment_seek(True)
@@ -179,16 +182,60 @@ def player(path, once=False, audio=None, hwaccel=None):
         state["paintable"], state["picture"] = paintable, picture
         return picture
 
-    def report(has_audio):
-        # what's playing, for Quick Settings (its wallpaper volume slider shows only for a video
-        # that has a sound track): $XDG_RUNTIME_DIR/mk-live-wallpaper.json
+    def report(has_audio=None, bars=None):
+        # what's playing, for GNOME Shell: $XDG_RUNTIME_DIR/mk-live-wallpaper.json
+        #   audio: the video has a sound track (Quick Settings shows its volume slider only then)
+        #   bars:  [top, bottom], the black letterbox bands encoded in the picture, as fractions of
+        #          its height (the desktop zooms past them, so no black bar ever shows)
+        if has_audio is not None:
+            state["has_audio"] = bool(has_audio)
+        if bars is not None:
+            state["bars"] = bars
         try:
             out = Path(GLib.get_user_runtime_dir()) / "mk-live-wallpaper.json"
             tmp = out.with_suffix(".tmp")
-            tmp.write_text(json.dumps({"path": str(path), "audio": bool(has_audio)}))
+            tmp.write_text(json.dumps({"path": str(path), "audio": state.get("has_audio", False),
+                                       "bars": state.get("bars", [0.0, 0.0])}))
             tmp.replace(out)
         except OSError:
             pass
+
+    def measure_bars():
+        # Letterbox bands baked into the video: rows that stay near-black across the width, from
+        # the top and from the bottom, on a few frames (3, 8 and 20 s in; a frame that's dark all
+        # over, a fade-in, says nothing). The smallest band seen wins, so a dark scene never
+        # counts as a bar. Read once per frame from the GPU, a few times in all.
+        paintable = state.get("paintable")
+        frame = paintable.get_current_image() if paintable is not None else None
+        if not isinstance(frame, Gdk.Texture):
+            return
+        try:
+            loader = Gdk.TextureDownloader.new(frame)
+            loader.set_format(Gdk.MemoryFormat.R8G8B8)
+            data, stride = loader.download_bytes()
+            data = data.get_data()
+        except (AttributeError, GLib.Error, TypeError):
+            return
+        w, h = frame.get_width(), frame.get_height()
+        if w < 64 or h < 64:
+            return
+        xs = range(0, w * 3, max(3, (w // 64) * 3))
+
+        def dark(y):
+            row = y * stride
+            return max(data[row + x] for x in xs) < 28 and max(data[row + x + 1] for x in xs) < 28
+
+        top = 0
+        while top < h // 2 and dark(top):
+            top += 1
+        bottom = 0
+        while bottom < h // 2 and dark(h - 1 - bottom):
+            bottom += 1
+        if top + bottom > h * 0.45:
+            return                                # (a dark frame: no answer)
+        seen = (round(top / h, 4), round(bottom / h, 4))
+        old = state.get("bars")
+        report(bars=[min(seen[0], old[0]), min(seen[1], old[1])] if old else list(seen))
 
     def linear(volume):
         # a slider's volume (0-1, as heard) to playbin's linear gain

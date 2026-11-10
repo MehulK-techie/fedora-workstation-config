@@ -13,16 +13,15 @@
 // Silent unless desktop-audio-enabled: no audio stream is opened at all then.
 // With sound on, two ways (wallpaper-background-play, Quick Settings' "Wallpaper
 // Bg Play" tile):
-//   off (the default): heard only on the bare desktop (unlocked, no overview, no
-//     window showing on this workspace). A window showing or taking focus fades it
-//     out over 400 ms (20 ms steps) and then pauses it; back on the bare desktop it
-//     plays and fades in over 350 ms to the slider's level. Another player playing
-//     mutes it too (audio-auto-mute-on-other-media).
-//   on: it plays on under your windows, sound and all, and steps aside only for
-//     other media: an MPRIS player or any other app's sound stream playing
-//     (otherMedia.js) fades it out over 400 ms; 600 ms after that goes quiet it
-//     fades back in over 350 ms.
-// Top-bar menus (Quick Settings, the calendar, Finder, stats) never pause it.
+//   off (the default): heard only on the bare desktop (unlocked, no overview, no normal
+//     window showing on this workspace). A window showing fades the sound out over
+//     300 ms (20 ms steps); back on the bare desktop it fades in over 300 ms to the
+//     slider's level. Another player playing mutes it too (audio-auto-mute-on-other-media).
+//   on: it's heard under your windows too, and steps aside only for other media: an
+//     MPRIS player or any other app's sound stream playing (otherMedia.js) fades it out;
+//     600 ms after that goes quiet it fades back in.
+// The video itself streams on all the while (windows, menus, the overview); it pauses
+// only while the screen is locked or a window is full screen.
 //
 // The picture: a clone of the player's window, the size of the whole monitor, in
 // the background layer (under the top bar and the dock, to the bottom edge), the
@@ -43,7 +42,7 @@ import { OtherMedia } from './otherMedia.js';
 const PLAYER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-live-wallpaper']);
 const LOG = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-live-wallpaper.log']);
 const KEYS = ['desktop-wallpaper-path', 'desktop-hwaccel', 'desktop-audio-enabled'];
-const FADE_OUT = 400, FADE_IN = 350;
+const FADE_OUT = 300, FADE_IN = 300;          // ms: the sound's ramps, out and in
 
 // Switching workspaces (Super+PageUp/PageDown, a swipe, the grid): GNOME slides a copy of
 // each workspace, every one on a still background of its own, made fresh for the switch
@@ -249,14 +248,15 @@ export class DesktopWallpaper {
 
     // Is the bare desktop what you're looking at? Unlocked, no overview, and no window
     // showing on this workspace (the wallpaper's own window aside)
+    // (asked of the windows themselves, never of the last focused one: GNOME keeps pointing
+    // at an app's window after it's minimized or closed)
     _onDesktop() {
         if (Main.sessionMode.isLocked || Main.overview.visible)
             return false;
         const ws = global.workspace_manager.get_active_workspace();
-        return !global.display.list_all_windows().some(w =>
-            w !== this._player.win && !w.minimized && w.showing_on_its_workspace?.() !== false &&
-            !w.skip_taskbar && w.get_window_type() !== Meta.WindowType.DESKTOP &&
-            (w.located_on_workspace?.(ws) ?? w.get_workspace() === ws));
+        return !ws.list_windows().some(w =>
+            w !== this._player.win && !w.minimized && w.showing_on_its_workspace() &&
+            (w.get_window_type() === Meta.WindowType.NORMAL || w.get_window_type() === Meta.WindowType.DIALOG));
     }
 
     // the slider's volume on the bare desktop; nothing anywhere else, or while another
@@ -294,7 +294,7 @@ export class DesktopWallpaper {
         });
     }
 
-    // FADE: a smooth ramp (out 400 ms, in 350 ms, 20 ms steps) rather than a jump (the slider moving)
+    // FADE: a smooth ramp (300 ms each way, 20 ms steps) rather than a jump (the slider moving)
     _syncVolume(fade = false) {
         if (!this.audio || !this._player.win)
             return;
@@ -377,15 +377,11 @@ export class DesktopWallpaper {
         actor.set_scale(m.width / f.width, m.height / f.height);
     }
 
-    // Paused under a full-screen window and while locked. Otherwise it plays while you can see
-    // it (the bare desktop, or the overview, where it's the backdrop), or, with Background
-    // Play, while you can hear it (under your windows, with no other media playing). Top-bar
-    // menus never pause it. With sound on, a pause waits for the 400 ms fade-out first.
+    // Paused only while locked or under a full-screen window. Between your windows and the
+    // desktop the video streams on, frame after frame: only its sound ramps (300 ms).
     _hidden() {
         const m = Main.layoutManager.primaryIndex;
-        const seen = Main.overview.visible || this._onDesktop();
-        const heard = this._background && !this._media?.playing;
-        return Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m)) || !(seen || heard);
+        return Main.sessionMode.isLocked || (m >= 0 && global.display.get_monitor_in_fullscreen(m));
     }
 
     // would the next sync pause it, or bring its sound down?

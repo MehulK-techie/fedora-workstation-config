@@ -145,6 +145,12 @@ def player(path, once=False, audio=None, hwaccel=None):
             Gst.util_set_object_arg(playbin, "flags", "video+audio+deinterlace+soft-colorbalance")
             state["level"] = audio
             playbin.set_property("volume", linear(audio))
+            # straight to the sound server (PipeWire, through its PulseAudio side), as the lock
+            # screen's video does: the default output, so the speaker's tuning applies too
+            pulse = Gst.ElementFactory.make("pulsesink", None)
+            if pulse is not None:
+                pulse.set_property("client-name", "MK Live Wallpaper")
+                playbin.set_property("audio-sink", pulse)
         state["pipeline"] = playbin
         bus = playbin.get_bus()
         bus.add_signal_watch()
@@ -155,6 +161,9 @@ def player(path, once=False, audio=None, hwaccel=None):
 
         def on_message(_bus, msg):
             t = msg.type
+            if t == Gst.MessageType.ASYNC_DONE and not state.get("reported"):
+                state["reported"] = True
+                report(playbin.get_property("n-audio") > 0)
             if t == Gst.MessageType.ASYNC_DONE and state["loop"] and not state.get("segmented"):
                 state["segmented"] = True             # (gapless looping: segment seeks, no flush between)
                 segment_seek(True)
@@ -169,6 +178,17 @@ def player(path, once=False, audio=None, hwaccel=None):
         picture = Gtk.Picture(paintable=paintable, content_fit=Gtk.ContentFit.COVER, can_shrink=True)
         state["paintable"], state["picture"] = paintable, picture
         return picture
+
+    def report(has_audio):
+        # what's playing, for Quick Settings (its wallpaper volume slider shows only for a video
+        # that has a sound track): $XDG_RUNTIME_DIR/mk-live-wallpaper.json
+        try:
+            out = Path(GLib.get_user_runtime_dir()) / "mk-live-wallpaper.json"
+            tmp = out.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"path": str(path), "audio": bool(has_audio)}))
+            tmp.replace(out)
+        except OSError:
+            pass
 
     def linear(volume):
         # a slider's volume (0-1, as heard) to playbin's linear gain
@@ -294,6 +314,8 @@ def player(path, once=False, audio=None, hwaccel=None):
     def activate(a):
         try:
             child = Gtk.Picture.new_for_filename(path) if is_image else video_widget()
+            if is_image:
+                report(False)
         except Exception as e:                    # noqa: BLE001 (any failure: say why, then stop)
             print(f"mk-live-wallpaper: {e}", file=sys.stderr, flush=True)
             a.quit()

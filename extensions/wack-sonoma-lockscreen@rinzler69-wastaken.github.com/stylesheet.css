@@ -433,24 +433,38 @@
 .wack-status-sep { color: rgba(255, 255, 255, 0.5); }
 .wack-status-icon { color: rgba(255, 255, 255, 0.92); }
 
-.wack-now-playing {
+/* the lock screen's media hub (lockWidgets.js NowPlaying): frosted dark glass under the clock */
+.wack-media-hub {
   margin-top: 18px;
-  padding: 10px 12px;
-  spacing: 12px;
-  width: 340px;
-  border-radius: 18px;
-  background-color: rgba(20, 22, 30, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  width: 400px;
+  padding: 14px 20px;
+  spacing: 10px;
+  border-radius: 20px;
+  background-color: rgba(18, 22, 32, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
 }
-.wack-np-art { width: 40px; height: 40px; border-radius: 8px; background-color: rgba(255, 255, 255, 0.10); }
-.wack-np-cover-none { color: rgba(255, 255, 255, 0.7); }
-.wack-np-text { spacing: 2px; }
-.wack-np-title { font-size: 14px; font-weight: bold; color: white; }
-.wack-np-artist { font-size: 12px; color: rgba(255, 255, 255, 0.7); }
-.wack-np-controls { spacing: 4px; }
-.wack-np-button { padding: 8px; border-radius: 999px; color: white; }
-.wack-np-button:hover, .wack-np-button:focus { background-color: rgba(255, 255, 255, 0.14); }
-.wack-np-button:insensitive { color: rgba(255, 255, 255, 0.35); }
+.wack-media-row { spacing: 14px; }
+.wack-media-art { border-radius: 12px; background-color: rgba(255, 255, 255, 0.10); }
+.wack-media-art-none { color: rgba(255, 255, 255, 0.7); }
+.wack-media-text { spacing: 2px; }
+.wack-media-top { spacing: 8px; }
+.wack-media-title { font-size: 14px; font-weight: bold; color: white; }
+.wack-media-artist { font-size: 12px; color: rgba(255, 255, 255, 0.70); }
+.wack-media-badge { font-size: 10px; font-weight: bold; padding: 2px 8px; border-radius: 999px; color: white; }
+.wack-media-badge.spotify { background-color: rgba(30, 215, 96, 0.85); box-shadow: 0 0 10px rgba(30, 215, 96, 0.55); }
+.wack-media-badge.youtube { background-color: rgba(229, 25, 55, 0.88); box-shadow: 0 0 10px rgba(229, 25, 55, 0.55); }
+.wack-media-controls { spacing: 6px; }
+.wack-media-button {
+  width: 34px; height: 34px; padding: 0; border-radius: 17px; color: white;
+  background-color: rgba(255, 255, 255, 0.10); border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.wack-media-button:hover, .wack-media-button:focus { background-color: rgba(255, 255, 255, 0.24); }
+.wack-media-button:insensitive { color: rgba(255, 255, 255, 0.35); }
+.wack-media-progress { spacing: 10px; }
+.wack-media-track { height: 4px; border-radius: 2px; background-color: rgba(255, 255, 255, 0.18); }
+.wack-media-fill { height: 4px; border-radius: 2px; background-color: rgba(255, 255, 255, 0.92); }
+.wack-media-time { font-size: 11px; font-feature-settings: "tnum"; color: rgba(255, 255, 255, 0.70); }
 
 .wack-lock-power { spacing: 10px; }
 .wack-lock-power-button {

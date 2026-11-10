@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# B&O-style tuning for the laptop's built-in speakers, in PipeWire itself (`mk sound bo`).
+#
+#   mk-bo-tuning install [--now]   put the filter in front of the built-in speaker
+#                                  (--now: restart PipeWire so it applies at once; sound
+#                                  stops for a second. Otherwise: at the next login)
+#   mk-bo-tuning remove [--now]    take it out, and keep it out (sync won't bring it back)
+#   mk-bo-tuning status            installed? which speaker? in the sound path right now?
+#
+# The filter (config/pipewire/99-bang-olufsen-dsp.conf: bass shelf, mid cut, vocal presence,
+# treble air, 125 % stereo width, a -0.5 dBFS ceiling) is a WirePlumber smart filter: apps,
+# the default output, GNOME's volume slider and the volume keys stay on the speaker itself,
+# and headphones, HDMI and Bluetooth never go through it. Only a laptop with a built-in
+# speaker output of its own (an ALSA sink named ...Speaker...) gets it.
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+TEMPLATE="$HOME/.local/share/mk-workstation/config/pipewire/99-bang-olufsen-dsp.conf"
+[[ -f "$TEMPLATE" ]] || TEMPLATE="$REPO_DIR/config/pipewire/99-bang-olufsen-dsp.conf"
+TARGET="$HOME/.config/pipewire/pipewire.conf.d/99-bang-olufsen-dsp.conf"
+OPTOUT="$HOME/.config/mk-workstation/bo-tuning-off"
+
+speaker() {
+    # the built-in speaker's sink (UCM names it ...HiFi__Speaker__sink); nothing if there's none
+    pw-dump 2>/dev/null | python3 -c '
+import json, sys
+try:
+    objects = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+for o in objects:
+    p = (o.get("info") or {}).get("props") or {}
+    name = p.get("node.name", "")
+    if p.get("media.class") == "Audio/Sink" and name.startswith("alsa_output.") and "Speaker" in name:
+        print(name)
+        break'
+}
+
+restart() {
+    systemctl --user restart pipewire.service pipewire-pulse.service wireplumber.service
+    echo "[+] PipeWire restarted"
+}
+
+case "${1:-status}" in
+    install)
+        if [[ -f "$OPTOUT" && "${2:-}" != "--now" ]]; then
+            echo "[*] B&O tuning stays off (switched off with 'mk-bo-tuning remove'; 'mk-bo-tuning install --now' turns it on)"
+            exit 0
+        fi
+        rm -f "$OPTOUT"
+        name=$(speaker)
+        if [[ -z "$name" ]]; then
+            echo "[*] B&O tuning: no built-in speaker output found (headphones, HDMI and USB are left alone)"
+            exit 0
+        fi
+        mkdir -p "$(dirname "$TARGET")"
+        new=$(sed "s|__SPEAKER__|$name|" "$TEMPLATE")
+        if [[ -f "$TARGET" ]] && [[ "$(cat "$TARGET")" == "$new" ]]; then
+            echo "[*] B&O tuning already installed for $name"
+        else
+            printf '%s\n' "$new" > "$TARGET"
+            echo "[+] B&O tuning installed for $name"
+            [[ "${2:-}" == "--now" ]] || echo "    (applies at the next login, or now with: mk-bo-tuning install --now)"
+        fi
+        if [[ "${2:-}" == "--now" ]]; then restart; fi
+        ;;
+    remove)
+        rm -f "$TARGET"
+        mkdir -p "$(dirname "$OPTOUT")"
+        touch "$OPTOUT"
+        echo "[+] B&O tuning removed"
+        if [[ "${2:-}" == "--now" ]]; then restart; fi
+        ;;
+    status)
+        if [[ -f "$TARGET" ]]; then
+            echo "Installed for: $(grep 'filter.smart.target' "$TARGET" | grep -o 'alsa_output[^"]*')"
+        else
+            echo "Not installed$([[ -f "$OPTOUT" ]] && echo ' (switched off)')"
+        fi
+        dump=$(pw-dump 2>/dev/null || true)     # (whole, first: grep -q would cut pw-dump off mid-write)
+        if grep -q '"node.name": "mk_bang_olufsen_in"' <<< "$dump"; then
+            echo "Active: yes (sound to the speaker goes through it)"
+        else
+            echo "Active: no"
+        fi
+        ;;
+    *)
+        echo "Usage: mk-bo-tuning install [--now] | remove [--now] | status" >&2
+        exit 2
+        ;;
+esac

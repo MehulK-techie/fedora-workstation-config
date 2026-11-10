@@ -49,7 +49,44 @@ class Player {
             title: m['xesam:title'] ?? '',
             artist: Array.isArray(artist) ? artist.join(', ') : artist ?? '',
             art: m['mpris:artUrl'] ?? '',
+            length: Number(m['mpris:length'] ?? 0),        // µs (0: unknown, a live stream)
+            trackId: m['mpris:trackid'] ?? '',
+            url: m['xesam:url'] ?? '',
         };
+    }
+
+    // where it comes from, for a badge: 'spotify', 'youtube' or null
+    get source() {
+        if (/spotify/i.test(this.name))
+            return 'spotify';
+        const {url, title} = this.metadata;
+        return /youtu\.?be/i.test(url) || /youtube/i.test(title) || /youtube/i.test(this._prop('Identity') ?? '')
+            ? 'youtube' : null;
+    }
+
+    get canSeek() {
+        return this._prop('CanSeek') ?? false;
+    }
+
+    // the position now (µs), asked for (players don't announce it as it moves)
+    position(callback) {
+        if (!this._proxy)
+            return;
+        Gio.DBus.session.call(this.name, PATH, 'org.freedesktop.DBus.Properties', 'Get',
+            new GLib.Variant('(ss)', [IFACE, 'Position']), new GLib.VariantType('(v)'), Gio.DBusCallFlags.NONE, 1000,
+            this._cancel, (bus, res) => {
+                try {
+                    callback(Number(bus.call_finish(res).deepUnpack()[0].deepUnpack()));
+                } catch {}
+            });
+    }
+
+    seek(us) {
+        const {trackId} = this.metadata;
+        if (!trackId || !this._proxy)
+            return;
+        this._proxy.call('SetPosition', new GLib.Variant('(ox)', [trackId, Math.round(us)]),
+            Gio.DBusCallFlags.NONE, -1, null, null);
     }
 
     get canGoNext() {

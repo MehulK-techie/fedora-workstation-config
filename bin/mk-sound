@@ -10,6 +10,9 @@
 #   mk sound on       install the profile, load it now and at every login
 #   mk sound off      stop processing (EasyEffects stays installed)
 #   mk sound status   is it on, and which profile
+#   mk sound bo [install [--now] | remove [--now] | status]
+#                     the B&O tuning built into PipeWire instead (bin/mk-bo-tuning);
+#                     use one or the other, not both
 set -euo pipefail
 
 PRESET="MK Laptop Speakers"
@@ -18,6 +21,12 @@ SOURCE="$HOME/.local/share/mk-workstation/assets/sound/$PRESET.json"
 [[ -f "$SOURCE" ]] || SOURCE="$REPO_DIR/assets/sound/$PRESET.json"
 PRESET_DIR="$HOME/.local/share/easyeffects/output"
 AUTOSTART="$HOME/.config/autostart/mk-sound.desktop"
+
+# mk sound bo [install|remove|status]: the PipeWire B&O tuning (no EasyEffects needed)
+if [[ "${1:-}" == bo ]]; then
+    shift
+    exec "$HOME/.local/bin/mk-bo-tuning" "${@:-status}"
+fi
 
 if ! command -v easyeffects &> /dev/null; then
     echo "[-] EasyEffects isn't installed. Run: sudo dnf install easyeffects (or sudo ./setup.sh)" >&2

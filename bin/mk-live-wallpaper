@@ -40,6 +40,7 @@ from pathlib import Path
 CONF = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mk" / "wallpaper.json"
 TITLE = "MK Live Wallpaper"
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".avif", ".heic", ".svg", ".bmp", ".gif", ".tif", ".tiff"}
+MAX_FPS = 30
 VA_DECODERS = ("vah264dec", "vah265dec", "vavp8dec", "vavp9dec", "vaav1dec", "vampeg2dec",
                "vaapih264dec", "vaapih265dec", "vaapivp9dec", "vaapiav1dec")
 
@@ -125,6 +126,14 @@ def player(path, once=False, audio=None, hwaccel=None):
             sink.set_property("sink", gtksink)
         playbin.set_property("uri", Gst.filename_to_uri(path))
         playbin.set_property("video-sink", sink)
+        # at most 30 frames a second (a 50 or 60 fps video drops the rest, evenly): half the
+        # repaints for GNOME Shell, which draws the wallpaper (and any blur over it) per frame.
+        # No caps filter: the decoder's frames stay in GPU memory (DMA-BUF), never copied out.
+        rate = Gst.ElementFactory.make("videorate", None)
+        if rate is not None:
+            rate.set_property("max-rate", MAX_FPS)
+            rate.set_property("drop-only", True)
+            playbin.set_property("video-filter", rate)
         if audio is None:
             # no audio at all: the audio stream isn't decoded, and nothing ever connects to
             # PipeWire / PulseAudio (a fakesink stands in should a file force one)

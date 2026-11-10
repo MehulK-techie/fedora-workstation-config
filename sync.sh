@@ -651,6 +651,16 @@ if [[ -n "$old_desktop" ]] &&
     ext_set "$MK_LOCK" "$LOCK_SCHEMA" desktop-wallpaper-path "$old_desktop"
     echo "    [+] Desktop live wallpaper: now played by WACK Sonoma Live Lockscreen"
 fi
+# v23: the desktop video is decoded on the graphics card (VA-API), once: a CPU-decoded HD
+# video made GNOME Shell drop frames under the dock and the top bar. Choosing "Processor"
+# again afterwards (Suite settings › Video Decoding) sticks.
+APPLIED_V23="$HOME/.config/mk-workstation/extensions-applied"
+if ! grep -qxF "set:desktop-hwaccel-vaapi" "$APPLIED_V23" 2>/dev/null; then
+    ext_set "$MK_LOCK" "$LOCK_SCHEMA" desktop-hwaccel vaapi
+    mkdir -p "$(dirname "$APPLIED_V23")"
+    echo "set:desktop-hwaccel-vaapi" >> "$APPLIED_V23"
+    echo "    [+] Desktop live wallpaper: decoded on the graphics card (VA-API)"
+fi
 # (Its "Sync Refresh Rate to GDM" button runs /usr/local/libexec/mk-gdm-monitors,
 # root-owned, which setup.sh installs; an earlier copy in ~/.local/libexec goes.)
 rm -f "$HOME/.local/libexec/mk/setup-system-optimizations.sh"
@@ -984,6 +994,9 @@ install -Dm644 "$SCRIPT_DIR/config/wireplumber/51-mk-follow-default.conf" \
 # the built-in speaker outranks HDMI and virtual outputs at every boot (read at the next login)
 install -Dm644 "$SCRIPT_DIR/config/wireplumber/52-prefer-hardware-speaker.conf" \
     "$HOME/.config/wireplumber/wireplumber.conf.d/52-prefer-hardware-speaker.conf"
+# B&O-style tuning for the built-in speakers (a PipeWire smart filter; bin/mk-bo-tuning).
+# Installed here, applied at the next login: a sync never restarts the sound.
+"$HOME/.local/bin/mk-bo-tuning" install || echo "    [*] B&O tuning: not installed this time"
 cat > "$HOME/.config/systemd/user/mk-audio-init.service" << 'UNIT'
 [Unit]
 Description=MK Workstation: sound for every app at login (bin/mk-audio-init)

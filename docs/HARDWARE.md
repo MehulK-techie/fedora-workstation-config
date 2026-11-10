@@ -130,6 +130,26 @@ It starts with your session; adjust anything live in the EasyEffects app, or
 `mk sound off` to go back. Keep the system volume at or under 100%: the profile
 already adds loudness.
 
+**B&O tuning in PipeWire itself (no EasyEffects, installed by `mk sync`).** A filter
+in front of the built-in speaker only (`bin/mk-bo-tuning`, `config/pipewire/99-bang-olufsen-dsp.conf`):
+apps, the default output, GNOME's volume slider and the volume keys stay on the
+speaker, and headphones, HDMI and Bluetooth never go through it. Use it or
+`mk sound on`, not both.
+
+| Stage | Setting |
+| :--- | :--- |
+| Headroom | −4 dB first, so the boosts don't hit the ceiling |
+| Bass warmth | Low shelf +5 dB at 95 Hz (Q 0.8), +2.5 dB at 140 Hz |
+| Less hollow | −1.8 dB at 380 Hz (Q 1.2) |
+| Voices | +3.2 dB at 2.8 kHz, +2 dB at 4.2 kHz |
+| Air | High shelf +3.5 dB at 10.5 kHz (Q 0.7) |
+| Width | Stereo widened to 125 % (mid/side) |
+| Ceiling | Hard −0.5 dBFS clamp (PipeWire has no built-in lookahead limiter, and no limiter plugin is installed) |
+
+`mk sound bo status` shows whether it's in the sound path; `mk sound bo install --now`
+applies it at once (sound stops for a second), `mk sound bo remove --now` takes it out
+and keeps it out.
+
 **Advanced, HP ENVY x360 13-ay0xxx (Realtek ALC245, `103c:876e`):** Linux
 drives only one speaker pin (`0x17`); the firmware marks pin `0x14` as unused.
 On some HP B&O models the second (bass) pair sits on such a pin and needs a

@@ -30,6 +30,8 @@ install -Dm644 "$SCRIPT_DIR/config/wireplumber/51-mk-follow-default.conf" \
     "$HOME/.config/wireplumber/wireplumber.conf.d/51-mk-follow-default.conf"
 install -Dm644 "$SCRIPT_DIR/config/wireplumber/52-prefer-hardware-speaker.conf" \
     "$HOME/.config/wireplumber/wireplumber.conf.d/52-prefer-hardware-speaker.conf"
+# B&O-style tuning for the built-in speakers (loaded by the restart below)
+"$SCRIPT_DIR/bin/mk-bo-tuning" install || true
 
 # Easy Effects off at login (idempotent: a switched-off entry is left alone)
 for entry in "$HOME/.config/autostart/mk-sound.desktop" "$HOME/.config/autostart/com.github.wwmm.easyeffects.desktop"; do

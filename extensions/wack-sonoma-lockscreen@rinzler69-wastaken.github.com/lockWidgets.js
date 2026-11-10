@@ -87,61 +87,157 @@ class StatusPill {
     }
 }
 
-// ----- Now Playing
+// ----- the media hub: what's playing (Spotify, a YouTube tab, any MPRIS player), under the clock
+// Hidden while nothing plays; fades in (250 ms) the moment something starts, and stays (paused)
+// for a player that played while locked, so you can start it again. Cover (52 px, rounded),
+// title and artist (cut short, never shifting the card), a Spotify / YouTube badge, Previous /
+// Play-Pause / Next, and a thin progress bar you can drag (01:24 / 03:45).
+const FADE = 250;
+const mmss = us => {
+    const t = Math.max(0, Math.floor(us / 1e6));
+    return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+};
+
 class NowPlaying {
     constructor() {
-        this.actor = new St.BoxLayout({style_class: 'wack-now-playing', x_align: Clutter.ActorAlign.CENTER,
-            visible: false});
-        this._art = new St.Bin({style_class: 'wack-np-art', y_align: Clutter.ActorAlign.CENTER});
+        this.actor = new St.BoxLayout({style_class: 'wack-media-hub', orientation: Clutter.Orientation.VERTICAL,
+            x_align: Clutter.ActorAlign.CENTER, visible: false, opacity: 0, reactive: true});
+        const row = new St.BoxLayout({style_class: 'wack-media-row'});
+        this._art = new St.Widget({style_class: 'wack-media-art', width: 52, height: 52, y_align: Clutter.ActorAlign.CENTER});
         const text = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true,
-            y_align: Clutter.ActorAlign.CENTER, style_class: 'wack-np-text'});
-        this._title = new St.Label({style_class: 'wack-np-title'});
-        this._artist = new St.Label({style_class: 'wack-np-artist'});
-        this._title.clutter_text.ellipsize = this._artist.clutter_text.ellipsize = 3;
-        text.add_child(this._title);
+            y_align: Clutter.ActorAlign.CENTER, style_class: 'wack-media-text'});
+        const top = new St.BoxLayout({style_class: 'wack-media-top'});
+        this._title = new St.Label({style_class: 'wack-media-title', x_expand: true});
+        this._badge = new St.Label({style_class: 'wack-media-badge', y_align: Clutter.ActorAlign.CENTER, visible: false});
+        top.add_child(this._title);
+        top.add_child(this._badge);
+        this._artist = new St.Label({style_class: 'wack-media-artist'});
+        this._title.clutter_text.ellipsize = this._artist.clutter_text.ellipsize = 3;    // (END)
+        text.add_child(top);
         text.add_child(this._artist);
-        const controls = new St.BoxLayout({style_class: 'wack-np-controls', y_align: Clutter.ActorAlign.CENTER});
+        const controls = new St.BoxLayout({style_class: 'wack-media-controls', y_align: Clutter.ActorAlign.CENTER});
         const button = (icon, label, method) => {
-            const b = new St.Button({style_class: 'wack-np-button', can_focus: true, accessible_name: label,
+            const b = new St.Button({style_class: 'wack-media-button', can_focus: true, accessible_name: label,
                 child: new St.Icon({icon_name: icon, icon_size: 16})});
-            b.connect('clicked', () => this._media.active?.call(method));
+            b.connect('clicked', () => this._player?.call(method));
             controls.add_child(b);
             return b;
         };
         this._prev = button('media-skip-backward-symbolic', 'Previous', 'Previous');
         this._play = button('media-playback-start-symbolic', 'Play or pause', 'PlayPause');
         this._next = button('media-skip-forward-symbolic', 'Next', 'Next');
-        [this._art, text, controls].forEach(a => this.actor.add_child(a));
+        [this._art, text, controls].forEach(a => row.add_child(a));
+        // the progress bar: a thin track, the played part in white; click or drag to seek
+        const progress = new St.BoxLayout({style_class: 'wack-media-progress'});
+        this._track = new St.Widget({style_class: 'wack-media-track', x_expand: true, y_align: Clutter.ActorAlign.CENTER,
+            reactive: true, layout_manager: new Clutter.BinLayout()});
+        this._fill = new St.Widget({style_class: 'wack-media-fill', x_align: Clutter.ActorAlign.START, width: 0});
+        this._track.add_child(this._fill);
+        this._time = new St.Label({style_class: 'wack-media-time', y_align: Clutter.ActorAlign.CENTER});
+        progress.add_child(this._track);
+        progress.add_child(this._time);
+        const seek = (_a, event) => {
+            const p = this._player, len = p?.metadata.length ?? 0;
+            if (!p?.canSeek || len <= 0)
+                return Clutter.EVENT_PROPAGATE;
+            const [x] = event.get_coords();
+            const [tx] = this._track.get_transformed_position();
+            const frac = Math.min(1, Math.max(0, (x - tx) / Math.max(1, this._track.width)));
+            p.seek(frac * len);
+            this._show(frac * len, len);
+            return Clutter.EVENT_STOP;
+        };
+        this._track.connect('button-press-event', seek);
+        this._track.connect('motion-event', (a, event) =>
+            event.get_state() & Clutter.ModifierType.BUTTON1_MASK ? seek(a, event) : Clutter.EVENT_PROPAGATE);
+        this.actor.add_child(row);
+        this.actor.add_child(progress);
+        this._played = new Set();                       // players that played while locked
         this._media = new MediaWatcher();
         this._media.connect('changed', () => this._sync());
+        this._tick = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+            this._poll();
+            return GLib.SOURCE_CONTINUE;
+        });
         this._sync();
     }
 
     _sync() {
         if (!this.actor)
             return;
-        const player = this._media.active;
-        this.actor.visible = Boolean(player);
-        if (!player)
+        const playing = [...this._media._players.values()].find(p => p.playing);
+        if (playing)
+            this._played.add(playing.name);
+        const player = playing ?? this._media.active;
+        const show = Boolean(player && (player.playing || this._played.has(player.name)));
+        this._player = show ? player : null;
+        this._fadeTo(show);
+        if (!show)
             return;
         const {title, artist, art} = player.metadata;
         this._title.text = title || 'Now Playing';
         this._artist.text = artist;
         this._artist.visible = artist !== '';
+        const source = player.source;
+        this._badge.visible = Boolean(source);
+        this._badge.text = source === 'spotify' ? 'Spotify' : 'YouTube';
+        this._badge.style_class = `wack-media-badge ${source ?? ''}`.trim();
         this._play.child.icon_name = player.playing ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
         this._prev.reactive = player.canGoPrevious;
         this._next.reactive = player.canGoNext;
         if (art !== this._artUrl) {
             this._artUrl = art;
-            const gicon = art.startsWith('file://') || art.startsWith('/')
-                ? Gio.FileIcon.new(art.startsWith('/') ? Gio.File.new_for_path(art) : Gio.File.new_for_uri(art)) : null;
-            this._art.set_child(gicon
-                ? new St.Icon({gicon, icon_size: 40, style_class: 'wack-np-cover'})
-                : new St.Icon({icon_name: 'audio-x-generic-symbolic', icon_size: 20, style_class: 'wack-np-cover-none'}));
+            const uri = art.startsWith('/') ? `file://${art}` : art;
+            this._art.style = uri.startsWith('file://')
+                ? `background-image: url("${uri.replace(/"/g, '%22')}"); background-size: cover;` : null;
+            this._art.destroy_all_children();
+            if (!this._art.style)
+                this._art.add_child(new St.Icon({icon_name: 'audio-x-generic-symbolic', icon_size: 22,
+                    style_class: 'wack-media-art-none', x_expand: true, y_expand: true,
+                    x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER}));
+        }
+        this._poll();
+    }
+
+    _fadeTo(show) {
+        if (show === this._shown)
+            return;
+        this._shown = show;
+        this.actor.remove_transition('opacity');
+        if (show) {
+            this.actor.show();
+            this.actor.ease({opacity: 255, duration: FADE, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        } else {
+            this.actor.ease({opacity: 0, duration: FADE, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                onComplete: () => this.actor && !this._shown && this.actor.hide()});
         }
     }
 
+    _poll() {
+        const p = this._player;
+        if (!p || !this.actor)
+            return;
+        const len = p.metadata.length;
+        if (len <= 0) {
+            this._show(0, 0);
+            return;
+        }
+        p.position(us => this._player === p && this._show(us, len));
+    }
+
+    _show(us, len) {
+        if (!this.actor)
+            return;
+        this._track.visible = len > 0;
+        this._time.text = len > 0 ? `${mmss(us)} / ${mmss(len)}` : 'Live';
+        if (len > 0)
+            this._fill.width = Math.round(Math.min(1, us / len) * this._track.width);
+    }
+
     destroy() {
+        if (this._tick)
+            GLib.source_remove(this._tick);
+        this._tick = 0;
         this._media.destroy();
         this.actor.destroy();
         this.actor = null;

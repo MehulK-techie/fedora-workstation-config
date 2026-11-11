@@ -740,12 +740,13 @@ export class ClipboardHistory {
         this._view.selected_at = Date.now();
         this._saveView();
         if (item.image) {
-            try {
-                const [, data] = GLib.file_get_contents(item.image);
-                this._clipboard.set_content(St.ClipboardType.CLIPBOARD, 'image/png', new GLib.Bytes(data));
-            } catch (e) {
-                return;
-            }
+            // (read off the compositor's thread: a picture can be megabytes)
+            Gio.File.new_for_path(item.image).load_bytes_async(null, (file, res) => {
+                try {
+                    const [bytes] = file.load_bytes_finish(res);
+                    this._clipboard?.set_content(St.ClipboardType.CLIPBOARD, 'image/png', bytes);
+                } catch {}                           // (the file's gone: nothing to copy)
+            });
         } else {
             this._clipboard.set_text(St.ClipboardType.CLIPBOARD, item.text);
         }

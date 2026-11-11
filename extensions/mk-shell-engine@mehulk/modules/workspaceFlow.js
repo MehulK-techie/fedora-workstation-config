@@ -5,12 +5,39 @@
 // wallpaper stays pinned behind it all (WACK Sonoma Live Lockscreen's desktop.js). While a swipe
 // is under your fingers it follows them exactly.
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const DURATION = 440;
 const DEPTH = 0.97;        // how far a workspace eases back as it leaves / comes in
 const DIM = 225;           // and its opacity at that point
 const CURVE = Clutter.AnimationMode.EASE_OUT_QUINT;
+
+// Blur my Shell's dynamic panel blur re-blurs on every frame whatever moves under the bar. While
+// workspaces slide it's rested: its blur layer (never its settings, which would rebuild the
+// actors mid-motion) is hidden for those 440 ms, the bar keeping its frosted tint, and shown
+// again the moment the slide lands. Only the dynamic kind: a static blur costs nothing.
+let restTimer = 0;
+function restPanelBlur(rest) {
+    if (restTimer) {
+        GLib.source_remove(restTimer);
+        restTimer = 0;
+    }
+    if (rest) {                                      // (never left hidden: back after 1.5 s whatever happens)
+        restTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+            restTimer = 0;
+            restPanelBlur(false);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+    try {
+        for (const actors of global.blur_my_shell?._panel_blur?.actors_list ?? []) {
+            const layer = actors?.widgets?.background_group ?? actors?.widgets?.background;
+            if (layer && !actors.static_blur)
+                layer.visible = !rest;
+        }
+    } catch {}                                       // (Blur my Shell changed shape: left alone)
+}
 
 export class WorkspaceFlow {
     constructor() {
@@ -30,7 +57,25 @@ export class WorkspaceFlow {
                 return result;
             };
         }
+        // (the blur rests from the first frame of a slide, keyboard or swipe, to its last)
+        this._savedBegin = controller._switchWorkspaceBegin;
+        this._savedFinish = controller._finishWorkspaceSwitch;
+        const savedBegin = this._savedBegin, savedFinish = this._savedFinish;
+        if (savedBegin) {
+            controller._switchWorkspaceBegin = function (...args) {
+                restPanelBlur(true);
+                return savedBegin.apply(this, args);
+            };
+        }
+        if (savedFinish) {
+            controller._finishWorkspaceSwitch = function (...args) {
+                const result = savedFinish.apply(this, args);
+                restPanelBlur(false);
+                return result;
+            };
+        }
         controller.animateSwitch = function (from, to, direction, onComplete) {
+            restPanelBlur(true);
             const result = saved.call(this, from, to, direction, onComplete);
             try {
                 retime(this._switchData, from, to);
@@ -42,6 +87,14 @@ export class WorkspaceFlow {
     }
 
     destroy() {
+        restPanelBlur(false);
+        for (const [name, saved] of [['_switchWorkspaceBegin', this._savedBegin], ['_finishWorkspaceSwitch', this._savedFinish]]) {
+            if (!saved || this._controller[name] === saved)
+                continue;
+            delete this._controller[name];
+            if (this._controller[name] !== saved)
+                this._controller[name] = saved;
+        }
         if (this._savedEnd && this._controller._switchWorkspaceEnd !== this._savedEnd) {
             delete this._controller._switchWorkspaceEnd;
             if (this._controller._switchWorkspaceEnd !== this._savedEnd)

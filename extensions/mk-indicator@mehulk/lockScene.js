@@ -132,23 +132,31 @@ export class LockScene {
         const mtime = info.get_attribute_uint64('time::modified') * 1e6 + info.get_attribute_uint32('time::modified-usec');
         if (mtime === this._lastMtime || info.get_size() !== this._w * this._h * 4)
             return;
+        if (this._reading)
+            return;                                  // (the last frame is still being read: skip this one)
         this._lastMtime = mtime;
-        let bytes;
-        try {
-            bytes = GLib.file_get_contents(FRAME)[1];
-        } catch (e) {
-            return;
-        }
-        if (bytes.length !== this._w * this._h * 4)
-            return;
-        const cogl = global.stage.context.get_backend().get_cogl_context();
-        this._content.set_bytes(cogl, new GLib.Bytes(bytes), Cogl.PixelFormat.BGRA_8888_PRE,
-            this._w, this._h, this._w * 4);
-        if (!this._shown) {
-            this._shown = true;
-            this._actor.ease({opacity: Math.round(255 * (1 - (this._dialog._adjustment.value ?? 0))),
-                duration: 600, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-        }
+        this._reading = true;
+        const w = this._w, h = this._h;
+        // the frame (megabytes) is read off the compositor's thread, shown when it's in
+        Gio.File.new_for_path(FRAME).load_bytes_async(null, (file, res) => {
+            this._reading = false;
+            let bytes;
+            try {
+                [bytes] = file.load_bytes_finish(res);
+            } catch {
+                return;
+            }
+            if (!this._content || !this._actor || !this._dialog || w !== this._w || h !== this._h ||
+                bytes.get_size() !== w * h * 4)
+                return;
+            const cogl = global.stage.context.get_backend().get_cogl_context();
+            this._content.set_bytes(cogl, bytes, Cogl.PixelFormat.BGRA_8888_PRE, w, h, w * 4);
+            if (!this._shown) {
+                this._shown = true;
+                this._actor.ease({opacity: Math.round(255 * (1 - (this._dialog._adjustment.value ?? 0))),
+                    duration: 600, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            }
+        });
     }
 
     _stopRenderer() {

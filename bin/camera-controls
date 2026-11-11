@@ -691,6 +691,8 @@ class Booth(Adw.ApplicationWindow):
         if now - self.last_shown < 1 / 60:  # up to 60 fps (as fast as the camera sends)
             return GLib.SOURCE_REMOVE
         self.last_shown = now
+        if self.grid_mode:
+            return GLib.SOURCE_REMOVE              # (nothing on the window's thread: see _grid_worker)
         img = self._latest()
         if img is None:
             return GLib.SOURCE_REMOVE
@@ -701,19 +703,7 @@ class Booth(Adw.ApplicationWindow):
                 self.last_track = now
                 self.tracker.update(small, now)
         if self.grid_mode:
-            # the frame shrunk ONCE to a tile; tiles refreshed round robin within 14 ms a tick
-            tile = small.resize((TILE_W, TILE_H), Image.Resampling.BILINEAR)
-            shown = [c for c in self.grid_cells if c[2] is None or c[2].get_visible()]
-            start, budget = time.perf_counter(), 0.014
-            for n in range(len(shown)):
-                key, pic, _cell = shown[(self.tile_next + n) % len(shown)]
-                pic.set_paintable(to_texture(render_look(tile, key, self.tracker)))
-                if time.perf_counter() - start > budget:
-                    self.tile_next = (self.tile_next + n + 1) % max(1, len(shown))
-                    break
-            else:
-                self.tile_next = 0
-            return GLib.SOURCE_REMOVE
+            return GLib.SOURCE_REMOVE              # (the grid's own worker does everything: _grid_worker)
         # the look is worked out on a worker thread (the window never waits on a filter);
         # a frame that comes while one is still being worked on is skipped, never queued
         if not getattr(self, "_rendering", False):
@@ -764,6 +754,72 @@ class Booth(Adw.ApplicationWindow):
     def _set_grid(self, on):
         self.grid_mode = on
         self.view_stack.set_visible_child_name("grid" if on else "single")
+        if on:
+            self._grid_start()
+        # (off: the worker sees grid_mode and ends; the tick callback removes itself. Nothing runs.)
+
+    # ----- the gallery's engine: every tile live, none of it on the window's thread
+    # A worker thread (only while the gallery shows) takes the newest camera frame, shrinks it
+    # ONCE to a tile (192 x 108), works out the visible looks in parallel on a small pool (PIL,
+    # NumPy and OpenCV let go of Python's lock while they compute) and leaves the finished
+    # textures in a tray. The window picks the tray up on its frame clock: one cheap swap per
+    # frame, never a filter. Back in the single view the worker has ended: no idle cost.
+    def _grid_start(self):
+        if getattr(self, "_grid_thread", None) and self._grid_thread.is_alive():
+            return
+        self._grid_tray, self._grid_lock = {}, threading.Lock()
+        self._grid_visible = [key for key, _pic, cell in self.grid_cells if cell is None or cell.get_visible()]
+        self._grid_pics = {key: pic for key, pic, _cell in self.grid_cells}
+        self._grid_thread = threading.Thread(target=self._grid_worker, daemon=True)
+        self._grid_thread.start()
+        self.gallery.add_tick_callback(self._grid_tick)
+
+    def _grid_tick(self, _widget, _clock):
+        if not self.grid_mode:
+            return GLib.SOURCE_REMOVE
+        # (which tiles show: asked of GTK here, on its own thread, for the worker to read)
+        self._grid_visible = [key for key, _pic, cell in self.grid_cells if cell is None or cell.get_visible()]
+        with self._grid_lock:
+            tray, self._grid_tray = self._grid_tray, {}
+        for key, texture in tray.items():
+            self._grid_pics[key].set_paintable(texture)
+        return GLib.SOURCE_CONTINUE
+
+    def _grid_worker(self):
+        from concurrent.futures import ThreadPoolExecutor
+        pool = ThreadPoolExecutor(max_workers=max(2, min(4, (os.cpu_count() or 4) - 1)))
+        tracker, last_track = self.tracker, 0.0
+
+        def one(args):
+            key, tile = args
+            try:
+                return key, to_texture(render_look(tile, key, tracker))
+            except Exception:                      # noqa: BLE001 (one look failing leaves its tile as it was)
+                return key, None
+        try:
+            while self.grid_mode and self.pipeline is not None:
+                start = time.monotonic()
+                img = self._latest()
+                keys = list(self._grid_visible)
+                if img is None or not keys:
+                    time.sleep(0.03)
+                    continue
+                tile = img.resize((TILE_W, TILE_H), Image.Resampling.BILINEAR)
+                # the face and hands for the AR tiles, 20 times a second at most
+                if start - last_track > 1 / 20 and any(k in booth_ar.AR_LOOKS for k in keys):
+                    last_track = start
+                    try:                           # (on a preview-sized copy: a tile is too small to find a face in)
+                        tracker.update(img.resize((PREVIEW_W, round(PREVIEW_W * img.height / img.width)),
+                                                  Image.Resampling.BILINEAR), start)
+                    except Exception:              # noqa: BLE001
+                        pass
+                done = {key: tex for key, tex in pool.map(one, [(k, tile) for k in keys]) if tex is not None}
+                with self._grid_lock:
+                    self._grid_tray.update(done)
+                # as fast as the looks allow, 60 passes a second at most
+                time.sleep(max(0.0, 1 / 60 - (time.monotonic() - start)))
+        finally:
+            pool.shutdown(wait=False)
 
     def _pick_from_grid(self, key):
         self.look_buttons[key].set_active(True)

@@ -310,6 +310,10 @@ vm.swappiness = 180
 vm.page-cluster = 0
 # keep directory and inode caches a bit longer
 vm.vfs_cache_pressure = 50
+# reclaim in the background, early and steadily (kswapd), instead of stalling whichever
+# program asks for memory next (the desktop, mid-animation): no sudden boosts, a wider margin
+vm.watermark_boost_factor = 0
+vm.watermark_scale_factor = 125
 # write back in small batches: no multi-second stalls after a big copy
 vm.dirty_bytes = 268435456
 vm.dirty_background_bytes = 67108864
@@ -318,12 +322,55 @@ vm.dirty_background_bytes = 67108864
 fs.inotify.max_user_watches = 524288
 fs.inotify.max_user_instances = 1024
 SYSCTL
+# A sysctl file that sorts after ours and sets swappiness back (99-swappiness.conf: 10 made the
+# kernel throw out programs' code pages under pressure instead of compressing idle memory
+# into zram: hitches whenever RAM filled up). Moved aside, never deleted; an older .bak is kept.
+stray=/etc/sysctl.d/99-swappiness.conf
+if [[ -f "$stray" ]]; then
+    if [[ -e "$stray.bak" ]]; then
+        mv "$stray" "$stray.bak.$(date +%Y%m%d%H%M%S)"
+    else
+        mv "$stray" "$stray.bak"
+    fi
+    echo "    [+] Moved aside $stray (it overrode the zram swappiness)"
+fi
 if swapon --show=NAME --noheadings 2> /dev/null | grep -q zram; then
     sysctl --system > /dev/null && echo "    [+] Applied (zram swap found)"
 else
     # Without zram, swapping goes to disk: keep the kernel's usual eagerness.
     sed -i 's/^vm.swappiness = 180/vm.swappiness = 60/; s/^vm.page-cluster = 0/vm.page-cluster = 3/' "$SYSCTL_FILE"
     sysctl --system > /dev/null && echo "    [+] Applied (disk swap: swappiness 60)"
+fi
+
+# The desktop's own memory, kept: GNOME Shell, the compositor's threads and PipeWire live in
+# the session slice, which uresourced (Fedora's own) shields from reclaim for the person at
+# the computer, by default only 250 MB of it. Raised to what that slice really uses (~600 MB):
+# 512 MB never reclaimed, up to 1 GB reclaimed last. A build or a browser filling the RAM
+# then pages out its own memory, not the desktop's.
+URES=/etc/uresourced.conf
+if [[ -f "$URES" ]]; then
+    [[ -e "$URES.bak" ]] || cp -a "$URES" "$URES.bak"
+    set_ures() {    # set_ures SECTION KEY VALUE: the key in that section, uncommented, once
+        local section=$1 key=$2 value=$3
+        if sed -n "/^\[$section\]/,/^\[/p" "$URES" | grep -qE "^#?$key="; then
+            sed -i "/^\[$section\]/,/^\[/ s|^#\?$key=.*|$key=$value|" "$URES"
+        else
+            sed -i "/^\[$section\]/a $key=$value" "$URES"
+        fi
+    }
+    set_ures Global MaxMemoryMin "10%"
+    set_ures Global MaxMemoryLow "15%"
+    set_ures ActiveUser MemoryMin 512M
+    set_ures ActiveUser MemoryLow 1G
+    systemctl try-restart uresourced.service &> /dev/null || true
+    echo "    [+] Desktop session memory protected (512 MB kept, 1 GB reclaimed last)"
+fi
+# The kernel's page ageing (MGLRU): pages used in the last second are never reclaimed, which
+# stops the thrash-and-freeze when memory runs out (the out-of-memory killer acts instead).
+if [[ -e /sys/kernel/mm/lru_gen/min_ttl_ms ]]; then
+    echo 'w /sys/kernel/mm/lru_gen/min_ttl_ms - - - - 1000' > /etc/tmpfiles.d/mk-lru-gen.conf
+    systemd-tmpfiles --create /etc/tmpfiles.d/mk-lru-gen.conf &> /dev/null || true
+    echo "    [+] Recently used memory is never reclaimed (MGLRU min_ttl 1 s)"
 fi
 
 # 8. Firmware: report available updates, never flash automatically

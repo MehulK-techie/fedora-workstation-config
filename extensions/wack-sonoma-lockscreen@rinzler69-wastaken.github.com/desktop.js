@@ -33,6 +33,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
+import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as WorkspaceAnimation from 'resource:///org/gnome/shell/ui/workspaceAnimation.js';
 import { OtherMedia } from './otherMedia.js';
@@ -42,6 +43,7 @@ const LOG = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-live-wallpaper.
 const KEYS = ['desktop-wallpaper-path', 'desktop-hwaccel', 'desktop-audio-enabled'];
 const FADE_OUT = 350, FADE_IN = 300;          // ms: the sound's ramps, out and in
 const CLONE_NAME = 'mk-live-wallpaper';       // the one live wallpaper in the background layer
+const BLEND = 52;                              // px: the bottom blend into black, behind the dock
 
 // Switching workspaces (Super+PageUp/PageDown, a swipe, the grid): GNOME slides a copy of
 // each workspace, every one on a still background of its own, made fresh for the switch
@@ -376,6 +378,8 @@ export class DesktopWallpaper {
         this._scale();
         this._frame?.set_position(m.x, m.y);
         this._frame?.set_size(m.width, m.height);
+        this._dim?.set_size(m.width, m.height);
+        this._blend?.set({y: m.height - BLEND, width: m.width});
         this._clone?.set_size(m.width, m.height);
         this._unbar();
     }
@@ -398,6 +402,14 @@ export class DesktopWallpaper {
             x: m.x, y: m.y, width: m.width, height: m.height});
         this._clone = new Clutter.Clone({source: actor, reactive: false, width: m.width, height: m.height});
         this._frame.add_child(this._clone);
+        // over the video: a faint ambient dim (as on the lock screen, so windows, the top bar and
+        // the dock sit on it with contrast), and a soft blend into black along the bottom 52 px,
+        // behind the dock: the video's lower edge never ends on a hard line
+        this._dim = new St.Widget({style_class: 'mk-wallpaper-dim', reactive: false, width: m.width, height: m.height});
+        this._blend = new St.Widget({style_class: 'mk-wallpaper-bottom-blend', reactive: false,
+            x: 0, y: m.height - BLEND, width: m.width, height: BLEND});
+        this._frame.add_child(this._dim);
+        this._frame.add_child(this._blend);
         layer.insert_child_at_index(this._frame, 0);
         this._watchState();
         // GNOME's still wallpaper on that monitor turns fully transparent while the video shows,
@@ -492,7 +504,7 @@ export class DesktopWallpaper {
         this._stateMonitor = null;
         this._clone?.disconnectObject(this);
         this._frame?.destroy();                      // (and the copy in it)
-        this._frame = this._clone = this._coverActor = null;
+        this._frame = this._clone = this._coverActor = this._dim = this._blend = null;
     }
 
     _scale() {

@@ -925,6 +925,9 @@ gsettings set org.gnome.desktop.peripherals.touchpad click-method 'fingers'
 gsettings set org.gnome.desktop.peripherals.touchpad tap-and-drag-lock false
 gsettings set org.gnome.desktop.peripherals.touchpad accel-profile 'default'
 gsettings set org.gnome.desktop.interface show-battery-percentage true
+# behind any wallpaper: solid black (never a colour seam at an edge of a live wallpaper)
+gsettings set org.gnome.desktop.background primary-color '#000000'
+gsettings set org.gnome.desktop.background color-shading-type 'solid'
 gsettings set org.gnome.desktop.interface clock-show-weekday true
 gsettings set org.gnome.settings-daemon.plugins.color night-light-enabled true
 

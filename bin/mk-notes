@@ -4679,14 +4679,37 @@ class NotesWindow(Adw.ApplicationWindow):
         self.sel_card = Gtk.Popover(child=row, autohide=False, has_arrow=True, position=Gtk.PositionType.TOP,
                                     css_classes=["mk-sel-card"])
         self.sel_card.set_parent(self.scroll_box)
+        # Shown only while words are selected, and gone the instant they aren't. A selection can
+        # end without the cursor's marks being "set" (Delete or Backspace on it, typing over it,
+        # the card's own Delete and Cut, another note loading), so the card follows the buffer's
+        # own has-selection and every change to the text, not just the marks.
         self.buffer.connect("mark-set", lambda _b, _i, mark: mark.get_name() in ("insert", "selection_bound")
-                            and self._queue_sel_card(40))
+                            and self._sel_card_sync(40))
+        self.buffer.connect("notify::has-selection", lambda *_: self._sel_card_sync(40))
+        self.buffer.connect_after("changed", lambda *_: self._sel_card_sync(40, True))
         leave = Gtk.EventControllerFocus()
         leave.connect("leave", lambda *_: GLib.timeout_add(120, self._sel_card_check))
         self.view.add_controller(leave)
+        # (the window itself losing the keyboard: no card left floating over another app)
+        self.connect("notify::is-active", lambda *_: self.is_active() or self._sel_card_hide())
         # scrolling: away at once; back when it stops, if the words are still selected
         self.page_scroll.get_vadjustment().connect("value-changed", lambda *_: (self.sel_card.popdown(),
                                                                                 self._queue_sel_card(300, True)))
+
+    def _sel_card_hide(self):
+        """Down now, and nothing pending that could bring it back."""
+        if getattr(self, "_sel_card_id", 0):
+            GLib.source_remove(self._sel_card_id)
+            self._sel_card_id = 0
+        if self.sel_card.get_visible():
+            self.sel_card.popdown()
+
+    def _sel_card_sync(self, delay, restart=False):
+        """No selection: hidden at once. A selection: shown / moved after the debounce."""
+        if not self.buffer.get_has_selection() or getattr(self, "loading", False):
+            self._sel_card_hide()
+        else:
+            self._queue_sel_card(delay, restart)
 
     def _queue_sel_card(self, delay, restart=False):
         """Debounced: dragging across words doesn't make the card jitter."""

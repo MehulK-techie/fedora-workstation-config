@@ -273,12 +273,21 @@ textview.mk-table-cell:focus { box-shadow: inset 0 0 0 2px @accent_color; }
 .mk-table-pill { font-size: 0.82em; padding: 2px 10px; min-height: 0; border-radius: 99px;
                  background: alpha(@window_fg_color, 0.08); }
 .mk-sheet { border-radius: 12px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45); }
-popover.mk-sel-card > contents { border-radius: 12px; background: rgba(24, 28, 38, 0.94); color: #e5e7eb;
-                                 box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); padding: 2px; }
-popover.mk-sel-card > arrow { background: rgba(24, 28, 38, 0.94); }
-popover.mk-sel-card button, popover.mk-sel-card menubutton > button { color: #e5e7eb; min-width: 26px; padding: 2px 6px;
-                                                                    transition: background-color 120ms ease; }
-popover.mk-sel-card button:hover { background: rgba(255, 255, 255, 0.1); }
+/* the selection pill: frosted dark glass (layered translucency: GTK can't blur what's behind a
+   popover), a 1 px edge with a brighter top, a soft two-step shadow; it fades and rises in */
+popover.mk-sel-card { transition: opacity 140ms ease-out; }
+popover.mk-sel-card > contents { border-radius: 999px; padding: 4px 8px; color: #f1f3f7;
+    background-image: linear-gradient(to bottom, rgba(58, 64, 80, 0.82), rgba(26, 30, 40, 0.88));
+    border: 1px solid rgba(255, 255, 255, 0.14); border-top-color: rgba(255, 255, 255, 0.30);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.38); }
+popover.mk-sel-card > arrow { background: rgba(30, 34, 46, 0.88); border: 1px solid rgba(255, 255, 255, 0.14); }
+popover.mk-sel-card button, popover.mk-sel-card menubutton > button { color: #f1f3f7; min-width: 28px; min-height: 28px;
+    padding: 2px 7px; margin: 0 1px; border-radius: 999px; background: none; box-shadow: none;
+    transition: background-color 120ms ease, color 120ms ease; }
+popover.mk-sel-card button:hover, popover.mk-sel-card menubutton > button:hover { background: rgba(255, 255, 255, 0.14); }
+popover.mk-sel-card button:active, popover.mk-sel-card button:checked,
+popover.mk-sel-card menubutton > button:checked { background: alpha(@accent_bg_color, 0.55); color: white; }
+popover.mk-sel-card separator { background: rgba(255, 255, 255, 0.14); margin: 5px 3px; min-width: 1px; }
 .mk-island .mk-inkbar { background: none; border: none; box-shadow: none; padding: 0; margin: 0; }
 .mk-island { border-radius: 12px; background: rgba(30, 34, 46, 0.85); color: #e5e7eb; padding: 4px 6px;
              border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22); }

@@ -1,0 +1,11 @@
+[Unit]
+Description=MK face engine (warm, on demand)
+
+[Service]
+ExecStart=/usr/local/libexec/mk-face serve
+StandardError=journal
+# the camera, its models and the saved faces; nothing else
+ProtectHome=yes
+PrivateNetwork=yes
+NoNewPrivileges=yes
+ProtectSystem=full

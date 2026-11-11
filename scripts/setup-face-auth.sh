@@ -127,12 +127,17 @@ install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-face-auth" /usr/local/libexec/m
 install -m 644 "$SCRIPT_DIR/assets/systemd/mk-face-auth.socket" "$SCRIPT_DIR/assets/systemd/mk-face-auth@.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now mk-face-auth.socket &>/dev/null && echo "  [+] in-app Face ID" || echo "  [!] the in-app Face ID socket didn't start"
+# the warm engine: loaded on demand (the lock screen warms it as the screen locks), gone when idle
+install -m 644 "$SCRIPT_DIR/assets/systemd/mk-face.socket" "$SCRIPT_DIR/assets/systemd/mk-face.service" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now mk-face.socket &>/dev/null && echo "  [+] warm face engine (on demand)" || echo "  [!] the warm face engine's socket didn't start"
+systemctl try-restart mk-face.service &>/dev/null || true
 
 echo
 echo "An ordinary webcam can't tell your face from a photo of it. Face is a convenience: the"
 echo "password always works too. Where should it be asked?"
 if ask "  sudo in a terminal"; then add_line /etc/pam.d/sudo; fi
-if ask "  the lock screen and login (the password field waits up to ~4 s for your face)"; then
+if ask "  the lock screen and login (the password field waits up to ~3.5 s for your face, ~1 s when nobody's at the camera)"; then
     if [[ ! -f /etc/pam.d/gdm-password && -f /usr/lib/pam.d/gdm-password ]]; then
         cp -a /usr/lib/pam.d/gdm-password /etc/pam.d/gdm-password
         echo "    copied /usr/lib/pam.d/gdm-password to /etc/pam.d"

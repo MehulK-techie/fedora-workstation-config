@@ -10,10 +10,22 @@ Root only (installed to /usr/local/libexec by scripts/setup-face-auth.sh):
   mk-face forget USER        delete USER's face
   mk-face status USER        enrolled or not
   mk-face --pam              for pam_exec: PAM_USER's face, 3.5 s, silent; exit 0 = match
+  mk-face serve              the warm engine (mk-face.socket starts it; see below)
 
-Limits, plainly: an ordinary webcam can't tell a face from a good photo of
-it (no depth or infrared check here), so face is a convenience, never the
-only way in: the password always works, and the PAM line is "sufficient".
+A match: three looks in a row over the threshold, spread over at least 450 ms, each of them
+well lit and sharp, and not a frozen picture (a feed whose frames are identical). One lucky
+frame, a dim shadow or a blur never opens anything. If no face shows at all in the first
+1.2 s the check ends there, so the password prompt isn't kept waiting.
+
+Fast: loading OpenCV and the models takes ~0.7 s each time. `mk-face serve` keeps them loaded
+for 2 minutes after the last use (systemd starts it on /run/mk-face.sock, on demand; it exits
+when idle, so it costs nothing in between). The lock screen warms it as the screen locks;
+--pam uses it when it's there and does the work itself when it isn't. Only root may ask it to
+verify (the socket checks who's calling); anyone may ask it to warm up, which opens nothing.
+
+Limits, plainly: an ordinary webcam has no depth or infrared, so a good photo held steady in
+good light, or a video of you, can still pass: the checks above stop the easy cases, not a
+determined one. Face is a convenience, never the only way in: the password always works, and the PAM line is "sufficient".
 --pam refuses unless the user's session is the one at the computer (seat0,
 local), so nobody signed in remotely can use the camera to get in.
 """
@@ -27,9 +39,17 @@ MODELS = "/usr/local/share/mk-face"
 DETECTOR = os.path.join(MODELS, "face_detection_yunet_2023mar.onnx")
 RECOGNIZER = os.path.join(MODELS, "face_recognition_sface_2021dec.onnx")
 DATA = "/var/lib/mk-face"
-CONF = "/etc/mk-face.conf"          # DEVICE=/dev/video0, THRESHOLD=0.45 (optional)
+CONF = "/etc/mk-face.conf"          # DEVICE=/dev/video0, THRESHOLD=0.45, SHARPNESS=30 (optional)
 THRESHOLD = 0.45                    # SFace cosine similarity; OpenCV suggests 0.363, this is stricter
 SAMPLES = 12
+SOCKET = "/run/mk-face.sock"
+IDLE_EXIT = 120.0                   # the warm engine leaves this long after its last use (s)
+NEED_FRAMES = 3                     # looks in a row over the threshold...
+NEED_SPAN = 0.45                    # ...spread over at least this long (s)
+NO_FACE_GIVE_UP = 1.2               # nobody at the camera: straight on to the password (s)
+BRIGHT_MIN, BRIGHT_MAX = 45.0, 215.0  # the face's mean brightness (0-255): not a shadow, not blown out
+CONTRAST_MIN = 18.0                 # its standard deviation: not a flat grey patch
+SHARP_MIN = 30.0                    # variance of the Laplacian on the 112 px aligned face: not a blur
 
 
 def conf():
@@ -115,8 +135,59 @@ def enroll(user, seconds=8.0):
     return 0
 
 
-def verify(user, seconds=4.0, quiet=False):
-    """0: a match (two frames in a row over the threshold), 1: no match, 2: not enrolled, 3: no camera."""
+class Judge:
+    """Decides a match from the frames, one at a time (no camera in here, so it can be tested).
+    feed(t, score, quality_ok, shape) -> True once NEED_FRAMES good matching looks in a row
+    span NEED_SPAN seconds and the feed isn't frozen. SHAPE: the face's five landmarks relative
+    to its box (a tuple of floats); a live camera never gives the same ones twice."""
+
+    def __init__(self, threshold):
+        self.threshold = threshold
+        self.run = []                 # (t, score, shape) of the matching looks in a row
+        self.best = -1.0
+        self.saw_face = False
+
+    def no_face(self):
+        self.run = []
+
+    def feed(self, t, score, quality_ok, shape):
+        self.saw_face = True
+        self.best = max(self.best, score)
+        if not quality_ok:
+            return False              # (too dark, too flat or blurred: not counted, not held against you)
+        if score < self.threshold:
+            self.run = []
+            return False
+        self.run.append((t, score, shape))
+        if len(self.run) < NEED_FRAMES or self.run[-1][0] - self.run[0][0] < NEED_SPAN:
+            return False
+        # a frozen feed (a still injected as video): every look identical to the last
+        frozen = all(a[1] == b[1] and a[2] == b[2] for a, b in zip(self.run, self.run[1:]))
+        if frozen:
+            self.run = self.run[-1:]
+            return False
+        return True
+
+
+def quality(cv2, crop, sharp_min=SHARP_MIN):
+    """Is this aligned face (112 x 112) lit and sharp enough to count?"""
+    grey = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    mean, std = cv2.meanStdDev(grey)
+    if not BRIGHT_MIN <= float(mean[0][0]) <= BRIGHT_MAX or float(std[0][0]) < CONTRAST_MIN:
+        return False
+    return float(cv2.Laplacian(grey, cv2.CV_64F).var()) >= sharp_min
+
+
+def shape_of(face):
+    """The five landmarks relative to the face's box, rounded: the same picture gives the same ones."""
+    x, y, w, h = (float(v) for v in face[:4])
+    w, h = max(w, 1.0), max(h, 1.0)
+    return tuple(round((float(face[4 + i]) - (x if i % 2 == 0 else y)) / (w if i % 2 == 0 else h), 4) for i in range(10))
+
+
+def verify(user, seconds=4.0, quiet=False, engine=None):
+    """0: a match (see Judge), 1: no match, 2: not enrolled, 3: no camera. ENGINE: (det, rec) kept
+    loaded by the warm service; made here otherwise."""
     import cv2
     import numpy as np
     path = model_path(user)
@@ -124,32 +195,39 @@ def verify(user, seconds=4.0, quiet=False):
         return 2
     known = np.load(path)
     threshold = float(conf().get("THRESHOLD", THRESHOLD))
-    det, rec = models()
+    sharp_min = float(conf().get("SHARPNESS", SHARP_MIN))     # (a soft webcam: lower it in /etc/mk-face.conf)
+    det, rec = engine or models()
     cap = camera()
     if cap is None:
         return 3
-    end, streak, best = time.monotonic() + seconds, 0, -1.0
+    judge = Judge(threshold)
+    start = time.monotonic()
+    end = start + seconds
     try:
         while time.monotonic() < end:
             ok, frame = cap.read()
+            now = time.monotonic()
             if not ok:
                 continue
             face = largest_face(det, frame)
             if face is None:
-                streak = 0
+                judge.no_face()
+                if not judge.saw_face and now - start > NO_FACE_GIVE_UP:
+                    break                       # nobody there: don't keep the password waiting
                 continue
-            f = feature(rec, frame, face)
+            crop = rec.alignCrop(frame, face)
+            f = rec.feature(crop)
             score = max(rec.match(f, k.reshape(1, -1), cv2.FaceRecognizerSF_FR_COSINE) for k in known)
-            best = max(best, score)
-            streak = streak + 1 if score >= threshold else 0
-            if streak >= 2:
+            if judge.feed(now, float(score), quality(cv2, crop, sharp_min), shape_of(face)):
                 if not quiet:
-                    print(f"Match ({score:.2f} >= {threshold}).")
+                    print(f"Match ({score:.2f} >= {threshold}, {NEED_FRAMES} looks over "
+                          f"{judge.run[-1][0] - judge.run[0][0]:.2f} s).")
                 return 0
     finally:
         cap.release()
     if not quiet:
-        print(f"No match (best {best:.2f}, needs {threshold})." if best >= 0 else "No face seen.")
+        print(f"No match (best {judge.best:.2f}, needs {NEED_FRAMES} looks in a row of {threshold} over "
+              f"{NEED_SPAN} s, lit and sharp)." if judge.saw_face else "No face seen.")
     return 1
 
 
@@ -180,7 +258,61 @@ def pam():
     # polkit) only for the person at the computer
     if not service.startswith("gdm") and not at_the_seat(user):
         return 1
-    return 0 if verify(user, 3.5, quiet=True) == 0 else 1
+    rc = ask_warm(user, 3.5)
+    if rc is None:                              # no warm engine: do it here
+        rc = verify(user, 3.5, quiet=True)
+    return 0 if rc == 0 else 1
+
+
+# ----- the warm engine
+def ask_warm(user, seconds):
+    """VERIFY through the warm service: its answer (0-3), or None when it isn't there."""
+    import socket
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            s.connect(SOCKET)
+            s.settimeout(seconds + 4.0)
+            s.sendall(f"VERIFY {user} {seconds}\n".encode())
+            answer = s.makefile().readline().strip()
+        return int(answer) if answer in ("0", "1", "2", "3") else None
+    except (OSError, ValueError):
+        return None
+
+
+def serve():
+    """systemd hands over the listening socket (fd 3). One request a connection, one at a time:
+    WARM (anyone: loads the models, stays IDLE_EXIT s) or VERIFY USER SECONDS (root only, by
+    SO_PEERCRED). Leaves when nothing has asked for IDLE_EXIT seconds."""
+    import socket
+    import struct
+    if os.environ.get("LISTEN_FDS") != "1":
+        print("mk-face serve is started by mk-face.socket.", file=sys.stderr)
+        return 2
+    server = socket.socket(fileno=3)
+    engine = models()
+    while True:
+        server.settimeout(IDLE_EXIT)
+        try:
+            conn, _addr = server.accept()
+        except (socket.timeout, TimeoutError):
+            return 0                            # idle: gone until the next connection starts it again
+        with conn:
+            try:
+                conn.settimeout(2.0)
+                _pid, uid, _gid = struct.unpack("3i", conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+                words = conn.makefile().readline().split()
+                if words[:1] == ["WARM"]:
+                    conn.sendall(b"OK\n")
+                elif words[:1] == ["VERIFY"] and len(words) == 3 and uid == 0:
+                    pwd.getpwnam(words[1])
+                    conn.settimeout(None)
+                    rc = verify(words[1], min(10.0, max(0.5, float(words[2]))), quiet=True, engine=engine)
+                    conn.sendall(f"{rc}\n".encode())
+                else:
+                    conn.sendall(b"NO\n")
+            except Exception:                   # noqa: BLE001 (one bad request never takes the service down)
+                pass
 
 
 def main(argv):
@@ -192,6 +324,8 @@ def main(argv):
             return pam()
         except Exception:                       # never in the way of the password
             return 1
+    if argv[:1] == ["serve"]:
+        return serve()
     if len(argv) < 2 or argv[0] not in ("enroll", "verify", "forget", "status"):
         print(__doc__.strip())
         return 2

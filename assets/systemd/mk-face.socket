@@ -1,0 +1,14 @@
+# The warm face engine (assets/libexec/mk-face serve): started the moment something
+# connects, gone again 2 minutes after its last use. Anyone may connect to warm it up
+# (the lock screen does, as the screen locks); only root's requests are verified
+# (the engine checks the caller with SO_PEERCRED).
+[Unit]
+Description=MK face engine (warm, on demand) socket
+
+[Socket]
+ListenStream=/run/mk-face.sock
+SocketMode=0666
+Accept=no
+
+[Install]
+WantedBy=sockets.target

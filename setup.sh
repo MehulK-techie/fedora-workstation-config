@@ -162,6 +162,12 @@ if [[ -x /usr/local/libexec/mk-face ]]; then
     install -m 644 "$SCRIPT_DIR/assets/systemd/mk-face-auth.socket" "$SCRIPT_DIR/assets/systemd/mk-face-auth@.service" /etc/systemd/system/
     systemctl daemon-reload
     systemctl enable --now mk-face-auth.socket &> /dev/null || WARNINGS+=("In-app Face ID socket didn't start")
+    # the engine itself, refreshed, and its warm on-demand service (loaded for 2 minutes around a check)
+    install -D -m 755 "$SCRIPT_DIR/assets/libexec/mk-face" /usr/local/libexec/mk-face
+    install -m 644 "$SCRIPT_DIR/assets/systemd/mk-face.socket" "$SCRIPT_DIR/assets/systemd/mk-face.service" /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable --now mk-face.socket &> /dev/null || WARNINGS+=("The warm face engine's socket didn't start")
+    systemctl try-restart mk-face.service &> /dev/null || true
 fi
 
 # Apps MK replaced: gThumb (Loupe, GNOME's image viewer, opens images now).

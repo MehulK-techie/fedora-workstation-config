@@ -188,8 +188,36 @@ export default class WackSonomaLiveLockscreen extends Extension {
         return part;
     }
 
+    // The face engine, warmed as the screen locks (when face unlock is installed): loading OpenCV
+    // and its models takes ~0.7 s, done now rather than when you're back and waiting. It leaves
+    // again on its own after 2 minutes (assets/libexec/mk-face serve). Opens nothing by itself.
+    _warmFace() {
+        const path = '/run/mk-face.sock';
+        if (!GLib.file_test(path, GLib.FileTest.EXISTS))
+            return;
+        try {
+            new Gio.SocketClient().connect_async(new Gio.UnixSocketAddress({path}), null, (client, res) => {
+                try {
+                    const conn = client.connect_finish(res);
+                    conn.get_output_stream().write_all_async(new TextEncoder().encode('WARM\n'), GLib.PRIORITY_DEFAULT, null,
+                        (stream, r) => {
+                            try {
+                                stream.write_all_finish(r);
+                            } catch {}
+                            // (closed a moment later: the engine answers and waits for the next caller)
+                            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+                                conn.close_async(GLib.PRIORITY_DEFAULT, null, null);
+                                return GLib.SOURCE_REMOVE;
+                            });
+                        });
+                } catch {}                           // (not installed, or busy: the check still works cold)
+            });
+        } catch {}
+    }
+
     _startParts() {
         this._running = true;
+        this._warmFace();
         // the desktop's top bar stays away while locked: no second battery or status icons
         // (the lock screen's own pill under the clock shows the battery and the weather)
         if (Main.panel.visible) {

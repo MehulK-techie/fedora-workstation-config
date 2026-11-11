@@ -102,6 +102,12 @@
       <summary>Raise the focused app</summary>
       <description>The app you're working in sits a little higher and larger (1.15x, 9 px up) on a tile in the glow colour; the others stay at rest.</description>
     </key>
+    <key name="panel-backdrop-mode" type="s">
+      <choices><choice value="adaptive-solid"/><choice value="always-blurred"/></choices>
+      <default>'adaptive-solid'</default>
+      <summary>Top bar backdrop</summary>
+      <description>The full-width strip behind the top bar's capsules: adaptive-solid (frosted on a clean desktop, solid black while an app window is open), always-blurred (frosted everywhere).</description>
+    </key>
     <key name="dock-animation-style" type="s">
       <choices><choice value="fade-scale"/><choice value="elastic-slide"/><choice value="magnetic-wave"/><choice value="instant-glass"/></choices>
       <default>'fade-scale'</default>

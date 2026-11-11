@@ -643,6 +643,12 @@ def topbar_studio(window):
     app.add(switch_row(s, "show-app-indicator", "App Indicator"))
     page.add(app)
 
+    if engine:
+        bar = Adw.PreferencesGroup(title="Top Bar")
+        bar.add(choice_buttons(engine, "panel-backdrop-mode", "Backdrop",
+                               [("adaptive-solid", "Adaptive (Solid on Window)"), ("always-blurred", "Always Frosted Blur")]))
+        page.add(bar)
+
     dock = Adw.PreferencesGroup(title="Dock")
     if engine:
         dock.add(combo_row(engine, "dock-style", "Theme", [("spider-glow", "Spider-Verse Crimson Glow"),

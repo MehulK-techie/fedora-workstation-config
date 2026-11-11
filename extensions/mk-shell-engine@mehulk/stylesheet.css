@@ -294,3 +294,10 @@
 .mk-cal-queue-struck { color: rgba(255, 255, 255, 0.45); }
 .mk-cal-remove { padding: 3px; border-radius: 999px; color: rgba(255, 255, 255, 0.6); }
 .mk-cal-remove:hover { background-color: rgba(239, 68, 68, 0.35); color: white; }
+
+/* panel-backdrop-mode (panel.js Backdrop): the full-width strip behind the capsules. Frosted (over
+   Blur my Shell's blur when it's on), and solid black while an app is open in the adaptive mode */
+#panel.mk-islands.mk-backdrop-frost, #panel.mk-edge.mk-backdrop-frost {
+  background-color: rgba(10, 12, 18, 0.38) !important; transition-duration: 200ms; }
+#panel.mk-islands.mk-backdrop-frost.mk-backdrop-solid, #panel.mk-edge.mk-backdrop-frost.mk-backdrop-solid {
+  background-color: #000000 !important; }

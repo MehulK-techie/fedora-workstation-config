@@ -610,6 +610,59 @@ class QuietIndicators {
     }
 }
 
+// panel-backdrop-mode: the full-width strip behind the three capsules.
+//   adaptive-solid  frosted over the live wallpaper on a clean desktop; solid black (200 ms) while an
+//                   app window is open on this workspace, the capsules staying crisp on top
+//   always-blurred  frosted everywhere, desktop and apps alike
+class Backdrop {
+    constructor(settings) {
+        this._settings = settings;
+        this._ids = [
+            [settings, settings.connect('changed::panel-backdrop-mode', () => this._sync())],
+            [global.display, global.display.connect('notify::focus-window', () => this._queue())],
+            [global.workspace_manager, global.workspace_manager.connect('active-workspace-changed', () => this._queue())],
+            [Main.overview, Main.overview.connect('showing', () => this._queue())],
+            [Main.overview, Main.overview.connect('hidden', () => this._queue())],
+        ];
+        for (const signal of ['map', 'minimize', 'unminimize', 'destroy', 'size-change'])
+            this._ids.push([global.window_manager, global.window_manager.connect(signal, () => this._queue())]);
+        Main.panel.add_style_class_name('mk-backdrop-frost');
+        this._sync();
+    }
+
+    _queue() {
+        if (this._idle)
+            return;
+        this._idle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._idle = 0;
+            this._sync();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // an app window showing on this workspace, on the primary monitor (the overview doesn't count)
+    _covered() {
+        if (Main.overview.visible)
+            return false;
+        const ws = global.workspace_manager.get_active_workspace(), primary = Main.layoutManager.primaryIndex;
+        return ws.list_windows().some(w => !w.minimized && w.showing_on_its_workspace() && w.get_monitor() === primary &&
+            (w.get_window_type() === Meta.WindowType.NORMAL || w.get_window_type() === Meta.WindowType.DIALOG));
+    }
+
+    _sync() {
+        const solid = this._settings.get_string('panel-backdrop-mode') === 'adaptive-solid' && this._covered();
+        (solid ? Main.panel.add_style_class_name : Main.panel.remove_style_class_name).call(Main.panel, 'mk-backdrop-solid');
+    }
+
+    destroy() {
+        if (this._idle)
+            GLib.source_remove(this._idle);
+        this._ids.forEach(([object, id]) => object.disconnect(id));
+        Main.panel.remove_style_class_name('mk-backdrop-frost');
+        Main.panel.remove_style_class_name('mk-backdrop-solid');
+    }
+}
+
 export class Panel {
     constructor(settings) {
         this._settings = settings;
@@ -627,6 +680,7 @@ export class Panel {
         panel.add_style_class_name(style === 'edge' ? 'mk-edge' : 'mk-islands');
         if (!isActive(BLUR_MY_SHELL))
             panel.add_style_class_name('mk-clear');     // (Blur my Shell's panel blur shows through otherwise)
+        this._backdrop = new Backdrop(this._settings);
         if (blurAllowed(this._settings)) {
             const glass = style === 'edge' ? [panel] : [panel._centerBox, panel._rightBox];  // (the left: LeftIslands)
             this._unblur = glass.map(actor => addWallpaperGlass(actor, Main.layoutManager.panelBox, PANEL_GLASS,
@@ -856,6 +910,8 @@ export class Panel {
         this._glassMenus = null;
         this._logo?.destroy();
         this._tray = this._quiet = this._battery = this._logo = null;
+        this._backdrop?.destroy();
+        this._backdrop = null;
         Main.panel.remove_style_class_name('mk-islands');
         Main.panel.remove_style_class_name('mk-clear');
         Main.panel.remove_style_class_name('mk-edge');

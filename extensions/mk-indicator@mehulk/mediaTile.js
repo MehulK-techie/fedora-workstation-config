@@ -103,7 +103,9 @@ const SKIP_GRACE_MS = 6000;      // a title change this soon after a skip is the
 const SPIN_MS = 3200, SPIN_UP_MS = 450, COAST_MS = 600, COAST_DEG = 45;
 // A paused player stays on the tile this long, then the tile fades away (a
 // tab or app left paused in the background isn't "playing" any more).
-const PAUSED_LINGER_MS = 20000;
+// screen recordings, screenshots, throwaway page blobs and temporary previews: never in the bar
+const EPHEMERAL = /screencast|screen recording|^recording\b|screenshot|^blob:|^file:\/\/\/(tmp|var\/tmp)\/|\/Screencasts\//i;
+const PAUSED_LINGER_MS = 8000;      // a paused player's tile stays this long, then fades away
 const BROWSERS = /chrom|firefox|brave|edge|opera|vivaldi|zen|librewolf|epiphany|falkon|qutebrowser|plasma-browser/i;
 
 function writeUserKey(key, value) {
@@ -335,7 +337,14 @@ export class MediaTile {
                     const v = info[n]?.Metadata?.['xesam:url'];
                     return v?.deepUnpack ? v.deepUnpack() : v;
                 };
-                this._decide(names.filter(n => info[n] && !walls.has(url(n))), info);
+                const title = n => {
+                    const v = info[n]?.Metadata?.['xesam:title'];
+                    return String(v?.deepUnpack ? v.deepUnpack() : v ?? '');
+                };
+                // never: the wallpaper, a track without a title, or a screen recording, screenshot
+                // or a page's throwaway blob (a file preview opened once never sticks in the bar)
+                this._decide(names.filter(n => info[n] && !walls.has(url(n)) && title(n).trim() &&
+                    !EPHEMERAL.test(title(n)) && !EPHEMERAL.test(String(url(n) ?? ''))), info);
             });
         }
     }

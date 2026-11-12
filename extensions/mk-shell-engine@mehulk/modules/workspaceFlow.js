@@ -1,7 +1,8 @@
 // MK Shell Engine: switching workspaces (Ctrl+Alt+Arrow, Super+PageUp/PageDown, the top bar's
-// dots, a touchpad swipe once you let go) is a depth-parallax glide: 280 ms on EASE_OUT_CUBIC.
-//   - the workspace you leave eases back to 0.965x and softens to 180 opacity; the one you arrive
-//     at glides in from 0.965x to full
+// dots, a touchpad swipe once you let go) is a depth-parallax glide: 260 ms on EASE_OUT_CUBIC.
+//   - the workspace you leave eases back to 0.968x and softens to 180 opacity; the one you arrive
+//     at glides in from 0.968x to full
+//   - 400 ms after landing, every window on the workspace is made sure of: whole, opaque, shown
 //   - the wallpaper drifts a little the same way and settles back (parallax): it grows 4 % for
 //     the moment and moves within that margin (about 2 % of the screen's width), so no edge of it
 //     ever shows; a literal quarter of the windows' travel would need it blown up by half
@@ -12,9 +13,10 @@ import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { isWallpaperWindow, restoreActor } from './wallpaperWindow.js';
 
-const DURATION = 280;
-const DEPTH = 0.965;       // how far a workspace eases back as it leaves / comes in
+const DURATION = 260;
+const DEPTH = 0.968;       // how far a workspace eases back as it leaves / comes in
 const DIM = 180;           // and its opacity at that point
 const CURVE = Clutter.AnimationMode.EASE_OUT_CUBIC;
 const OVERSCAN = 1.04;     // the background, grown this much while it drifts, so its edges stay off screen
@@ -55,6 +57,31 @@ function pulseDots() {
     dots.ease({scale_x: 1.12, scale_y: 1.12, duration: 90, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         onStopped: () => dots.ease({scale_x: 1, scale_y: 1, duration: 260, mode: Clutter.AnimationMode.EASE_OUT_BACK,
             onStopped: () => dots.set_scale(1, 1)})});
+}
+
+// After a switch: no window on the workspace you landed on is left faded, shrunk or moved (an
+// effect cut short mid-slide), unless something is still animating it.
+let settleTimer = 0;
+function settleSoon() {
+    if (settleTimer)
+        GLib.source_remove(settleTimer);
+    settleTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, DURATION + 400, () => {
+        settleTimer = 0;
+        guarded('settle', () => {
+            const ws = global.workspace_manager.get_active_workspace();
+            for (const actor of global.get_window_actors()) {
+                const win = actor.meta_window;
+                if (!win || win.minimized || isWallpaperWindow(win) || win.window_type !== Meta.WindowType.NORMAL ||
+                    !(win.get_workspace() === ws || win.is_on_all_workspaces()))
+                    continue;
+                const busy = ['opacity', 'scale-x', 'translation-x', 'translation-y'].some(p => actor.get_transition(p));
+                if (!busy && (actor.opacity !== 255 || actor.scale_x !== 1 || actor.scale_y !== 1 ||
+                    actor.translation_x !== 0 || actor.translation_y !== 0 || !actor.visible))
+                    restoreActor(actor);
+            }
+        });
+        return GLib.SOURCE_REMOVE;
+    });
 }
 
 function guarded(what, fn) {
@@ -111,6 +138,7 @@ export class WorkspaceFlow {
                     console.warn(`mk-shell-engine: workspace flow: ${e.message}`);    // (GNOME's curve then)
                 }
                 guarded('dots', pulseDots);
+                settleSoon();
                 return result;
             };
         }
@@ -146,12 +174,16 @@ export class WorkspaceFlow {
             }
             guarded('parallax', () => drift(direction));
             guarded('dots', pulseDots);
+            settleSoon();
             return result;
         };
     }
 
     destroy() {
         restPanelBlur(false);
+        if (settleTimer)
+            GLib.source_remove(settleTimer);
+        settleTimer = 0;
         guarded('reset', () => {
             Main.layoutManager._backgroundGroup?.remove_all_transitions();
             resetBackground();

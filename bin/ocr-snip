@@ -58,6 +58,19 @@ elif (( status == 2 )); then
     grim -g "$slurp_area" "$TMP_IMG"
 fi
 
+# A very wide snip is read from a copy at most 1600 px wide: OCR's time grows with the area, and
+# text that large stays legible at that width (narrower snips are read as they are)
+python3 - "$TMP_IMG" << 'PY' 2> /dev/null || true
+import sys
+import gi
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import GdkPixbuf
+path = sys.argv[1]
+pix = GdkPixbuf.Pixbuf.new_from_file(path)
+if pix.get_width() > 1600:
+    pix.scale_simple(1600, round(pix.get_height() * 1600 / pix.get_width()), GdkPixbuf.InterpType.HYPER).savev(path, "png", [], [])
+PY
+
 tesseract "$TMP_IMG" "${TMP_TXT%.txt}" --oem 1 --psm 6 -l eng 2>/dev/null || \
 tesseract "$TMP_IMG" "${TMP_TXT%.txt}" -l eng 2>/dev/null
 

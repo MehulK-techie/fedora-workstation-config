@@ -9,6 +9,7 @@
 // The previous box only ever lived in GNOME Shell's memory, so there's no file
 // or setting to clear: it's forgotten each time the tool opens.
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 export class Snip {
@@ -55,9 +56,20 @@ export class Snip {
             const result = saved.stopDrag.apply(this, args);
             if (fresh)
                 this._mkBlank = false;            // a box exists now (a click makes a small one)
+            // let go, and it's taken: once the release has finished (the drag's grab let go, the
+            // selection drawn) rather than inside it, so a big area never holds up the pointer and
+            // the tool's overlay closes straight away (GNOME encodes and saves off the main loop)
             if (fresh && moved && self._settings.get_boolean('snip-auto-capture') &&
-                ui._selectionButton.checked && ui._shotButton.checked)
-                ui._onCaptureButtonClicked().catch(logError);       // let go, and it's taken
+                ui._selectionButton.checked && ui._shotButton.checked) {
+                if (self._captureId)
+                    GLib.source_remove(self._captureId);
+                self._captureId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                    self._captureId = 0;
+                    if (ui.visible)
+                        ui._onCaptureButtonClicked().catch(logError);
+                    return GLib.SOURCE_REMOVE;
+                });
+            }
             return result;
         };
     }
@@ -80,6 +92,9 @@ export class Snip {
     }
 
     destroy() {
+        if (this._captureId)
+            GLib.source_remove(this._captureId);
+        this._captureId = 0;
         this._ui.open = this._saved.open;
         this._ui._onCaptureButtonClicked = this._saved.capture;
         this._sel.stopDrag = this._saved.stopDrag;

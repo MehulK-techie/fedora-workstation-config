@@ -17,7 +17,7 @@
 //   modules/calendarDeck.js      the calendar as glass, and a reminder for any day ahead
 //   modules/wallpaperEngine.js   Super+W: the next wallpaper, with the contour-trace transition
 //   modules/commandPalette.js    Super+Space: windows, the shell's actions, math, ? S.P.I.D.E.Y
-//   modules/glassControls.js     Quick Settings: Frost (blur 0-64) and Glass Tint (colour, 0-45 %) for the shell's glass
+//   modules/glassControls.js     the shell's glass: Frost and Glass Tint (set in MK Control Center), Night Light warmth (Quick Settings)
 //   modules/colorPicker.js       the eyedropper in the top bar: a pixel's #hex to the clipboard
 //   modules/showDesktop.js       Super+D, per workspace: the same windows back, the top one focused
 //   modules/focusRing.js         a 1.5 px accent outline around the focused window (focus-ring)
@@ -136,7 +136,7 @@ export default class MKShellEngine extends Extension {
         this._start('workspace flow', () => new WorkspaceFlow());
         this._start('dynamic island', () => new Island());
         this._start('deep focus', () => (this._deepFocus = new DeepFocus(this._settings, () => this._dock)));
-        this._start('d-bus bridge', () => new Bridge(() => this._deepFocus));
+        this._start('d-bus bridge', () => new Bridge(() => this._deepFocus, () => this._wallpaper));
         this._start('focus ring', () => new FocusRing(this._settings));
         this._start('show desktop', () => new ShowDesktop());
         this._start('color picker', () => (this._picker = new ColorPicker()));

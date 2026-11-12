@@ -5,6 +5,7 @@
 //       --method org.mk.ShellEngine.DeepFocus toggle          # on | off | toggle | status -> b
 //   ... --method org.mk.ShellEngine.Wallpaper pause           # pause | resume | status   -> s
 //   ... --method org.mk.ShellEngine.Island 'emblem-ok-symbolic' 'Done'
+//   ... --method org.mk.ShellEngine.WallpaperGrid                 # Super+W's grid
 //   ... --method org.mk.ShellEngine.Screenshot false             # true: the focused window -> s
 //
 // Screenshot: GNOME only lets its own allow-listed apps use org.gnome.Shell.Screenshot, so Spidey's
@@ -44,6 +45,7 @@ const XML = `<node>
       <arg type="b" direction="in" name="window"/>
       <arg type="s" direction="out" name="path"/>
     </method>
+    <method name="WallpaperGrid"/>
     <method name="Island">
       <arg type="s" direction="in" name="icon"/>
       <arg type="s" direction="in" name="text"/>
@@ -52,8 +54,9 @@ const XML = `<node>
 </node>`;
 
 export class Bridge {
-    constructor(getDeepFocus) {
+    constructor(getDeepFocus, getWallpaper = () => null) {
         this._getDeepFocus = getDeepFocus;
+        this._getWallpaper = getWallpaper;
         this._dbus = Gio.DBusExportedObject.wrapJSObject(XML, this);
         this._dbus.export(Gio.DBus.session, PATH);
         if (lockedAway) {
@@ -102,6 +105,14 @@ export class Bridge {
         else if (action !== 'status')
             throw new Error(`unknown action ${action}: pause, resume or status`);
         return desktop._held ? 'paused' : 'playing';
+    }
+
+    // MK Control Center's "Open Wallpaper Grid"
+    WallpaperGrid() {
+        const engine = this._getWallpaper();
+        if (!engine)
+            throw new Error('the wallpaper grid is not running');
+        engine.openGrid();
     }
 
     Island(icon, text) {

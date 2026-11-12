@@ -492,6 +492,67 @@ def colour_row(s, key, title, subtitle=""):
     return row
 
 
+TINTS = [("auto", "Wallpaper Auto", None), ("#0f1117", "Obsidian", "#0f1117"), ("#22d3ee", "Arctic Cyan", "#22d3ee"),
+         ("#a855f7", "Amethyst", "#a855f7"), ("#10b981", "Emerald", "#10b981"), ("#f59e0b", "Warm Amber", "#f59e0b")]
+
+
+def tint_row(s, key="panel-tint-color"):
+    """Glass Tint Colour: a swatch per preset (Wallpaper Auto first), and a colour of your own, all
+    live both ways (as the dock's Glow Colour row)."""
+    row = Adw.ActionRow(title="Glass Tint Colour", subtitle="The top bar's capsules, the dock and popovers only")
+    box = Gtk.Box(css_classes=["linked"], valign=Gtk.Align.CENTER)
+    buttons, group = {}, None
+    css = Gtk.CssProvider()
+    css.load_from_string("".join(f".mk-tint-{v[1:]} {{ background: {c}; min-width: 18px; min-height: 18px; }}"
+                                 for v, _l, c in TINTS if c))
+    Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    for value, label, colour in TINTS:
+        b = Gtk.ToggleButton(group=group, tooltip_text=label)
+        if colour:
+            b.set_child(Gtk.Box(css_classes=[f"mk-tint-{value[1:]}"]))
+        else:
+            b.set_label("Auto")
+        group = group or b
+        b.connect("toggled", lambda btn, v=value: btn.get_active() and s.get_string(key) != v and s.set_string(key, v))
+        buttons[value] = b
+        box.append(b)
+    own = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(title="Glass Tint Colour", with_alpha=False),
+                                valign=Gtk.Align.CENTER, tooltip_text="A colour of your own")
+
+    def chosen(b, _p):
+        c = b.get_rgba()
+        hexed = f"#{round(c.red * 255):02x}{round(c.green * 255):02x}{round(c.blue * 255):02x}"
+        if s.get_string(key) != hexed:
+            s.set_string(key, hexed)
+    own.connect("notify::rgba", chosen)
+
+    def show(*_):
+        value = s.get_string(key)
+        b = buttons.get(value)
+        if b and not b.get_active():
+            b.set_active(True)
+        elif not b:
+            for other in buttons.values():
+                other.set_active(False)
+            rgba = Gdk.RGBA()
+            if rgba.parse(value):
+                own.set_rgba(rgba)
+    show()
+    s.connect(f"changed::{key}", show)
+    row.add_suffix(box)
+    row.add_suffix(own)
+    return row
+
+
+def open_wallpaper_grid(_button=None):
+    """The shell's wallpaper grid (Super+W), through MK Shell Engine's D-Bus bridge."""
+    try:
+        Gio.DBus.session.call_sync("org.gnome.Shell", "/org/mk/ShellEngine", "org.mk.ShellEngine", "WallpaperGrid",
+                                   None, None, Gio.DBusCallFlags.NONE, 2000, None)
+    except GLib.Error as e:
+        print(f"Wallpaper grid: {e.message}")
+
+
 def missing(page, what):
     group = Adw.PreferencesGroup(title="Not installed yet",
                                  description=f"{what} isn't installed: run ./sync.sh (mk sync) once.")
@@ -648,7 +709,22 @@ def topbar_studio(window):
         bar = Adw.PreferencesGroup(title="Top Bar")
         bar.add(choice_buttons(engine, "panel-backdrop-mode", "Backdrop",
                                [("adaptive-solid", "Adaptive (Solid on Window)"), ("always-blurred", "Always Frosted Blur")]))
+        # the shell's glass, live: its frost and its tint (glassControls.js in the engine applies them)
+        bar.add(switch_row(engine, "panel-blur-enabled", "Frosted Glass", "The blur behind the capsules, the dock and popovers"))
+        bar.add(scale_row(engine, "panel-blur-sigma", "Frosted Blur Strength", 0, 64, 1,
+                          lambda v: "Clear" if v < 0.5 else f"{round(v)}", subtitle="0 clear glass, 64 heavy frost; MK's own is 38"))
+        bar.add(tint_row(engine))
+        bar.add(scale_row(engine, "panel-tint-opacity", "Tint Opacity", 0, 45, 1, lambda v: f"{round(v)} %",
+                          subtitle="Never application windows"))
         page.add(bar)
+
+        walls = Adw.PreferencesGroup(title="Wallpapers")
+        grid = Adw.ActionRow(title="Wallpaper Grid", subtitle="Pictures/Wallpapers and MK's own: search, shuffle, auto-rotate (Super+W)")
+        button = Gtk.Button(label="Open Wallpaper Grid", valign=Gtk.Align.CENTER, css_classes=["suggested-action"])
+        button.connect("clicked", open_wallpaper_grid)
+        grid.add_suffix(button)
+        walls.add(grid)
+        page.add(walls)
 
     dock = Adw.PreferencesGroup(title="Dock")
     if engine:

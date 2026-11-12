@@ -102,6 +102,14 @@ export class WallpaperEngine {
         Main.panel._mkIsland?.show({icon, text});
     }
 
+    // (MK Control Center's button, through the D-Bus bridge)
+    openGrid() {
+        GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            this._openCarousel();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
     _openCarousel() {
         if (this._busy)
             return;

@@ -32,6 +32,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { DASH_TO_DOCK, isActive, watch } from './conflicts.js';
 import { DOCK_GLASS, addWallpaperGlass, blurAllowed } from './blur.js';
 import { accentRGB, onAccentChanged } from './colour.js';
+import { isWallpaperWindow } from './wallpaperWindow.js';
 import * as Actions from './appActions.js';
 
 const MARGIN = 4;              // the dock's gap above the screen's bottom edge
@@ -261,7 +262,9 @@ export class Dock {
     _apps() {
         const favourites = AppFavorites.getAppFavorites().getFavorites();
         const ids = new Set(favourites.map(a => a.get_id()));
-        const running = Shell.AppSystem.get_default().get_running().filter(a => !ids.has(a.get_id()));
+        // (a live wallpaper's player is never an app here, even in the frames before it's the desktop)
+        const running = Shell.AppSystem.get_default().get_running().filter(a => !ids.has(a.get_id()) &&
+            !(a.get_windows().length && a.get_windows().every(w => isWallpaperWindow(w))));
         return [favourites, running];
     }
 
@@ -362,7 +365,8 @@ export class Dock {
 
     _windowsOf(app) {
         const ws = global.workspace_manager.get_active_workspace();
-        return app.get_windows().filter(w => !w.skip_taskbar && (w.get_workspace() === ws || w.is_on_all_workspaces()));
+        return app.get_windows().filter(w => !w.skip_taskbar && !isWallpaperWindow(w) &&
+            (w.get_workspace() === ws || w.is_on_all_workspaces()));
     }
 
     _activate(app) {
@@ -688,7 +692,7 @@ export class Dock {
         const primary = Main.layoutManager.primaryIndex;
         const {x, y, width, height} = this._rect;
         return ws.list_windows().some(w => {
-            if (w.minimized || w.get_monitor() !== primary || w.skip_taskbar ||
+            if (w.minimized || w.get_monitor() !== primary || w.skip_taskbar || isWallpaperWindow(w) ||
                 w.window_type !== Meta.WindowType.NORMAL && w.window_type !== Meta.WindowType.DIALOG)
                 return false;
             const f = w.get_frame_rect();

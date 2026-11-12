@@ -15,6 +15,7 @@ import Meta from 'gi://Meta';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { BURN_MY_WINDOWS, isActive, watch } from './conflicts.js';
+import { isWallpaperWindow, restoreActor } from './wallpaperWindow.js';
 
 const OPEN = 220, CLOSE = 130, FADE_IN = 100;   // ms: opening eases out (cubic) over 220
 const clamp = p => Math.min(1, Math.max(0, p));
@@ -88,12 +89,31 @@ export class WindowAnimations {
     _run(shellwm, actor, opening) {
         const complete = () => opening ? shellwm.completed_map(actor) : shellwm.completed_destroy(actor);
         this._running.get(actor)?.finish();
-        if (!this._fits(actor)) {
-            // GNOME's own (its method, called directly: its handler is blocked)
-            if (opening)
-                Main.wm._mapWindow(shellwm, actor);
-            else
-                Main.wm._destroyWindow(shellwm, actor);
+        // a live wallpaper's player: no effect at all (it's being made the desktop, kept unseen)
+        if (isWallpaperWindow(actor.meta_window)) {
+            complete();
+            return;
+        }
+        let fits = false;
+        try {
+            fits = this._fits(actor);
+        } catch (e) {
+            console.error(`mk-shell-engine: window animation check: ${e.message}`);
+        }
+        if (!fits) {
+            // GNOME's own (its method, called directly: its handler is blocked); if that throws,
+            // the window is put back whole and handed over, never left unseen
+            try {
+                if (opening)
+                    Main.wm._mapWindow(shellwm, actor);
+                else
+                    Main.wm._destroyWindow(shellwm, actor);
+            } catch (e) {
+                console.error(`mk-shell-engine: GNOME's window animation: ${e.message}`);
+                if (opening)
+                    restoreActor(actor);
+                complete();
+            }
             return;
         }
         let done = false, timeline = null;
@@ -104,10 +124,9 @@ export class WindowAnimations {
             this._running.delete(actor);
             try {
                 timeline?.stop();
-                actor.set_scale(1, 1);
-                actor.translation_y = 0;
-                actor.set_pivot_point(0, 0);
-                actor.opacity = 255;
+                restoreActor(actor);
+                if (!opening)
+                    actor.opacity = 0;                   // (a closing window stays gone while GNOME removes it)
             } catch (e) {
                 console.error(`mk-shell-engine: window animation cleanup: ${e.message}`);
             } finally {

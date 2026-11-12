@@ -18,6 +18,7 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { isWallpaperWindow, restoreActor } from './wallpaperWindow.js';
 import { MAGIC_LAMP, isActive, watch } from './conflicts.js';
 
 const MINIMIZE = 220, UNMINIMIZE = 220, DISSOLVE = 60;   // ms (ease-out cubic)
@@ -111,21 +112,29 @@ export class MagicLamp {
     _run(shellwm, actor, minimizing) {
         const complete = () => minimizing ? shellwm.completed_minimize(actor) : shellwm.completed_unminimize(actor);
         this._running.get(actor)?.finish();          // a minimize cut short by an unminimize (or the reverse)
-        if (!this._fits(actor)) {
-            // GNOME's own animation (its method, called directly: its handler is blocked)
-            if (minimizing)
-                Main.wm._minimizeWindow(shellwm, actor);
-            else
-                Main.wm._unminimizeWindow(shellwm, actor);
+        let fits = false;
+        try {
+            fits = !isWallpaperWindow(actor.meta_window) && this._fits(actor);
+        } catch (e) {
+            console.error(`mk-shell-engine: minimize glide check: ${e.message}`);
+        }
+        if (!fits) {
+            // GNOME's own animation (its method, called directly: its handler is blocked); if that
+            // throws, the window is put back whole and handed over
+            try {
+                if (minimizing)
+                    Main.wm._minimizeWindow(shellwm, actor);
+                else
+                    Main.wm._unminimizeWindow(shellwm, actor);
+            } catch (e) {
+                console.error(`mk-shell-engine: GNOME's minimize animation: ${e.message}`);
+                restoreActor(actor);
+                complete();
+            }
             return;
         }
         let done = false, timeline = null, destroyId = 0;
-        const reset = () => {
-            actor.set_scale(1, 1);
-            actor.set_translation(0, 0, 0);
-            actor.set_pivot_point(0, 0);
-            actor.opacity = 255;
-        };
+        const reset = () => restoreActor(actor);
         const finish = () => {
             if (done)
                 return;

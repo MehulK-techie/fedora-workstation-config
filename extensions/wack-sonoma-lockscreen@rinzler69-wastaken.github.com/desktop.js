@@ -124,6 +124,24 @@ function writeNote(note) {
 
 const usable = path => typeof path === 'string' && path !== '' && GLib.file_test(path, GLib.FileTest.IS_REGULAR);
 
+// a live wallpaper player's window (bin/mk-live-wallpaper's app id and title, or the lock
+// screen's mpv): kept unseen until it's the desktop; marked so MK Shell Engine's effects skip it
+const PLAYER_IDS = ['mk-live-wallpaper', 'mk-live-wallpaper-lock'];
+function isWallpaperWindow(win) {
+    try {
+        return Boolean(win._mkWallpaper) || PLAYER_IDS.includes((win.get_wm_class() ?? '').toLowerCase()) ||
+            ['MK Live Wallpaper', ...PLAYER_IDS].includes(win.get_title() ?? '');
+    } catch {
+        return false;
+    }
+}
+function conceal(win) {
+    win._mkWallpaper = true;
+    const actor = win.get_compositor_private();
+    if (actor)
+        actor.opacity = 0;
+}
+
 // One player process and its window. onWindow(win) once the window is shown.
 class Player {
     constructor(onWindow) {
@@ -131,6 +149,11 @@ class Player {
         this.win = null;
         this._restarts = 0;
         this._createdId = global.display.connect('window-created', (_d, win) => this._claim(win));
+        // (a player already there, from before this loaded: unseen too)
+        for (const actor of global.get_window_actors()) {
+            if (actor.meta_window && isWallpaperWindow(actor.meta_window))
+                conceal(actor.meta_window);
+        }
     }
 
     start(path, args = []) {
@@ -178,29 +201,52 @@ class Player {
         } catch {}                                 // (it has just gone: the restart follows)
     }
 
+    // The player's window, the moment it exists (matched by its process, or by its app id
+    // "mk-live-wallpaper"): unseen from the first frame (its actor at opacity 0, marked so the
+    // engine's open animation, dock and minimize glide leave it alone), then, once shown, made
+    // the desktop (DESKTOP type: below everything, out of the dock, Alt+Tab and the overview)
+    // and only then visible. A player window that isn't this one's (left by an earlier shell)
+    // is kept unseen too, never shown as an app.
     _claim(win) {
-        if (!this._proc || win.get_pid() !== Number(this._proc.get_identifier()))
-            return;
-        this.win = win;
-        const id = win.connect('shown', () => {
-            win.disconnect(id);
-            // a moment later: changing its type while Mutter is still stacking it trips Mutter
-            this._idle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-                this._idle = 0;
-                if (this.win !== win)
+        try {
+            const ours = this._proc && win.get_pid() === Number(this._proc.get_identifier());
+            if (!ours) {
+                if (isWallpaperWindow(win))
+                    conceal(win);
+                else                                 // (the app id can arrive a moment later)
+                    win.connectObject('notify::wm-class', () => isWallpaperWindow(win) && conceal(win), this);
+                return;
+            }
+            this.win = win;
+            conceal(win);
+            const id = win.connect('shown', () => {
+                win.disconnect(id);
+                conceal(win);
+                // a moment later: changing its type while Mutter is still stacking it trips Mutter
+                this._idle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                    this._idle = 0;
+                    if (this.win !== win)
+                        return GLib.SOURCE_REMOVE;
+                    try {
+                        win.set_type(Meta.WindowType.DESKTOP);   // below everything, out of every window list
+                        win.stick();
+                        const actor = win.get_compositor_private();
+                        if (actor) {
+                            actor.reactive = false;              // clicks go through
+                            for (const child of actor.get_children())
+                                child.reactive = false;
+                            // (still unseen: what shows is the clone _cover puts in the background layer)
+                        }
+                        this._onWindow(win);
+                    } catch (e) {
+                        console.warn(`live wallpaper window: ${e.message}`);
+                    }
                     return GLib.SOURCE_REMOVE;
-                win.set_type(Meta.WindowType.DESKTOP);   // below everything, out of every window list
-                win.stick();
-                const actor = win.get_compositor_private();
-                if (actor) {
-                    actor.reactive = false;              // clicks go through
-                    for (const child of actor.get_children())
-                        child.reactive = false;
-                }
-                this._onWindow(win);
-                return GLib.SOURCE_REMOVE;
+                });
             });
-        });
+        } catch (e) {
+            console.warn(`live wallpaper window: ${e.message}`);
+        }
     }
 
     stop() {
@@ -212,6 +258,19 @@ class Player {
         const proc = this._proc;
         this._proc = this.win = null;
         if (proc) {
+            // (and if it hasn't gone 3 s later, it's ended: a stuck player never lingers)
+            let killId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 3, () => {
+                killId = 0;
+                try {
+                    proc.force_exit();
+                } catch {}
+                return GLib.SOURCE_REMOVE;
+            });
+            proc.wait_async(null, () => {
+                if (killId)
+                    GLib.source_remove(killId);
+                killId = 0;
+            });
             try {
                 proc.get_stdin_pipe()?.write_all(new TextEncoder().encode('quit\n'), null);
                 proc.get_stdin_pipe()?.close(null);      // (it quits when its stdin closes, too)
@@ -222,6 +281,8 @@ class Player {
     destroy() {
         this.stop();
         global.display.disconnect(this._createdId);
+        for (const actor of global.get_window_actors())
+            actor.meta_window?.disconnectObject?.(this);
     }
 }
 
@@ -531,10 +592,8 @@ export class DesktopWallpaper {
             } catch {}                               // (replaced and gone already)
         }
         this._stills = null;
-        if (this._coverActor) {
-            this._coverActor.disconnectObject(this);
-            this._coverActor.opacity = 255;
-        }
+        if (this._coverActor)                        // (the player's own window stays unseen: it only
+            this._coverActor.disconnectObject(this); //  ever shows through the clone, never as itself)
         this._stateMonitor?.cancel();
         this._stateMonitor = null;
         this._clone?.disconnectObject(this);

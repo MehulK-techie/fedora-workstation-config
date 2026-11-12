@@ -256,9 +256,7 @@ export class NotifyCenter {
                 l.clutter_text.line_wrap = true;
                 holder.add_child(l);
             }
-            if (selected)
-                holder.add_child(new St.Label({text: '✓ Selected', style_class: 'mk-clip-selected-badge',
-                    x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.END}));   // (the corner: the text stays readable)
+            // (selected: the tile's accent edge and tint, CSS; no label over a tile this small)
             b.set_child(holder);
             b.connect('clicked', () => this._pick(item));
             this._shelfRow.add_child(b);

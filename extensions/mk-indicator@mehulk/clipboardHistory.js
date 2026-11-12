@@ -620,13 +620,16 @@ export class ClipboardHistory {
             column.add_child(content);
             column.add_child(new St.Label({text: item.tags.map(t => `#${t}`).join('  '), style_class: 'mk-clip-tags'}));
         }
+        // on the clipboard now: a small pill in a row of its own above the content (never laid over
+        // the words: a long link stays readable), and the card's glowing accent edge (CSS)
         if (selected) {
             const content = main.get_child();
-            const holder = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
-            main.set_child(holder);
-            holder.add_child(content);
-            holder.add_child(new St.Label({text: '✓ Selected', style_class: 'mk-clip-selected-badge',
-                x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.START}));
+            const column = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true,
+                style_class: 'mk-clip-selected-column'});
+            main.set_child(column);
+            column.add_child(new St.Label({text: '✓ Selected', style_class: 'mk-clip-selected-badge',
+                x_align: Clutter.ActorAlign.START}));
+            column.add_child(content);
         }
         main.connect('clicked', () => this._copy(item));
         main.connect('key-press-event', (_a, event) => this._cardKey(main, item, event));

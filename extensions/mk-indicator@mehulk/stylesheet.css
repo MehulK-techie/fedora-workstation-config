@@ -317,6 +317,12 @@
 .mk-stats-net-label { font-size: 0.86em; font-weight: 600; font-feature-settings: "tnum"; }
 
 /* the entry on the clipboard now: a glowing accent edge and a badge (entries never reorder) */
-.mk-clip-card.mk-clip-selected { border: 1px solid -st-accent-color; box-shadow: 0 0 10px st-transparentize(-st-accent-color, 0.4); }
+.mk-clip-card.mk-clip-selected { background-color: st-transparentize(-st-accent-color, 0.86);
+  border: 1px solid st-transparentize(-st-accent-color, 0.55); border-left: 3px solid -st-accent-color;
+  box-shadow: 0 0 10px st-transparentize(-st-accent-color, 0.65); }
+.mk-clip-selected-column { spacing: 4px; }
+.mk-clip-card { border: 1px solid rgba(255, 255, 255, 0.06); border-top-color: rgba(255, 255, 255, 0.16); transition-duration: 140ms; }
+.mk-clip-card:hover { background-color: rgba(255, 255, 255, 0.09); }
+.mk-clip-main { padding-right: 8px; }
 .mk-clip-selected-badge { font-size: 0.72em; font-weight: 800; color: white; padding: 2px 8px; margin: 4px;
   border-radius: 999px; background-color: -st-accent-color; }

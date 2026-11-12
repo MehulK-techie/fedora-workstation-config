@@ -310,7 +310,7 @@
       <choices><choice value="slow-stop"/><choice value="zoom"/><choice value="crossfade"/><choice value="none"/></choices>
       <default>'slow-stop'</default>
       <summary>Unlock animation</summary>
-      <description>slow-stop: the video slows to a stop and dissolves as the lock screen slides away; zoom: it lifts a little (1.03x) as it fades while the desktop settles from 1.03x into place; crossfade: a plain fade; none: at once.</description>
+      <description>slow-stop: the video slows to a stop and dissolves as the lock screen slides away; zoom: it lifts a little (1.02x) as it fades while the desktop settles from 1.02x into place; crossfade: a plain fade; none: at once.</description>
     </key>
     <key name="animation-duration" type="i">
       <range min="120" max="600"/>

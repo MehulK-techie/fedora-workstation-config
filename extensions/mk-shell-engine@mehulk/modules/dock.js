@@ -673,7 +673,15 @@ export class Dock {
 
     // Is any window on this desktop over the dock's spot? (Never on the bare desktop: there the
     // dock always shows, in place, over the live wallpaper.)
+    // Deep Focus: tucked away whatever the windows do (the bottom edge still brings it back)
+    setTucked(on) {
+        this._tucked = on;
+        this._queueDodge();
+    }
+
     _covered() {
+        if (this._tucked)
+            return true;
         if (!this._rect)
             return false;
         const ws = global.workspace_manager.get_active_workspace();

@@ -561,7 +561,8 @@
 
 /* the desktop's live wallpaper (desktop.js): a faint ambient dim over the video, and its bottom
    52 px blending into black behind the dock */
-.mk-wallpaper-dim { background-color: rgba(6, 8, 12, 0.10); }
+.mk-wallpaper-dim { background-color: rgba(6, 8, 12, 0.10); transition-duration: 600ms; }
+.mk-wallpaper-dim.mk-wallpaper-deep { background-color: rgba(4, 5, 8, 0.55); }
 .mk-wallpaper-bottom-blend {
   background-gradient-direction: vertical;
   background-gradient-start: rgba(0, 0, 0, 0.0);

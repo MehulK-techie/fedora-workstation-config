@@ -56,6 +56,9 @@ cd ~/fedora-workstation-config && git pull && ./sync.sh
 - **Live wallpaper:** decoded on the graphics card and capped at 30 fps so the dock and top bar stay smooth; edge to edge, under the top bar and the dock to the bottom of the screen; menus never pause it. Its volume slider sits in Quick Settings right under the speaker's, while the wallpaper is a video with sound. By default it plays (with its sound) only on the clean desktop: open an app and it fades out and pauses, using no CPU at all, then picks up again when you're back on the desktop. Turn on **Wallpaper Bg Play** in Quick Settings to keep it playing under your apps; it then fades out by itself while YouTube, Spotify or anything else plays, and comes back when they stop.
 - **Dock:** optional frosted glass behind each icon (Command Centre › Dock); the top bar always shows; the dock shows on a clean desktop and gets out of the way when a window overlaps it, with one of four animations you pick in Command Centre (the bottom edge of the screen brings it back), in place, over the live wallpaper.
 - **Workspaces:** switching slides your windows over the live wallpaper, which stays put and keeps playing.
+- **Dynamic Island:** volume, brightness, a new song or a timer ending show in the clock's capsule, which widens for a moment and settles back.
+- **Deep Focus (Super+Alt+F):** notifications off, wallpaper paused, dock tucked away and a 50-minute focus session; press again and everything comes back.
+- **Wallpaper palette:** the top bar's glass, the Dynamic Island and the dock's edge take on a quiet tint from your wallpaper (with `mk accent auto`).
 - **Photo Booth:** 43 live looks including AR (hearts that burst from your hands, a crown, halo, cat or bunny ears, pixel shades, a thought cloud) and real frames (Polaroid, 4-cut strip, 35mm film, comic panel, neon HUD, gallery matte), fullscreen with F11.
 
 ## Cheat sheet

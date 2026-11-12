@@ -50,6 +50,11 @@
       <summary>Calendar quick add</summary>
       <description>Opens the calendar with the reminder box ready to type in (again: closes it).</description>
     </key>
+    <key name="deep-focus" type="as">
+      <default><![CDATA[['<Super><Alt>f']]]></default>
+      <summary>Deep Focus</summary>
+      <description>Do Not Disturb, the live wallpaper dimmed and paused, the dock tucked away and a 50-minute MK Companion focus session; again: everything back as it was.</description>
+    </key>
     <key name="snap-layouts" type="as">
       <default><![CDATA[['<Super>z']]]></default>
       <summary>Snap layouts</summary>

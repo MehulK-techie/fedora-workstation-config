@@ -295,12 +295,32 @@ def remove_custom(custom_id):
                    [p for p in media.get_strv("custom-keybindings") if p != path])
 
 
-def apply_all(verbose=False):
+def apply_all(verbose=False, only_new=None):
+    """Every shortcut, or with only_new (a ledger file's path) only the ones never applied on this
+    account before: an update brings MK's new shortcuts and leaves every key you changed alone.
+    Each one applied is noted in the ledger."""
     skipped = []
     shortcuts = load_shortcuts()
+    done = set()
+    if only_new:
+        try:
+            done = set(Path(only_new).read_text().splitlines())
+        except OSError:
+            pass
+    applied = []
     for shortcut in shortcuts:
+        if only_new and shortcut.ident in done:
+            continue
         if not apply(shortcut):
             skipped.append(shortcut.label)
+        else:
+            applied.append(shortcut.ident)
+    if only_new:
+        ledger = Path(only_new)
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        ledger.write_text("\n".join(sorted(done | set(applied))) + "\n")
+        if verbose and applied:
+            print(f"    [+] New shortcuts: {len(applied)}")
     # Command shortcuts MK used to set and no longer lists (e.g. Obsidian, now
     # MK Notes): remove their slots so the keys don't keep an old action.
     wanted = {s.custom_id for s in shortcuts if s.kind == "custom"}

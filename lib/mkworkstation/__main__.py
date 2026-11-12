@@ -9,6 +9,7 @@
 WHEN: 30m, 2h, 1h30m, 18:00, 6pm, tomorrow, 'tomorrow 9:00'
 """
 import sys
+from pathlib import Path
 
 import mkworkstation
 from mkworkstation import companion
@@ -47,7 +48,17 @@ if __name__ == "__main__":
     command, args = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("", [])
     try:
         if command == "apply-shortcuts":
-            mkworkstation.apply_all(verbose=True)
+            # apply-shortcuts [--only-new LEDGER | --record LEDGER]: all (noting each in LEDGER), or
+            # only those LEDGER doesn't list yet
+            if "--only-new" in args:
+                mkworkstation.apply_all(verbose=True, only_new=args[args.index("--only-new") + 1])
+            elif "--record" in args:
+                mkworkstation.apply_all(verbose=True)
+                ledger = args[args.index("--record") + 1]
+                Path(ledger).parent.mkdir(parents=True, exist_ok=True)
+                Path(ledger).write_text("\n".join(sorted(s.ident for s in mkworkstation.load_shortcuts())) + "\n")
+            else:
+                mkworkstation.apply_all(verbose=True)
         elif command == "brand":
             print("\t".join(mkworkstation.brand()))
         elif command in ("note", "task"):

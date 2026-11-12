@@ -74,6 +74,7 @@ cd ~/fedora-workstation-config && git pull && ./sync.sh
 | Add a reminder from anywhere | `Super+Alt+A` |
 | Clipboard history (colour swatches, Open link, Paste as plain text, Edit) · emoji | `Super+V` · `Super+.` |
 | Pick a colour from the screen | the eyedropper in the top bar |
+| Command palette: windows, actions, math, `?` S.P.I.D.E.Y | `Super+Space` (keyboard layouts: `Super+Alt+Space`) |
 | Wallpaper grid (search, shuffle, auto-rotate, Open Folder; drop pictures into Pictures/Wallpapers) | `Super+W` |
 | Photo Booth | `Super+C` |
 | Switch apps · all windows | `Super+Tab` · `Alt+Tab` |

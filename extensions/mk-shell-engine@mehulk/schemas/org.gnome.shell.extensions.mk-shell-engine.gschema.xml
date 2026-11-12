@@ -87,6 +87,11 @@
       <summary>Glass tint strength</summary>
       <description>0-45 %: how much of the tint colour the top bar's capsules, the dock and MK's popovers take on (never application windows).</description>
     </key>
+    <key name="command-palette" type="as">
+      <default><![CDATA[['<Super>space']]]></default>
+      <summary>Command palette</summary>
+      <description>Windows on every workspace, the shell's actions, math and S.P.I.D.E.Y, in one search bar.</description>
+    </key>
     <key name="focus-ring" type="b">
       <default>true</default>
       <summary>Focus outline</summary>

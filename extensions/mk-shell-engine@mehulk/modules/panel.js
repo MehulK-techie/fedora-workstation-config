@@ -771,6 +771,24 @@ export class Panel {
     constructor(settings) {
         this._settings = settings;
         this._parts = [];
+        // a tactile press on every top-bar button: it dips to 0.96x and springs back (one capture
+        // on the bar, so buttons added later get it too; the click itself is untouched)
+        this._pressId = Main.panel.connect('captured-event', (_p, event) => {
+            if (event.type() !== Clutter.EventType.BUTTON_PRESS || !St.Settings.get().enable_animations)
+                return Clutter.EVENT_PROPAGATE;
+            let a = event.get_source();
+            while (a && a !== Main.panel && !a.has_style_class_name?.('panel-button'))
+                a = a.get_parent();
+            if (a && a !== Main.panel) {
+                a.set_pivot_point(0.5, 0.5);
+                a.remove_transition('scale-x');
+                a.remove_transition('scale-y');
+                a.set_scale(0.96, 0.96);
+                a.ease({scale_x: 1, scale_y: 1, duration: 200, mode: Clutter.AnimationMode.EASE_OUT_BACK,
+                    onStopped: () => a.set_scale(1, 1)});
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
         this._ids = ['changed::top-bar-style', 'changed::show-active-app', 'changed::blur',
             'changed::finder-show-button'].map(
             signal => settings.connect(signal, () => this._rebuild()));
@@ -1033,6 +1051,9 @@ export class Panel {
     }
 
     destroy() {
+        if (this._pressId)
+            Main.panel.disconnect(this._pressId);
+        this._pressId = 0;
         this._unwatch();
         for (const id of this._ids)
             this._settings.disconnect(id);

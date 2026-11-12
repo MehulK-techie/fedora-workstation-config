@@ -15,6 +15,8 @@
 //   modules/mediaKeys.js   Previous / Next track: one press, one skip
 //   modules/windowAnimations.js  windows open and close with a little spring (while Burn My Windows is off)
 //   modules/calendarDeck.js      the calendar as glass, and a reminder for any day ahead
+//   modules/bridge.js            org.mk.ShellEngine on the session bus: Deep Focus, wallpaper hold,
+//                                island notices for your own tools (Spidey)
 //   modules/island.js            the Dynamic Island: the clock's capsule widens for volume, brightness,
 //                                power profile, a new track, a timer ending (GNOME's OSD pop-up replaced)
 //   modules/deepFocus.js         Deep Focus (Super+Alt+F): Do Not Disturb, the wallpaper paused, the dock
@@ -33,6 +35,7 @@ import { CalendarDeck } from './modules/calendarDeck.js';
 import { WorkspaceFlow } from './modules/workspaceFlow.js';
 import { Island } from './modules/island.js';
 import { DeepFocus } from './modules/deepFocus.js';
+import { Bridge } from './modules/bridge.js';
 import { NotifyCenter } from './modules/notifyCenter.js';
 import { ScreenshotActions } from './modules/screenshotActions.js';
 import { LiveWallpaper } from './modules/liveWallpaper.js';
@@ -118,7 +121,8 @@ export default class MKShellEngine extends Extension {
         this._start('window animations', () => new WindowAnimations());
         this._start('workspace flow', () => new WorkspaceFlow());
         this._start('dynamic island', () => new Island());
-        this._start('deep focus', () => new DeepFocus(this._settings, () => this._dock));
+        this._start('deep focus', () => (this._deepFocus = new DeepFocus(this._settings, () => this._dock)));
+        this._start('d-bus bridge', () => new Bridge(() => this._deepFocus));
         this._start('calendar', () => new CalendarDeck(this._settings));
         this._start('notification centre', () => new NotifyCenter());
         this._start('screenshot actions', () => new ScreenshotActions());
@@ -192,6 +196,7 @@ export default class MKShellEngine extends Extension {
         }
         this._parts = [];
         this._dock = null;
+        this._deepFocus = null;
     }
 
     _start(name, make) {

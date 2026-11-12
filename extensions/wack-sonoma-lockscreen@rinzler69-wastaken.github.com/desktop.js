@@ -321,6 +321,13 @@ export class DesktopWallpaper {
     // Quick Settings' Wallpaper Bg Play, on).
     // Deep Focus (MK Shell Engine's deepFocus.js): the wallpaper dims, its sound fades out and it
     // pauses (no CPU, no GPU), until Deep Focus ends
+    // paused by hand (the engine's D-Bus bridge: `Wallpaper pause|resume`), until resumed: the same
+    // quiet pause as under a full-screen window, sound faded out first
+    setHeld(on) {
+        this._held = on;
+        this._queueVolume();
+    }
+
     setDeepFocus(on) {
         this._deep = on;
         if (this._dim) {
@@ -331,7 +338,7 @@ export class DesktopWallpaper {
     }
 
     _volume() {
-        if (Main.sessionMode.isLocked || this._deep)
+        if (Main.sessionMode.isLocked || this._deep || this._held)
             return 0;
         const level = this._settings.get_double('desktop-audio-volume');
         if (this._bgPlay)                            // under your apps too; never over other media
@@ -552,7 +559,7 @@ export class DesktopWallpaper {
     // overview); with Bg Play on, only while other media plays. A pause waits for the sound's fade.
     _hidden() {
         const m = Main.layoutManager.primaryIndex;
-        if (Main.sessionMode.isLocked || this._deep || (m >= 0 && global.display.get_monitor_in_fullscreen(m)))
+        if (Main.sessionMode.isLocked || this._deep || this._held || (m >= 0 && global.display.get_monitor_in_fullscreen(m)))
             return true;
         if (this._bgPlay)
             return Boolean(this._media?.playing);

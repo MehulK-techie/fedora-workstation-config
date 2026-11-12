@@ -15,16 +15,34 @@
 // wallpaper plays (it covers the still one) the shuffle says so and leaves it be.
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import { WallpaperGrid } from './wallpaperGrid.js';
 
 const HELPER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-wallpaper']);
 const STAGE1 = 300, STAGE2 = 380, HOLD = 700, OUT = 300;
 const LIVE_CLONE = 'mk-live-wallpaper';           // WACK's desktop.js names its live wallpaper this
+
+// the top bar's wallpaper button: opens the grid once its click is over (as the eyedropper)
+const WallpaperButton = GObject.registerClass(class MkWallpaperButton extends PanelMenu.Button {
+    constructor(onClick) {
+        super(0.5, 'Wallpapers', true);
+        this.add_child(new St.Icon({icon_name: 'preferences-desktop-wallpaper-symbolic', style_class: 'system-status-icon'}));
+        this.connect('button-press-event', () => Clutter.EVENT_STOP);
+        this.connect('button-release-event', () => {
+            GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                onClick();
+                return GLib.SOURCE_REMOVE;
+            });
+            return Clutter.EVENT_STOP;
+        });
+    }
+});
 
 export class WallpaperEngine {
     constructor(settings) {
@@ -33,8 +51,25 @@ export class WallpaperEngine {
         this._timers = new Set();
         // Super+W: the grid, to pick one (the timer and Shuffle take one without asking)
         this._carousel = new WallpaperGrid(settings, path => this.show(path), () => this.random());
-        Main.wm.addKeybinding('wallpaper-shuffle', settings, Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
-            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW, () => this._openCarousel());
+        // (registered once; only a binding that took is removed again: removing one that never took
+        // logged "Trying to remove non-existent keybinding")
+        this._hasWallpaperBinding = false;
+        try {
+            const action = Main.wm.addKeybinding('wallpaper-shuffle', settings, Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
+                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW, () => this._openCarousel());
+            this._hasWallpaperBinding = action !== Meta.KeyBindingAction.NONE;
+            if (!this._hasWallpaperBinding)
+                console.warn('mk-shell-engine: Super+W (wallpaper-shuffle) could not be registered: the top-bar button still opens the grid');
+        } catch (e) {
+            console.warn(`mk-shell-engine: wallpaper key: ${e.message}`);
+        }
+        // the same grid, one click away: a button in the top bar beside the eyedropper
+        try {
+            this._button = new WallpaperButton(() => this._openCarousel());
+            Main.panel.addToStatusArea('mk-wallpaper-grid', this._button, 0, 'right');
+        } catch (e) {
+            console.warn(`mk-shell-engine: wallpaper button: ${e.message}`);
+        }
         settings.connectObject('changed::wallpaper-shuffle-minutes', () => this._schedule(), this);
         this._schedule();
     }
@@ -235,7 +270,11 @@ export class WallpaperEngine {
         this._intervalId = 0;
         this._clear();
         this._busy = false;
-        Main.wm.removeKeybinding('wallpaper-shuffle');
+        if (this._hasWallpaperBinding)
+            Main.wm.removeKeybinding('wallpaper-shuffle');
+        this._hasWallpaperBinding = false;
+        this._button?.destroy();
+        this._button = null;
         this._settings.disconnectObject(this);
     }
 }

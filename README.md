@@ -75,7 +75,7 @@ cd ~/fedora-workstation-config && git pull && ./sync.sh
 | Clipboard history (colour swatches, Open link, Paste as plain text, Edit) · emoji | `Super+V` · `Super+.` |
 | Pick a colour from the screen | the eyedropper in the top bar |
 | Command palette: windows, actions, math, `?` S.P.I.D.E.Y | `Super+Space` (keyboard layouts: `Super+Alt+Space`) |
-| Wallpaper grid (search, shuffle, auto-rotate, Open Folder; drop pictures into Pictures/Wallpapers) | `Super+W` |
+| Wallpaper grid (search, shuffle, auto-rotate, Open Folder; drop pictures into Pictures/Wallpapers) | `Super+W`, or the wallpaper button in the top bar |
 | Photo Booth | `Super+C` |
 | Switch apps · all windows | `Super+Tab` · `Alt+Tab` |
 

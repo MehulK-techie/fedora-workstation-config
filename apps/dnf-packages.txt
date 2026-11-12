@@ -79,7 +79,6 @@ brightnessctl
 
 # --- Photos, screenshots, camera and audio -------------------------------------
 snapshot
-python3-opencv
 flameshot
 easyeffects
 mediawriter

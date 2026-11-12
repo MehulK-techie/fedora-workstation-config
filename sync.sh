@@ -1010,6 +1010,30 @@ else
     PYTHONPATH="$MK_SHARE/lib" python3 -m mkworkstation apply-shortcuts --only-new "$SHORTCUTS_LEDGER"
 fi
 
+# Super+W (the wallpaper grid) and Super+Space (the command palette) are MK Shell Engine's: a GNOME
+# binding holding exactly one of them loses that key (and only that one), so both always register.
+# (Keyboard layouts switch with Super+Alt+Space: config/shortcuts.conf.)
+python3 - << 'PY' || true
+import gi
+from gi.repository import Gio
+TAKEN = {"<super>w", "<super>space"}
+source = Gio.SettingsSchemaSource.get_default()
+for schema_id in ("org.gnome.desktop.wm.keybindings", "org.gnome.shell.keybindings", "org.gnome.mutter.keybindings"):
+    schema = source.lookup(schema_id, True)
+    if not schema:
+        continue
+    settings = Gio.Settings.new(schema_id)
+    for key in schema.list_keys():
+        if schema.get_key(key).get_value_type().dup_string() != "as":
+            continue
+        keys = settings.get_strv(key)
+        kept = [k for k in keys if k.lower().replace("<mod4>", "<super>") not in TAKEN]
+        if kept != keys:
+            settings.set_strv(key, kept)
+            print(f"    [*] {schema_id.split('.')[-2]} {key}: freed {', '.join(set(keys) - set(kept))} for MK")
+Gio.Settings.sync()
+PY
+
 # Drop your own custom shortcuts that run exactly what an mk-* shortcut now
 # runs (such as an older "Launch Obsidian" on Super+N), so no key is bound twice.
 dedupe_custom_shortcuts() {
@@ -1059,7 +1083,8 @@ if (( FRESH )); then
     mkdir -p "$(dirname "$MARKER")"
     date -Iseconds > "$MARKER"
 fi
-echo "✔ Workstation configurations synchronized."
+synced=$(git -C "$SCRIPT_DIR" log -1 --format='%h %s' 2> /dev/null | cut -c1-90 || true)
+echo "✔ Workstation configurations synchronized${synced:+ (commit $synced)}."
 if (( NEW_EXTENSIONS )); then
     echo "  New extensions were installed: log out and back in to load them."
 fi

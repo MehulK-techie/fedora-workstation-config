@@ -88,6 +88,9 @@ export default class WackSonomaLiveLockscreen extends Extension {
         this._settings = this.getSettings();
         this._hookShield();
         this._sessionId = Main.sessionMode.connect('updated', () => this._sync());
+        // the lock screen's player never lives on the unlocked desktop: one that appears there
+        // (a setup that finished after unlocking) is hidden and ended the moment it shows itself
+        this._strayId = global.display.connect('window-created', (_d, win) => this._guardLockPlayer(win));
         this._styleIds = STYLE_KEYS.map(k => this._settings.connect(`changed::${k}`, () => this._applyStyle()));
         this._liveIds = LIVE_KEYS.map(k => this._settings.connect(`changed::${k}`, () => this._restartLive()));
         this._volumeIds = ['lockscreen-audio-volume', 'audio-auto-mute-on-other-media'].map(k =>
@@ -155,7 +158,11 @@ export default class WackSonomaLiveLockscreen extends Extension {
     // ----- the two parts, while locked
     _sync() {
         const locked = Main.sessionMode.isLocked;
-        this._syncTopBar(locked);
+        try {
+            this._syncTopBar(locked);
+        } catch (e) {                                    // (never in the way of the lock parts below)
+            console.error(`wack-sonoma-lockscreen: top bar: ${e.message}`);
+        }
         if (locked) {
             if (this._stopId) {                          // locked again during the unlock animation
                 GLib.source_remove(this._stopId);
@@ -271,29 +278,58 @@ export default class WackSonomaLiveLockscreen extends Extension {
 
     _stopParts() {
         this._running = false;
-        if (this._styleRetry) {
-            GLib.source_remove(this._styleRetry);
-            this._styleRetry = 0;
+        // each step on its own: one that throws never keeps the rest (the lock video's player
+        // among them) running on the unlocked desktop
+        const steps = [
+            () => {
+                if (this._styleRetry)
+                    GLib.source_remove(this._styleRetry);
+                this._styleRetry = 0;
+            },
+            () => {
+                if (this._hidPanel)
+                    Main.panel.show();
+                this._hidPanel = false;
+            },
+            () => this._dim?.destroy(),
+            () => this._greeting?.destroy(),
+            () => this._tagline?.destroy(),
+            () => this._unformatDate(),
+            () => this._unlayoutClock(),
+            () => this._unwatchBlur(),
+            () => this._media?.destroy(),
+            () => this._stopPart('_widgets'),
+            () => this._stopPart('_live'),
+            () => this._stopPart('_sonoma'),
+        ];
+        for (const step of steps) {
+            try {
+                step();
+            } catch (e) {
+                console.error(`wack-sonoma-lockscreen: stopping the lock screen: ${e.message}`);
+            }
         }
-        if (this._hidPanel) {
-            Main.panel.show();
-            this._hidPanel = false;
-        }
-        this._dim?.destroy();
-        this._dim = null;
-        this._greeting?.destroy();
-        this._greeting = null;
-        this._tagline?.destroy();
-        this._tagline = null;
-        this._unformatDate();
-        this._unlayoutClock();
-        this._unwatchBlur();
-        this._media?.destroy();
-        this._media = null;
-        this._stopPart('_widgets');
-        this._stopPart('_live');
-        this._stopPart('_sonoma');
+        this._dim = this._greeting = this._tagline = this._media = null;
         this._sweepLockPlayer();
+    }
+
+    _guardLockPlayer(win) {
+        const check = () => {
+            try {
+                if (Main.sessionMode.isLocked)
+                    return;
+                const id = `${win.get_wm_class() ?? ''} ${win.get_title() ?? ''}`.toLowerCase();
+                if (!id.includes('mk-live-wallpaper-lock'))
+                    return;
+                win.disconnectObject(this);
+                win.get_compositor_private()?.hide();
+                win.kill();
+                console.warn('wack-sonoma-lockscreen: a lock screen player appeared on the unlocked desktop: ended');
+            } catch {}
+        };
+        check();
+        if (!win.get_wm_class())                        // (its id may come a moment later)
+            win.connectObject('notify::wm-class', check, 'notify::title', check, this);
     }
 
     // Unlocked: the lock screen's mpv has normally quit with its part. Should one still be there
@@ -795,6 +831,11 @@ export default class WackSonomaLiveLockscreen extends Extension {
         }
         Main.screenShield?._dialog?.remove_style_class_name('mk-hide-fp-hint');
         Main.sessionMode.disconnect(this._sessionId);
+        if (this._strayId)
+            global.display.disconnect(this._strayId);
+        this._strayId = 0;
+        for (const actor of global.get_window_actors())
+            actor.meta_window?.disconnectObject?.(this);
         if (this._sweepId)                           // (_stopParts above scheduled one: not past disable)
             GLib.source_remove(this._sweepId);
         this._sweepId = 0;

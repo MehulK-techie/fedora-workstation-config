@@ -31,13 +31,26 @@ export default class LockscreenExtension extends Extension {
         this._userPaused = false;
         this._settings = this.getSettings();
 
-        this._setup().catch((e) => {
+        // MK: every enable gets its own generation. Setting up waits (for the lock screen dialog,
+        // for mpv, for its window); unlocking meanwhile disables this part, and the setup that was
+        // under way must then stop where it is and end the mpv it started, never carry on after
+        // unlock (an mpv window left on the unlocked desktop sits invisible on top of every window
+        // and takes their clicks) and never disable a newer run's state with its own late error.
+        const gen = this._gen = (this._gen ?? 0) + 1;
+        this._setup(gen).catch((e) => {
+            if (gen !== this._gen)
+                return;                                  // (a stale setup: already cleaned up)
             logError(`Unable to setup extension: ${e}`);
             this.disable();
         });
     }
 
-    async _setup() {
+    // MK: still the current run (not disabled, not re-enabled since)?
+    _current(gen) {
+        return gen === this._gen && this._settings !== null;
+    }
+
+    async _setup(gen) {
         if (!this._checkMpv())
             return;
 
@@ -48,14 +61,29 @@ export default class LockscreenExtension extends Extension {
         this._readPlaybackSettings();
         this._setupWatchers();
         await this._setupInjector();
+        if (!this._current(gen))
+            return;
 
         this._setupPlayer(this._createPlaylist(videoPaths));
         if (this._settings.get_boolean(Keys.MPRIS_ENABLED))
             this._setupMpris();
 
-        await this._player.run();
-        const window = await this._player.waitForWindow(WINDOW_TIMEOUT);
+        // (the player of this run, held here: disable() drops this._player)
+        const player = this._player;
+        const abandon = () => {
+            try {
+                player.destroy();                        // (ends its mpv: force_exit)
+            } catch {}
+        };
+        await player.run();
+        if (!this._current(gen))
+            return abandon();
+        const window = await player.waitForWindow(WINDOW_TIMEOUT);
+        if (!this._current(gen))
+            return abandon();
         await this._setupRenderer(window);
+        if (!this._current(gen))
+            return abandon();
     }
 
     // MK: zero-lag mode keeps the video in step with the screen (its refresh rate, from
@@ -378,6 +406,7 @@ export default class LockscreenExtension extends Extension {
      * Stopping the videoplayblack and cleaning everything up
     */
     disable() {
+        this._gen = (this._gen ?? 0) + 1;                // (a setup still under way stops: _current)
         destroySleeps();
         if (this._resumeId)
             GLib.source_remove(this._resumeId);

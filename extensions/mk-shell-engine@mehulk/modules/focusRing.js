@@ -1,7 +1,7 @@
-// MK Shell Engine: a quiet outline around the window you're working in (as Niri draws it): 1.5 px
+// MK Shell Engine: a crisp outline around the window you're working in (as Niri draws it): 2 px with a soft glow,
 // in your accent colour, following the window's corners, just above it in the stacking (so a
-// window over it still covers it). Never where it wastes or hides anything: not on a maximized or
-// full-screen window, not in the overview, not while workspaces slide, not on dialogs or menus.
+// window over it still covers it), on floating, tiled and maximized windows alike. Never on a
+// full-screen window, in the overview, not while workspaces slide, not on dialogs or menus.
 // `focus-ring` (on by default) under org.gnome.shell.extensions.mk-shell-engine switches it.
 //
 // Cost: one non-reactive actor, moved only when the focused window moves, resizes or changes.
@@ -13,7 +13,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { accentRGB, onAccentChanged } from './colour.js';
 import { isWallpaperWindow } from './wallpaperWindow.js';
 
-const WIDTH = 1.5;          // px
+const WIDTH = 2;            // px
 const RADIUS = 12;          // libadwaita's window corners
 const TYPES = [Meta.WindowType.NORMAL];
 
@@ -34,8 +34,8 @@ export class FocusRing {
 
     _paint() {
         const [r, g, b] = accentRGB() ?? [120, 170, 255];
-        this._ring.style = `border: ${WIDTH}px solid rgba(${r},${g},${b},0.85); border-radius: ${RADIUS}px;` +
-            `box-shadow: 0 0 10px 0 rgba(${r},${g},${b},0.18);`;
+        this._ring.style = `border: ${WIDTH}px solid rgba(${r},${g},${b},0.90); border-radius: ${RADIUS}px;` +
+            `box-shadow: 0 0 14px 1px rgba(${r},${g},${b},0.32);`;
     }
 
     _follow() {
@@ -53,8 +53,6 @@ export class FocusRing {
             return false;
         if (!TYPES.includes(win.window_type) || win.minimized || win.fullscreen || isWallpaperWindow(win))
             return false;
-        if (win.maximized_horizontally && win.maximized_vertically)
-            return false;                            // (maximized: every pixel is the window's)
         return win.get_workspace() === global.workspace_manager.get_active_workspace() || win.is_on_all_workspaces();
     }
 

@@ -68,7 +68,7 @@
     <key name="focus-ring" type="b">
       <default>true</default>
       <summary>Focus outline</summary>
-      <description>A 1.5 px accent-coloured outline around the window you're working in (not when it's maximized or full screen).</description>
+      <description>A 2 px accent-coloured outline with a soft glow around the window you're working in (not when it's full screen).</description>
     </key>
     <key name="wallpaper-shuffle" type="as">
       <default><![CDATA[['<Super>w']]]></default>

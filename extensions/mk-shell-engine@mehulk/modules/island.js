@@ -42,7 +42,14 @@ export class Island {
         this._content.add_child(this._label);
         this._content.add_child(this._track);
         this.actor.add_child(this._content);
-        Main.layoutManager.addTopChrome(this.actor, {affectsInputRegion: false, trackFullscreen: true});
+        // (GNOME 51 no longer takes affectsInputRegion: then the plain form; the island sits over
+        // the top bar's clock, so the input it covers while shown is the bar's anyway)
+        try {
+            Main.layoutManager.addTopChrome(this.actor, {affectsInputRegion: false, trackFullscreen: true});
+        } catch {
+            this.actor.get_parent()?.remove_child(this.actor);
+            Main.layoutManager.addTopChrome(this.actor, {trackFullscreen: true});
+        }
 
         // GNOME's OSD: every call goes here instead (restored on destroy)
         const osd = Main.osdWindowManager;

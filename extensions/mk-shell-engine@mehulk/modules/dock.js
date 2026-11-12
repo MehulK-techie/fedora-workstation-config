@@ -131,7 +131,18 @@ export class Dock {
         this._glow = /^#[0-9a-f]{6}$/i.test(glow) ? glow : '#ef4444';
         const edge = ['spider-glow', 'cyber-neon'].includes(style)
             ? `border: 1px solid ${this._glow}; box-shadow: 0 0 20px 1px ${this._glow}80; ` : '';
-        this._actor.style = `${tint ? `background-color: ${tint}; ` : ''}${edge}border-radius: ${this._radius}px;`;
+        // frosted glass: the tint as a soft vertical gradient (a little lighter at the top, where
+        // the light catches it) rather than one flat colour
+        const glass = tint ? (() => {
+            const m = tint.match(/rgba\((\d+), (\d+), (\d+), ([\d.]+)\)/);
+            if (!m)
+                return `background-color: ${tint}; `;
+            const [r, g, b, a] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+            const lift = v => Math.min(255, v + 26);
+            return `background-gradient-direction: vertical; background-gradient-start: rgba(${lift(r)}, ${lift(g)}, ` +
+                `${lift(b)}, ${Math.min(0.95, a + 0.06).toFixed(2)}); background-gradient-end: ${tint}; `;
+        })() : '';
+        this._actor.style = `${glass}${edge}border-radius: ${this._radius}px;`;
         this._indicator = this._settings.get_string('dock-indicator-style');
         this._connect(this._settings, 'changed::dock-focused-raise', () => this._settle());
         // the icons only take the pointer once the dock is (nearly) back in place: a hidden
@@ -483,7 +494,9 @@ export class Dock {
             // a small glowing dot pops in under each running app (two for several windows);
             // the app you're using gets its dot in your accent colour
             const dot = colour => {
-                const w = new St.Widget({style_class: `mk-dock-bar mk-dock-bar-${this._indicator ?? 'glowing-dot'}`,
+                // (the app you're using: a short glowing pill instead of a dot)
+                const w = new St.Widget({style_class: `mk-dock-bar mk-dock-bar-${this._indicator ?? 'glowing-dot'}` +
+                    (state === 'focus' ? ' mk-dock-bar-active' : ''),
                     style: `background-color: ${colour}; box-shadow: 0 0 ${state === 'focus' ? 8 : 6}px ${colour};`,
                     pivot_point: new Graphene.Point({x: 0.5, y: 0.5}), scale_x: 0, scale_y: 0, opacity: 0});
                 item.bars.add_child(w);
@@ -513,15 +526,18 @@ export class Dock {
         const [dockX] = this._actor.get_transformed_position();
         const under = items.find(it => !it.isAppGrid && pointerX >= dockX + it.button.x &&
             pointerX < dockX + it.button.x + it.button.width);
-        // Magnetic Wave: the icons near the pointer swell too, falling off with distance
-        const wave = this._style === 'magnetic-wave' && this._hover > 1.001;
+        // The icons near the pointer swell too, on a Gaussian falloff with distance (the icon under
+        // it the most, its neighbours less, the rest not at all): a gentle wave by default, a wide
+        // one for Magnetic Wave. Scaling never changes the layout, so nothing shifts sideways.
+        const wave = this._hover > 1.001;
+        const reach = this._style === 'magnetic-wave' ? 1.25 : 0.85;   // in icon widths
         items.forEach(it => {
             if (it.gone)
                 return;
             let [scale, lift] = it === under && this._hover > 1.001 ? [this._hover, LIFT] : this._rest(it);
             if (wave && !it.isAppGrid) {
                 const centre = dockX + it.button.x + it.button.width / 2;
-                const k = Math.exp(-(((pointerX - centre) / (it.button.width * 1.25)) ** 2));
+                const k = Math.exp(-(((pointerX - centre) / (it.button.width * reach)) ** 2));
                 const [restScale, restLift] = this._rest(it);
                 scale = Math.round((restScale + (this._hover - 1) * k) * 100) / 100;
                 lift = Math.round(Math.max(restLift, LIFT * k));
@@ -555,7 +571,8 @@ export class Dock {
     }
 
     _settle() {
-        const ease = {duration: 180, mode: Clutter.AnimationMode.EASE_OUT_QUAD};
+        // the pointer gone: each icon springs back to rest, a slight, damped overshoot
+        const ease = {duration: 260, mode: Clutter.AnimationMode.EASE_OUT_BACK};
         const rgb = this._rgb();
         if (this._gone)
             return;

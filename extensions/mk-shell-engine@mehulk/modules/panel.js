@@ -478,6 +478,10 @@ class TrayFold {
 }
 
 // "Thu Nov 5 · 2:25 PM", in place of GNOME's clock text (GNOME's menu, calendar and all stay).
+// The centre capsule as a small Dynamic Island:
+//   while something plays: three little equalizer bars and the track's title beside the time
+//   the calendar deck (calendar, agenda and tasks, Focus timer, media card) morphs out of the
+//   capsule when opened: it grows down from the pill with a spring (280 ms, EASE_OUT_BACK)
 class Clock {
     constructor() {
         this._display = Main.panel.statusArea.dateMenu?._clockDisplay;
@@ -486,6 +490,8 @@ class Clock {
         this._label = new St.Label({style_class: 'mk-clock', y_align: Clutter.ActorAlign.CENTER});
         this._display.get_parent().insert_child_above(this._label, this._display);
         this._display.hide();
+        this._buildMedia();
+        this._morph();
         this._iface = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
         this._wall = new GnomeDesktop.WallClock();
         this._ids = [this._wall.connect('notify::clock', () => this._sync()),
@@ -498,10 +504,108 @@ class Clock {
         this._label.text = GLib.DateTime.new_now_local().format(h24 ? '%a %b %-e  ·  %H:%M' : '%a %b %-e  ·  %-l:%M %p');
     }
 
+    // ----- now playing, in the capsule
+    _buildMedia() {
+        this._media = new St.BoxLayout({style_class: 'mk-clock-media', visible: false, y_align: Clutter.ActorAlign.CENTER});
+        this._eq = new St.BoxLayout({style_class: 'mk-eq', y_align: Clutter.ActorAlign.CENTER});
+        this._bars = [0, 1, 2].map(() => {
+            const bar = new St.Widget({style_class: 'mk-eq-bar', y_align: Clutter.ActorAlign.END, height: 4});
+            this._eq.add_child(bar);
+            return bar;
+        });
+        this._track = new St.Label({style_class: 'mk-clock-track', y_align: Clutter.ActorAlign.CENTER});
+        this._media.add_child(this._eq);
+        this._media.add_child(this._track);
+        this._label.get_parent().insert_child_below(this._media, this._label);
+        this._players = new Map();
+        // (GNOME's own MPRIS source; if a GNOME version has it differently, the capsule just shows the time)
+        import('resource:///org/gnome/shell/ui/mpris.js').then(Mpris => {
+            if (!this._media)
+                return;
+            this._source = new Mpris.MprisSource();
+            this._source.connectObject('player-added', (_s, p) => this._watchPlayer(p),
+                'player-removed', (_s, p) => this._unwatchPlayer(p), this);
+            for (const p of this._source.players ?? [])
+                this._watchPlayer(p);
+        }).catch(e => console.warn(`mk-shell-engine: capsule media: ${e.message}`));
+    }
+
+    _watchPlayer(player) {
+        if (this._players.has(player) || /LiveLockScreen|mk.?live.?wallpaper/i.test(player._busName ?? ''))
+            return;
+        this._players.set(player, player.connect('changed', () => this._syncMedia()));
+        this._syncMedia();
+    }
+
+    _unwatchPlayer(player) {
+        const id = this._players.get(player);
+        if (id)
+            player.disconnect(id);
+        this._players.delete(player);
+        this._syncMedia();
+    }
+
+    _syncMedia() {
+        const playing = [...this._players.keys()].find(p => p.status === 'Playing');
+        const show = Boolean(playing?.trackTitle);
+        if (show) {
+            const title = playing.trackTitle;
+            this._track.text = title.length > 28 ? `${title.slice(0, 27).trimEnd()}…` : title;
+        }
+        if (show === this._media.visible)
+            return;
+        this._media.visible = show;
+        if (show && !this._eqId) {
+            // the bars dance (a new height every 160 ms, eased): only while something plays
+            this._eqId = GLib.timeout_add(GLib.PRIORITY_LOW, 160, () => {
+                for (const bar of this._bars)
+                    bar.ease({height: 3 + Math.round(Math.random() * 9), duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+                return GLib.SOURCE_CONTINUE;
+            });
+        } else if (!show && this._eqId) {
+            GLib.source_remove(this._eqId);
+            this._eqId = 0;
+        }
+    }
+
+    // ----- the deck grows out of the capsule
+    _morph() {
+        const menu = Main.panel.statusArea.dateMenu?.menu;
+        if (!menu?.actor)
+            return;
+        this._menu = menu;
+        this._morphId = menu.connect('open-state-changed', (_m, open) => {
+            const actor = menu.actor;
+            try {
+                if (open && St.Settings.get().enable_animations) {
+                    actor.set_pivot_point(0.5, 0);
+                    actor.set_scale(0.82, 0.55);
+                    actor.ease({scale_x: 1, scale_y: 1, duration: 280, mode: Clutter.AnimationMode.EASE_OUT_BACK,
+                        onStopped: () => actor.set_scale(1, 1)});
+                } else if (!open) {
+                    actor.set_scale(1, 1);
+                }
+            } catch {}
+        });
+    }
+
     destroy() {
         this._wall.disconnect(this._ids[0]);
         this._iface.disconnect(this._ids[1]);
         this._wall.run_dispose?.();
+        if (this._eqId)
+            GLib.source_remove(this._eqId);
+        this._eqId = 0;
+        for (const [player, id] of this._players ?? [])
+            player.disconnect(id);
+        this._players?.clear();
+        this._source?.disconnectObject(this);
+        this._source = null;
+        if (this._morphId)
+            this._menu.disconnect(this._morphId);
+        this._menu?.actor?.set_scale(1, 1);
+        this._media?.destroy();
+        this._media = null;
         this._label.destroy();
         this._display.show();
     }

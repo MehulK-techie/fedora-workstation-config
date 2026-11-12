@@ -363,3 +363,9 @@
   color: rgba(255, 255, 255, 0.92); text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45); }
 .mk-desk-clock-date { font-size: 16pt; font-weight: 600; letter-spacing: 1px; padding-left: 6px;
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5); }
+
+/* the centre capsule's now-playing (modules/panel.js Clock) */
+.mk-clock-media { spacing: 6px; margin-right: 8px; }
+.mk-eq { spacing: 2px; height: 12px; }
+.mk-eq-bar { width: 3px; border-radius: 2px; background-color: -st-accent-color; }
+.mk-clock-track { font-size: 9.5pt; color: rgba(255, 255, 255, 0.78); }

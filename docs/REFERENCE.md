@@ -30,6 +30,7 @@ Every command, file and format. How the parts fit together is in
 | `mk power [status\|on\|off]` | Smart power profiles on laptops |
 | `mk screensaver [on \| off \| show [SCENE] \| scene NAME \| delay SECONDS \| list]` | Screensaver scenes when you step away |
 | `mk welcome variety on\|off` · `birthday [YYYY-]MM-DD` · `lines` | A different greeting each time; a birthday greeting and countdown; edit your own lines |
+| `mk wallpaper [next \| set FILE \| list]` | The still wallpaper: Pictures/Wallpapers, then MK's own three (`Super+W` animates `next` with the contour-trace transition; `wallpaper-shuffle-minutes` shuffles on a timer) |
 | `mk accent [auto \| #rrggbb \| system on\|off \| status]` | Accent colour: from the wallpaper, or fixed; also sets GNOME's accent |
 | `mk rename "NAME" [TAG]` | Rename MK's windows, notifications and top-bar tag |
 | `mk lock app NAME` · `mk unlock app NAME` | The app's launcher asks for your fingerprint or password before it starts (polkit `auth_self`) · stop asking |

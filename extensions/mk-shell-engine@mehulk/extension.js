@@ -15,6 +15,7 @@
 //   modules/mediaKeys.js   Previous / Next track: one press, one skip
 //   modules/windowAnimations.js  windows open and close with a little spring (while Burn My Windows is off)
 //   modules/calendarDeck.js      the calendar as glass, and a reminder for any day ahead
+//   modules/focusRing.js         a 1.5 px accent outline around the focused window (focus-ring)
 //   modules/bridge.js            org.mk.ShellEngine on the session bus: Deep Focus, wallpaper hold,
 //                                island notices for your own tools (Spidey)
 //   modules/island.js            the Dynamic Island: the clock's capsule widens for volume, brightness,
@@ -36,6 +37,7 @@ import { WorkspaceFlow } from './modules/workspaceFlow.js';
 import { Island } from './modules/island.js';
 import { DeepFocus } from './modules/deepFocus.js';
 import { Bridge } from './modules/bridge.js';
+import { FocusRing } from './modules/focusRing.js';
 import { NotifyCenter } from './modules/notifyCenter.js';
 import { ScreenshotActions } from './modules/screenshotActions.js';
 import { LiveWallpaper } from './modules/liveWallpaper.js';
@@ -123,6 +125,7 @@ export default class MKShellEngine extends Extension {
         this._start('dynamic island', () => new Island());
         this._start('deep focus', () => (this._deepFocus = new DeepFocus(this._settings, () => this._dock)));
         this._start('d-bus bridge', () => new Bridge(() => this._deepFocus));
+        this._start('focus ring', () => new FocusRing(this._settings));
         this._start('calendar', () => new CalendarDeck(this._settings));
         this._start('notification centre', () => new NotifyCenter());
         this._start('screenshot actions', () => new ScreenshotActions());

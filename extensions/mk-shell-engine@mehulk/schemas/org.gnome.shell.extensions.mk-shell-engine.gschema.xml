@@ -65,6 +65,22 @@
       <summary>Coder desktop</summary>
       <description>An editor, a terminal and a browser on localhost onto a fresh desktop, side by side.</description>
     </key>
+    <key name="focus-ring" type="b">
+      <default>true</default>
+      <summary>Focus outline</summary>
+      <description>A 1.5 px accent-coloured outline around the window you're working in (not when it's maximized or full screen).</description>
+    </key>
+    <key name="wallpaper-shuffle" type="as">
+      <default><![CDATA[['<Super>w']]]></default>
+      <summary>Next wallpaper</summary>
+      <description>Shows the next picture from Pictures/Wallpapers (and MK's own) with the contour-trace transition.</description>
+    </key>
+    <key name="wallpaper-shuffle-minutes" type="i">
+      <range min="0" max="1440"/>
+      <default>0</default>
+      <summary>Shuffle the wallpaper every N minutes</summary>
+      <description>0: only when asked (Super+W).</description>
+    </key>
     <key name="dock" type="b">
       <default>true</default>
       <summary>MK dock</summary>

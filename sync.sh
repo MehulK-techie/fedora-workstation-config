@@ -949,6 +949,24 @@ if gsettings list-keys org.gnome.mutter | grep -qx experimental-features; then
     gsettings_append org.gnome.mutter experimental-features scale-monitor-framebuffer xwayland-native-scaling
 fi
 
+# A saved setting that names a file this machine doesn't have (a wallpaper photo or video from
+# the machine it was exported on) is left out, so the extension keeps its own default instead of
+# pointing at nothing (a blank lock screen, a wallpaper player started for a missing file).
+drop_missing_files() {
+    local line value
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^[a-z0-9-]+=\'(file://)?(/[^\']*)\'$ ]]; then
+            value="${BASH_REMATCH[2]}"
+            [[ -n "${BASH_REMATCH[1]}" ]] && printf -v value '%b' "${value//%/\\x}"   # (file:// URIs: %20 and co.)
+            if [[ ! -e "$value" ]]; then
+                echo "    [*] Left out ${line%%=*} (no $value on this machine)" >&2
+                continue
+            fi
+        fi
+        printf '%s\n' "$line"
+    done
+}
+
 # Saved extension preferences (config/extension-settings/, written by `mk export`).
 # Loaded after the defaults above, so your own tuned values win.
 echo "==> Restoring saved extension settings..."
@@ -959,7 +977,7 @@ for settings in "$SCRIPT_DIR"/config/extension-settings/*.dconf; do
         echo "    [*] Skipped $(basename "$settings") (missing '# dconf path:' header)"
         continue
     fi
-    sed "s|__USER_HOME__|$HOME|g" "$settings" | dconf load "$path"
+    sed "s|__USER_HOME__|$HOME|g" "$settings" | drop_missing_files | dconf load "$path"
 done
 # Blur my Shell's top bar: dynamic blur, its background overridden only while a window
 # touches the bar, the default style (straight to dconf: in place even before the

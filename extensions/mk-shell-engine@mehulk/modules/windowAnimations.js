@@ -10,6 +10,7 @@
 // own animation. Stands aside while Burn My Windows is on (it animates the
 // same moments).
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
@@ -18,6 +19,7 @@ import { BURN_MY_WINDOWS, isActive, watch } from './conflicts.js';
 import { isWallpaperWindow, restoreActor } from './wallpaperWindow.js';
 
 const OPEN = 220, CLOSE = 130, FADE_IN = 100;   // ms: opening eases out (cubic) over 220
+const SAFETY = 400;                             // ms after a window opens: it must be whole and visible
 const clamp = p => Math.min(1, Math.max(0, p));
 const lerp = (a, b, t) => a + (b - a) * t;
 const easeOutCubic = p => 1 - (1 - p) ** 3;
@@ -28,6 +30,7 @@ const TYPES = [Meta.WindowType.NORMAL, Meta.WindowType.DIALOG, Meta.WindowType.M
 export class WindowAnimations {
     constructor() {
         this._running = new Map();
+        this._safety = new Map();                // actor -> its 400 ms check
         this._hooked = false;
         this._unwatch = watch(() => this._sync());
         this._sync();
@@ -86,7 +89,51 @@ export class WindowAnimations {
             !win.is_monitor_sized() && !Main.overview.visible && actor.width > 0 && actor.height > 0;
     }
 
+    // 400 ms after an ordinary window opens (whichever animation it got, ours or GNOME's), it's
+    // made sure of: no effect left running on it, so it's put whole and in place, fully opaque,
+    // shown. Whatever went wrong on a fresh machine, a window never stays invisible.
+    _checkLater(actor) {
+        const old = this._safety.get(actor);
+        if (old)
+            GLib.source_remove(old);
+        const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SAFETY, () => {
+            this._safety.delete(actor);
+            try {
+                const win = actor.meta_window;
+                if (!win || win.minimized || win.window_type !== Meta.WindowType.NORMAL ||
+                    isWallpaperWindow(win) || this._running.has(actor))
+                    return GLib.SOURCE_REMOVE;
+                const busy = ['opacity', 'scale-x', 'scale-y', 'translation-x', 'translation-y']
+                    .some(p => actor.get_transition(p));
+                // (hidden is only wrong for a window on this workspace: elsewhere it's meant to be)
+                const here = !Main.overview.visible && (win.is_on_all_workspaces() ||
+                    win.get_workspace() === global.workspace_manager.get_active_workspace());
+                const off = actor.opacity !== 255 || actor.scale_x !== 1 || actor.scale_y !== 1 ||
+                    actor.translation_x !== 0 || actor.translation_y !== 0 || (here && !actor.visible);
+                if (off && !busy) {
+                    console.warn('mk-shell-engine: a window was left faded, shrunk or hidden after opening: put right');
+                    const wasVisible = actor.visible;
+                    restoreActor(actor);
+                    if (!here && !wasVisible)
+                        actor.hide();
+                }
+            } catch {}                                // (the window went away meanwhile)
+            return GLib.SOURCE_REMOVE;
+        });
+        this._safety.set(actor, id);
+        actor.connectObject('destroy', () => {
+            const pending = this._safety.get(actor);
+            if (pending)
+                GLib.source_remove(pending);
+            this._safety.delete(actor);
+        }, this);
+    }
+
     _run(shellwm, actor, opening) {
+        try {
+            if (opening)
+                this._checkLater(actor);
+        } catch {}
         const complete = () => opening ? shellwm.completed_map(actor) : shellwm.completed_destroy(actor);
         this._running.get(actor)?.finish();
         // a live wallpaper's player: no effect at all (it's being made the desktop, kept unseen)
@@ -162,6 +209,11 @@ export class WindowAnimations {
     }
 
     destroy() {
+        for (const [actor, id] of this._safety) {
+            GLib.source_remove(id);
+            actor.disconnectObject(this);
+        }
+        this._safety.clear();
         this._unwatch();
         if (this._hooked)
             this._unhook();

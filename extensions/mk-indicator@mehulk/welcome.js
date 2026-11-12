@@ -229,6 +229,16 @@ export class EdgeLight {
         timeline.connect('completed', () => this.stop());
         this._timeline = timeline;
         timeline.start();
+        // (never left on screen: whatever cuts the timeline or the greeting's fade short, it all goes
+        // a few seconds after it should have ended)
+        if (this._deadline)
+            GLib.source_remove(this._deadline);
+        this._deadline = GLib.timeout_add(GLib.PRIORITY_DEFAULT, duration + 400 * extra.length + 4000, () => {
+            this._deadline = 0;
+            this.stop();
+            this._dropGreeting();
+            return GLib.SOURCE_REMOVE;
+        });
 
         if (greeting)
             this._showGreeting(greeting, subtitle, duration + 400 * extra.length, monitor, a, extra);
@@ -294,6 +304,9 @@ export class EdgeLight {
     }
 
     destroy() {
+        if (this._deadline)
+            GLib.source_remove(this._deadline);
+        this._deadline = 0;
         this.stop();
         this._dropGreeting();
     }

@@ -142,8 +142,14 @@ export default class MKShellEngine extends Extension {
         const go = () => {
             this._bootId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 120, () => {
                 this._bootId = 0;
-                for (const [actor] of parts)
-                    actor.ease({opacity: 255, translation_y: 0, duration: 260, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+                for (const [actor] of parts) {
+                    // (onStopped: cut short or not, it ends fully shown and in place)
+                    actor.ease({opacity: 255, translation_y: 0, duration: 260, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                        onStopped: () => {
+                            actor.opacity = 255;
+                            actor.translation_y = 0;
+                        }});
+                }
                 return GLib.SOURCE_REMOVE;
             });
         };

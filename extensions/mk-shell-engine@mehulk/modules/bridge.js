@@ -12,6 +12,11 @@
 // only, in RAM, never a path the caller picks), and every capture shows in the Dynamic Island
 // ("Spidey looked at your screen"), so it can't happen without you seeing it.
 //
+// Unlock: locking takes the engine's parts down and unlocking builds them again, so a bridge built
+// right after a lock runs `~/.local/bin/spidey --greet --unlock` (if Spidey is installed) 1.5 s
+// later, once the unlock has settled; Spidey itself decides whether this part of the day was
+// already greeted, and its config's "greet": false silences it.
+//
 // Only your session's bus reaches it (the same user who could press the keys). Idle it costs
 // nothing: one exported object, no timers.
 import Gio from 'gi://Gio';
@@ -21,6 +26,10 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { UNIFIED } from './conflicts.js';
 
 const PATH = '/org/mk/ShellEngine';
+const SPIDEY = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'spidey']);
+const GREET_DELAY_MS = 1500;
+
+let lockedAway = false;              // (set as the bridge goes down for the lock screen)
 const XML = `<node>
   <interface name="org.mk.ShellEngine">
     <method name="DeepFocus">
@@ -47,6 +56,25 @@ export class Bridge {
         this._getDeepFocus = getDeepFocus;
         this._dbus = Gio.DBusExportedObject.wrapJSObject(XML, this);
         this._dbus.export(Gio.DBus.session, PATH);
+        if (lockedAway) {
+            lockedAway = false;
+            this._greetId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, GREET_DELAY_MS, () => {
+                this._greetId = 0;
+                this._greet();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+    }
+
+    _greet() {
+        if (Main.sessionMode.isLocked || !GLib.file_test(SPIDEY, GLib.FileTest.IS_EXECUTABLE))
+            return;
+        try {
+            Gio.Subprocess.new([SPIDEY, '--greet', '--unlock'],
+                Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+        } catch (e) {
+            console.warn(`mk-shell-engine: spidey greet: ${e.message}`);
+        }
     }
 
     _desktop() {
@@ -118,6 +146,11 @@ export class Bridge {
     }
 
     destroy() {
+        if (this._greetId)
+            GLib.source_remove(this._greetId);
+        this._greetId = 0;
+        if (Main.sessionMode.isLocked)
+            lockedAway = true;
         this._dbus?.unexport();
         this._dbus = null;
     }

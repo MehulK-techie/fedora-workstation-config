@@ -26,7 +26,6 @@ HP ENVY x360 Convertible 13-ay0xxx  (convertible)
 | GPU (Intel, AMD, NVIDIA) | `lspci` | The matching VA-API driver, so H.264/HEVC video decodes on the GPU | `setup.sh` |
 | Battery | `/sys/class/power_supply/BAT*` | Smart power profiles: performance on AC, balanced on battery, power-saver when low | `sync.sh`, `bin/mk-power` |
 | 2-in-1 / tablet | `hostnamectl chassis` | Installs `iio-sensor-proxy` for auto-rotation and tablet mode | `setup.sh` |
-| Weak hardware | RAM, cores, GPU rendering | `mk effects auto` switches off blur and window effects | `sync.sh`, `config/effects.conf` |
 | Touchpad | input devices | Tap to click, natural scrolling, 3- and 4-finger gestures | `sync.sh` |
 | Bluetooth / Airplane mode | `systemd-rfkill` masked | Unmasks it, so each radio's on/off state survives a reboot | `setup.sh` |
 | Your monitors | `~/.config/monitors.xml` | The login screen uses the same resolution and scaling, so logging in doesn't flicker | `setup.sh` |
@@ -105,8 +104,6 @@ Delete that file and reboot to go back to the kernel's defaults.
   and back on when you unlock. MK's own extension stays loaded across the lock
   so unlocking doesn't rebuild it, and it no longer re-applies the top-bar
   blur after each unlock (that was a visible hitch).
-- **Lighter effects:** if unlocking or animations still stutter on an older
-  machine, `mk effects lite`.
 
 ## Speakers
 

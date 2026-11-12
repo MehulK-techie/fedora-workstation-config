@@ -28,7 +28,6 @@ Every command, file and format. How the parts fit together is in
 | `mk fingerprint [enroll [FINGER]\|list\|delete\|settings\|check]` | Fingerprint enrollment for login and sudo; `check` reports why the lock screen may not use it |
 | `mk focus [DURATION] ["LABEL"]` | Start the focus timer in the background (`25`, `1:30`, `90s`) |
 | `mk power [status\|on\|off]` | Smart power profiles on laptops |
-| `mk effects [full\|lite\|auto]` | Show or set the visual effects profile |
 | `mk screensaver [on \| off \| show [SCENE] \| scene NAME \| delay SECONDS \| list]` | Screensaver scenes when you step away |
 | `mk welcome variety on\|off` · `birthday [YYYY-]MM-DD` · `lines` | A different greeting each time; a birthday greeting and countdown; edit your own lines |
 | `mk accent [auto \| #rrggbb \| system on\|off \| status]` | Accent colour: from the wallpaper, or fixed; also sets GNOME's accent |
@@ -107,10 +106,8 @@ Every `mk` command has a `just` twin for the common ones (`just --list`).
 | `config/dock.conf` | `MAGNIFY=`, `MAGNIFY_SPREAD=`, `MAGNIFY_MS=` | mk-indicator (dock magnification) |
 | `~/.config/mk-workstation/timer.conf` | `SILENCE=`, `AMBIENT=`, `AMBIENT_IDLE=` (s), `SOUND=` (none, chime, bell, soft, alarm); the scene comes from `screensaver.conf` | `mk-timer` (written by its window) |
 | `config/power.conf` | `ON_AC=`, `ON_BATTERY=`, `LOW_BATTERY=`, `LOW_PERCENT=` | `mk-power` |
-| `config/effects.conf` | `HEAVY=` UUIDs, `AUTO_LITE_BELOW_GB=` | `sync.sh` |
 | `config/enabled-extensions.txt` | one UUID per line | `sync.sh` |
 | `config/extension-settings/<uuid>.dconf` | `# dconf path: …` header, then `dconf dump` output | `sync.sh` |
-| `config/tiling-layouts.json` | Tiling Assistant layouts | `sync.sh` (only if you have none) |
 | `config/burn-my-windows-profile.conf` | Burn My Windows profile keyfile | `sync.sh` |
 | `config/*-full.dconf`, `keybindings.dconf` | reference dumps from `mk export`; not applied | you |
 | `apps/dnf-packages.txt`, `apps/flatpaks.txt` | one name per line | `setup.sh`, `mk update`, `mk save` |

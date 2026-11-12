@@ -10,8 +10,8 @@
 - **Local Path:** wherever the repo was cloned (the `mk` CLI records it in `~/.config/mk-workstation/repo-path`)
 - **Script roles:** `setup.sh` (root: DNF, RPM Fusion, Flatpaks, Howdy) → runs `sync.sh` as the user (the single source of all GNOME settings); `register-face.sh` (face unlock wizard + PAM); `mk export` saves settings and extensions into `config/`
 
-### ACTIVE EXTENSIONS (16, listed in `config/enabled-extensions.txt`, settings in `config/extension-settings/`)
-Touchpad Gesture Customization, Blur my Shell, Transparent Top Bar, WACK Lockscreen Clock, WACK Shell, Text Extractor, Places Status Indicator, Dash to Dock, AppIndicator, Caffeine, Tiling Assistant, Magic Lamp, Impatience, Burn My Windows, plus the project's own `mk-indicator@mehulk`.
+### ACTIVE EXTENSIONS (7, the curated set: third-party ones in `config/enabled-extensions.txt`, settings in `config/extension-settings/`)
+MK's own `mk-shell-engine@mehulk`, `mk-indicator@mehulk`, `wack-sonoma-lockscreen@rinzler69-wastaken.github.com`, plus Blur my Shell, Caffeine, Text Extractor, Touchpad Gesture Customization.
 
 ### KEYBINDING & UTILITY MATRIX
 - `Super + Shift + T` / `Super + Alt + T` : OCR (`ocr-snip` via the screenshot portal / Text Extractor)
@@ -23,7 +23,7 @@ Touchpad Gesture Customization, Blur my Shell, Transparent Top Bar, WACK Lockscr
 - `Super + N` : MK Notes · `Super + B` : default browser · `Super + Shift + N` : Quick Notes & Focus Timer
 - `Super + Z` : snap layouts · `Super + ←/→` then `↑/↓` : quarters · `Super + Ctrl + T` : always on top
 - `mk update` (update everything) · `mk save` (capture what you added)
-- `Super + C` : Camera Controls Studio
+- `Super + C` : MK Photo Booth (webcam, looks, stickers)
 - `Alt + Tab` / `Super + Tab` : Window switcher across all workspaces / app switcher
 - `Super + Backspace` / `Super + Shift + X` : Shut down dialog
 - `Ctrl + Alt + ←/→` : left free for Zen Browser workspaces

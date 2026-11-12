@@ -31,7 +31,7 @@ Two rules shape the code:
 | :--- | :--- | :--- |
 | 0 | Snapshot all GNOME settings (`mk restore` undoes the sync); the first one is kept forever as `original-dconf.ini` | `~/.config/mk-workstation/backups/` |
 | 1 | Copy `bin/*` to `~/.local/bin`; copy `lib/` and `config/` to `~/.local/share/mk-workstation/`; install the update-check and reminder timers; retire old login hacks | `bin/`, `lib/`, `config/` |
-| 2 | Install missing extensions from extensions.gnome.org for the running GNOME version; patch known GNOME 50 bugs in third-party extensions; enable the list, minus heavy effects in lite mode | `config/enabled-extensions.txt`, `config/effects.conf` |
+| 2 | Refresh MK's three extensions and compile every extension's schemas; on a fresh install (no `~/.config/mk-workstation/.initialized`, or `--reset-defaults`) also install the four third-party ones from extensions.gnome.org and turn on exactly the seven (every other one off); steps 3 to 7 (desktop settings) run on a fresh install only, and step 9 adds only new shortcuts on an update | `config/enabled-extensions.txt` |
 | 3–7 | Window, workspace, Files, touchpad and animation settings | inline in `sync.sh` |
 | 7b | Load each extension's saved settings | `config/extension-settings/*.dconf` |
 | 8 | Dialog styling | inline CSS |

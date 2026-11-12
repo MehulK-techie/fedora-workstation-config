@@ -27,7 +27,6 @@ Credit for everything in the last two groups belongs to its authors; see
 | Undo | Restore the settings snapshot before the last sync; remove MK from your account | `mk restore`, `mk uninstall` | `bin/mk` |
 | Speaker tuning | EasyEffects profile for laptop speakers: high-pass, warmth, psychoacoustic bass, less harshness, slight widening, compressor, limiter | `mk sound on\|off` | `bin/mk-sound`, `assets/sound/` |
 | App icons | Launchers and icons for MK's apps; your own image with one command | `mk icon APP IMAGE` | `assets/icons`, `assets/applications` |
-| Effects profile | Blur, wobbly windows and genie off on weak machines (auto) or on demand; the open/close glide always stays | `mk effects full\|lite\|auto` | `sync.sh`, `config/effects.conf` |
 | Smart power (laptops) | Performance on AC, balanced on battery, power-saver when low; only switches on changes | `mk power` | `bin/mk-power`, `config/power.conf` |
 | Face unlock wizard | Several face models in different light, IR-aware security, other users | `mk face` | `register-face.sh` |
 | Fingerprint enrollment | Enroll, list, delete fingers; login, lock screen and sudo enabled by setup; a login notice when the reader has forgotten your finger | `mk fingerprint` | `bin/mk`, `setup.sh`, `scripts/fingerprint-pam.sh` |
@@ -160,7 +159,7 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | Lutris, GameMode, Gamescope, MangoHud, vkBasalt | Gaming |
 | Extension Manager | Browse and configure extensions |
 | Frog | Grab text from images |
-| Cameractrls, Kamoso, Guvcview | Webcam settings and capture |
+| GNOME Camera (snapshot) | The one camera app (duplicates are removed); MK's Photo Booth (Super+C) adds looks and camera controls |
 | Flip Clock | Full-screen clock |
 | Flameshot, Loupe | Screenshots with annotations; image viewer |
 | EasyEffects | Audio equalizer and effects |
@@ -189,7 +188,6 @@ From `apps/flatpaks.txt` (Flathub) and `apps/dnf-packages.txt` (Fedora / RPM Fus
 | `mk focus [25 \| 1:30 \| 90s] ["label"]` | Start the focus timer |
 | `mk welcome on\|off\|test\|edit\|title\|greeting\|voice\|notify` | The welcome light and greeting |
 | `mk power [status\|on\|off]` | Smart power profiles |
-| `mk effects [full\|lite\|auto]` | Visual effects profile |
 | `mk sound on\|off\|status` | Laptop speaker tuning |
 | `mk notes [today \| serve \| NOTE]` | MK Notes; `serve` = phone sync without the window |
 | `mk icon APP IMAGE\|reset` · `mk icon list` | Your own app icons |

@@ -33,10 +33,7 @@ There are two ways to customize:
 | Your own command shortcuts | Super+/ › **+** | `config/shortcuts.conf` (`custom:` lines) |
 | Apps installed | Install them, then `mk save` | `apps/dnf-packages.txt`, `apps/flatpaks.txt` |
 | Extensions and their settings | Extension Manager, then `mk save` | `config/enabled-extensions.txt`, `config/extension-settings/` |
-| Snap layouts (Super+Z) | `~/.config/tiling-assistant/layouts.json` | `config/tiling-layouts.json` |
-| Window open/close effect | Burn My Windows settings (make your own profile) | `config/burn-my-windows-profile.conf` |
 | Power profiles (laptops) | `~/.config/mk-workstation/power.conf`, or `mk power off` | `config/power.conf` |
-| Heavy effects on or off | `mk effects full`, `lite` or `auto` | `config/effects.conf` (which effects count as heavy, and the auto threshold) |
 | Focus timer silencing notifications | The switch in the timer | default in `bin/mk-timer` (`SILENCE`) |
 | App icons | `mk icon companion ~/Pictures/me.png` (SVG or PNG) | `assets/icons/` |
 | Files look | — | `config/gtk/files.css` |
@@ -120,15 +117,12 @@ You can also edit the lists by hand: one Flatpak ID or dnf package name per
 line, and one extension UUID per line in `config/enabled-extensions.txt`.
 `mk update` installs anything newly added.
 
-## Effects and performance
+## Your changes and sync
 
-`mk effects` shows the current profile. `lite` keeps the wobbly-window
-effects and the genie minimize installed but switched off (Blur my Shell
-stays on: sync.sh switches it on for the top bar's glass), which keeps older
-laptops and virtual machines smooth; `full` turns them on; `auto` (the
-default) chooses lite when the computer has less than 4 GiB of RAM, two CPU
-cores or fewer, or no GPU rendering. Change which effects count as heavy, or
-the RAM threshold, in `config/effects.conf`.
+The first `./sync.sh` on an account applies MK's defaults (seven extensions, desktop settings,
+shortcuts) and writes `~/.config/mk-workstation/.initialized`. Later runs only refresh MK's code
+and add shortcuts MK introduced since: anything you change in GNOME Settings, Extension Manager or
+the Command Centre stays. `./sync.sh --reset-defaults` puts MK's defaults back.
 
 ## Colours and look
 

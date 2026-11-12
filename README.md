@@ -36,7 +36,7 @@ Log out and back in when it finishes: that's it. (`setup.sh` installs the apps a
 cd ~/fedora-workstation-config && git pull && ./sync.sh
 ```
 
-`sync.sh` is safe to run as often as you like: it never duplicates anything and keeps your own changes. It also makes the folders MK uses (Pictures/Screenshots, Videos/Wallpapers, ~/.config/mk) and ends by naming any package MK needs that isn't installed yet; `./sync.sh --check-deps` does just that check. Nothing in the repo is tied to one account: personal paths are stored as `__USER_HOME__` and filled in for whoever runs it. It updates the extensions, apps, shortcuts, audio rules and Blur my Shell settings. New system packages come from `sudo ./setup.sh`, which is safe to run again too.
+`sync.sh` is safe to run as often as you like: it never duplicates anything and keeps your own changes. The first run on an account (no `~/.config/mk-workstation/.initialized` yet) is a fresh install: it turns on exactly MK's seven extensions (every other one off) and applies MK's desktop settings, theme and shortcuts. Every run after that is an update: MK's code, extensions and their schemas are refreshed and shortcuts MK has added since are set, and nothing you changed is touched: extension switches, settings, wallpaper, keys. `./sync.sh --reset-defaults` puts MK's defaults back (each sync's settings snapshot undoes it: `mk restore`). It also makes the folders MK uses (Pictures/Screenshots, Videos/Wallpapers, ~/.config/mk) and ends by naming any package MK needs that isn't installed yet; `./sync.sh --check-deps` does just that check. Nothing in the repo is tied to one account: personal paths are stored as `__USER_HOME__` and filled in for whoever runs it. It updates MK's apps, extensions, audio rules and new shortcuts. New system packages come from `sudo ./setup.sh`, which is safe to run again too.
 
 ---
 
@@ -175,7 +175,6 @@ Most Fedora post-install scripts ([fedorable](https://github.com/chetripley/fedo
 - **Smart power (laptops):** performance when plugged in, balanced on battery, power-saver below 25%, switching by itself; `mk power off` if you'd rather choose
 - **Morning brief:** one notification a day with your open tasks and today's reminders
 - **Housekeeping:** Trash and temp files older than 30 days are cleared automatically; slow search providers are skipped so overview search stays instant
-- **Smooth on any machine:** `mk effects lite` (or `auto` on weak hardware) turns off the wobbly-window and genie effects (the top bar's blur stays); `full` brings them back
 - **Focus timer:** type a time and press Enter, hides while it counts, a full-screen pixel celebration with a chime (or a sound you pick, or silence)
 - **Screensaver:** step away and a scene plays: a brick-built hero hanging beside a skyscraper, a brick-built caped knight in the rain, or a cyan-and-amber hex terminal decoding the time; pick one from live previews or shuffle in the Screensaver app (`mk screensaver`)
 - **Window switcher:** Alt+Tab and three-finger swipes open a compact card of live windows at once; 1–9 sends a window to that desktop
@@ -220,14 +219,14 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | Group | Apps |
 | :--- | :--- |
 | Browsing, notes, office | Zen Browser, MK Notes (built in), Joplin, ONLYOFFICE |
-| Desktop tools | Extension Manager, GNOME Tweaks, Sushi (Quick Look), Frog (text from images), Cameractrls, FlipClock, Flameshot |
+| Desktop tools | Extension Manager, GNOME Tweaks, Sushi (Quick Look), Frog (text from images), FlipClock, Flameshot |
 | Communication and audio | ZapZap (WhatsApp), Spotify, SonoBus, EasyEffects |
 | Gaming | Lutris, GameMode, Gamescope, MangoHud, vkBasalt |
 | Development | VS Code, Distrobox, Android tools, GCC, Make, Node.js, pip |
 | Terminal | btop, fastfetch, fzf, ripgrep, zoxide, ncdu, just, chezmoi, 7-Zip, unrar |
-| Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, Loupe (images), Kamoso, Media Writer |
+| Media and codecs | full ffmpeg, GStreamer plugins, VA-API driver for your GPU, Loupe (images), GNOME's Camera (the only camera app: Kamoso, Cheese, Guvcview, DroidCam and Camera Controls are removed), Media Writer |
 
-**Extensions** ([guide](docs/EXTENSIONS.md)): Blur my Shell, Dash to Dock, Touchpad Gesture Customization, Transparent Top Bar, WACK Shell, WACK Lockscreen Clock, Text Extractor, Places Menu, Tiling Assistant (split screen), Magic Lamp (genie minimize), Impatience (25% faster animations), AppIndicator (tray icons), Caffeine (keep awake), and MK's own top-bar extension (system monitor, welcome light, focus timer, Alt+Tab glide, wallpaper accent). MK also ships **MehulK Workstation & Sonoma Suite** (formerly WACK Sonoma Live Lockscreen; off until you switch it on): the lock screen above, the desktop's live wallpaper with optional sound, Finder (Fedora logo), an icon-only Places menu and the app indicator in the top bar, and Hibernate in the Finder menu, Quick Settings and on the lock screen (real hibernation needs a one-time `sudo scripts/setup-hibernate.sh` and doesn't work while Secure Boot is on; until then the Hibernate buttons sleep instead, keeping everything open in memory, and say so).
+**Extensions** ([guide](docs/EXTENSIONS.md)): seven, and only these: MK's own three (**MK Shell Engine**: dock, top bar, window and workspace animations, snap layouts, Dynamic Island, Deep Focus; **mk-indicator**: system monitor, welcome light, focus timer, clipboard, wallpaper accent; and **MehulK Workstation & Sonoma Suite**), plus Blur my Shell, Caffeine (keep awake), Text Extractor and Touchpad Gesture Customization. A fresh install turns exactly these on and every other extension off. The Suite (formerly WACK Sonoma Live Lockscreen) brings the lock screen above, the desktop's live wallpaper with optional sound, Finder (Fedora logo), an icon-only Places menu and the app indicator in the top bar, and Hibernate in the Finder menu, Quick Settings and on the lock screen (real hibernation needs a one-time `sudo scripts/setup-hibernate.sh` and doesn't work while Secure Boot is on; until then the Hibernate buttons sleep instead, keeping everything open in memory, and say so).
 
 ---
 
@@ -248,7 +247,6 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk power` | | Smart power profiles: status, on, off |
 | `mk device` | | What this computer has and what MK tunes for it |
 | `mk fingerprint` | | Enroll a finger for login and sudo (`list`, `delete`) |
-| `mk effects full\|lite\|auto` | | Visual effects profile; lite keeps older machines smooth |
 | `mk welcome` | | Welcome light and greeting: on, off, test, edit, title, voice |
 | `mk screensaver show web` · `scene` · `delay` · `off` | | Screensaver scenes when you step away |
 | `mk welcome variety` · `birthday 07-14` · `lines` | | A different greeting each time; your own lines |
@@ -345,12 +343,11 @@ Every screenshot is saved to `~/Pictures/Screenshots` and copied to the clipboar
 ├── config/
 │   ├── shortcuts.conf           Every keyboard shortcut (group | label | target | keys)
 │   ├── brand.conf               The name shown in MK's windows and top bar
-│   ├── effects.conf             Which effects `mk effects lite` turns off
 │   ├── dock.conf · power.conf   Dock magnification; smart power thresholds
-│   ├── enabled-extensions.txt   Extensions sync.sh installs and enables
+│   ├── enabled-extensions.txt   The four third-party extensions a fresh install adds
 │   ├── extension-settings/      One saved .dconf per extension
 │   └── *.dconf                  Reference snapshots written by mk export
-├── extensions/           mk-indicator (ours: top-bar tag, dock glow, Alt+Tab theme), mk-shell-engine (ours: snap layouts, glass dock, blur) + WACK Shell (GPL, no GNOME 50 build online)
+├── extensions/           MK's own three: mk-shell-engine, mk-indicator, wack-sonoma-lockscreen (the Suite)
 ├── scripts/              update-repo.sh (mk export), lint.sh
 ├── docs/                 GUIDE, HARDWARE, CUSTOMIZING, ARCHITECTURE, REFERENCE, FACE-UNLOCK, EXTENSIONS, BUGS
 │   ├── MK-Workstation-Overview.pdf   14-slide overview; overview/ rebuilds it

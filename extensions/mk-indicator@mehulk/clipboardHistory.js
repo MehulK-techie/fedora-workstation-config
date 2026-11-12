@@ -21,6 +21,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
@@ -333,6 +334,7 @@ export class ClipboardHistory {
         const d = this._dialog;
         if (!d || !this._shown)
             return;
+        this._closeEditor();                         // (opened again, it's the list)
         this._shown = false;
         this._closing = true;
         const card = d.dialogLayout;
@@ -710,31 +712,63 @@ export class ClipboardHistory {
         global.stage.set_key_focus(entry.clutter_text);
     }
 
-    // Change the text in place: Save keeps it in the history (and copies it).
+    // Edit an entry, isolated: the list (and the search and filters) step aside while you edit, so a
+    // long, many-line text can never spill over the rows below. The text sits in its own bounded,
+    // scrolling viewport (160-260 px, wrapped, on an opaque ground) with its length and lines below,
+    // Cancel and Save and copy. Save keeps it in the history (and copies it).
     _edit(card, item) {
         this._forget(item);
-        card.destroy_all_children();
-        const column = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, style: 'spacing: 6px;'});
+        this._closeEditor();
+        const box = this._scroll.get_parent();
+        const aside = [this._scroll, this._pinBar, this._entry].filter(Boolean);
+        aside.forEach(a => a.hide());
+        const editor = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-clip-editor',
+            x_expand: true});
         const entry = new St.Entry({text: item.text, can_focus: true, x_expand: true, style_class: 'mk-clip-edit'});
         entry.clutter_text.single_line_mode = false;
         entry.clutter_text.line_wrap = true;
+        entry.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         entry.clutter_text.activatable = false;
-        column.add_child(entry);
-        const row = new St.BoxLayout({style: 'spacing: 6px;', x_align: Clutter.ActorAlign.END});
+        const view = new St.ScrollView({style_class: 'mk-clip-edit-scroll', child: entry, clip_to_allocation: true,
+            hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC});
+        editor.add_child(view);
+        const bar = new St.BoxLayout({style_class: 'mk-clip-edit-bar', x_expand: true});
+        const count = new St.Label({style_class: 'mk-clip-edit-count', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const recount = () => {
+            const text = entry.get_text();
+            count.text = `${text.length} characters · ${text.split('\n').length} lines`;
+        };
+        entry.clutter_text.connect('text-changed', recount);
+        recount();
         const cancel = new St.Button({label: 'Cancel', style_class: 'button', can_focus: true});
-        cancel.connect('clicked', () => this._fill());
+        cancel.connect('clicked', () => {
+            this._closeEditor();
+            this._fill();
+        });
         const save = new St.Button({label: 'Save and copy', style_class: 'button default', can_focus: true});
         save.connect('clicked', () => {
             const text = entry.get_text();
             if (text.trim())
                 item.text = text;
+            this._closeEditor();
             this._copy(item);
         });
-        row.add_child(cancel);
-        row.add_child(save);
-        column.add_child(row);
-        card.add_child(column);
+        bar.add_child(count);
+        bar.add_child(cancel);
+        bar.add_child(save);
+        editor.add_child(bar);
+        box.add_child(editor);
+        this._editor = {editor, aside};
         global.stage.set_key_focus(entry.clutter_text);
+    }
+
+    _closeEditor() {
+        if (!this._editor)
+            return;
+        const {editor, aside} = this._editor;
+        this._editor = null;
+        editor.destroy();
+        aside.forEach(a => a.show());
     }
 
     _copy(item, paste = false) {

@@ -234,9 +234,11 @@ done
 flatpak update --system -y --noninteractive || WARNINGS+=("Flatpak update failed")
 
 # 7. Hardware / SELinux Permissions
-if (( INSTALL_FACE )) && command -v getenforce &>/dev/null && [[ "$(getenforce)" == "Enforcing" ]]; then
-    echo "==> Configuring SELinux biometric camera rule..."
-    setsebool -P authlogin_camera 1 || WARNINGS+=("Could not set SELinux boolean authlogin_camera")
+# The lock screen's face check (GDM, confined as xdm_t) reaches MK's warm face engine through one
+# SELinux rule (Fedora 45 has no authlogin_camera boolean any more); only once face unlock is set up.
+if [[ -x /usr/local/libexec/mk-face ]] && command -v getenforce &>/dev/null && [[ "$(getenforce)" != Disabled ]]; then
+    echo "==> SELinux: the lock screen's face check..."
+    "$SCRIPT_DIR/scripts/setup-face-auth.sh" --selinux || WARNINGS+=("The lock screen's SELinux rule for face unlock wasn't installed")
 fi
 
 # 7b. Hardware this computer actually has (detected, so any laptop gets what it needs)
@@ -413,6 +415,6 @@ if (( ${#WARNINGS[@]} )); then
     printf '    - %s\n' "${WARNINGS[@]}"
 fi
 echo "✔ Setup complete. Log out and back in to load extensions."
-if (( INSTALL_FACE )) && command -v howdy &>/dev/null; then
-    echo "  Optional: sudo ./register-face.sh to enroll face unlock."
+if (( INSTALL_FACE )) && [[ ! -x /usr/local/libexec/mk-face ]]; then
+    echo "  Optional: sudo ./register-face.sh to set up face unlock (sudo, the lock screen, login)."
 fi

@@ -4,6 +4,8 @@
 #
 #   sudo ./scripts/setup-face-auth.sh             install, enroll, then ask where to use it
 #   sudo ./scripts/setup-face-auth.sh --remove    take face out of every PAM file again
+#   sudo ./scripts/setup-face-auth.sh --selinux   only the lock screen's SELinux rule (setup.sh runs it)
+#   sudo ./scripts/setup-face-auth.sh --diagnose  why the last face checks said no
 #
 # What it does:
 #   1. installs the engine to /usr/local/libexec/mk-face
@@ -26,6 +28,7 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 USER_NAME=${SUDO_USER:-}
+[[ "$USER_NAME" == root ]] && USER_NAME=""          # (faces are enrolled for your account, never root's)
 ENGINE=/usr/local/libexec/mk-face
 MODEL_DIR=/usr/local/share/mk-face
 PAM_LINE="auth       sufficient   pam_exec.so quiet $ENGINE --pam"
@@ -65,14 +68,68 @@ remove_line() {
     echo "  [-] $f: face taken out"
 }
 
+# The lock screen checks faces from GDM's worker, confined by SELinux (xdm_t). Rather than open
+# the camera and the saved faces to that whole domain (semanage permissive xdm_t would switch
+# SELinux off for all of GDM), one rule: xdm_t may connect to the warm face engine's socket
+# (/run/mk-face.sock, a system service that does the camera and the faces itself). Enforcing
+# stays on. (Fedora 45 no longer has the authlogin_camera boolean older MK versions set.)
+selinux_rule() {
+    command -v getenforce &> /dev/null && [[ "$(getenforce)" != Disabled ]] || return 0
+    if ! command -v checkmodule &> /dev/null || ! command -v semodule_package &> /dev/null; then
+        dnf install -y checkpolicy policycoreutils > /dev/null || { echo "  [!] checkpolicy is missing: SELinux rule not installed" >&2; return 1; }
+    fi
+    local dir
+    dir=$(mktemp -d)
+    cat > "$dir/mkface.te" << 'TE'
+module mkface 1.1;
+require {
+    type xdm_t;
+    type init_t;
+    type var_run_t;
+    class unix_stream_socket connectto;
+    class sock_file write;
+}
+# the lock screen (GDM's worker, pam_exec mk-face --pam) reaches the warm face engine's socket
+allow xdm_t init_t:unix_stream_socket connectto;
+allow xdm_t var_run_t:sock_file write;
+TE
+    if checkmodule -M -m -o "$dir/mkface.mod" "$dir/mkface.te" > /dev/null &&
+        semodule_package -o "$dir/mkface.pp" -m "$dir/mkface.mod" && semodule -i "$dir/mkface.pp"; then
+        echo "  [+] SELinux: the lock screen may reach the face engine (module mkface; Enforcing stays on)"
+    else
+        echo "  [!] SELinux rule not installed" >&2
+    fi
+    rm -rf "$dir"
+}
+
+diagnose() {
+    echo "== The last face checks (journalctl -t mk-face)"
+    journalctl -t mk-face -n 15 --no-pager 2> /dev/null || true
+    echo "== PAM's view (pam_exec)"
+    journalctl -b --no-pager 2> /dev/null | grep -F "mk-face" | grep -F pam_exec | tail -5 || true
+    echo "== SELinux denials today involving the face check or GDM"
+    ausearch -m avc -ts today 2> /dev/null | grep -E "mk-face|xdm_t" | tail -10 || echo "   (none)"
+    echo "== Where it's used"
+    grep -l "mk-face --pam" /etc/pam.d/* 2> /dev/null || echo "   (nowhere)"
+    semodule -l 2> /dev/null | grep -qx mkface && echo "== SELinux module mkface: installed" || echo "== SELinux module mkface: missing (sudo $0 --selinux)"
+}
+
 ask() {                # QUESTION: true on y / yes
     local a=""
     read -rp "$1 [y/N]: " a || true
     [[ "$a" =~ ^[yY] ]]
 }
 
+if [[ "${1:-}" == "--selinux" ]]; then
+    selinux_rule
+    exit $?
+fi
+if [[ "${1:-}" == "--diagnose" ]]; then
+    diagnose
+    exit 0
+fi
 if [[ "${1:-}" == "--remove" ]]; then
-    for f in /etc/pam.d/sudo /etc/pam.d/gdm-password /etc/pam.d/polkit-1; do remove_line "$f"; done
+    for f in /etc/pam.d/sudo /etc/pam.d/gdm-password /etc/pam.d/login /etc/pam.d/polkit-1; do remove_line "$f"; done
     echo "Face unlock is off everywhere (your saved face stays in /var/lib/mk-face; mk-face-auth --forget deletes it)."
     exit 0
 fi
@@ -137,11 +194,19 @@ echo
 echo "An ordinary webcam can't tell your face from a photo of it. Face is a convenience: the"
 echo "password always works too. Where should it be asked?"
 if ask "  sudo in a terminal"; then add_line /etc/pam.d/sudo; fi
-if ask "  the lock screen and login (the password field waits up to ~3.5 s for your face, ~1 s when nobody's at the camera)"; then
+if ask "  the lock screen and login (the password field waits up to ~5 s for your face, ~3 s when nobody's at the camera)"; then
     if [[ ! -f /etc/pam.d/gdm-password && -f /usr/lib/pam.d/gdm-password ]]; then
         cp -a /usr/lib/pam.d/gdm-password /etc/pam.d/gdm-password
         echo "    copied /usr/lib/pam.d/gdm-password to /etc/pam.d"
     fi
     add_line /etc/pam.d/gdm-password
+    selinux_rule || true
+fi
+if ask "  console login (a text terminal, Ctrl+Alt+F3)"; then
+    if [[ ! -f /etc/pam.d/login && -f /usr/lib/pam.d/login ]]; then
+        cp -a /usr/lib/pam.d/login /etc/pam.d/login
+        echo "    copied /usr/lib/pam.d/login to /etc/pam.d"
+    fi
+    add_line /etc/pam.d/login
 fi
 echo "Done. mk-face-auth --status shows where it's used; sudo $0 --remove takes it out."

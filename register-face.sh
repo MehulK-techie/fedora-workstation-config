@@ -35,6 +35,19 @@ while (( $# )); do
     shift
 done
 
+# Never enrolled as root: the face belongs to the account that will use it.
+if [[ "$TARGET_USER" == root ]]; then
+    echo "[-] Run it with sudo from your own account (or --user NAME): faces aren't enrolled for root." >&2
+    exit 2
+fi
+# Fedora 45 has no Howdy: MK's own face engine (OpenCV) does face unlock instead, for sudo, the
+# lock screen and login, through scripts/setup-face-auth.sh (enrolls TARGET_USER).
+if ! command -v howdy &> /dev/null; then
+    echo "==> Howdy isn't available here: setting up MK's own face engine for $TARGET_USER"
+    [[ $EUID -eq 0 ]] || { echo "[-] Run it with sudo." >&2; exit 1; }
+    SUDO_USER="$TARGET_USER" exec "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/scripts/setup-face-auth.sh"
+fi
+
 if [[ ! "$MODEL_COUNT" =~ ^[1-5]$ ]]; then
     echo "[-] Error: --models must be a number from 1 to 5." >&2
     exit 2

@@ -356,3 +356,10 @@
 .mk-wall-dots { spacing: 8px; }
 .mk-wall-dot { width: 12px; height: 12px; border-radius: 99px; border: 1px solid rgba(255, 255, 255, 0.25); }
 .mk-wall-hint { font-size: 9pt; color: rgba(255, 255, 255, 0.45); }
+
+/* the ambient desktop clock (modules/desktopClock.js) */
+.mk-desk-clock { spacing: 2px; }
+.mk-desk-clock-time { font-size: 72pt; font-weight: 800; letter-spacing: -2px; font-feature-settings: "tnum";
+  color: rgba(255, 255, 255, 0.92); text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45); }
+.mk-desk-clock-date { font-size: 16pt; font-weight: 600; letter-spacing: 1px; padding-left: 6px;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5); }

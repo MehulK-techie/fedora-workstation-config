@@ -1,17 +1,69 @@
-// MK Shell Engine: switching workspaces (Super+PageUp/PageDown, the top bar's dots, a touchpad
-// swipe once you let go) glides over 440 ms on EASE_OUT_QUINT (a quick start, a long cushioned
-// landing) instead of GNOME's 250 ms EASE_OUT_CUBIC, with a little depth: the workspace you leave
-// eases back to 0.97x and dims a touch, the one you arrive at comes forward from 0.97x. The live
-// wallpaper stays pinned behind it all (WACK Sonoma Live Lockscreen's desktop.js). While a swipe
-// is under your fingers it follows them exactly.
+// MK Shell Engine: switching workspaces (Ctrl+Alt+Arrow, Super+PageUp/PageDown, the top bar's
+// dots, a touchpad swipe once you let go) is a depth-parallax glide: 280 ms on EASE_OUT_CUBIC.
+//   - the workspace you leave eases back to 0.965x and softens to 180 opacity; the one you arrive
+//     at glides in from 0.965x to full
+//   - the wallpaper drifts a little the same way and settles back (parallax): it grows 4 % for
+//     the moment and moves within that margin (about 2 % of the screen's width), so no edge of it
+//     ever shows; a literal quarter of the windows' travel would need it blown up by half
+//   - the top bar's workspace dots give one crisp pulse as you land
+// While a swipe is under your fingers it follows them exactly. Every part of this is guarded: if
+// GNOME's shell differs, its own slide runs as it is.
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const DURATION = 440;
-const DEPTH = 0.97;        // how far a workspace eases back as it leaves / comes in
-const DIM = 225;           // and its opacity at that point
-const CURVE = Clutter.AnimationMode.EASE_OUT_QUINT;
+const DURATION = 280;
+const DEPTH = 0.965;       // how far a workspace eases back as it leaves / comes in
+const DIM = 180;           // and its opacity at that point
+const CURVE = Clutter.AnimationMode.EASE_OUT_CUBIC;
+const OVERSCAN = 1.04;     // the background, grown this much while it drifts, so its edges stay off screen
+const DRIFT = 0.9;         // how much of the room that overscan gives it the wallpaper drifts
+
+// The wallpaper's drift: out toward the overscan's edge, and back. Always ends exactly where it
+// started (cut short, it's put straight back).
+function drift(direction) {
+    const bg = Main.layoutManager._backgroundGroup, m = Main.layoutManager.primaryMonitor;
+    const sign = direction === Meta.MotionDirection.RIGHT ? -1 : direction === Meta.MotionDirection.LEFT ? 1 : 0;
+    if (!bg || !m || !sign)
+        return;
+    const room = m.width * (OVERSCAN - 1) / 2;             // what the overscan hides on each side
+    const shift = sign * Math.round(room * DRIFT);
+    bg.remove_all_transitions();
+    bg.set_pivot_point((m.x + m.width / 2) / Math.max(1, bg.width), (m.y + m.height / 2) / Math.max(1, bg.height));
+    const settle = () => bg.ease({translation_x: 0, scale_x: 1, scale_y: 1, duration: Math.round(DURATION * 0.7),
+        mode: Clutter.AnimationMode.EASE_OUT_QUAD, onStopped: () => resetBackground()});
+    bg.ease({translation_x: shift, scale_x: OVERSCAN, scale_y: OVERSCAN, duration: Math.round(DURATION * 0.45),
+        mode: CURVE, onStopped: finished => finished ? settle() : resetBackground()});
+}
+
+function resetBackground() {
+    const bg = Main.layoutManager._backgroundGroup;
+    if (bg && !bg.get_transition('translation-x')) {
+        bg.translation_x = 0;
+        bg.set_scale(1, 1);
+    }
+}
+
+// The top bar's workspace dots: a quick swell and a springy return.
+function pulseDots() {
+    const dots = Main.panel.statusArea?.activities;
+    if (!dots)
+        return;
+    dots.remove_all_transitions();
+    dots.set_pivot_point(0.5, 0.5);
+    dots.ease({scale_x: 1.12, scale_y: 1.12, duration: 90, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        onStopped: () => dots.ease({scale_x: 1, scale_y: 1, duration: 260, mode: Clutter.AnimationMode.EASE_OUT_BACK,
+            onStopped: () => dots.set_scale(1, 1)})});
+}
+
+function guarded(what, fn) {
+    try {
+        fn();
+    } catch (e) {
+        console.warn(`mk-shell-engine: workspace flow (${what}): ${e.message}`);
+    }
+}
 
 // Blur my Shell's dynamic panel blur re-blurs on every frame whatever moves under the bar. While
 // workspaces slide it's rested: its blur layer (never its settings, which would rebuild the
@@ -58,6 +110,7 @@ export class WorkspaceFlow {
                 } catch (e) {
                     console.warn(`mk-shell-engine: workspace flow: ${e.message}`);    // (GNOME's curve then)
                 }
+                guarded('dots', pulseDots);
                 return result;
             };
         }
@@ -91,12 +144,20 @@ export class WorkspaceFlow {
             } catch (e) {
                 console.warn(`mk-shell-engine: workspace flow: ${e.message}`);    // (GNOME's own glide then)
             }
+            guarded('parallax', () => drift(direction));
+            guarded('dots', pulseDots);
             return result;
         };
     }
 
     destroy() {
         restPanelBlur(false);
+        guarded('reset', () => {
+            Main.layoutManager._backgroundGroup?.remove_all_transitions();
+            resetBackground();
+            Main.panel.statusArea?.activities?.remove_all_transitions();
+            Main.panel.statusArea?.activities?.set_scale(1, 1);
+        });
         for (const [name, saved] of [['_switchWorkspaceBegin', this._savedBegin], ['_finishWorkspaceSwitch', this._savedFinish]]) {
             if (!saved || this._controller[name] === saved)
                 continue;

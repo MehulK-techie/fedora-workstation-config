@@ -65,11 +65,6 @@
       <summary>Coder desktop</summary>
       <description>An editor, a terminal and a browser on localhost onto a fresh desktop, side by side.</description>
     </key>
-    <key name="desktop-clock" type="b">
-      <default>true</default>
-      <summary>Desktop clock</summary>
-      <description>The time and date on the bare desktop, fading away while a window is open on the workspace.</description>
-    </key>
     <key name="focus-ring" type="b">
       <default>true</default>
       <summary>Focus outline</summary>

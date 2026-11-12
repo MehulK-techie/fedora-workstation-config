@@ -727,6 +727,25 @@ PY
         glib-compile-schemas "$USER_EXT_DIR/$uuid/schemas" 2>/dev/null || true
     fi
 done
+# Every installed extension's settings schemas, compiled (one copied from another machine, or
+# installed by hand, may come without gschemas.compiled: its settings would fail to load).
+for schemas in "$USER_EXT_DIR"/*/schemas; do
+    [[ -d "$schemas" ]] || continue
+    compgen -G "$schemas/*.gschema.xml" > /dev/null || continue
+    glib-compile-schemas "$schemas" 2> /dev/null || true
+done
+
+# Stray players from elsewhere: autostart entries for other live-wallpaper, mpv or lock-screen
+# tools would put a second player (a visible window) or an overlay on the desktop at login. They
+# are moved aside, not deleted (~/.config/mk-workstation/backups/autostart/); MK's own are kept.
+AUTOSTART_DIR="$HOME/.config/autostart"
+for entry in "$AUTOSTART_DIR"/*wallpaper*.desktop "$AUTOSTART_DIR"/*mpv*.desktop "$AUTOSTART_DIR"/*lockscreen*.desktop; do
+    [[ -f "$entry" ]] || continue
+    case "$(basename "$entry")" in mk-*|spidey-*) continue ;; esac
+    mkdir -p "$HOME/.config/mk-workstation/backups/autostart"
+    mv -f "$entry" "$HOME/.config/mk-workstation/backups/autostart/"
+    echo "    [*] Moved aside autostart entry $(basename "$entry") (a second wallpaper or lock-screen player)"
+done
 # WACK Shell's logo: the MK emblem (with its "MK" label), set only while no
 # custom logo is chosen, so a logo you pick in WACK's settings stays yours.
 install -Dm644 "$SCRIPT_DIR/assets/icons/mk-emblem-symbolic.svg" "$MK_SHARE/mk-emblem-symbolic.svg"
@@ -977,7 +996,8 @@ for settings in "$SCRIPT_DIR"/config/extension-settings/*.dconf; do
         echo "    [*] Skipped $(basename "$settings") (missing '# dconf path:' header)"
         continue
     fi
-    sed "s|__USER_HOME__|$HOME|g" "$settings" | drop_missing_files | dconf load "$path"
+    # (__USER_HOME__ from `mk export`; a literal /home/<someone>/ from an older dump is this home too)
+    sed -E -e "s|__USER_HOME__|$HOME|g" -e "s#/home/[^/']+/#$HOME/#g" "$settings" | drop_missing_files | dconf load "$path"
 done
 # Blur my Shell's top bar: dynamic blur, its background overridden only while a window
 # touches the bar, the default style (straight to dconf: in place even before the

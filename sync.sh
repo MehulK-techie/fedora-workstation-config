@@ -33,6 +33,12 @@ check_deps() {
     fi
     echo "    [+] Every package MK uses is installed (${#wanted[@]} checked)"
 }
+# ./sync.sh --reset-defaults: put every MK default back (extensions, settings, shortcuts), as
+# on a fresh install; without it, a re-sync only updates MK's own code and leaves your choices be.
+RESET_DEFAULTS=0
+for arg in "$@"; do
+    [[ "$arg" == --reset-defaults ]] && RESET_DEFAULTS=1
+done
 if [[ "${1:-}" == "--check-deps" ]]; then
     echo "==> Checking packages..."
     check_deps
@@ -153,6 +159,36 @@ dconf dump / > "$BACKUP_DIR/dconf-$(date +%Y%m%d-%H%M%S).ini"
 find "$BACKUP_DIR" -name 'dconf-*.ini' -printf '%T@ %p\n' | sort -rn | tail -n +6 | cut -d' ' -f2- | xargs -r rm -f --
 echo "    [+] Settings snapshot saved (undo with: mk restore)"
 
+# Fresh install or update? ~/.config/mk-workstation/.initialized is written by the first sync.
+#   fresh (no marker, or --reset-defaults): MK's defaults: exactly the curated extensions on,
+#     every other one off; the desktop settings, theme, extension settings and shortcuts below.
+#   update (the marker is there): MK's code is refreshed (bin/, lib/, its three extensions, their
+#     schemas), new MK shortcuts are added, and nothing you set is touched: extension switches,
+#     settings, wallpaper, keys.
+# An install from before the marker existed (it has the extensions-applied ledger) counts as an
+# update: it's yours already.
+MARKER="$HOME/.config/mk-workstation/.initialized"
+if (( RESET_DEFAULTS )); then
+    FRESH=1
+    echo "==> --reset-defaults: MK's defaults go back on (this run's snapshot undoes it: mk restore)"
+elif [[ -f "$MARKER" ]]; then
+    FRESH=0
+elif [[ -f "$HOME/.config/mk-workstation/extensions-applied" ]]; then
+    FRESH=0
+    mkdir -p "$(dirname "$MARKER")"
+    date -Iseconds > "$MARKER"
+    echo "    [*] Existing MK install: your settings are kept (./sync.sh --reset-defaults for MK's)"
+else
+    FRESH=1
+fi
+if (( ! FRESH )); then
+    echo "    [*] Update: MK's code is refreshed; your extensions, settings and keys stay as they are"
+fi
+# The extensions MK uses, and only these (fresh install / --reset-defaults turns exactly these on)
+CURATED_EXTENSIONS=(mk-shell-engine@mehulk mk-indicator@mehulk wack-sonoma-lockscreen@rinzler69-wastaken.github.com
+    blur-my-shell@aunetx caffeine@patapon.info text-extractor@imshaaz21.github.com
+    touchpad-gesture-customization@coooolapps.com)
+
 # 1. Deploy local CLI tools and remember where the repo lives (used by `mk`)
 mkdir -p "$HOME/.local/bin" "$HOME/.config/mk-workstation"
 # Files only: a stray folder (e.g. Python's __pycache__) must not stop the sync.
@@ -266,7 +302,7 @@ if [[ "$cursor" == "$CURSOR_NAME" && ! -d "$HOME/.local/share/icons/$CURSOR_NAME
     fi
     rm -rf "$tmp"
 fi
-if [[ -d "$HOME/.local/share/icons/$cursor" || -d "/usr/share/icons/$cursor" ]]; then
+if (( FRESH )) && [[ -d "$HOME/.local/share/icons/$cursor" || -d "/usr/share/icons/$cursor" ]]; then
     gsettings set org.gnome.desktop.interface cursor-theme "$cursor"
 fi
 
@@ -526,6 +562,8 @@ echo "==> Installing and enabling GNOME extensions..."
 mapfile -t ACTIVE_EXTENSIONS < <(grep -vE '^\s*(#|$)' "$SCRIPT_DIR/config/enabled-extensions.txt" || true)
 mkdir -p "$USER_EXT_DIR"
 NEW_EXTENSIONS=0
+# (third-party ones installed on a fresh install only: an update never adds extensions)
+(( FRESH )) || ACTIVE_EXTENSIONS=()
 for uuid in "${ACTIVE_EXTENSIONS[@]}"; do
     # Never replace a version that is already installed.
     if [[ -d "$USER_EXT_DIR/$uuid" || -d "/usr/share/gnome-shell/extensions/$uuid" ]]; then
@@ -547,44 +585,13 @@ for uuid in "${ACTIVE_EXTENSIONS[@]}"; do
         glib-compile-schemas "$schemas" || true
     fi
 done
-# WACK Shell 1.0.0 calls super.vfunc_event(), which GNOME 50 no longer provides:
-# every pointer event over its panel buttons logs a JS error (hundreds per
-# session). Pass the event on instead. No-op once upstream fixes it.
-WACK_JS="$USER_EXT_DIR/wack-shell@rinzler69-wastaken.github.com/panelComponents.js"
-if [[ -f "$WACK_JS" ]] && grep -q 'return super.vfunc_event(event);' "$WACK_JS"; then
-    sed -i 's|return super.vfunc_event(event);|return Clutter.EVENT_PROPAGATE; // MK: no StWidget.vfunc_event on GNOME 50|' "$WACK_JS"
-    echo "    [+] Patched WACK Shell for GNOME 50 (takes effect after logging in again)"
-fi
-# WACK Shell also snapshots the dock with paint_to_content(), which GNOME 50's
-# dock actor lacks: every dock move logged an error and a stack trace, a hitch
-# right when windows minimize. Skip the snapshot instead.
-WACK_EXT_JS="$USER_EXT_DIR/wack-shell@rinzler69-wastaken.github.com/extension.js"
-if [[ -f "$WACK_EXT_JS" ]] && grep -q '^ *dock\.paint_to_content(null);' "$WACK_EXT_JS"; then
-    sed -i 's|^\( *\)dock\.paint_to_content(null);|\1dock.paint_to_content?.(null); // MK: not on GNOME 50 dock actors|' "$WACK_EXT_JS"
-    echo "    [+] Patched WACK Shell dock snapshot (takes effect after logging in again)"
-fi
-# Magic Lamp plays its genie even when GNOME was told to skip the effect, so
-# gestures that animate windows themselves (4-finger pinch to show the desktop)
-# ran two animations back to back and stuttered. Make it honour skipNextEffect().
-LAMP_JS="$USER_EXT_DIR/compiz-alike-magic-lamp-effect@hermes83.github.com/extension.js"
-if [[ -f "$LAMP_JS" ]] && ! grep -q 'MK: skipNextEffect' "$LAMP_JS" &&
-    grep -q 'stack.indexOf("_unminimizeWindow") !== -1)) {' "$LAMP_JS"; then
-    sed -i \
-        -e 's#^\( *\)\(if (stack && (stack.indexOf("_minimizeWindow") !== -1 || stack.indexOf("_unminimizeWindow") !== -1)) {\)$#\1\2\n\1    if (Main.wm._skippedActors?.delete(actor)) (Main.wm._mkSkipLamp ??= new Set()).add(actor); // MK: skipNextEffect#' \
-        -e '/window_manager.connect("\(un\)\{0,1\}minimize"/,/if (Main.overview.visible) {/ s#^\( *\)if (Main.overview.visible) {$#\1if (Main.overview.visible || Main.wm._mkSkipLamp?.delete(actor)) {#' \
-        "$LAMP_JS"
-    echo "    [+] Patched Magic Lamp to respect gesture animations (takes effect after logging in again)"
-fi
 # Smoother unlock: GNOME switches off every extension that isn't marked for the
 # lock screen when you lock, and rebuilds them all as you unlock, which is the
 # hitch you see as the lock screen slides away (and gestures don't answer for a
 # moment). Keep the ones with nothing to show or type on the lock screen loaded:
-# animations and gestures (they only act on the normal desktop). Not the
-# clipboard, text grabber or resource monitor (its menu lists your processes):
-# they would work on the lock screen.
-for uuid in impatience@gfxmonk.net burn-my-windows@schneegans.github.com \
-            compiz-windows-effect@hermes83.github.com compiz-alike-magic-lamp-effect@hermes83.github.com \
-            touchpad-gesture-customization@coooolapps.com transparent-top-bar@ftpix.com; do
+# gestures (they only act on the normal desktop). Not the text grabber: it
+# would work on the lock screen.
+for uuid in touchpad-gesture-customization@coooolapps.com; do
     meta="$USER_EXT_DIR/$uuid/metadata.json"
     [[ -f "$meta" ]] || continue
     python3 - "$meta" << 'PY' && echo "    [+] $uuid stays loaded while locked (after logging in again)"
@@ -608,20 +615,6 @@ if [[ -f "$GESTURE_ALTTAB" ]] && ! grep -q 'MK: same travel per window' "$GESTUR
     sed -i 's#this._progress = Math.clamp(this._progress + delta / distance, 0, 1);#this._progress = Math.clamp(this._progress + delta / distance * 6 / Math.max(3, (this._switcher?._items.length ?? 4) + 2 * dummyWinCount), 0, 1); // MK: same travel per window#' "$GESTURE_ALTTAB"
     echo "    [+] Patched 3-finger Alt+Tab for even finger travel per window (after logging in again)"
 fi
-# WACK Shell's top-left menu: shortcut hints beside every item it can match
-# (Shut Down, Restart, Lock, Log Out...), read live from your keybindings, and
-# one beside Sleep too (WACK has no Sleep hint of its own: patched in).
-ext_set wack-shell@rinzler69-wastaken.github.com org.gnome.shell.extensions.wack-shell show-menu-shortcuts true
-ext_set wack-shell@rinzler69-wastaken.github.com org.gnome.shell.extensions.wack-shell menu-shortcut-amount 1
-WACK_MENU="$USER_EXT_DIR/wack-shell@rinzler69-wastaken.github.com/panelComponents.js"
-if [[ -f "$WACK_MENU" ]] && ! grep -q 'MK: sleep hint' "$WACK_MENU" &&
-    grep -q "} else if (action === 'settings') {" "$WACK_MENU" &&
-    grep -q 'SystemActions.getDefault().activateSuspend();' "$WACK_MENU"; then
-    # 0,/re/: first match only, the user-defined branch where name, cmd and binding exist.
-    sed -i "0,/} else if (action === 'settings') {/s#} else if (action === 'settings') {#} else if (action === 'sleep') { // MK: sleep hint\n                    if (name === 'sleep' || name === 'suspend' || cmd.includes('suspend')) {\n                        return formatShortcut(binding, isMac);\n                    }\n                } else if (action === 'settings') {#" "$WACK_MENU"
-    perl -0pi -e "s#(SystemActions\.getDefault\(\)\.activateSuspend\(\);\n\s*\})\)\);#\1, getShortcut('sleep'), isDark));#" "$WACK_MENU"
-    echo "    [+] Top-left menu: Sleep shows its shortcut (after logging in again)"
-fi
 # Four-finger desktop swipes: one desktop per swipe, however fast the flick,
 # and a settle of at least 300 ms, so switching feels deliberate and weighted
 # instead of skipping two desktops on a quick swipe.
@@ -632,13 +625,6 @@ if [[ -f "$GESTURE_WS" ]] && ! grep -q 'MK: one desktop per swipe' "$GESTURE_WS"
     sed -i 's#_gestureBegin(tracker, monitor) {#_gestureBegin(tracker, monitor) {\n        this._mkStart = global.workspace_manager.get_active_workspace_index(); // MK: one desktop per swipe#' "$GESTURE_WS"
     sed -i 's#this._workspaceAnimation._switchWorkspaceEnd(tracker, duration, progress);#if (this._mkStart !== undefined) progress = Math.clamp(progress, this._mkStart - 1, this._mkStart + 1);\n        this._workspaceAnimation._switchWorkspaceEnd(tracker, Math.max(duration, 300), progress);#' "$GESTURE_WS"
     echo "    [+] Desktop swipes: one desktop at a time, weighted (after logging in again)"
-fi
-# Burn My Windows: a short, subtle "Glide" when windows open and close. The MK
-# profile is high priority, so it wins over the default profile (Fire).
-BMW_PROFILE="$HOME/.config/burn-my-windows/profiles/mk-glide.conf"
-if [[ -d "$USER_EXT_DIR/burn-my-windows@schneegans.github.com" ]]; then
-    mkdir -p "$(dirname "$BMW_PROFILE")"
-    cp -f "$SCRIPT_DIR/config/burn-my-windows-profile.conf" "$BMW_PROFILE"
 fi
 
 # This project's own top-bar watermark: always refresh it so repo updates land.
@@ -681,7 +667,7 @@ fi
 # video made GNOME Shell drop frames under the dock and the top bar. Choosing "Processor"
 # again afterwards (Suite settings › Video Decoding) sticks.
 APPLIED_V23="$HOME/.config/mk-workstation/extensions-applied"
-if ! grep -qxF "set:desktop-hwaccel-vaapi" "$APPLIED_V23" 2>/dev/null; then
+if (( FRESH )) && ! grep -qxF "set:desktop-hwaccel-vaapi" "$APPLIED_V23" 2>/dev/null; then
     ext_set "$MK_LOCK" "$LOCK_SCHEMA" desktop-hwaccel vaapi
     mkdir -p "$(dirname "$APPLIED_V23")"
     echo "set:desktop-hwaccel-vaapi" >> "$APPLIED_V23"
@@ -691,42 +677,7 @@ fi
 # root-owned, which setup.sh installs; an earlier copy in ~/.local/libexec goes.)
 rm -f "$HOME/.local/libexec/mk/setup-system-optimizations.sh"
 
-gsettings set org.gnome.shell disable-user-extensions false
-# GNOME 51 removed St.BoxLayout's `vertical` property; extensions that still set
-# it fail to start (WACK's lock-screen clock: "No property vertical"). Their
-# boxes get `orientation` instead, in the installed copy: idempotent, and done
-# again after an update brings the old code back. Only these known files.
-WACK_CLOCK="$USER_EXT_DIR/wack-lockscreen-clock@rinzler69-wastaken.github.com/src/main"
-if (( $(gnome_version 2> /dev/null || echo 0) >= 48 )) && [[ -d "$WACK_CLOCK" ]]; then
-    for f in wackClock.js cupertinoPrompt.js lockscreenMessageManager.js cupertinoPromptManager.js; do
-        if [[ -f "$WACK_CLOCK/$f" ]] && grep -q 'vertical: true' "$WACK_CLOCK/$f" && grep -q "import Clutter from 'gi://Clutter'" "$WACK_CLOCK/$f"; then
-            sed -i 's/\bvertical: true\b/orientation: Clutter.Orientation.VERTICAL/' "$WACK_CLOCK/$f"
-            echo "    [+] WACK lock-screen clock: $f updated for GNOME 51"
-        fi
-    done
-fi
-# WACK Shell and its lock-screen clock list GNOME 46-50 in their metadata, so
-# Extension Manager calls them "Unsupported" on newer GNOME (they run: the
-# patches above cover GNOME 50 / 51). Add this GNOME's version to the installed
-# copies, once, and make sure their schemas are compiled.
-for uuid in wack-shell@rinzler69-wastaken.github.com wack-lockscreen-clock@rinzler69-wastaken.github.com; do
-    meta="$USER_EXT_DIR/$uuid/metadata.json"
-    [[ -f "$meta" ]] || continue
-    python3 - "$meta" "$(gnome_version 2>/dev/null || echo)" << 'PY'
-import json, sys
-path, version = sys.argv[1], sys.argv[2]
-meta = json.load(open(path))
-versions = meta.setdefault("shell-version", [])
-if version and version not in versions:
-    versions.append(version)
-    with open(path, "w") as f:
-        json.dump(meta, f, indent=2)
-    print(f"    [+] {meta.get('uuid', path)}: marked as made for GNOME {version}")
-PY
-    if [[ -d "$USER_EXT_DIR/$uuid/schemas" ]]; then
-        glib-compile-schemas "$USER_EXT_DIR/$uuid/schemas" 2>/dev/null || true
-    fi
-done
+(( FRESH )) && gsettings set org.gnome.shell disable-user-extensions false
 # Every installed extension's settings schemas, compiled (one copied from another machine, or
 # installed by hand, may come without gschemas.compiled: its settings would fail to load).
 for schemas in "$USER_EXT_DIR"/*/schemas; do
@@ -746,112 +697,48 @@ for entry in "$AUTOSTART_DIR"/*wallpaper*.desktop "$AUTOSTART_DIR"/*mpv*.desktop
     mv -f "$entry" "$HOME/.config/mk-workstation/backups/autostart/"
     echo "    [*] Moved aside autostart entry $(basename "$entry") (a second wallpaper or lock-screen player)"
 done
-# WACK Shell's logo: the MK emblem (with its "MK" label), set only while no
-# custom logo is chosen, so a logo you pick in WACK's settings stays yours.
-install -Dm644 "$SCRIPT_DIR/assets/icons/mk-emblem-symbolic.svg" "$MK_SHARE/mk-emblem-symbolic.svg"
-WACK_SCHEMAS="$USER_EXT_DIR/wack-shell@rinzler69-wastaken.github.com/schemas"
-if [[ -f "$WACK_SCHEMAS/gschemas.compiled" ]] &&
-    [[ "$(gsettings --schemadir "$WACK_SCHEMAS" get org.gnome.shell.extensions.wack-shell custom-logo-path 2>/dev/null)" == "''" ]]; then
-    ext_set wack-shell@rinzler69-wastaken.github.com org.gnome.shell.extensions.wack-shell custom-logo-path "$MK_SHARE/mk-emblem-symbolic.svg"
-    ext_set wack-shell@rinzler69-wastaken.github.com org.gnome.shell.extensions.wack-shell use-custom-logo true
-    ext_set wack-shell@rinzler69-wastaken.github.com org.gnome.shell.extensions.wack-shell symbolic-logo true
-    echo "    [+] WACK Shell's logo: the MK emblem"
-fi
-# Effects profile (`mk effects full|lite|auto`, default auto): lite keeps the
-# heaviest effects (config/effects.conf) installed but switched off, so older
-# or low-power machines stay smooth. auto picks lite on weak hardware.
-EFFECTS=$(cat "$HOME/.config/mk-workstation/effects" 2>/dev/null || echo auto)
-read -ra HEAVY_EXTENSIONS <<< "$(sed -n 's/^HEAVY=//p' "$SCRIPT_DIR/config/effects.conf")"
-if [[ "$EFFECTS" != full && "$EFFECTS" != lite ]]; then
-    lite_below=$(sed -n 's/^AUTO_LITE_BELOW_GB=//p' "$SCRIPT_DIR/config/effects.conf")
-    mem_gb=$(awk '/^MemTotal/ { print int($2 / 1048576) }' /proc/meminfo)
-    if (( mem_gb < ${lite_below:-4} )) || (( $(nproc) <= 2 )) || ! compgen -G "/dev/dri/renderD*" > /dev/null; then
-        EFFECTS=lite
-    else
-        EFFECTS=full
-    fi
-fi
-# Your extension switches are yours. sync enables an extension only the
-# first time it sets it up on this computer, and switches a replaced one off
-# only once; after that, whatever you turn on or off in Extension Manager
-# stays as you left it, sync after sync. What it has done is listed in
-# ~/.config/mk-workstation/extensions-applied (one "enable:" or "retire:"
-# line each; delete a line to have it done again on the next sync).
+# One-time steps sync has done on this computer, one line each, in
+# ~/.config/mk-workstation/extensions-applied (delete a line to have it done again).
 APPLIED="$HOME/.config/mk-workstation/extensions-applied"
 mkdir -p "$(dirname "$APPLIED")"
 if [[ ! -f "$APPLIED" ]]; then
     touch "$APPLIED"
     # An install from before this list existed: take today's switches as yours (nothing changes now).
     if gsettings get org.gnome.shell enabled-extensions | grep -q "$MK_INDICATOR"; then
-        for uuid in "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR" "$MK_ENGINE"; do echo "enable:$uuid"; done >> "$APPLIED"
-        for uuid in clipboard-indicator@tudmotu.com space-bar@luchrioh monitor@astraext.github.io \
-            macos-dock@vinnytherobot.github.io dash-to-dock@micxgx.gmail.com blur-my-shell@aunetx \
-            compiz-alike-magic-lamp-effect@hermes83.github.com; do echo "retire:$uuid"; done >> "$APPLIED"
+        for uuid in "${CURATED_EXTENSIONS[@]}"; do echo "enable:$uuid"; done >> "$APPLIED"
     fi
 fi
 first_time() { ! grep -qxF -- "$1" "$APPLIED"; }
 
 # The lock screen's unlock: a slight zoom that fades into the desktop (1.03x to 1.0, 320 ms), set
 # once; a different choice in the Command Centre stays yours.
-if first_time "lock-unlock-zoom"; then
+if (( FRESH )) && first_time "lock-unlock-zoom"; then
     ext_set "$MK_LOCK" "$LOCK_SCHEMA" unlock-animation zoom
     ext_set "$MK_LOCK" "$LOCK_SCHEMA" animation-duration 320
     echo "lock-unlock-zoom" >> "$APPLIED"
 fi
 
-if [[ "$EFFECTS" == lite ]]; then
-    kept=()
-    for uuid in "${ACTIVE_EXTENSIONS[@]}"; do
-        [[ " ${HEAVY_EXTENSIONS[*]} " == *" $uuid "* ]] || kept+=("$uuid")
+# Fresh install: exactly the curated extensions on, every other one off (GNOME's own included);
+# an update leaves your switches exactly as they are.
+if (( FRESH )); then
+    list=$(printf "'%s', " "${CURATED_EXTENSIONS[@]}")
+    gsettings set org.gnome.shell enabled-extensions "[${list%, }]"
+    gsettings_remove org.gnome.shell disabled-extensions "${CURATED_EXTENSIONS[@]}"
+    for uuid in "${CURATED_EXTENSIONS[@]}"; do
+        grep -qxF "enable:$uuid" "$APPLIED" || echo "enable:$uuid" >> "$APPLIED"
     done
-    ACTIVE_EXTENSIONS=("${kept[@]}")
-    echo "    [*] Effects: lite (wobbly windows and genie stay off unless you turn them on; 'mk effects full' turns them on)"
+    echo "    [+] Extensions on: ${CURATED_EXTENSIONS[*]%%@*} (every other one off)"
+    # Extension managers are tools you open now and then, not dock apps.
+    gsettings_remove org.gnome.shell favorite-apps com.mattjakeman.ExtensionManager.desktop org.gnome.Extensions.desktop
 fi
-TO_ENABLE=()
-for uuid in "${ACTIVE_EXTENSIONS[@]}" "$MK_INDICATOR" "$MK_ENGINE"; do
-    if first_time "enable:$uuid"; then
-        TO_ENABLE+=("$uuid")
-        echo "enable:$uuid" >> "$APPLIED"
-    fi
-done
-if (( ${#TO_ENABLE[@]} )); then
-    # Write the list directly: `gnome-extensions enable` fails on Wayland for
-    # extensions the running shell hasn't loaded yet. GNOME's disabled list
-    # overrides the enabled one, so they come off it too (this once).
-    gsettings_append org.gnome.shell enabled-extensions "${TO_ENABLE[@]}"
-    gsettings_remove org.gnome.shell disabled-extensions "${TO_ENABLE[@]}"
-    echo "    [+] Enabled for the first time: ${TO_ENABLE[*]}"
-fi
-# Extensions an MK version replaced, switched off once (turn one back on and it stays on):
-#   Clipboard Indicator (MK's clipboard history, Super+V), Space Bar (duplicated GNOME's workspace
-#   dots), Astra Monitor (MK's system monitor), MacOS Dock (a second dock), Dash to Dock, Blur my
-#   Shell and Magic Lamp (the engine's dock, glass and minimize glide; each of the engine's stands
-#   aside while the one it replaces runs).
-for uuid in clipboard-indicator@tudmotu.com space-bar@luchrioh monitor@astraext.github.io \
-    macos-dock@vinnytherobot.github.io dash-to-dock@micxgx.gmail.com \
-    compiz-alike-magic-lamp-effect@hermes83.github.com; do
-    if first_time "retire:$uuid"; then
-        gsettings_remove org.gnome.shell enabled-extensions "$uuid"
-        echo "retire:$uuid" >> "$APPLIED"
-    fi
-done
-# Space Bar and GNOME's Window List draw their own workspace labels ("W.S 1") beside MK's
-# top bar: off at every sync (the app indicator and the workspace dots are MK's own).
-gsettings_remove org.gnome.shell enabled-extensions space-bar@luchrioh window-list@gnome-shell-extensions.gcampax.github.com
-# Blur my Shell: on, with real dynamic blur behind the top bar (MK's own glass stands aside
-# while it runs: modules/blur.js). Its panel keys are written after the saved extension
-# settings are restored (below), so those never put the old static blur back.
-if [[ -d "$USER_EXT_DIR/blur-my-shell@aunetx" || -d /usr/share/gnome-shell/extensions/blur-my-shell@aunetx ]]; then
-    gsettings_append org.gnome.shell enabled-extensions blur-my-shell@aunetx
-    gsettings_remove org.gnome.shell disabled-extensions blur-my-shell@aunetx
-fi
-# Extension managers are tools you open now and then, not dock apps.
-gsettings_remove org.gnome.shell favorite-apps com.mattjakeman.ExtensionManager.desktop org.gnome.Extensions.desktop
 if [[ -d "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io" ]]; then
     gnome-extensions uninstall macos-dock@vinnytherobot.github.io 2>/dev/null \
         || rm -rf "$HOME/.local/share/gnome-shell/extensions/macos-dock@vinnytherobot.github.io"
 fi
 
+# Steps 3 to 7 are MK's default desktop settings: applied on a fresh install (or with
+# --reset-defaults) only, so an update never puts back a setting you changed.
+if (( FRESH )); then
 # 3. Window Management & Multitasking (All Workspaces, Zero Lag)
 # Every keyboard shortcut lives in config/shortcuts.conf (applied in step 9).
 echo "==> Applying window management settings..."
@@ -862,35 +749,11 @@ gsettings set org.gnome.shell.window-switcher current-workspace-only false
 ext_set touchpad-gesture-customization@coooolapps.com \
     org.gnome.shell.extensions.touchpad-gesture-customization alttab-all-workspaces true
 
-# Windows-style split screen (Tiling Assistant): Super+arrows snap halves, and
-# Super+Left then Super+Up makes a quarter, as on Windows. After snapping, Snap
-# Assist offers your other windows for the free space; snapped windows raise
-# together. Super+Z is MK's own snap layouts (mk-indicator, snapLayouts.js).
-TA="tiling-assistant@leleat-on-github"
-TA_SCHEMA="org.gnome.shell.extensions.tiling-assistant"
-ext_set "$TA" "$TA_SCHEMA" dynamic-keybinding-behavior 3
-ext_set "$TA" "$TA_SCHEMA" enable-tiling-popup true
-ext_set "$TA" "$TA_SCHEMA" enable-raise-tile-group true
-ext_set "$TA" "$TA_SCHEMA" enable-tile-animations false
-ext_set "$TA" "$TA_SCHEMA" enable-layout-picker true
-# Install the MK layouts unless you already made your own (TA's examples don't count).
-TA_LAYOUTS="$HOME/.config/tiling-assistant/layouts.json"
-TA_EXAMPLE=$(find "$USER_EXT_DIR/$TA" "/usr/share/gnome-shell/extensions/$TA" -name layouts_example.json 2>/dev/null | head -n 1 || true)
-same_json() { python3 -c 'import json, sys; sys.exit(json.load(open(sys.argv[1])) != json.load(open(sys.argv[2])))' "$1" "$2" 2>/dev/null; }
-if [[ ! -s "$TA_LAYOUTS" ]] || { [[ -n "$TA_EXAMPLE" ]] && same_json "$TA_LAYOUTS" "$TA_EXAMPLE"; }; then
-    mkdir -p "$(dirname "$TA_LAYOUTS")"
-    cp -f "$SCRIPT_DIR/config/tiling-layouts.json" "$TA_LAYOUTS"
-elif ! same_json "$TA_LAYOUTS" "$SCRIPT_DIR/config/tiling-layouts.json"; then
-    echo "    [*] Kept your own Tiling Assistant layouts ($TA_LAYOUTS)"
-fi
-# While Tiling Assistant runs it owns Super+arrows (it blanks GNOME's own snap
-# keys and restores them when disabled), so only set GNOME's when it isn't running.
-if [[ "$(gnome-extensions info "$TA" 2>/dev/null | awk '/State:/ { print $2 }')" != "ACTIVE" ]]; then
-    gsettings set org.gnome.mutter.keybindings toggle-tiled-left "['<Super>Left']"
-    gsettings set org.gnome.mutter.keybindings toggle-tiled-right "['<Super>Right']"
-    gsettings set org.gnome.desktop.wm.keybindings maximize "['<Super>Up']"
-    gsettings set org.gnome.desktop.wm.keybindings unmaximize "['<Super>Down']"
-fi
+# Super+arrows: GNOME's own halves, maximize and restore.
+gsettings set org.gnome.mutter.keybindings toggle-tiled-left "['<Super>Left']"
+gsettings set org.gnome.mutter.keybindings toggle-tiled-right "['<Super>Right']"
+gsettings set org.gnome.desktop.wm.keybindings maximize "['<Super>Up']"
+gsettings set org.gnome.desktop.wm.keybindings unmaximize "['<Super>Down']"
 # Busy apps (games, compiles) get 20s before GNOME shows "not responding" (default 5s).
 gsettings set org.gnome.mutter check-alive-timeout 20000
 
@@ -1018,6 +881,7 @@ dconf write /org/gnome/shell/extensions/blur-my-shell/panel/style-panel 0
 # and no Dash to Dock blur: MK's dock isn't Dash to Dock, and that pass only ever left a
 # rectangle of blurred still wallpaper where a dock would be
 dconf write /org/gnome/shell/extensions/blur-my-shell/dash-to-dock/blur false
+fi  # (FRESH: default settings)
 
 # 8. Modern Modal Dialog Styling (written once; re-runs don't append again)
 SHELL_CSS="$HOME/.config/gnome-shell/gnome-shell.css"
@@ -1112,7 +976,14 @@ remove_legacy_shortcuts
 # Every shortcut: config/shortcuts.conf, then your changes from the Shortcuts
 # window (Super+/) in ~/.config/mk-workstation/shortcuts.conf. Runs after the
 # saved extension settings, so your choices win over extension defaults too.
-PYTHONPATH="$MK_SHARE/lib" python3 -m mkworkstation apply-shortcuts
+# Fresh install: all of them (each noted in shortcuts-applied); update: only shortcuts MK added
+# since, so a key you changed in GNOME Settings is never put back.
+SHORTCUTS_LEDGER="$HOME/.config/mk-workstation/shortcuts-applied"
+if (( FRESH )); then
+    PYTHONPATH="$MK_SHARE/lib" python3 -m mkworkstation apply-shortcuts --record "$SHORTCUTS_LEDGER"
+else
+    PYTHONPATH="$MK_SHARE/lib" python3 -m mkworkstation apply-shortcuts --only-new "$SHORTCUTS_LEDGER"
+fi
 
 # Drop your own custom shortcuts that run exactly what an mk-* shortcut now
 # runs (such as an older "Launch Obsidian" on Super+N), so no key is bound twice.
@@ -1135,7 +1006,7 @@ dedupe_custom_shortcuts() {
     local IFS=,
     gsettings set "$MEDIA_KEYS" custom-keybindings "[${kept[*]}]"
 }
-dedupe_custom_shortcuts
+(( FRESH )) && dedupe_custom_shortcuts
 
 # The folders MK's tools save to and read from, on any account (made if missing)
 mkdir -p "$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")/Screenshots" \
@@ -1144,6 +1015,10 @@ mkdir -p "$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")/Screensh
 
 echo "==> Checking packages..."
 check_deps || true
+if (( FRESH )); then
+    mkdir -p "$(dirname "$MARKER")"
+    date -Iseconds > "$MARKER"
+fi
 echo "✔ Workstation configurations synchronized."
 if (( NEW_EXTENSIONS )); then
     echo "  New extensions were installed: log out and back in to load them."

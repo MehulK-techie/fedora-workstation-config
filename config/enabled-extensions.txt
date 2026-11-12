@@ -1,15 +1,7 @@
-# Extensions sync.sh installs and enables. Written by 'mk export'; edit freely.
-# Missing ones are downloaded from extensions.gnome.org for your GNOME version.
-touchpad-gesture-customization@coooolapps.com
-tiling-assistant@leleat-on-github
+# The third-party extensions MK uses (sync.sh installs them on a fresh install, from
+# extensions.gnome.org for your GNOME version). MK's own three (mk-shell-engine, mk-indicator,
+# wack-sonoma-lockscreen) come from this repo. A fresh install turns exactly these seven on.
+blur-my-shell@aunetx
 caffeine@patapon.info
-transparent-top-bar@ftpix.com
-wack-lockscreen-clock@rinzler69-wastaken.github.com
-wack-shell@rinzler69-wastaken.github.com
 text-extractor@imshaaz21.github.com
-mk-indicator@mehulk
-places-menu@gnome-shell-extensions.gcampax.github.com
-appindicatorsupport@rgcjonas.gmail.com
-impatience@gfxmonk.net
-burn-my-windows@schneegans.github.com
-compiz-windows-effect@hermes83.github.com
+touchpad-gesture-customization@coooolapps.com

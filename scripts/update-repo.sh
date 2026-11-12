@@ -38,21 +38,25 @@ dump /org/gnome/desktop/ > "$CONFIG_DIR/gnome-desktop-full.dconf"
 dump /org/gnome/mutter/ > "$CONFIG_DIR/gnome-mutter-full.dconf"
 dump /org/gnome/settings-daemon/plugins/media-keys/ > "$CONFIG_DIR/keybindings.dconf"
 
-# Enabled extensions that actually work here, plus each one's settings.
-# sync.sh installs and enables exactly this list, then loads these settings.
+# The curated extensions (the seven MK uses) that are enabled and work here, plus each one's
+# settings. Anything else you have on stays on this machine and out of the repo.
+MK_OWN=" mk-shell-engine@mehulk mk-indicator@mehulk wack-sonoma-lockscreen@rinzler69-wastaken.github.com "
+CURATED="$MK_OWN blur-my-shell@aunetx caffeine@patapon.info text-extractor@imshaaz21.github.com touchpad-gesture-customization@coooolapps.com "
 EXT_LIST="$CONFIG_DIR/enabled-extensions.txt"
 {
-    echo "# Extensions sync.sh installs and enables. Written by 'mk export'; edit freely."
-    echo "# Missing ones are downloaded from extensions.gnome.org for your GNOME version."
+    echo "# The third-party extensions MK uses (sync.sh installs them on a fresh install, from"
+    echo "# extensions.gnome.org for your GNOME version). MK's own three come from this repo."
+    echo "# Written by 'mk export' (only these curated ones are ever listed)."
 } > "$EXT_LIST"
 rm -f "$EXT_SETTINGS_DIR"/*.dconf
 while IFS= read -r uuid; do
     state=$(gnome-extensions info "$uuid" 2>/dev/null | awk '/State:/ { print $2 }')
+    [[ "$CURATED" == *" $uuid "* ]] || continue
     case "$state" in
         ACTIVE|ENABLED|INACTIVE) ;;
         *) echo "    [*] Skipped $uuid (state: ${state:-unknown}, broken on this GNOME version?)"; continue ;;
     esac
-    echo "$uuid" >> "$EXT_LIST"
+    [[ "$MK_OWN" == *" $uuid "* ]] || echo "$uuid" >> "$EXT_LIST"
     path=$(ext_settings_path "$uuid")
     settings=$(dump "$path")
     if [[ -n "$settings" ]]; then

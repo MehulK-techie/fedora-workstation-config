@@ -567,24 +567,9 @@ case "${1:-help}" in
         ;;
 
     effects)
-        # full: every effect · lite: wobbly windows and genie off (the glide and Blur my Shell stay) · auto: lite on weak hardware
-        shift
-        EFFECTS_FILE="$HOME/.config/mk-workstation/effects"
-        case "${1:-}" in
-            full|lite|auto)
-                mkdir -p "$(dirname "$EFFECTS_FILE")"
-                echo "$1" > "$EFFECTS_FILE"
-                echo "==> Effects: $1. Applying..."
-                "$REPO_DIR/sync.sh" | grep -E "Effects|✔|log out" || true
-                ;;
-            "")
-                echo "Effects: $(cat "$EFFECTS_FILE" 2>/dev/null || echo auto)   (mk effects full | lite | auto)"
-                ;;
-            *)
-                echo "Usage: mk effects full | lite | auto" >&2
-                exit 2
-                ;;
-        esac
+        # (retired: the wobbly-window and genie extensions it switched are no longer part of MK;
+        # MK Shell Engine's own effects are light enough for any machine)
+        echo "mk effects is retired: MK's window effects are MK Shell Engine's own, light on any machine."
         ;;
 
     rename)
@@ -1026,7 +1011,6 @@ KEYRING
         echo "  fingerprint  Enroll a finger for login and sudo (list, delete, settings)"
         echo "  focus      Start the focus timer: mk focus 25 \"Writing\" (also 1:30, 90s)"
         echo "  power      Smart power profiles on laptops: status, on, off; or comfort, quiet, performance"
-        echo "  effects    Visual effects: full, lite (smooth on older machines) or auto"
         echo "  screensaver  Scenes when you step away: on, off, show, scene web|knight|matrix|aurora, delay N"
         echo "  notes      MK Notes: mk notes, mk notes today, mk notes serve (phone sync)"
         echo "  accent     Desktop colour: auto (from your wallpaper), #rrggbb, status"

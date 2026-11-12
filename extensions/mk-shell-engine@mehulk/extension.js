@@ -112,6 +112,8 @@ export default class MKShellEngine extends Extension {
     _startParts() {
         this._running = true;
         this._parts = [];
+        this._started = [];
+        this._failed = [];
         this._start('snap layouts', () => {
             const snap = new SnapLayouts();
             bindSnapLayouts(this, snap);
@@ -145,6 +147,11 @@ export default class MKShellEngine extends Extension {
         this._start('calendar', () => new CalendarDeck(this._settings));
         this._start('notification centre', () => new NotifyCenter());
         this._start('screenshot actions', () => new ScreenshotActions());
+        // one line in the journal that says it all (journalctl --user -b | grep mk-shell-engine)
+        if (this._failed.length)
+            console.warn(`mk-shell-engine: ${this._started.length} modules started; failed: ${this._failed.join(', ')}`);
+        else
+            console.log(`mk-shell-engine: all ${this._started.length} modules initialized`);
         if (Main.layoutManager._startingUp && !this._bootFaded)
             this._bootFade();
     }
@@ -227,7 +234,9 @@ export default class MKShellEngine extends Extension {
     _start(name, make) {
         try {
             this._parts.push(make());
+            this._started.push(name);
         } catch (e) {
+            this._failed.push(name);
             console.error(`mk-shell-engine: ${name} didn't start: ${e.message}\n${e.stack}`);
         }
     }

@@ -66,6 +66,7 @@ export class WallpaperEngine {
         // the same grid, one click away: a button in the top bar beside the eyedropper
         try {
             this._button = new WallpaperButton(() => this._openCarousel());
+            Main.panel.statusArea['mk-wallpaper-grid']?.destroy();   // (one left by a run that didn't stop)
             Main.panel.addToStatusArea('mk-wallpaper-grid', this._button, 0, 'right');
         } catch (e) {
             console.warn(`mk-shell-engine: wallpaper button: ${e.message}`);
@@ -260,6 +261,10 @@ export class WallpaperEngine {
     }
 
     destroy() {
+        try {
+            this._button?.destroy();
+        } catch {}
+        this._button = null;
         this._carousel?.destroy();
         this._cancel?.cancel();
         for (const id of this._timers)
@@ -273,8 +278,6 @@ export class WallpaperEngine {
         if (this._hasWallpaperBinding)
             Main.wm.removeKeybinding('wallpaper-shuffle');
         this._hasWallpaperBinding = false;
-        this._button?.destroy();
-        this._button = null;
         this._settings.disconnectObject(this);
     }
 }

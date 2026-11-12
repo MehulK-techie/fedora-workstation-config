@@ -51,6 +51,8 @@ const Eyedropper = GObject.registerClass(class MkEyedropper extends PanelMenu.Bu
 export class ColorPicker {
     constructor() {
         this._button = new Eyedropper(() => this.pick());
+        // (a button left behind by a run that failed to stop would block this one: it goes first)
+        Main.panel.statusArea['mk-eyedropper']?.destroy();
         Main.panel.addToStatusArea('mk-eyedropper', this._button, 0, 'right');
     }
 
@@ -124,7 +126,12 @@ export class ColorPicker {
     }
 
     destroy() {
+        // the button first, on its own: whatever else fails, it never outlives the run
+        try {
+            this._button?.destroy();
+        } catch {}
+        this._button = null;
         this._end();
-        this._button.destroy();
     }
+
 }

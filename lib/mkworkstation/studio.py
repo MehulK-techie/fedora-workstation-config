@@ -14,6 +14,7 @@ follows at once, so this window, Extension Manager and `mk-live-wallpaper`
 always agree. There's one wallpaper player: the suite's.
 """
 import json
+import os
 import re
 import subprocess
 from datetime import datetime
@@ -392,7 +393,7 @@ def desktop_sound_status(s):
             return "No desktop video chosen (Media › Desktop)"
         try:
             info = json.loads((Path(GLib.get_user_runtime_dir()) / "mk-live-wallpaper.json").read_text())
-            if info.get("audio") is False:
+            if info.get("path") == os.path.expanduser(s.get_string("desktop-wallpaper-path")) and info.get("audio") is False:
                 return "This video has no sound track"
         except (OSError, ValueError):
             pass

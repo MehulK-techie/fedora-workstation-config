@@ -389,7 +389,18 @@ def player(path, once=False, audio=None, hwaccel=None):
                               GLib.IOCondition.IN | GLib.IOCondition.HUP | GLib.IOCondition.ERR, on_stdin)
 
     app.connect("activate", activate)
-    app.connect("shutdown", lambda *_: state["pipeline"] and state["pipeline"].set_state(Gst.State.NULL))
+    def shutdown(*_):
+        if state["pipeline"]:
+            state["pipeline"].set_state(Gst.State.NULL)
+        # what's playing is nothing now: the state file goes too, if it's still ours (another
+        # player may already have written its own), so nothing reads a video that isn't there
+        try:
+            out = Path(GLib.get_user_runtime_dir()) / "mk-live-wallpaper.json"
+            if json.loads(out.read_text()).get("path") == str(path):
+                out.unlink()
+        except (OSError, ValueError):
+            pass
+    app.connect("shutdown", shutdown)
     return app.run([sys.argv[0]])
 
 

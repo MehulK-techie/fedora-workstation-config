@@ -94,6 +94,16 @@ function unpinWorkspaces() {
     pin.saved = null;
 }
 
+// what the player reports about the video it plays (bin/mk-live-wallpaper writes it)
+const RUNTIME_STATE = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'mk-live-wallpaper.json']);
+function forgetRuntimeState() {
+    Gio.File.new_for_path(RUNTIME_STATE).delete_async(GLib.PRIORITY_DEFAULT, null, (file, res) => {
+        try {
+            file.delete_finish(res);
+        } catch {}                                   // (nothing there: fine)
+    });
+}
+
 // ~/.config/mk/wallpaper.json, shared with bin/mk-live-wallpaper and MK Command Centre
 const NOTE = GLib.build_filenamev([GLib.get_user_config_dir(), 'mk', 'wallpaper.json']);
 function readNote() {
@@ -141,11 +151,15 @@ class Player {
             console.warn(`wack-sonoma-lockscreen: desktop wallpaper: ${e.message}`);
             return;
         }
-        const proc = this._proc;
+        const proc = this._proc, began = GLib.get_monotonic_time();
         proc.wait_async(null, () => {
             if (proc !== this._proc)
                 return;                             // (stopped on purpose)
             this._proc = this.win = null;
+            // one that played a good while and then stopped (a GPU reset, a driver hiccup) gets a
+            // fresh set of restarts: only a player that keeps failing straight away is given up on
+            if (GLib.get_monotonic_time() - began > 60e6)
+                this._restarts = 0;
             if (this._restarts++ < 3) {
                 this._retry = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
                     this._retry = 0;
@@ -272,6 +286,9 @@ export class DesktopWallpaper {
 
     _start() {
         const path = this._settings.get_string('desktop-wallpaper-path').replace(/^~(?=\/)/, GLib.get_home_dir());
+        // the runtime state ($XDG_RUNTIME_DIR/mk-live-wallpaper.json) only ever describes what's
+        // playing now: cleared as a player stops or is replaced, written by the new one once it runs
+        forgetRuntimeState();
         if (!usable(path)) {
             this._player.stop();
             return;

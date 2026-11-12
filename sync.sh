@@ -712,6 +712,17 @@ if [[ ! -f "$APPLIED" ]]; then
 fi
 first_time() { ! grep -qxF -- "$1" "$APPLIED"; }
 
+# The drop-in wallpaper folder (Super+W shows everything in it, live): MK's six go in once; a
+# picture you delete there stays deleted, and nothing of yours is ever replaced.
+WALL_DIR="$(xdg-user-dir PICTURES 2> /dev/null || echo "$HOME/Pictures")/Wallpapers"
+mkdir -p "$WALL_DIR"
+if first_time "wallpapers-copied"; then
+    for wall in "$MK_SHARE"/assets/wallpapers/*.jpg; do
+        [[ -e "$wall" && ! -e "$WALL_DIR/$(basename "$wall")" ]] && cp "$wall" "$WALL_DIR/"
+    done
+    echo "wallpapers-copied" >> "$APPLIED"
+fi
+
 # The lock screen's unlock: a slight zoom that fades into the desktop (1.02x to 1.0, 320 ms), set
 # once; a different choice in the Command Centre stays yours.
 if (( FRESH )) && first_time "lock-unlock-zoom"; then

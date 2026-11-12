@@ -6,8 +6,9 @@
                                prints {"path", "art", "contour", "accent", "name"}; sets nothing
   mk-wallpaper set FILE        set FILE as the wallpaper
   mk-wallpaper list            the pictures it cycles through
+  mk-wallpaper random [--json] any one of them (Shuffle)
   mk-wallpaper list --json     the same for the Super+W carousel: each with a 360x225 thumbnail and a
-                               4-colour palette (cached in ~/.cache/mk-workstation/wallpaper-thumbs)
+                               8-colour palette (cached in ~/.cache/mk-workstation/wallpaper-thumbs)
   mk-wallpaper prepare FILE --json   the contour trace of FILE (as `next --json`, for a picked one)
 
 Pictures: ~/Pictures/Wallpapers (yours, any jpg/png/webp), the pictures directly in ~/Pictures (not its
@@ -31,6 +32,7 @@ from urllib.parse import quote, unquote
 HOME = Path.home()
 PICTURES = Path(os.environ.get("XDG_PICTURES_DIR", HOME / "Pictures"))
 FOLDERS = [PICTURES / "Wallpapers", PICTURES, HOME / ".local/share/mk-workstation/assets/wallpapers"]
+# (MK's six are copied into Pictures/Wallpapers once: the same picture there and in MK's folder shows once)
 THUMBS = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "mk-workstation" / "wallpaper-thumbs"
 EXT = {".jpg", ".jpeg", ".png", ".webp"}
 RUNTIME = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
@@ -149,11 +151,11 @@ def prepare(path):
 
 
 def thumb_and_palette(path):
-    """A 360x225 cover-cropped thumbnail and the picture's 4 main colours (k-means on a small copy,
+    """A 360x225 cover-cropped thumbnail and the picture's 8 main colours (k-means on a small copy,
     most vivid first), cached by path and modification time."""
     import hashlib
     st = path.stat()
-    key = hashlib.sha1(f"{path.resolve()}:{st.st_mtime_ns}:{st.st_size}".encode()).hexdigest()[:20]
+    key = hashlib.sha1(f"{path.resolve()}:{st.st_mtime_ns}:{st.st_size}:8".encode()).hexdigest()[:20]
     THUMBS.mkdir(parents=True, exist_ok=True)
     thumb, meta = THUMBS / f"{key}.jpg", THUMBS / f"{key}.json"
     if thumb.exists() and meta.exists():
@@ -177,10 +179,10 @@ def thumb_and_palette(path):
     y0, x0 = (small.shape[0] - 225) // 2, (small.shape[1] - 360) // 2
     cv2.imwrite(str(thumb), small[y0:y0 + 225, x0:x0 + 360], [cv2.IMWRITE_JPEG_QUALITY, 84])
     pixels = cv2.resize(img, (48, 30), interpolation=cv2.INTER_AREA).reshape(-1, 3).astype(np.float32)
-    _c, labels, centres = cv2.kmeans(pixels, 4, None, (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0),
+    _c, labels, centres = cv2.kmeans(pixels, 8, None, (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0),
                                      3, cv2.KMEANS_PP_CENTERS)
     hsv = cv2.cvtColor(centres.reshape(1, -1, 3).astype(np.uint8), cv2.COLOR_BGR2HSV)[0]
-    order = sorted(range(4), key=lambda i: -(int(hsv[i][1]) * int(hsv[i][2])))
+    order = sorted(range(len(centres)), key=lambda i: -(int(hsv[i][1]) * int(hsv[i][2])))
     palette = ["#%02x%02x%02x" % tuple(int(v) for v in centres[i][::-1]) for i in order]
     meta.write_text(json.dumps({"palette": palette}))
     return str(thumb), palette
@@ -205,6 +207,16 @@ def main(argv):
             return 0
         for p in pictures():
             print(p)
+        return 0
+    if cmd == "random":
+        import random
+        pics = pictures()
+        now = current()
+        pool = [p for p in pics if not (now and p.resolve() == now.resolve())] or pics
+        if not pool:
+            print(json.dumps({"error": "no pictures"}))
+            return 1
+        print(json.dumps(prepare(random.choice(pool))) if "--json" in argv else set_wallpaper(random.choice(pool)))
         return 0
     if cmd == "prepare" and len(argv) > 1:
         print(json.dumps(prepare(Path(argv[1]))))

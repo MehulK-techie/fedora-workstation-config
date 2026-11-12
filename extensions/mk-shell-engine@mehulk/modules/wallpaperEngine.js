@@ -1,13 +1,13 @@
 // MK Shell Engine: the wallpaper shuffle and its contour-trace transition.
 //
-// Super+W (`wallpaper-shuffle`) opens the carousel to pick one (wallpaperCarousel.js); every N minutes
+// Super+W (`wallpaper-shuffle`) opens the 3 x 3 grid to pick one (wallpaperGrid.js); every N minutes
 // (`wallpaper-shuffle-minutes`, 0 = never) shows the next picture from ~/Pictures/Wallpapers and MK's own three. bin/mk-wallpaper
 // prepares it in a process of its own (the shell never decodes or analyses a full-size picture):
 // a downscaled copy, and its contour trace (the picture's contour lines and edges, glowing in its
 // own accent colour over an obsidian blueprint grid). Then, in the background layer, behind every
 // window:
-//   stage 1, 0-380 ms    the contour trace draws in over obsidian, settling from 1.02x
-//   stage 2, 380-820 ms  the full-colour picture floods in from the centre in a growing circle (a
+//   stage 1, 0-300 ms    the contour trace draws in over obsidian, settling from 1.02x
+//   stage 2, 300-680 ms  the full-colour picture floods in from the centre in a growing circle (a
 //                        radial reveal) as the lines fade away
 // and GNOME's own wallpaper is switched to it underneath, the overlay dissolving once that's in.
 // Two plain cross-fades of two pictures: nothing a slow or software-rendered GPU can't draw, no
@@ -20,10 +20,10 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import { WallpaperCarousel } from './wallpaperCarousel.js';
+import { WallpaperGrid } from './wallpaperGrid.js';
 
 const HELPER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-wallpaper']);
-const STAGE1 = 380, STAGE2 = 440, HOLD = 700, OUT = 300;
+const STAGE1 = 300, STAGE2 = 380, HOLD = 700, OUT = 300;
 const LIVE_CLONE = 'mk-live-wallpaper';           // WACK's desktop.js names its live wallpaper this
 
 export class WallpaperEngine {
@@ -31,8 +31,8 @@ export class WallpaperEngine {
         this._settings = settings;
         this._frames = [];
         this._timers = new Set();
-        // Super+W: the carousel, to pick one (the timer still just takes the next)
-        this._carousel = new WallpaperCarousel(path => this.show(path));
+        // Super+W: the grid, to pick one (the timer and Shuffle take one without asking)
+        this._carousel = new WallpaperGrid(settings, path => this.show(path), () => this.random());
         Main.wm.addKeybinding('wallpaper-shuffle', settings, Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
             Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW, () => this._openCarousel());
         settings.connectObject('changed::wallpaper-shuffle-minutes', () => this._schedule(), this);
@@ -74,6 +74,11 @@ export class WallpaperEngine {
             return;
         }
         this._carousel.open();
+    }
+
+    // Shuffle: any one of them
+    random() {
+        this._run(['random', '--json']);
     }
 
     // the timer's: the next picture, no questions

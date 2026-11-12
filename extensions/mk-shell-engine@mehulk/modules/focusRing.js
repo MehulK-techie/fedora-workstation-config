@@ -1,6 +1,6 @@
-// MK Shell Engine: a crisp outline around the window you're working in (as Niri draws it): 2 px with a soft glow,
+// MK Shell Engine: a crisp outline around the window you're working in (as Niri draws it): 2 px, a border only,
 // in your accent colour, following the window's corners, just above it in the stacking (so a
-// window over it still covers it), on floating, tiled and maximized windows alike. Never on a
+// window over it still covers it), on floating and tiled windows. Never on a maximized or
 // full-screen window, in the overview, not while workspaces slide, not on dialogs or menus.
 // `focus-ring` (on by default) under org.gnome.shell.extensions.mk-shell-engine switches it.
 //
@@ -34,8 +34,9 @@ export class FocusRing {
 
     _paint() {
         const [r, g, b] = accentRGB() ?? [120, 170, 255];
-        this._ring.style = `border: ${WIDTH}px solid rgba(${r},${g},${b},0.90); border-radius: ${RADIUS}px;` +
-            `box-shadow: 0 0 14px 1px rgba(${r},${g},${b},0.32);`;
+        // (a border only: St draws a box-shadow as a blurred fill of the whole box, and on an empty
+        // box over a window that tinted the entire window in the accent colour)
+        this._ring.style = `border: ${WIDTH}px solid rgba(${r},${g},${b},0.90); border-radius: ${RADIUS}px;`;
     }
 
     _follow() {
@@ -53,6 +54,8 @@ export class FocusRing {
             return false;
         if (!TYPES.includes(win.window_type) || win.minimized || win.fullscreen || isWallpaperWindow(win))
             return false;
+        if (win.maximized_horizontally && win.maximized_vertically)
+            return false;                            // (maximized: every pixel is the window's)
         return win.get_workspace() === global.workspace_manager.get_active_workspace() || win.is_on_all_workspaces();
     }
 

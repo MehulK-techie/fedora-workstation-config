@@ -248,13 +248,19 @@ export default class MKIndicatorExtension extends Extension {
         if (locked && !this._wasLocked)
             this._quietLockScreen();
         // The screensaver scene behind the lock screen's clock.
-        if (locked && !this._wasLocked) {
-            this._lockScene = new LockScene();
-            this._lockScene.start();
-        } else if (!locked && this._lockScene) {
-            this._lockScene.stop();
-            this._lockScene = null;
+        // (never in the way of the rest of locking or unlocking: a scene that fails is just dropped)
+        try {
+            if (locked && !this._wasLocked) {
+                this._lockScene = new LockScene();
+                this._lockScene.start();
+            } else if (!locked && this._lockScene) {
+                this._lockScene.stop();
+            }
+        } catch (e) {
+            console.error(`mk-indicator: lock scene: ${e.message}`);
         }
+        if (!locked)
+            this._lockScene = null;
         // Folders opened with mk lock close when the screen locks.
         if (locked && !this._wasLocked) {
             try {

@@ -12,6 +12,25 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import { openModal } from './modal.js';
 
+// The crosshair, and back. GNOME 50 dropped global.display.set_cursor (calling it threw, right after
+// the screen was taken): a cursor that belongs to the overlay actor where Clutter has that, the old call
+// only where it still exists. Never throws.
+function setCursor(actor, crosshair) {
+    try {
+        const type = crosshair ? Clutter.CursorType.CROSSHAIR : Clutter.CursorType.DEFAULT;
+        if (actor && 'cursor_type' in actor) {
+            actor.cursor_type = type;
+            return;
+        }
+        if (typeof actor?.set_cursor_type === 'function') {
+            actor.set_cursor_type(type);
+            return;
+        }
+        if (typeof global.display.set_cursor === 'function')
+            global.display.set_cursor(crosshair ? Meta.Cursor.CROSSHAIR : Meta.Cursor.DEFAULT);
+    } catch {}
+}
+
 const Eyedropper = GObject.registerClass(class MkEyedropper extends PanelMenu.Button {
     constructor(onClick) {
         super(0.5, 'Color picker', true);
@@ -38,30 +57,37 @@ export class ColorPicker {
     pick() {
         if (this._overlay)
             return;
-        const stage = global.stage;
-        this._overlay = new St.Widget({reactive: true, x: 0, y: 0, width: stage.width, height: stage.height});
-        Main.layoutManager.addTopChrome(this._overlay);
-        this._modal = openModal(this._overlay, () => this._end());
-        if (!this._modal) {
-            this._end();
-            return;
-        }
-        global.display.set_cursor(Meta.Cursor.CROSSHAIR);
-        this._overlay.connect('button-press-event', (_a, event) => {
-            if (event.get_button() !== Clutter.BUTTON_PRIMARY) {
+        // everything that takes the screen inside a try: whatever fails, the grab and the overlay go
+        // at once (an overlay left up after a failure took every click on the desktop)
+        try {
+            const stage = global.stage;
+            this._overlay = new St.Widget({reactive: true, x: 0, y: 0, width: stage.width, height: stage.height});
+            Main.layoutManager.addTopChrome(this._overlay);
+            this._modal = openModal(this._overlay, () => this._end());
+            if (!this._modal) {
                 this._end();
-                return Clutter.EVENT_STOP;
+                return;
             }
-            const [x, y] = event.get_coords();
-            this._end();
-            this._read(Math.round(x), Math.round(y));
-            return Clutter.EVENT_STOP;
-        });
-        this._overlay.connect('key-press-event', (_a, event) => {
-            if (event.get_key_symbol() === Clutter.KEY_Escape)
+            setCursor(this._overlay, true);
+            this._overlay.connect('button-press-event', (_a, event) => {
+                if (event.get_button() !== Clutter.BUTTON_PRIMARY) {
+                    this._end();
+                    return Clutter.EVENT_STOP;
+                }
+                const [x, y] = event.get_coords();
                 this._end();
-            return Clutter.EVENT_STOP;
-        });
+                this._read(Math.round(x), Math.round(y));
+                return Clutter.EVENT_STOP;
+            });
+            this._overlay.connect('key-press-event', (_a, event) => {
+                if (event.get_key_symbol() === Clutter.KEY_Escape)
+                    this._end();
+                return Clutter.EVENT_STOP;
+            });
+        } catch (e) {
+            this._end();
+            logError(e, 'mk-shell-engine colorPicker');
+        }
     }
 
     _read(x, y) {
@@ -80,15 +106,21 @@ export class ColorPicker {
         });
     }
 
+    // the grab and the overlay first, the cursor last: nothing can keep the overlay up
     _end() {
-        global.display.set_cursor(Meta.Cursor.DEFAULT);
-        this._modal?.close();
-        this._modal = null;
-        if (this._overlay) {
-            Main.layoutManager.removeChrome(this._overlay);
-            this._overlay.destroy();
-        }
+        const overlay = this._overlay;
         this._overlay = null;
+        try {
+            this._modal?.close();
+        } catch {}
+        this._modal = null;
+        if (overlay) {
+            try {
+                Main.layoutManager.removeChrome(overlay);
+            } catch {}
+            overlay.destroy();
+        }
+        setCursor(overlay, false);
     }
 
     destroy() {

@@ -276,7 +276,7 @@ textview.mk-table-cell:focus { box-shadow: inset 0 0 0 2px @accent_color; }
 /* the selection pill: frosted dark glass (layered translucency: GTK can't blur what's behind a
    popover), a 1 px edge with a brighter top, a soft two-step shadow; it fades and rises in */
 popover.mk-sel-card { transition: opacity 140ms ease-out; }
-popover.mk-sel-card > contents { border-radius: 999px; padding: 4px 8px; color: #f1f3f7;
+popover.mk-sel-card > contents { border-radius: 16px; padding: 4px 8px; color: #f1f3f7;
     background-image: linear-gradient(to bottom, rgba(58, 64, 80, 0.82), rgba(26, 30, 40, 0.88));
     border: 1px solid rgba(255, 255, 255, 0.14); border-top-color: rgba(255, 255, 255, 0.30);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.38); }
@@ -4685,8 +4685,11 @@ class NotesWindow(Adw.ApplicationWindow):
         btn(Gtk.Image(icon_name="edit-copy-symbolic"), lambda: self.buffer.copy_clipboard(clip), "Copy")
         btn(Gtk.Image(icon_name="edit-cut-symbolic"), lambda: self.buffer.cut_clipboard(clip, True), "Cut")
         btn(Gtk.Image(icon_name="user-trash-symbolic"), lambda: self.buffer.delete_selection(True, True), "Delete")
+        # (16 px corners on the popover itself, never 999: GTK sizes a popover around its corner
+        # radius and arrow, and a huge radius made the card a screen-filling circle)
         self.sel_card = Gtk.Popover(child=row, autohide=False, has_arrow=True, position=Gtk.PositionType.TOP,
-                                    css_classes=["mk-sel-card"])
+                                    css_classes=["mk-sel-card"], halign=Gtk.Align.CENTER, valign=Gtk.Align.START,
+                                    hexpand=False, vexpand=False)
         self.sel_card.set_parent(self.scroll_box)
         # Shown only while words are selected, and gone the instant they aren't. A selection can
         # end without the cursor's marks being "set" (Delete or Backspace on it, typing over it,

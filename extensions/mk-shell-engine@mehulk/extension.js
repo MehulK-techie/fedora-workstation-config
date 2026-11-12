@@ -15,6 +15,8 @@
 //   modules/mediaKeys.js   Previous / Next track: one press, one skip
 //   modules/windowAnimations.js  windows open and close with a little spring (while Burn My Windows is off)
 //   modules/calendarDeck.js      the calendar as glass, and a reminder for any day ahead
+//   modules/island.js            the Dynamic Island: the clock's capsule widens for volume, brightness,
+//                                power profile, a new track, a timer ending (GNOME's OSD pop-up replaced)
 //   modules/workspaceFlow.js     workspace switches glide (260 ms, EASE_OUT_EXPO) with a little depth
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
@@ -27,6 +29,7 @@ import { MediaKeys } from './modules/mediaKeys.js';
 import { WindowAnimations } from './modules/windowAnimations.js';
 import { CalendarDeck } from './modules/calendarDeck.js';
 import { WorkspaceFlow } from './modules/workspaceFlow.js';
+import { Island } from './modules/island.js';
 import { NotifyCenter } from './modules/notifyCenter.js';
 import { ScreenshotActions } from './modules/screenshotActions.js';
 import { LiveWallpaper } from './modules/liveWallpaper.js';
@@ -111,6 +114,7 @@ export default class MKShellEngine extends Extension {
         this._start('media keys', () => new MediaKeys(this._settings));
         this._start('window animations', () => new WindowAnimations());
         this._start('workspace flow', () => new WorkspaceFlow());
+        this._start('dynamic island', () => new Island());
         this._start('calendar', () => new CalendarDeck(this._settings));
         this._start('notification centre', () => new NotifyCenter());
         this._start('screenshot actions', () => new ScreenshotActions());

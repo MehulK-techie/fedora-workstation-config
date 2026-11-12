@@ -20,6 +20,7 @@ const CLIP_DIR = GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstatio
 const CLIP_STORE = GLib.build_filenamev([CLIP_DIR, 'history.json']);
 const CLIP_VIEW = GLib.build_filenamev([CLIP_DIR, 'view.json']);
 const FOCUS_MIN = 25;
+const mmss = sec => { const t = Math.max(0, Math.ceil(sec)); return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
 
 function readJson(path, fallback) {
     try {
@@ -290,33 +291,122 @@ export class NotifyCenter {
     }
 
     // ----- Focus 25m
+    // ----- the Focus pill: one pill for whichever focus timer runs. MK Companion's timer (mk-timer,
+    // ~/.cache/mk-workstation/timer.json, watched and read off the compositor's thread) when it
+    // runs; otherwise the calendar's own Focus 25m (Do Not Disturb with a countdown). A thin bar
+    // under the time fills as the session goes. Idle, it ticks nothing.
     _focus() {
         const controls = this._list._clearButton?.get_parent();
         if (!controls)
             return;
         this._notif = new Gio.Settings({schema_id: 'org.gnome.desktop.notifications'});
-        this._focusBtn = new St.Button({style_class: 'mk-focus-button button', can_focus: true,
-            label: `Focus ${FOCUS_MIN}m`, x_align: Clutter.ActorAlign.END});
-        this._focusBtn.connect('clicked', () => (this._focusEnd ? this._stopFocus(false) : this._startFocus()));
+        const body = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-focus-body'});
+        const row = new St.BoxLayout({style_class: 'mk-focus-row'});
+        this._focusIcon = new St.Icon({icon_name: 'alarm-symbolic', icon_size: 12, style_class: 'mk-focus-icon',
+            y_align: Clutter.ActorAlign.CENTER});
+        this._focusLabel = new St.Label({text: `Focus ${FOCUS_MIN}m`, y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'mk-focus-label'});
+        row.add_child(this._focusIcon);
+        row.add_child(this._focusLabel);
+        this._focusTrack = new St.Widget({style_class: 'mk-focus-track', layout_manager: new Clutter.BinLayout(),
+            visible: false});
+        this._focusFill = new St.Widget({style_class: 'mk-focus-fill', x_align: Clutter.ActorAlign.START, width: 0});
+        this._focusTrack.add_child(this._focusFill);
+        body.add_child(row);
+        body.add_child(this._focusTrack);
+        this._focusBtn = new St.Button({style_class: 'mk-focus-pill', can_focus: true, child: body,
+            x_align: Clutter.ActorAlign.END, accessible_name: 'Focus'});
+        this._focusBtn.connect('clicked', () => {
+            if (this._companion?.running)
+                this._openTimer();
+            else if (this._focusEnd)
+                this._stopFocus(false);
+            else
+                this._startFocus();
+        });
         controls.add_child(this._focusBtn);
+        // MK Companion's timer
+        this._timerFile = Gio.File.new_for_path(GLib.build_filenamev([GLib.get_user_cache_dir(), 'mk-workstation', 'timer.json']));
+        try {
+            this._timerMonitor = this._timerFile.monitor_file(Gio.FileMonitorFlags.NONE, null);
+            this._timerMonitor.connect('changed', () => this._readCompanion());
+        } catch {}
+        this._readCompanion();
+    }
+
+    _readCompanion() {
+        this._timerFile.load_contents_async(null, (file, res) => {
+            let state = null;
+            try {
+                state = JSON.parse(new TextDecoder().decode(file.load_contents_finish(res)[1]));
+            } catch {}
+            const was = this._companion?.running;
+            this._companion = state?.running ? state : null;
+            if (was && !this._companion && state && !state.paused)
+                Main.panel._mkIsland?.show({icon: 'alarm-symbolic', text: 'Timer done', level: 1});
+            this._focusSync();
+        });
+    }
+
+    _openTimer() {
+        try {
+            Gio.Subprocess.new([GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-timer'])],
+                Gio.SubprocessFlags.NONE);
+        } catch {}
+    }
+
+    // what the pill shows now: [label, fraction done (or -1), active]
+    _focusNow() {
+        const now = GLib.get_real_time() / 1e6, mono = GLib.get_monotonic_time() / 1e6;
+        const c = this._companion;
+        if (c) {
+            const left = c.paused ? Number(c.left ?? 0) : Math.max(0, Number(c.end ?? now) - now);
+            const total = Number(c.total) || left || 1;
+            const tag = c.label ? `${c.label} · ` : '';
+            return [`${tag}${mmss(left)}${c.paused ? ' (paused)' : ''}`, 1 - left / total, true];
+        }
+        if (this._focusEnd) {
+            const left = Math.max(0, this._focusEnd - mono);
+            return [mmss(left), 1 - left / (FOCUS_MIN * 60), true];
+        }
+        return [`Focus ${FOCUS_MIN}m`, -1, false];
+    }
+
+    _focusSync() {
+        if (!this._focusBtn)
+            return;
+        const [text, done, active] = this._focusNow();
+        this._focusLabel.text = text;
+        (active ? this._focusBtn.add_style_pseudo_class : this._focusBtn.remove_style_pseudo_class)
+            .call(this._focusBtn, 'checked');
+        this._focusTrack.visible = done >= 0;
+        if (done >= 0) {
+            const width = Math.round(Math.min(1, Math.max(0, done)) * (this._focusTrack.width || 96));
+            this._focusFill.ease({width, duration: 900, mode: Clutter.AnimationMode.LINEAR});
+        }
+        // a tick only while something counts down
+        const counting = active && !(this._companion?.paused);
+        if (counting && !this._focusTimer) {
+            this._focusTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+                if (this._focusEnd && GLib.get_monotonic_time() / 1e6 >= this._focusEnd) {
+                    this._focusTimer = 0;
+                    this._stopFocus(true);
+                    return GLib.SOURCE_REMOVE;
+                }
+                this._focusSync();
+                return GLib.SOURCE_CONTINUE;
+            });
+        } else if (!counting && this._focusTimer) {
+            GLib.source_remove(this._focusTimer);
+            this._focusTimer = 0;
+        }
     }
 
     _startFocus() {
         this._focusEnd = GLib.get_monotonic_time() / 1e6 + FOCUS_MIN * 60;
         this._bannersWere = this._notif.get_boolean('show-banners');
         this._notif.set_boolean('show-banners', false);              // Do Not Disturb
-        this._focusBtn.add_style_pseudo_class('checked');
-        const tick = () => {
-            const left = Math.round(this._focusEnd - GLib.get_monotonic_time() / 1e6);
-            if (left <= 0) {
-                this._stopFocus(true);
-                return GLib.SOURCE_REMOVE;
-            }
-            this._focusBtn.label = `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
-            return GLib.SOURCE_CONTINUE;
-        };
-        tick();
-        this._focusTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, tick);
+        this._focusSync();
     }
 
     _stopFocus(finished) {
@@ -327,12 +417,11 @@ export class NotifyCenter {
         if (this._bannersWere !== undefined)
             this._notif.set_boolean('show-banners', this._bannersWere);
         this._bannersWere = undefined;
-        if (this._focusBtn) {
-            this._focusBtn.label = `Focus ${FOCUS_MIN}m`;
-            this._focusBtn.remove_style_pseudo_class('checked');
-        }
-        if (finished)
+        this._focusSync();
+        if (finished) {
             Main.notify('Focus session done', `${FOCUS_MIN} minutes: time for a break. Notifications are back on.`);
+            Main.panel._mkIsland?.show({icon: 'alarm-symbolic', text: 'Focus done', level: 1});
+        }
     }
 
     destroy() {
@@ -354,6 +443,9 @@ export class NotifyCenter {
             this._dateRow.destroy();
         }
         this._shelfBox?.destroy();
+        this._timerMonitor?.cancel();
+        this._timerMonitor = null;
         this._focusBtn?.destroy();
+        this._focusBtn = null;
     }
 }

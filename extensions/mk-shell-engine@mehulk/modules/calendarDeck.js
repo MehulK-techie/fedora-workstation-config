@@ -159,8 +159,12 @@ export class CalendarDeck {
         calendar.get_parent().insert_child_above(this._card, calendar);
         this._button = this._card;           // (what the rest calls "the control" below the month)
 
+        this._calendar = calendar;
         this._ids = [
             [calendar, calendar.connect('selected-date-changed', (_c, datetime) => this._chosen(datetime))],
+            // hovering a day previews its tasks in the list (the chosen day comes back on leaving)
+            [calendar, calendar.connect('motion-event', (_c, event) => this._hoverAt(event))],
+            [calendar, calendar.connect('leave-event', () => this._hoverAt(null))],
             [this._menu, this._menu.connect('open-state-changed', (_m, open) => this._glass(open))],
         ];
         this._placeholders();
@@ -219,10 +223,10 @@ export class CalendarDeck {
     // The chosen day's tasks (open ones with a time that day), in time order: a card each
     // with its countdown and Done; a click opens its preview (notes, when it was added,
     // Edit Time, Delete, Complete). An empty day says so.
-    _fillQueue() {
+    _fillQueue(peek = null) {
         this._queue.destroy_all_children();
         const h24 = this._iface.get_string('clock-format') === '24h';
-        const day = this._day ?? GLib.DateTime.new_now_local();
+        const day = peek ?? this._day ?? GLib.DateTime.new_now_local();
         const start = GLib.DateTime.new_local(day.get_year(), day.get_month(), day.get_day_of_month(), 0, 0, 0).to_unix();
         const end = start + 86400;
         // the day's checklist: open tasks with a time that day, and the ones ticked off it
@@ -340,7 +344,76 @@ export class CalendarDeck {
         this._fillQueue();
     }
 
+    // ----- hover to preview a day
+    _hoverAt(event) {
+        let date = null;
+        if (event) {
+            const [x, y] = event.get_coords();
+            for (let a = global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, x, y); a && a !== this._calendar;
+                a = a.get_parent()) {
+                if (a._date instanceof Date) {
+                    date = a._date;
+                    break;
+                }
+            }
+        }
+        const key = date ? date.toDateString() : null;
+        if (key === this._peekKey)
+            return Clutter.EVENT_PROPAGATE;
+        this._peekKey = key;
+        if (this._peekId)
+            GLib.source_remove(this._peekId);
+        // (a short wait: sweeping the pointer across the month doesn't flicker the list)
+        this._peekId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, key ? 90 : 160, () => {
+            this._peekId = 0;
+            this._peek(date);
+            return GLib.SOURCE_REMOVE;
+        });
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    _peek(date) {
+        if (!this._card || !this._menu.isOpen)
+            return;
+        const chosen = this._day ?? GLib.DateTime.new_now_local();
+        const day = date ? GLib.DateTime.new_local(date.getFullYear(), date.getMonth() + 1, date.getDate(), 12, 0, 0) : null;
+        const same = !day || day.format('%F') === chosen.format('%F');
+        const peeking = !same;
+        if (peeking === Boolean(this._peeking) && (!peeking || this._peeking === day.format('%F')))
+            return;
+        this._peeking = peeking ? day.format('%F') : null;
+        // the list cross-fades to the hovered day; adding stays with the chosen day
+        this._queueScroll.remove_transition('opacity');
+        this._queueScroll.ease({opacity: 0, duration: 90, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => {
+                if (!this._card)
+                    return;
+                if (peeking) {
+                    this._card.visible = true;
+                    this._peekHeading ??= this._heading.text;
+                    this._heading.text = `${day.format('%A %-e %B')} · preview`;
+                    [this._entry, this._chips, this._saved].forEach(a => (a.visible = false));
+                    this._card.add_style_class_name('mk-cal-peeking');
+                    this._fillQueue(day);
+                } else {
+                    this._card.remove_style_class_name('mk-cal-peeking');
+                    this._entry.visible = this._chips.visible = true;
+                    if (this._peekHeading !== undefined)
+                        this._heading.text = this._peekHeading;
+                    this._peekHeading = undefined;
+                    this._fillQueue();
+                    this._card.visible = this._day !== null;
+                }
+                this._queueScroll.ease({opacity: 255, duration: 140, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            }});
+    }
+
     _chosen(datetime) {
+        this._peeking = null;
+        this._peekHeading = undefined;
+        this._card?.remove_style_class_name('mk-cal-peeking');
+        if (this._entry)
+            this._entry.visible = this._chips.visible = true;
         const today = GLib.DateTime.new_now_local();
         const midnight = d => GLib.DateTime.new_local(d.get_year(), d.get_month(), d.get_day_of_month(), 0, 0, 0);
         const day = Math.round(midnight(datetime).difference(midnight(today)) / GLib.TIME_SPAN_DAY);   // 0 today, 1 tomorrow
@@ -413,6 +486,9 @@ export class CalendarDeck {
     }
 
     destroy() {
+        if (this._peekId)
+            GLib.source_remove(this._peekId);
+        this._peekId = 0;
         if (this._settings)
             Main.wm.removeKeybinding('calendar-quick-add');
         for (const {item, ids, s, sid} of this._hidden ?? []) {

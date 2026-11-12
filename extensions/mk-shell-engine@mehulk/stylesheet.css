@@ -286,8 +286,7 @@
 .mk-clip-shelf-text { font-size: 0.74em; padding: 6px 8px; color: rgba(255, 255, 255, 0.86); }
 .mk-clip-selected-badge { font-size: 0.66em; font-weight: 800; color: white; padding: 1px 7px; margin: 3px;
   border-radius: 999px; background-color: -st-accent-color; }
-.mk-focus-button { padding: 4px 12px; border-radius: 999px; font-weight: 700; font-feature-settings: "tnum"; }
-.mk-focus-button:checked { background-color: st-transparentize(-st-accent-color, 0.4); }
+
 .mk-cal-check { width: 16px; height: 16px; border-radius: 5px; padding: 0; margin-right: 6px;
   border: 1.5px solid rgba(255, 255, 255, 0.45); }
 .mk-cal-check.mk-cal-checked { background-color: -st-accent-color; border-color: -st-accent-color; }
@@ -301,3 +300,42 @@
   background-color: rgba(10, 12, 18, 0.38) !important; transition-duration: 200ms; }
 #panel.mk-islands.mk-backdrop-frost.mk-backdrop-solid, #panel.mk-edge.mk-backdrop-frost.mk-backdrop-solid {
   background-color: #000000 !important; }
+
+/* ----- tactile glass (v31): two-stop vertical translucency, a 1 px edge with a brighter top
+   catch-light, a soft shadow; hover lifts a touch, the active state is a pill */
+
+/* the calendar menu and its task list */
+.mk-cal { background-gradient-direction: vertical; background-gradient-start: rgba(30, 34, 46, 0.80);
+  background-gradient-end: rgba(14, 16, 24, 0.84); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.28); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.26); }
+.mk-cal-queue-card { border-radius: 12px; background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06); border-top-color: rgba(255, 255, 255, 0.14);
+  transition-duration: 160ms; }
+.mk-cal-queue-card:hover { background-color: rgba(255, 255, 255, 0.09); border-top-color: rgba(255, 255, 255, 0.22); }
+.mk-cal-queue-card:checked { background-color: st-transparentize(-st-accent-color, 0.78); }
+.mk-cal-peeking .mk-cal-card-title { color: st-lighten(-st-accent-color, 25%); }
+.mk-cal-peeking .mk-cal-queue-card { background-color: rgba(255, 255, 255, 0.035); }
+.calendar-day:hover { background-color: rgba(255, 255, 255, 0.10); border-radius: 999px; transition-duration: 120ms; }
+
+/* the Focus pill: the time, and a thin bar filling under it */
+.mk-focus-pill { padding: 5px 12px 4px; border-radius: 999px; font-weight: 700; font-feature-settings: "tnum";
+  background-color: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.10);
+  border-top-color: rgba(255, 255, 255, 0.24); transition-duration: 160ms; }
+.mk-focus-pill:hover { background-color: rgba(255, 255, 255, 0.12); }
+.mk-focus-pill:checked { background-color: st-transparentize(-st-accent-color, 0.62);
+  border-color: st-transparentize(-st-accent-color, 0.3); }
+.mk-focus-row { spacing: 6px; }
+.mk-focus-track { height: 2px; min-width: 96px; margin-top: 3px; border-radius: 1px; background-color: rgba(255, 255, 255, 0.18); }
+.mk-focus-fill { height: 2px; border-radius: 1px; background-color: rgba(255, 255, 255, 0.92); }
+
+/* the Dynamic Island: over the clock's capsule, as one with the top bar's glass */
+.mk-island-pill { border-radius: 999px; padding: 0 14px;
+  background-gradient-direction: vertical; background-gradient-start: rgba(28, 31, 42, 0.94);
+  background-gradient-end: rgba(8, 9, 14, 0.96); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.28); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
+.mk-island-content { spacing: 10px; }
+.mk-island-icon { color: white; }
+.mk-island-label { color: white; font-weight: 600; font-size: 0.92em; max-width: 190px; }
+.mk-island-track { height: 4px; min-width: 90px; border-radius: 2px; background-color: rgba(255, 255, 255, 0.18); }
+.mk-island-fill { height: 4px; border-radius: 2px; background-color: white; }
+.mk-island-over .mk-island-fill { background-color: #f59e0b; }

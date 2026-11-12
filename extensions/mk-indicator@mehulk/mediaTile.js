@@ -702,6 +702,12 @@ export class MediaTile {
     _showPill(title, artist) {
         if (this._conf.TRACK_PILL === 'off' || this._locked || this._fullscreen())
             return;
+        // MK Shell Engine's Dynamic Island, when it's there: the clock's capsule says it instead
+        const island = Main.panel._mkIsland;
+        if (island) {
+            island.show({icon: 'audio-x-generic-symbolic', text: artist ? `${title} · ${artist}` : title});
+            return;
+        }
         if (!this._pill) {
             this._pill = new St.BoxLayout({style_class: 'mk-track-pill', opacity: 0, reactive: false});
             this._pillArt = new St.Widget({style_class: 'mk-track-pill-art', width: 32, height: 32,

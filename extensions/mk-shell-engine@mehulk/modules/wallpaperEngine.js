@@ -136,7 +136,9 @@ export class WallpaperEngine {
             // the obsidian blueprint ground, then the trace on it, then the picture
             const ground = new St.Widget({reactive: false, opacity: 0, x_expand: true, y_expand: true,
                 style: 'background-color: #0b0e14;'});
-            const contour = this._picture(info.contour), art = this._picture(info.art);
+            // (no trace when OpenCV isn't installed: an empty layer, so it's a plain cross-fade)
+            const contour = info.contour ? this._picture(info.contour) : new St.Widget({opacity: 0});
+            const art = this._picture(info.art);
             frame.add_child(ground);
             contour.set_pivot_point(0.5, 0.5);
             contour.set_scale(1.02, 1.02);

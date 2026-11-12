@@ -216,6 +216,10 @@ export default class WackSonomaLiveLockscreen extends Extension {
     }
 
     _startParts() {
+        if (this._sweepId) {
+            GLib.source_remove(this._sweepId);
+            this._sweepId = 0;
+        }
         this._running = true;
         this._warmFace();
         // the desktop's top bar stays away while locked: no second battery or status icons
@@ -289,6 +293,30 @@ export default class WackSonomaLiveLockscreen extends Extension {
         this._stopPart('_widgets');
         this._stopPart('_live');
         this._stopPart('_sonoma');
+        this._sweepLockPlayer();
+    }
+
+    // Unlocked: the lock screen's mpv has normally quit with its part. Should one still be there
+    // 2 s on (a player that hung), it's hidden and ended: it can never show over the desktop.
+    _sweepLockPlayer() {
+        if (this._sweepId)
+            GLib.source_remove(this._sweepId);
+        this._sweepId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
+            this._sweepId = 0;
+            if (Main.sessionMode.isLocked)
+                return GLib.SOURCE_REMOVE;
+            for (const actor of global.get_window_actors()) {
+                const win = actor.meta_window;
+                if (!win)
+                    continue;
+                const id = `${win.get_wm_class() ?? ''} ${win.get_title() ?? ''}`.toLowerCase();
+                if (id.includes('mk-live-wallpaper-lock')) {
+                    actor.hide();
+                    win.kill();
+                }
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     // ----- the look: dimming, the clock, the avatar, notifications, the hint line
@@ -756,6 +784,9 @@ export default class WackSonomaLiveLockscreen extends Extension {
         }
         Main.screenShield?._dialog?.remove_style_class_name('mk-hide-fp-hint');
         Main.sessionMode.disconnect(this._sessionId);
+        if (this._sweepId)                           // (_stopParts above scheduled one: not past disable)
+            GLib.source_remove(this._sweepId);
+        this._sweepId = 0;
         for (const id of this._styleIds)
             this._settings.disconnect(id);
         for (const id of [...this._liveIds, ...this._volumeIds])

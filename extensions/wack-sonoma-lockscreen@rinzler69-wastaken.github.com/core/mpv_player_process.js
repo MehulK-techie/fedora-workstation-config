@@ -231,6 +231,18 @@ export class MpvPlayerProcess {
         // Preventing window from auto resizing on new video load is very important
         // thats why we include these arguments if they are present 
         // (they might not be on some builds)
+        // MK: the lock screen's player is never an app window: a fixed identity (so MK Shell
+        // Engine and the unlock sweep in extension.js know it), no border, no on-screen controls,
+        // no key or mouse bindings. Each only where this mpv has it
+        for (const [option, value] of [
+            ['title', 'mk-live-wallpaper-lock'], ['wayland-app-id', 'mk-live-wallpaper-lock'],
+            ['border', 'no'], ['osc', 'no'], ['input-default-bindings', 'no'],
+            ['input-vo-keyboard', 'no'], ['input-cursor', 'no'],
+        ]) {
+            if (supported.has(option))
+                args.push(`--${option}=${value}`);
+        }
+
         for (const option of [
             'auto-window-resize', 'wayland-configure-bounds'
         ]) {

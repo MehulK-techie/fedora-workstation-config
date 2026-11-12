@@ -52,8 +52,12 @@ export class WorkspaceFlow {
         if (savedEnd) {
             controller._switchWorkspaceEnd = function (tracker, duration, endProgress) {
                 const result = savedEnd.call(this, tracker, Math.max(duration, DURATION), endProgress);
-                for (const group of this._switchData?.monitors ?? [])
-                    group.get_transition('progress')?.set_progress_mode(CURVE);
+                try {
+                    for (const group of this._switchData?.monitors ?? [])
+                        group.get_transition('progress')?.set_progress_mode(CURVE);
+                } catch (e) {
+                    console.warn(`mk-shell-engine: workspace flow: ${e.message}`);    // (GNOME's curve then)
+                }
                 return result;
             };
         }
@@ -64,7 +68,12 @@ export class WorkspaceFlow {
         if (savedBegin) {
             controller._switchWorkspaceBegin = function (...args) {
                 restPanelBlur(true);
-                return savedBegin.apply(this, args);
+                try {
+                    return savedBegin.apply(this, args);
+                } catch (e) {
+                    restPanelBlur(false);                // (GNOME's own failed: the bar's blur back at once)
+                    throw e;
+                }
             };
         }
         if (savedFinish) {

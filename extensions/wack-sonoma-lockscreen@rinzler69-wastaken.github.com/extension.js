@@ -293,7 +293,6 @@ export default class WackSonomaLiveLockscreen extends Extension {
             },
             () => this._dim?.destroy(),
             () => this._greeting?.destroy(),
-            () => this._unwatchFaceScan(),
             () => this._tagline?.destroy(),
             () => this._unformatDate(),
             () => this._unlayoutClock(),
@@ -424,7 +423,6 @@ export default class WackSonomaLiveLockscreen extends Extension {
         }
         this._overWack(clockBox, time, date);
         this._greet(dialog);
-        this._watchFaceScan(dialog);
         this._tag(time ? underClock(time) : null);
         this._formatDate(date);
         this._avatar(dialog);
@@ -634,97 +632,6 @@ export default class WackSonomaLiveLockscreen extends Extension {
         } catch {}                          // (gone with the lock screen)
         this._blockId = this._timeId = 0;
         this._clockBlock = this._clockTime = this._clockDate = null;
-    }
-
-    // Face ID-style status while the face check runs: when the password prompt comes up (a key, a
-    // click, waking) and face unlock is set up for the lock screen (/etc/pam.d/gdm-password asks
-    // mk-face), a small accent ring pulses above the field with "Scanning face..." for the check's
-    // 5 s; no match by then: "Use your password", fading away. Typing hides it at once.
-    _watchFaceScan(dialog) {
-        const adjustment = dialog._adjustment;
-        if (!adjustment || this._scanAdjustment === adjustment)
-            return;
-        this._unwatchFaceScan();
-        let faceOn = false;
-        try {
-            faceOn = new TextDecoder().decode(GLib.file_get_contents('/etc/pam.d/gdm-password')[1])
-                .split('\n').some(l => /^\s*auth\s.*mk-face --pam/.test(l));
-        } catch {}
-        if (!faceOn)
-            return;
-        this._scanAdjustment = adjustment;
-        this._scanDialog = dialog;
-        let prompting = adjustment.value >= 0.99;
-        this._scanId = adjustment.connect('notify::value', () => {
-            const now = adjustment.value >= 0.99;
-            if (now && !prompting)
-                this._showFaceScan(dialog);
-            else if (!now && prompting)
-                this._hideFaceScan();
-            prompting = now;
-        });
-        if (prompting)
-            this._showFaceScan(dialog);
-    }
-
-    _showFaceScan(dialog) {
-        const box = dialog._promptBox ?? dialog._authPrompt?.get_parent();
-        if (!box)
-            return;
-        this._hideFaceScan();
-        const ring = new St.Widget({style_class: 'mk-face-scan-ring', y_align: Clutter.ActorAlign.CENTER});
-        const label = new St.Label({style_class: 'mk-face-scan-label', text: 'Scanning face\u2026',
-            y_align: Clutter.ActorAlign.CENTER});
-        const row = new St.BoxLayout({style_class: 'mk-face-scan', x_align: Clutter.ActorAlign.CENTER, opacity: 0});
-        row.add_child(ring);
-        row.add_child(label);
-        box.insert_child_at_index(row, 0);
-        this._scanRow = row;
-        row.ease({opacity: 255, duration: 200, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-        ring.set_pivot_point(0.5, 0.5);
-        ring.ease({scale_x: 1.3, scale_y: 1.3, opacity: 110, duration: 650, autoReverse: true, repeatCount: 7,
-            mode: Clutter.AnimationMode.EASE_IN_OUT_SINE});
-        // typing means the password: out of the way
-        const entry = dialog._authPrompt?._entry;
-        if (entry?.clutter_text)
-            this._scanEntryId = [entry.clutter_text, entry.clutter_text.connect('text-changed', () => this._hideFaceScan())];
-        this._scanTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5200, () => {
-            this._scanTimer = 0;
-            if (this._scanRow !== row)
-                return GLib.SOURCE_REMOVE;
-            ring.remove_all_transitions();
-            ring.set({scale_x: 1, scale_y: 1, opacity: 255});
-            ring.add_style_class_name('mk-face-scan-done');
-            label.text = 'Use your password';
-            row.ease({opacity: 0, delay: 2200, duration: 400, mode: Clutter.AnimationMode.EASE_IN_QUAD,
-                onStopped: () => this._scanRow === row && this._hideFaceScan()});
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
-    _hideFaceScan() {
-        if (this._scanTimer)
-            GLib.source_remove(this._scanTimer);
-        this._scanTimer = 0;
-        if (this._scanEntryId) {
-            try {
-                this._scanEntryId[0].disconnect(this._scanEntryId[1]);
-            } catch {}
-        }
-        this._scanEntryId = null;
-        this._scanRow?.destroy();
-        this._scanRow = null;
-    }
-
-    _unwatchFaceScan() {
-        this._hideFaceScan();
-        if (this._scanId) {
-            try {
-                this._scanAdjustment.disconnect(this._scanId);
-            } catch {}                               // (gone with the lock screen)
-        }
-        this._scanId = 0;
-        this._scanAdjustment = this._scanDialog = null;
     }
 
     // a line of your own above the password field

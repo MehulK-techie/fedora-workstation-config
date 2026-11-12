@@ -569,10 +569,3 @@
   background-gradient-end: rgba(0, 0, 0, 0.92);
 }
 
-/* MK: the face check's status above the password field (extension.js _showFaceScan) */
-.mk-face-scan { spacing: 8px; margin-bottom: 10px; padding: 5px 12px; border-radius: 99px;
-  background-color: rgba(15, 17, 23, 0.55); border: 1px solid rgba(255, 255, 255, 0.10); }
-.mk-face-scan-ring { width: 12px; height: 12px; border-radius: 99px; border: 2px solid -st-accent-color;
-  box-shadow: 0 0 8px 0 -st-accent-color; }
-.mk-face-scan-ring.mk-face-scan-done { border-color: rgba(255, 255, 255, 0.45); box-shadow: none; }
-.mk-face-scan-label { font-size: 10.5pt; color: rgba(255, 255, 255, 0.82); }

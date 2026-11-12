@@ -8,7 +8,7 @@
 //
 // Motion: it opens from the clock's own size to its width with a spring (EASE_OUT_BACK, 340 ms),
 // its contents fading in a beat later so nothing is clipped mid-morph; a level fills its bar
-// smoothly; after 1.6 s without news it settles back (EASE_OUT_EXPO, 300 ms) and fades away. A
+// smoothly; a long line widens it (to 680 px) and stays longer to be read; after 1.6 s without news it settles back (EASE_OUT_EXPO, 300 ms) and fades away. A
 // new event while it's open just retargets it: no flicker, no restart. Idle, it costs nothing:
 // no timers, no actors drawn (it's hidden).
 import Clutter from 'gi://Clutter';
@@ -18,7 +18,9 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const OPEN_MS = 340, CLOSE_MS = 300, HOLD_MS = 1600;
-const WIDTH = 300;                 // the island's width when open (px)
+const WIDTH = 300;                 // the island's width when open (px): at least this
+const MAX_WIDTH = 680;             // a longer line (Spidey's greeting) widens it up to this
+const READ_MS_PER_CHAR = 55;       // and holds it long enough to read (up to 6 s)
 const PROFILES = {'power-saver': ['power-profile-power-saver-symbolic', 'Power Saver'],
     'balanced': ['power-profile-balanced-symbolic', 'Balanced'],
     'performance': ['power-profile-performance-symbolic', 'Performance']};
@@ -76,7 +78,12 @@ export class Island {
         (over ? this.actor.add_style_class_name : this.actor.remove_style_class_name).call(this.actor, 'mk-island-over');
 
         const a = this._anchor();
-        const width = Math.max(a.w, WIDTH);
+        // (as wide as the line needs, within the screen)
+        const [, natural] = this._label.get_preferred_width(-1);
+        const monitor = Main.layoutManager.primaryMonitor;
+        const room = monitor ? monitor.width - 80 : MAX_WIDTH;
+        const width = Math.round(Math.min(Math.max(a.w, WIDTH, natural + (level >= 0 ? 150 : 64)), MAX_WIDTH, room));
+        const hold = Math.max(HOLD_MS, Math.min(6000, 1000 + text.length * READ_MS_PER_CHAR));
         const opening = !this._open;
         this._open = true;
         if (opening) {
@@ -105,7 +112,7 @@ export class Island {
         }
         if (this._holdId)
             GLib.source_remove(this._holdId);
-        this._holdId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, HOLD_MS, () => {
+        this._holdId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, hold, () => {
             this._holdId = 0;
             this._close();
             return GLib.SOURCE_REMOVE;

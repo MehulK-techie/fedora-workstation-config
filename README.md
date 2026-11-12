@@ -73,7 +73,7 @@ cd ~/fedora-workstation-config && git pull && ./sync.sh
 | Notes · Companion (tasks, reminders) | `Super+N` · `Super+Shift+N` |
 | Add a reminder from anywhere | `Super+Alt+A` |
 | Clipboard history · emoji | `Super+V` · `Super+.` |
-| Next wallpaper (contour-trace transition) | `Super+W` |
+| Wallpaper carousel (pick one: W or arrows, let go of Super) | `Super+W` |
 | Photo Booth | `Super+C` |
 | Switch apps · all windows | `Super+Tab` · `Alt+Tab` |
 
@@ -255,7 +255,7 @@ Edit [`apps/flatpaks.txt`](apps/flatpaks.txt) and [`apps/dnf-packages.txt`](apps
 | `mk sound on\|off` | | Laptop speaker tuning (EasyEffects profile) |
 | `mk icon APP IMAGE` | | Use your own image as an MK app icon |
 | `mk accent auto` | | Accent colour from your wallpaper (or `mk accent #hex`), kept calm for a dark desktop |
-| `mk wallpaper` | `Super+W` | Next wallpaper from Pictures/Wallpapers and MK's own three, traced in contour lines then flooded in; `set FILE`, `list` |
+| `mk wallpaper` | `Super+W` | Next wallpaper from Pictures/Wallpapers, Pictures and MK's own six (Super+W picks from a carousel, traced in contour lines then revealed from the centre); `set FILE`, `list` |
 | `mk rename "Name" TAG` | | Rename MK's windows, notifications and top-bar tag |
 | `mk uninstall` | | Remove MK's tools, shortcuts and helpers from your account |
 | | `just setup` | Full system setup (`sudo ./setup.sh`) |

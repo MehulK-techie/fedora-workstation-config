@@ -6,8 +6,12 @@
                                prints {"path", "art", "contour", "accent", "name"}; sets nothing
   mk-wallpaper set FILE        set FILE as the wallpaper
   mk-wallpaper list            the pictures it cycles through
+  mk-wallpaper list --json     the same for the Super+W carousel: each with a 360x225 thumbnail and a
+                               4-colour palette (cached in ~/.cache/mk-workstation/wallpaper-thumbs)
+  mk-wallpaper prepare FILE --json   the contour trace of FILE (as `next --json`, for a picked one)
 
-Pictures: ~/Pictures/Wallpapers (yours, any jpg/png/webp), then MK's own three
+Pictures: ~/Pictures/Wallpapers (yours, any jpg/png/webp), the pictures directly in ~/Pictures (not its
+subfolders: no screenshots or camera rolls), then MK's own
 (~/.local/share/mk-workstation/assets/wallpapers, from the repo's assets/wallpapers).
 
 The contour trace: the picture's brightness contour lines (ten even bands, like a topographic map,
@@ -25,8 +29,9 @@ from pathlib import Path
 from urllib.parse import quote, unquote
 
 HOME = Path.home()
-FOLDERS = [Path(os.environ.get("XDG_PICTURES_DIR", HOME / "Pictures")) / "Wallpapers",
-           HOME / ".local/share/mk-workstation/assets/wallpapers"]
+PICTURES = Path(os.environ.get("XDG_PICTURES_DIR", HOME / "Pictures"))
+FOLDERS = [PICTURES / "Wallpapers", PICTURES, HOME / ".local/share/mk-workstation/assets/wallpapers"]
+THUMBS = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "mk-workstation" / "wallpaper-thumbs"
 EXT = {".jpg", ".jpeg", ".png", ".webp"}
 RUNTIME = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 PREVIEW_W = 1920
@@ -139,8 +144,46 @@ def prepare(path):
     cv2.imwrite(str(art), img, [cv2.IMWRITE_JPEG_QUALITY, 88])
     cv2.imwrite(str(contour), np.clip(canvas, 0, 255).astype(np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 90])
     b, g, r = accent
-    return {"path": str(Path(path).resolve()), "art": str(art), "contour": str(contour),
+    return {"path": str(Path(path).resolve()), "art": str(art), "contour": str(contour), "w": w, "h": h,
             "accent": f"#{r:02x}{g:02x}{b:02x}", "name": Path(path).stem.replace("-", " ").replace("_", " ")}
+
+
+def thumb_and_palette(path):
+    """A 360x225 cover-cropped thumbnail and the picture's 4 main colours (k-means on a small copy,
+    most vivid first), cached by path and modification time."""
+    import hashlib
+    st = path.stat()
+    key = hashlib.sha1(f"{path.resolve()}:{st.st_mtime_ns}:{st.st_size}".encode()).hexdigest()[:20]
+    THUMBS.mkdir(parents=True, exist_ok=True)
+    thumb, meta = THUMBS / f"{key}.jpg", THUMBS / f"{key}.json"
+    if thumb.exists() and meta.exists():
+        try:
+            return str(thumb), json.loads(meta.read_text())["palette"]
+        except (OSError, ValueError, KeyError):
+            pass
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return str(path), []
+    img = cv2.imread(str(path), cv2.IMREAD_REDUCED_COLOR_4)
+    if img is None:
+        img = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if img is None:
+        return None, []
+    h, w = img.shape[:2]
+    scale = max(360 / w, 225 / h)
+    small = cv2.resize(img, (max(360, round(w * scale)), max(225, round(h * scale))), interpolation=cv2.INTER_AREA)
+    y0, x0 = (small.shape[0] - 225) // 2, (small.shape[1] - 360) // 2
+    cv2.imwrite(str(thumb), small[y0:y0 + 225, x0:x0 + 360], [cv2.IMWRITE_JPEG_QUALITY, 84])
+    pixels = cv2.resize(img, (48, 30), interpolation=cv2.INTER_AREA).reshape(-1, 3).astype(np.float32)
+    _c, labels, centres = cv2.kmeans(pixels, 4, None, (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 1.0),
+                                     3, cv2.KMEANS_PP_CENTERS)
+    hsv = cv2.cvtColor(centres.reshape(1, -1, 3).astype(np.uint8), cv2.COLOR_BGR2HSV)[0]
+    order = sorted(range(4), key=lambda i: -(int(hsv[i][1]) * int(hsv[i][2])))
+    palette = ["#%02x%02x%02x" % tuple(int(v) for v in centres[i][::-1]) for i in order]
+    meta.write_text(json.dumps({"palette": palette}))
+    return str(thumb), palette
 
 
 def main(argv):
@@ -149,8 +192,22 @@ def main(argv):
         print(__doc__.strip())
         return 0
     if cmd == "list":
+        if "--json" in argv:
+            now = current()
+            out = []
+            for p in pictures():
+                thumb, palette = thumb_and_palette(p)
+                if thumb:
+                    out.append({"path": str(p.resolve()), "name": p.stem.replace("-", " ").replace("_", " "),
+                                "thumb": thumb, "palette": palette,
+                                "current": bool(now and now.exists() and now.resolve() == p.resolve())})
+            print(json.dumps(out))
+            return 0
         for p in pictures():
             print(p)
+        return 0
+    if cmd == "prepare" and len(argv) > 1:
+        print(json.dumps(prepare(Path(argv[1]))))
         return 0
     if cmd == "set" and len(argv) > 1:
         set_wallpaper(argv[1])

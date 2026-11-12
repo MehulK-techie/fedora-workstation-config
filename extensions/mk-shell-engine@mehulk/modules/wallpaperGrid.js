@@ -15,6 +15,7 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { accentRGB } from './colour.js';
+import { openModal } from './modal.js';
 
 const HELPER = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'mk-wallpaper']);
 const FOLDER = GLib.build_filenamev([GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES) ??
@@ -159,7 +160,11 @@ export class WallpaperGrid {
         this._actor.add_child(card);
         card.set_position(Math.round((m.width - WIDTH) / 2), Math.max(40, Math.round(m.height * 0.14)));
         Main.layoutManager.addTopChrome(this._actor);
-        this._grab = Main.pushModal(this._actor, {actionMode: Shell.ActionMode.POPUP});
+        this._modal = openModal(this._actor, () => this.close());
+        if (!this._modal) {
+            this.close();
+            return;
+        }
         this._actor.connect('key-press-event', (_a, e) => this._key(e));
         this._fill(items);
         this._search.grab_key_focus();
@@ -260,9 +265,8 @@ export class WallpaperGrid {
         this._reloadId = 0;
         if (!this._actor)
             return;
-        if (this._grab)
-            Main.popModal(this._grab);
-        this._grab = null;
+        this._modal?.close();
+        this._modal = null;
         const actor = this._actor;
         this._actor = this._grid = this._tiles = this._items = this._shown = this._search = this._scroll = null;
         actor.ease({opacity: 0, duration: 120, mode: Clutter.AnimationMode.EASE_OUT_QUAD,

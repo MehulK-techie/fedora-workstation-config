@@ -4,18 +4,26 @@
 // The pixel comes from GNOME Shell's own Shell.Screenshot.pick_color: nothing leaves the shell.
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
+import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import { openModal } from './modal.js';
 
 const Eyedropper = GObject.registerClass(class MkEyedropper extends PanelMenu.Button {
     constructor(onClick) {
         super(0.5, 'Color picker', true);
         this.add_child(new St.Icon({icon_name: 'color-select-symbolic', style_class: 'system-status-icon'}));
-        this.connect('button-press-event', () => {
-            onClick();
+        // on release, once the click is over: the overlay takes the pointer only after this
+        // button has let it go (taking it mid-click left the two fighting over it)
+        this.connect('button-press-event', () => Clutter.EVENT_STOP);
+        this.connect('button-release-event', () => {
+            GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                onClick();
+                return GLib.SOURCE_REMOVE;
+            });
             return Clutter.EVENT_STOP;
         });
     }
@@ -33,7 +41,11 @@ export class ColorPicker {
         const stage = global.stage;
         this._overlay = new St.Widget({reactive: true, x: 0, y: 0, width: stage.width, height: stage.height});
         Main.layoutManager.addTopChrome(this._overlay);
-        this._grab = Main.pushModal(this._overlay, {actionMode: Shell.ActionMode.POPUP});
+        this._modal = openModal(this._overlay, () => this._end());
+        if (!this._modal) {
+            this._end();
+            return;
+        }
         global.display.set_cursor(Meta.Cursor.CROSSHAIR);
         this._overlay.connect('button-press-event', (_a, event) => {
             if (event.get_button() !== Clutter.BUTTON_PRIMARY) {
@@ -70,9 +82,8 @@ export class ColorPicker {
 
     _end() {
         global.display.set_cursor(Meta.Cursor.DEFAULT);
-        if (this._grab)
-            Main.popModal(this._grab);
-        this._grab = null;
+        this._modal?.close();
+        this._modal = null;
         if (this._overlay) {
             Main.layoutManager.removeChrome(this._overlay);
             this._overlay.destroy();

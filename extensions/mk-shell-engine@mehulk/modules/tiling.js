@@ -26,6 +26,7 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { accentRGB } from './colour.js';
+import { openModal } from './modal.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
 
 const GAP = 8;               // between tiles, and to the screen's edge
@@ -210,7 +211,11 @@ export class SnapLayouts {
         const [, natW] = panel.get_preferred_width(-1), [, natH] = panel.get_preferred_height(natW);
         panel.set_position(Math.round((monitor.width - natW) / 2), Math.round((monitor.height - natH) / 2));
 
-        this._grab = Main.pushModal(this._actor, {actionMode: Shell.ActionMode.POPUP});
+        this._modal = openModal(this._actor, () => this.close());
+        if (!this._modal) {
+            this.close();
+            return;
+        }
         this._actor.grab_key_focus();
         this._actor.connect('key-press-event', (_a, event) => this._onKey(event));
         this._actor.connect('button-release-event', (_a, event) => {
@@ -307,9 +312,8 @@ export class SnapLayouts {
     close() {
         if (!this._actor)
             return;
-        if (this._grab)
-            Main.popModal(this._grab);
-        this._grab = null;
+        this._modal?.close();
+        this._modal = null;
         const actor = this._actor;
         this._actor = this._cards = this._previews = this._focus = null;
         actor.destroy();
@@ -417,7 +421,11 @@ class SnapAssist {
         this._actor.add_child(zone);
         Main.uiGroup.add_child(this._actor);
         this._unglass = addWallpaperGlass(zone, this._actor, ASSIST_GLASS, 18, desktopCopy);
-        this._grab = Main.pushModal(this._actor, {actionMode: Shell.ActionMode.POPUP});
+        this._modal = openModal(this._actor, () => this.destroy());
+        if (!this._modal) {
+            this.destroy();
+            return;
+        }
         this._actor.grab_key_focus();
         this._actor.connect('key-press-event', (_a, event) => this._key(event));
         this._actor.connect('button-release-event', () => {
@@ -494,9 +502,8 @@ class SnapAssist {
     _hide() {
         this._unglass?.();
         this._unglass = null;
-        if (this._grab)
-            Main.popModal(this._grab);
-        this._grab = null;
+        this._modal?.close();
+        this._modal = null;
         this._actor?.destroy();
         this._actor = this._cards = null;
     }

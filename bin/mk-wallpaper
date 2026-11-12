@@ -11,8 +11,7 @@
                                8-colour palette (cached in ~/.cache/mk-workstation/wallpaper-thumbs)
   mk-wallpaper prepare FILE --json   the contour trace of FILE (as `next --json`, for a picked one)
 
-Pictures: ~/Pictures/Wallpapers (yours, any jpg/png/webp), the pictures directly in ~/Pictures (not its
-subfolders: no screenshots or camera rolls), then MK's own
+Pictures: ~/Pictures/Wallpapers (yours, any jpg/png/webp: drop them in), then MK's own
 (~/.local/share/mk-workstation/assets/wallpapers, from the repo's assets/wallpapers).
 
 The contour trace: the picture's brightness contour lines (ten even bands, like a topographic map,
@@ -31,7 +30,8 @@ from urllib.parse import quote, unquote
 
 HOME = Path.home()
 PICTURES = Path(os.environ.get("XDG_PICTURES_DIR", HOME / "Pictures"))
-FOLDERS = [PICTURES / "Wallpapers", PICTURES, HOME / ".local/share/mk-workstation/assets/wallpapers"]
+# (not the pictures loose in Pictures: that's where screenshots and photos land)
+FOLDERS = [PICTURES / "Wallpapers", HOME / ".local/share/mk-workstation/assets/wallpapers"]
 # (MK's six are copied into Pictures/Wallpapers once: the same picture there and in MK's folder shows once)
 THUMBS = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "mk-workstation" / "wallpaper-thumbs"
 EXT = {".jpg", ".jpeg", ".png", ".webp"}
@@ -40,7 +40,24 @@ PREVIEW_W = 1920
 OBSIDIAN = (20, 14, 11)                  # BGR of #0b0e14
 
 
+def seed():
+    """Pictures/Wallpapers made, and given MK's six while it has no picture at all (so Super+W has
+    something to show before the first sync); a folder with any picture of yours is left alone."""
+    folder, mine = FOLDERS[0], FOLDERS[-1]
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        if any(p.suffix.lower() in EXT for p in folder.iterdir()) or not mine.is_dir():
+            return
+        import shutil
+        for p in mine.iterdir():
+            if p.suffix.lower() in EXT:
+                shutil.copy2(p, folder / p.name)
+    except OSError:
+        pass
+
+
 def pictures():
+    seed()
     seen, out = set(), []
     for folder in FOLDERS:
         if not folder.is_dir():

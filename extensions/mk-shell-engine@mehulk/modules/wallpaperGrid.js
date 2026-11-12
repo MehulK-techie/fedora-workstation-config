@@ -5,7 +5,7 @@
 //   the tiles: 16:9, rounded, the picked one ringed in the accent colour, eight colours from each
 //   picture along its bottom; more than nine scroll
 //   arrows move, Enter or a click sets it (the contour-trace transition), Esc closes
-// The pictures: Pictures/Wallpapers, the pictures directly in Pictures, MK's own (`mk-wallpaper list
+// The pictures: Pictures/Wallpapers and MK's own (`mk-wallpaper list
 // --json`: cached thumbnails and palettes). Pictures/Wallpapers is watched: whatever you drop in shows
 // up in the grid at once, open or not.
 import Clutter from 'gi://Clutter';
@@ -145,9 +145,10 @@ export class WallpaperGrid {
             }
         });
         card.add_child(head);
-        // the grid: 3 x 3 in view, more scroll
-        this._grid = new St.Widget({layout_manager: new Clutter.GridLayout({column_spacing: GAP, row_spacing: GAP}),
-            style_class: 'mk-wall-tiles'});
+        // the grid: 3 x 3 in view, more scroll. (Rows of boxes: a ScrollView takes only a scrollable
+        // child, which a box is and a plain widget with a grid layout isn't: that refused to build)
+        this._grid = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, style_class: 'mk-wall-tiles',
+            style: `spacing: ${GAP}px;`});
         this._scroll = new St.ScrollView({child: this._grid, hscrollbar_policy: St.PolicyType.NEVER,
             vscrollbar_policy: St.PolicyType.AUTOMATIC, style_class: 'mk-wall-scroll',
             height: TILE_H * 3 + GAP * 2 + 8, x_expand: true});
@@ -178,7 +179,7 @@ export class WallpaperGrid {
         const query = this._search?.get_text().trim().toLowerCase() ?? '';
         this._shown = this._items.map((item, i) => [item, i]).filter(([item]) => !query || item.name.toLowerCase().includes(query));
         this._grid.destroy_all_children();
-        const layout = this._grid.layout_manager;
+        let row = null;
         this._tiles = this._shown.map(([item], k) => {
             const tile = new St.Button({style_class: 'mk-wall-tile', can_focus: false, width: TILE_W, height: TILE_H,
                 style: `background-image: url("${Gio.File.new_for_path(item.thumb).get_uri()}"); background-size: cover;`});
@@ -194,7 +195,11 @@ export class WallpaperGrid {
                 this._pick();
             });
             tile.connect('notify::hover', () => tile.hover && this._select(k, false));
-            layout.attach(tile, k % COLS, Math.floor(k / COLS), 1, 1);
+            if (k % COLS === 0) {
+                row = new St.BoxLayout({style: `spacing: ${GAP}px;`});
+                this._grid.add_child(row);
+            }
+            row.add_child(tile);
             return tile;
         });
         this._empty.visible = this._tiles.length === 0;

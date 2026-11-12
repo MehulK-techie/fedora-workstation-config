@@ -72,7 +72,8 @@ cd ~/fedora-workstation-config && git pull && ./sync.sh
 | Every shortcut, live and editable | `Super+/` |
 | Notes · Companion (tasks, reminders) | `Super+N` · `Super+Shift+N` |
 | Add a reminder from anywhere | `Super+Alt+A` |
-| Clipboard history · emoji | `Super+V` · `Super+.` |
+| Clipboard history (colour swatches, Open link, Paste as plain text, Edit) · emoji | `Super+V` · `Super+.` |
+| Pick a colour from the screen | the eyedropper in the top bar |
 | Wallpaper grid (search, shuffle, auto-rotate, Open Folder; drop pictures into Pictures/Wallpapers) | `Super+W` |
 | Photo Booth | `Super+C` |
 | Switch apps · all windows | `Super+Tab` · `Alt+Tab` |

@@ -234,6 +234,11 @@ done
 flatpak update --system -y --noninteractive || WARNINGS+=("Flatpak update failed")
 
 # 7. Hardware / SELinux Permissions
+# Howdy, where it's installed, checks faces inside GDM's worker: its camera rule (register-face.sh).
+if [[ -e /usr/lib64/security/pam_howdy.so || -e /usr/lib/security/pam_howdy.so ]] &&
+    command -v getenforce &> /dev/null && [[ "$(getenforce)" != Disabled ]]; then
+    "$SCRIPT_DIR/register-face.sh" --selinux || WARNINGS+=("Howdy's SELinux camera rule wasn't installed")
+fi
 # The lock screen's face check (GDM, confined as xdm_t) reaches MK's warm face engine through one
 # SELinux rule (Fedora 45 has no authlogin_camera boolean any more); only once face unlock is set up.
 if [[ -x /usr/local/libexec/mk-face ]] && command -v getenforce &>/dev/null && [[ "$(getenforce)" != Disabled ]]; then

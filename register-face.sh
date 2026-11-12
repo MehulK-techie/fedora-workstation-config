@@ -29,11 +29,49 @@ while (( $# )); do
         --user) TARGET_USER="${2:?--user needs a name}"; shift ;;
         --models) MODEL_COUNT="${2:?--models needs a number}"; shift ;;
         --tune-only) TUNE_ONLY=1 ;;
+        --selinux) SELINUX_ONLY=1 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "[-] Unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
     shift
 done
+
+# Howdy checks the face inside GDM's own worker (SELinux domain xdm_t), so on the lock screen that
+# worker opens the camera itself. One policy module lets xdm_t use video devices (nothing else);
+# SELinux stays Enforcing. (Fedora 45 no longer has the authlogin_camera boolean.) Only while
+# Howdy's PAM module is installed: MK's own face engine needs no camera access from GDM at all.
+howdy_selinux() {
+    [[ -e /usr/lib64/security/pam_howdy.so || -e /usr/lib/security/pam_howdy.so ]] || return 0
+    command -v getenforce &> /dev/null && [[ "$(getenforce)" != Disabled ]] || return 0
+    command -v checkmodule &> /dev/null || dnf install -y checkpolicy > /dev/null || return 1
+    local dir
+    dir=$(mktemp -d)
+    cat > "$dir/mkhowdy.te" << 'TE'
+module mkhowdy 1.0;
+require {
+    type xdm_t;
+    type v4l_device_t;
+    type device_t;
+    class chr_file { open read write ioctl getattr map };
+    class dir { search getattr read open };
+}
+# the lock screen's Howdy (pam_howdy in GDM's worker) opens /dev/video*
+allow xdm_t v4l_device_t:chr_file { open read write ioctl getattr map };
+allow xdm_t device_t:dir { search getattr read open };
+TE
+    if checkmodule -M -m -o "$dir/mkhowdy.mod" "$dir/mkhowdy.te" > /dev/null &&
+        semodule_package -o "$dir/mkhowdy.pp" -m "$dir/mkhowdy.mod" && semodule -i "$dir/mkhowdy.pp"; then
+        echo "    [+] SELinux: the lock screen's Howdy may use the camera (module mkhowdy; Enforcing stays on)"
+    else
+        echo "    [!] SELinux module mkhowdy not installed" >&2
+    fi
+    rm -rf "$dir"
+}
+if (( ${SELINUX_ONLY:-0} )); then
+    [[ $EUID -eq 0 ]] || { echo "[-] Run it with sudo." >&2; exit 1; }
+    howdy_selinux
+    exit $?
+fi
 
 # Never enrolled as root: the face belongs to the account that will use it.
 if [[ "$TARGET_USER" == root ]]; then
@@ -342,6 +380,11 @@ echo "[+] Recorded ${recorded} new face model(s) for ${TARGET_USER}."
 # ------------------------------------------------------------------------------
 echo "==> Step 4/4: Enabling face unlock..."
 (( SUDO_FACE )) || PAM_FILES=(/etc/pam.d/gdm-password)
+# console login (a text terminal) too, from its packaged stack if there's no /etc copy yet
+PAM_FILES+=(/etc/pam.d/login)
+if [[ ! -f /etc/pam.d/login && -f /usr/lib/pam.d/login ]]; then
+    cp -a /usr/lib/pam.d/login /etc/pam.d/login
+fi
 # polkit's PAM stack (GNOME's "confirm it's you" prompt: Vault, MK Lock, admin
 # tasks) ships in /usr/lib/pam.d; a copy in /etc/pam.d takes its place.
 if (( SUDO_FACE )) && [[ ! -f /etc/pam.d/polkit-1 && -f /usr/lib/pam.d/polkit-1 ]]; then
@@ -387,9 +430,7 @@ else
     done
 fi
 
-if command -v getenforce &>/dev/null && [[ "$(getenforce)" == "Enforcing" ]]; then
-    setsebool -P authlogin_camera 1 2>/dev/null || true
-fi
+howdy_selinux
 
 echo ""
 echo "================================================="

@@ -628,6 +628,12 @@ case "${1:-help}" in
         esac
         ;;
 
+    wallpaper)
+        # mk wallpaper [next | set FILE | list]: the still wallpaper (Super+W: next, with its transition)
+        shift
+        exec "$HOME/.local/bin/mk-wallpaper" "${@:-next}"
+        ;;
+
     accent)
         # mk accent [settings | auto | #rrggbb | status | system on|off]: the
         # desktop's accent colour. settings (the default) follows the accent you
@@ -1013,6 +1019,7 @@ KEYRING
         echo "  power      Smart power profiles on laptops: status, on, off; or comfort, quiet, performance"
         echo "  screensaver  Scenes when you step away: on, off, show, scene web|knight|matrix|aurora, delay N"
         echo "  notes      MK Notes: mk notes, mk notes today, mk notes serve (phone sync)"
+        echo "  wallpaper  Next wallpaper (Super+W animates it), set FILE, list"
         echo "  accent     Desktop colour: auto (from your wallpaper), #rrggbb, status"
         echo "  rename     Rename MK's windows and top-bar tag: mk rename \"My Desk\" MD"
         echo "  storage    Storage Sense: old caches, orphan thumbnails, journal, unused Flatpaks (--deep, --dry-run, --last)"

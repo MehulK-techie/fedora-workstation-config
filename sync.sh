@@ -763,6 +763,18 @@ gsettings set org.gnome.mutter check-alive-timeout 20000
 gsettings set org.gnome.mutter dynamic-workspaces true
 gsettings set org.gnome.mutter workspaces-only-on-primary true
 
+# A fresh install that still has Fedora's own wallpaper gets MK's first (Super+W cycles them and
+# yours in Pictures/Wallpapers); a wallpaper you chose is never replaced.
+case "$(gsettings get org.gnome.desktop.background picture-uri-dark)" in
+    *"/usr/share/backgrounds/"*|"''")
+        if [[ -f "$MK_SHARE/assets/wallpapers/obsidian-aurora.jpg" ]]; then
+            for key in picture-uri picture-uri-dark; do
+                gsettings set org.gnome.desktop.background "$key" "file://$MK_SHARE/assets/wallpapers/obsidian-aurora.jpg"
+            done
+        fi
+        ;;
+esac
+
 # 6. Clean Calendar & Panel Defaults
 gsettings set org.gnome.desktop.calendar show-weekdate false
 gsettings set org.gnome.shell.world-clocks locations "[]"

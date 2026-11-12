@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""MK wallpaper shuffle: the next picture, and its contour trace for the transition.
+
+  mk-wallpaper next            the next picture, set at once (no transition: the shell's Super+W has it)
+  mk-wallpaper next --json     prepare the next one for MK Shell Engine's contour-trace transition:
+                               prints {"path", "art", "contour", "accent", "name"}; sets nothing
+  mk-wallpaper set FILE        set FILE as the wallpaper
+  mk-wallpaper list            the pictures it cycles through
+
+Pictures: ~/Pictures/Wallpapers (yours, any jpg/png/webp), then MK's own three
+(~/.local/share/mk-workstation/assets/wallpapers, from the repo's assets/wallpapers).
+
+The contour trace: the picture's brightness contour lines (ten even bands, like a topographic map,
+so soft pictures have shapes too) and its sharp edges (OpenCV's Canny), drawn as glowing lines
+in the picture's own accent colour (its most vivid hue, kept comfortable: never neon) over an
+obsidian blueprint grid. Both images are written small (at most 1920 px wide) to
+$XDG_RUNTIME_DIR, under new names each time, the previous ones removed.
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+from urllib.parse import quote, unquote
+
+HOME = Path.home()
+FOLDERS = [Path(os.environ.get("XDG_PICTURES_DIR", HOME / "Pictures")) / "Wallpapers",
+           HOME / ".local/share/mk-workstation/assets/wallpapers"]
+EXT = {".jpg", ".jpeg", ".png", ".webp"}
+RUNTIME = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+PREVIEW_W = 1920
+OBSIDIAN = (20, 14, 11)                  # BGR of #0b0e14
+
+
+def pictures():
+    seen, out = set(), []
+    for folder in FOLDERS:
+        if not folder.is_dir():
+            continue
+        for p in sorted(folder.iterdir(), key=lambda p: p.name.lower()):
+            if p.suffix.lower() in EXT and p.is_file() and p.name not in seen:
+                seen.add(p.name)
+                out.append(p)
+    return out
+
+
+def current():
+    try:
+        uri = subprocess.run(["gsettings", "get", "org.gnome.desktop.background", "picture-uri-dark"],
+                             capture_output=True, text=True, timeout=5).stdout.strip().strip("'")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return Path(unquote(uri[len("file://"):])) if uri.startswith("file://") else None
+
+
+def next_picture():
+    pics = pictures()
+    if not pics:
+        return None
+    now = current()
+    names = [p.resolve() for p in pics]
+    i = names.index(now.resolve()) if now and now.exists() and now.resolve() in names else -1
+    return pics[(i + 1) % len(pics)]
+
+
+def set_wallpaper(path):
+    uri = "file://" + quote(str(Path(path).resolve()))
+    for key in ("picture-uri", "picture-uri-dark"):
+        subprocess.run(["gsettings", "set", "org.gnome.desktop.background", key, uri], check=False)
+    subprocess.run(["gsettings", "set", "org.gnome.desktop.background", "picture-options", "zoom"], check=False)
+
+
+def comfortable_accent(img):
+    """The picture's most vivid hue (enough of it to matter), as a calm dark-mode accent: saturation
+    0.58, a lower brightness for yellows and greens (they glare first). BGR, 0-255."""
+    import cv2
+    import numpy as np
+    small = cv2.resize(img, (64, 64), interpolation=cv2.INTER_AREA)
+    hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV_FULL).reshape(-1, 3).astype(np.float32)
+    weight = (hsv[:, 1] / 255) * (hsv[:, 2] / 255)
+    vivid = weight > 0.18
+    if vivid.sum() < 40:
+        hue = 215.0                                              # (a grey picture: a calm blue)
+    else:
+        hist = np.bincount((hsv[vivid, 0] / 256 * 36).astype(int), weights=weight[vivid], minlength=36)
+        hue = (int(hist.argmax()) + 0.5) * 10
+    value = 0.80 if 45 <= hue <= 170 else 0.90
+    pixel = np.uint8([[[int(hue / 360 * 255), int(0.58 * 255), int(value * 255)]]])
+    return [int(c) for c in cv2.cvtColor(pixel, cv2.COLOR_HSV2BGR_FULL)[0, 0]]
+
+
+def prepare(path):
+    import cv2
+    import numpy as np
+    img = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if img is None:
+        raise SystemExit(f"mk-wallpaper: can't read {path}")
+    h, w = img.shape[:2]
+    if w > PREVIEW_W:
+        img = cv2.resize(img, (PREVIEW_W, round(h * PREVIEW_W / w)), interpolation=cv2.INTER_AREA)
+        h, w = img.shape[:2]
+    accent = comfortable_accent(img)
+    # The lines: contour lines proper (the softened brightness, stretched to the full range, cut into
+    # ten even bands and traced where one band meets the next, like a topographic map: an aurora or
+    # a mist gets its shapes, a flat sky stays inside one band and draws nothing), and the sharp
+    # boundaries of a photo (Canny, thresholds from Otsu's split). Only lines long enough to be a
+    # shape's: no stars, no grain.
+    gray = cv2.medianBlur(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 5)
+    soft = cv2.normalize(cv2.GaussianBlur(gray, (0, 0), 5), None, 0, 255, cv2.NORM_MINMAX)
+    levels = (soft.astype(np.int32) * 10 // 256).astype(np.uint8)
+    iso = cv2.morphologyEx(levels, cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8)) > 0
+    sharp = cv2.GaussianBlur(gray, (0, 0), 1.6)
+    high, _ = cv2.threshold(sharp, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    canny = cv2.Canny(sharp, max(20, int(high * 0.5)), max(40, int(high))) > 0
+    edges = (iso | canny).astype(np.uint8) * 255
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(edges, connectivity=8)
+    keep = np.zeros(count, bool)
+    keep[1:] = stats[1:, cv2.CC_STAT_AREA] >= max(80, (w * h) // 11000)
+    edges = np.where(keep[labels], 255, 0).astype(np.uint8)
+    glow = cv2.GaussianBlur(edges, (0, 0), 3.0)
+    line = np.clip(edges.astype(np.float32) / 255 * 0.9 + glow.astype(np.float32) / 255 * 0.7, 0, 1)
+    # the blueprint: obsidian, a faint grid every 48 px
+    canvas = np.empty((h, w, 3), np.float32)
+    canvas[:] = OBSIDIAN
+    grid = np.zeros((h, w), np.float32)
+    grid[::48, :] = 1
+    grid[:, ::48] = 1
+    canvas += grid[..., None] * (np.array(accent, np.float32) * 0.07)
+    canvas = canvas * (1 - line[..., None]) + np.array(accent, np.float32) * line[..., None]
+    stamp = f"{int(time.time() * 1000)}"
+    for old in RUNTIME.glob("mk-wallpaper-*.jpg"):
+        old.unlink(missing_ok=True)
+    art, contour = RUNTIME / f"mk-wallpaper-art-{stamp}.jpg", RUNTIME / f"mk-wallpaper-contour-{stamp}.jpg"
+    cv2.imwrite(str(art), img, [cv2.IMWRITE_JPEG_QUALITY, 88])
+    cv2.imwrite(str(contour), np.clip(canvas, 0, 255).astype(np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 90])
+    b, g, r = accent
+    return {"path": str(Path(path).resolve()), "art": str(art), "contour": str(contour),
+            "accent": f"#{r:02x}{g:02x}{b:02x}", "name": Path(path).stem.replace("-", " ").replace("_", " ")}
+
+
+def main(argv):
+    cmd = argv[0] if argv else "next"
+    if cmd in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    if cmd == "list":
+        for p in pictures():
+            print(p)
+        return 0
+    if cmd == "set" and len(argv) > 1:
+        set_wallpaper(argv[1])
+        return 0
+    if cmd == "next":
+        pic = next_picture()
+        if not pic:
+            print(json.dumps({"error": "no pictures in ~/Pictures/Wallpapers"}) if "--json" in argv
+                  else "No pictures: put some in ~/Pictures/Wallpapers.")
+            return 1
+        if "--json" in argv:
+            print(json.dumps(prepare(pic)))
+        else:
+            set_wallpaper(pic)
+            print(f"Wallpaper: {pic.name}")
+        return 0
+    print(__doc__.strip(), file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

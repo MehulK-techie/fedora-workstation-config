@@ -1,11 +1,11 @@
 // MK Shell Engine: switching workspaces (Ctrl+Alt+Arrow, Super+PageUp/PageDown, the top bar's
-// dots, a touchpad swipe once you let go) is a depth-parallax glide: 260 ms on EASE_OUT_CUBIC.
-//   - the workspace you leave eases back to 0.968x and softens to 180 opacity; the one you arrive
-//     at glides in from 0.968x to full
+// dots, a touchpad swipe once you let go) is a depth-parallax glide: 360 ms on EASE_OUT_CUBIC.
+//   - the workspace you leave eases back to 0.90x and softens to 160 opacity; the one you arrive
+//     at glides in from 0.92x to full
 //   - 400 ms after landing, every window on the workspace is made sure of: whole, opaque, shown
-//   - the wallpaper drifts a little the same way and settles back (parallax): it grows 4 % for
-//     the moment and moves within that margin (about 2 % of the screen's width), so no edge of it
-//     ever shows; a literal quarter of the windows' travel would need it blown up by half
+//   - the wallpaper drifts the same way and settles back (parallax): it grows 6 % for the moment
+//     and moves within that margin (about 3 % of the screen's width), so no edge of it
+//     ever shows; a literal 0.35x of the windows' travel would need it blown up by over 70 %
 //   - the top bar's workspace dots give one crisp pulse as you land
 // While a swipe is under your fingers it follows them exactly. Every part of this is guarded: if
 // GNOME's shell differs, its own slide runs as it is.
@@ -15,11 +15,12 @@ import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { isWallpaperWindow, restoreActor } from './wallpaperWindow.js';
 
-const DURATION = 260;
-const DEPTH = 0.968;       // how far a workspace eases back as it leaves / comes in
-const DIM = 180;           // and its opacity at that point
+const DURATION = 360;
+const DEPTH = 0.90;        // how far the workspace you leave eases back
+const DEPTH_IN = 0.92;     // and the one you arrive at comes in from
+const DIM = 160;           // their opacity at that point
 const CURVE = Clutter.AnimationMode.EASE_OUT_CUBIC;
-const OVERSCAN = 1.04;     // the background, grown this much while it drifts, so its edges stay off screen
+const OVERSCAN = 1.06;     // the background, grown this much while it drifts, so its edges stay off screen
 const DRIFT = 0.9;         // how much of the room that overscan gives it the wallpaper drifts
 
 // The wallpaper's drift: out toward the overscan's edge, and back. Always ends exactly where it
@@ -226,7 +227,7 @@ function retime(switchData, from, to) {
             ws.set_pivot_point(0.5, 0.5);
             const leaving = ws.workspace === fromWs;
             if (!leaving)
-                ws.set({scale_x: DEPTH, scale_y: DEPTH, opacity: DIM});
+                ws.set({scale_x: DEPTH_IN, scale_y: DEPTH_IN, opacity: DIM});
             ws.ease({scale_x: leaving ? DEPTH : 1, scale_y: leaving ? DEPTH : 1, opacity: leaving ? DIM : 255,
                 duration: DURATION, mode: CURVE});
         }

@@ -25,6 +25,7 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { evaluate, format } from './calc.js';
 import { addWallpaperGlass, desktopCopy } from './blur.js';
 
 const CAL_GLASS = {sigma: 48, brightness: 0.58};
@@ -155,6 +156,7 @@ export class CalendarDeck {
             hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC, overlay_scrollbars: true});
         for (const actor of [this._heading, this._entry, this._chips, this._saved, this._queueScroll])
             this._card.add_child(actor);
+        this._card.add_child(this._mathBar());
         this._iface = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
         calendar.get_parent().insert_child_above(this._card, calendar);
         this._button = this._card;           // (what the rest calls "the control" below the month)
@@ -187,6 +189,34 @@ export class CalendarDeck {
 
     // World Clocks and Weather only once you've set a place up (unset, they were
     // buttons that only said "Add world clocks…" / "Select weather location…")
+    // The math bar: type 1280 * 1.18 or 512 / 16 and the answer shows as you type; click it to copy
+    // (modules/calc.js: its own small parser, never eval)
+    _mathBar() {
+        const row = new St.BoxLayout({style_class: 'mk-cal-math'});
+        const entry = new St.Entry({hint_text: '=  1280 * 1.18', can_focus: true, x_expand: true,
+            style_class: 'mk-cal-math-entry'});
+        const answer = new St.Button({style_class: 'mk-cal-math-answer', visible: false, can_focus: true,
+            accessible_name: 'Copy the answer'});
+        let value = null;
+        entry.clutter_text.connect('text-changed', () => {
+            value = evaluate(entry.get_text());
+            answer.label = value === null ? '' : `= ${format(value)}`;
+            answer.visible = value !== null;
+        });
+        const copy = () => {
+            if (value === null)
+                return;
+            const plain = String(Number(value.toPrecision(10)));
+            St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, plain);
+            Main.panel._mkIsland?.show({icon: 'accessories-calculator-symbolic', text: `${plain} copied`});
+        };
+        answer.connect('clicked', copy);
+        entry.clutter_text.connect('activate', copy);
+        row.add_child(entry);
+        row.add_child(answer);
+        return row;
+    }
+
     _placeholders() {
         const dm = this._dateMenu;
         this._hidden = [];

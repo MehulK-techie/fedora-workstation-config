@@ -690,12 +690,14 @@ done
 # tools would put a second player (a visible window) or an overlay on the desktop at login. They
 # are moved aside, not deleted (~/.config/mk-workstation/backups/autostart/); MK's own are kept.
 AUTOSTART_DIR="$HOME/.config/autostart"
-for entry in "$AUTOSTART_DIR"/*wallpaper*.desktop "$AUTOSTART_DIR"/*mpv*.desktop "$AUTOSTART_DIR"/*lockscreen*.desktop; do
+# CopyQ too: MK's clipboard history (Super+V, in the shell) does its job without a resident app.
+for entry in "$AUTOSTART_DIR"/*wallpaper*.desktop "$AUTOSTART_DIR"/*mpv*.desktop "$AUTOSTART_DIR"/*lockscreen*.desktop \
+    "$AUTOSTART_DIR"/com.github.hluk.copyq.desktop "$AUTOSTART_DIR"/copyq.desktop; do
     [[ -f "$entry" ]] || continue
     case "$(basename "$entry")" in mk-*|spidey-*) continue ;; esac
     mkdir -p "$HOME/.config/mk-workstation/backups/autostart"
     mv -f "$entry" "$HOME/.config/mk-workstation/backups/autostart/"
-    echo "    [*] Moved aside autostart entry $(basename "$entry") (a second wallpaper or lock-screen player)"
+    echo "    [*] Moved aside autostart entry $(basename "$entry") (a second player, or CopyQ: Super+V is MK's)"
 done
 # One-time steps sync has done on this computer, one line each, in
 # ~/.config/mk-workstation/extensions-applied (delete a line to have it done again).

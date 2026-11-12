@@ -156,8 +156,9 @@ export class Accent {
             let rgb = DEFAULT;
             try {
                 const hue = dominantHue(GdkPixbuf.Pixbuf.new_from_stream_finish(res), 0.35);
+                // (calm, for a dark desktop: never neon; yellows and greens glare first, so dimmer)
                 if (hue !== null)
-                    rgb = hsvToRgb(hue, 0.72, 0.98);
+                    rgb = hsvToRgb(hue, 0.58, hue >= 45 && hue <= 170 ? 0.80 : 0.90);
             } catch (e) {
                 // XML slideshows, unusual formats: keep the default
             }

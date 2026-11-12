@@ -791,6 +791,14 @@ if [[ ! -f "$APPLIED" ]]; then
 fi
 first_time() { ! grep -qxF -- "$1" "$APPLIED"; }
 
+# The lock screen's unlock: a slight zoom that fades into the desktop (1.03x to 1.0, 320 ms), set
+# once; a different choice in the Command Centre stays yours.
+if first_time "lock-unlock-zoom"; then
+    ext_set "$MK_LOCK" "$LOCK_SCHEMA" unlock-animation zoom
+    ext_set "$MK_LOCK" "$LOCK_SCHEMA" animation-duration 320
+    echo "lock-unlock-zoom" >> "$APPLIED"
+fi
+
 if [[ "$EFFECTS" == lite ]]; then
     kept=()
     for uuid in "${ACTIVE_EXTENSIONS[@]}"; do

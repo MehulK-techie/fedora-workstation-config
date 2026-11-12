@@ -718,7 +718,18 @@ export default class WackSonomaLiveLockscreen extends Extension {
             // the crossfade: the lock screen (the video in it) and its sound go together, 450 ms
             const duration = animate && preset !== 'none' && St.Settings.get().enable_animations
                 ? (preset === 'crossfade' ? UNLOCK_FADE : self._settings.get_int('animation-duration')) : 0;
-            group.ease({opacity: 0, ...(preset === 'zoom' ? {scale_x: 1.06, scale_y: 1.06} : {}),
+            // zoom: one continuous motion: the lock screen lifts a touch (1.03x) as it fades, while
+            // the desktop under it (wallpaper and windows) settles from 1.03x to its place
+            if (preset === 'zoom' && duration > 0) {
+                const desk = global.window_group;
+                desk.remove_transition('scale-x');
+                desk.remove_transition('scale-y');
+                desk.set_pivot_point(0.5, 0.5);
+                desk.set_scale(1.03, 1.03);
+                desk.ease({scale_x: 1, scale_y: 1, duration, mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                    onStopped: () => desk.set_scale(1, 1)});         // (cut short or not: back to 1)
+            }
+            group.ease({opacity: 0, ...(preset === 'zoom' ? {scale_x: 1.03, scale_y: 1.03} : {}),
                 duration, mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
                 onComplete: () => {
                     this._hideLockScreenComplete();      // (both of GNOME's completions, as its slide does)

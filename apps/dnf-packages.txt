@@ -78,9 +78,8 @@ playerctl
 brightnessctl
 
 # --- Photos, screenshots, camera and audio -------------------------------------
-kamoso
+snapshot
 flameshot
-guvcview
 easyeffects
 mediawriter
 

@@ -9,7 +9,6 @@ org.onlyoffice.desktopeditors
 # --- Desktop tools -------------------------------------------------------------
 com.mattjakeman.ExtensionManager
 com.github.tenderowl.frog
-hu.irl.cameractrls
 one.alynx.FlipClock
 
 # --- Communication, music and audio --------------------------------------------

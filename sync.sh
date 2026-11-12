@@ -1015,6 +1015,21 @@ mkdir -p "$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")/Screensh
 
 echo "==> Checking packages..."
 check_deps || true
+# One camera app: GNOME's Camera (snapshot). Duplicates installed for your account alone go now;
+# system-wide ones are named (sync runs as you: `sudo ./setup.sh` removes them).
+if flatpak info --user hu.irl.cameractrls &> /dev/null; then
+    flatpak uninstall --user -y --noninteractive hu.irl.cameractrls &> /dev/null &&
+        echo "    [+] Removed Camera Controls (duplicate camera app)"
+fi
+dupes=()
+for pkg in kamoso cheese guvcview droidcam cameractrls; do
+    rpm -q "$pkg" &> /dev/null && dupes+=("$pkg")
+done
+flatpak info --system hu.irl.cameractrls &> /dev/null && dupes+=("hu.irl.cameractrls (Flatpak)")
+if (( ${#dupes[@]} )); then
+    echo "    [*] Duplicate camera apps installed: ${dupes[*]} (GNOME's Camera is the one MK keeps;"
+    echo "        sudo ./setup.sh removes them)"
+fi
 if (( FRESH )); then
     mkdir -p "$(dirname "$MARKER")"
     date -Iseconds > "$MARKER"

@@ -170,8 +170,11 @@ if [[ -x /usr/local/libexec/mk-face ]]; then
     systemctl try-restart mk-face.service &> /dev/null || true
 fi
 
-# Apps MK replaced: gThumb (Loupe, GNOME's image viewer, opens images now).
-REMOVE_PKGS=(gthumb)
+# Apps MK replaced: gThumb (Loupe, GNOME's image viewer, opens images now). And every camera app
+# but GNOME's own Camera (snapshot): Kamoso (with the KDE/Qt libraries it pulls in, removed along
+# with it), Cheese, Guvcview, DroidCam and Camera Controls duplicated it in the app grid.
+# (MK's Photo Booth only needs v4l-utils.)
+REMOVE_PKGS=(gthumb kamoso cheese guvcview droidcam cameractrls)
 # IBus Typing Booster runs in the background (about 100 MB) even when it isn't
 # one of your input sources; the MK emoji board (Super+.) covers emoji. Kept
 # when you use it as an input source.
@@ -221,6 +224,13 @@ if [[ -f "$SCRIPT_DIR/apps/flatpaks.txt" ]]; then
         flatpak install --system -y --noninteractive flathub "$app" || WARNINGS+=("Flatpak failed to install: $app")
     done < "$SCRIPT_DIR/apps/flatpaks.txt"
 fi
+# Camera Controls came as a Flatpak (an earlier apps/flatpaks.txt): gone too, as a duplicate camera app
+for app in hu.irl.cameractrls; do
+    if flatpak info --system "$app" &> /dev/null; then
+        echo "==> Removing $app (duplicate camera app)..."
+        flatpak uninstall --system -y --noninteractive "$app" || WARNINGS+=("Could not remove Flatpak $app")
+    fi
+done
 flatpak update --system -y --noninteractive || WARNINGS+=("Flatpak update failed")
 
 # 7. Hardware / SELinux Permissions

@@ -203,6 +203,9 @@ def verify(user, seconds=4.0, quiet=False, engine=None):
     judge = Judge(threshold)
     start = time.monotonic()
     end = start + seconds
+    # nobody at the camera: give up soon (sudo); a longer check (the lock screen, login: the camera
+    # starting cold in a dim room) waits longer for a first face
+    give_up = NO_FACE_GIVE_UP if seconds < 4.5 else seconds * 0.6
     try:
         while time.monotonic() < end:
             ok, frame = cap.read()
@@ -212,7 +215,7 @@ def verify(user, seconds=4.0, quiet=False, engine=None):
             face = largest_face(det, frame)
             if face is None:
                 judge.no_face()
-                if not judge.saw_face and now - start > NO_FACE_GIVE_UP:
+                if not judge.saw_face and now - start > give_up:
                     break                       # nobody there: don't keep the password waiting
                 continue
             crop = rec.alignCrop(frame, face)
@@ -247,20 +250,47 @@ def at_the_seat(user):
     return props.get("Name") == user and props.get("Remote") == "no"
 
 
+PAM_OUTCOMES = {1: "no match (no clear face, or not this face)", 2: "no face enrolled",
+                3: "no camera", None: "the warm engine didn't answer"}
+
+
+def pam_log(message):
+    """One line in the journal (`journalctl -t mk-face`): why a face check said no."""
+    try:
+        import syslog
+        syslog.openlog("mk-face", 0, syslog.LOG_AUTHPRIV)
+        syslog.syslog(syslog.LOG_INFO, message)
+    except Exception:
+        pass
+
+
 def pam():
     user = os.environ.get("PAM_USER", "")
     if os.environ.get("PAM_TYPE") != "auth" or not user or os.environ.get("PAM_RHOST"):
         return 1
-    if not os.path.exists(model_path(user)):
-        return 1                                # not enrolled: straight on to the password
     service = os.environ.get("PAM_SERVICE", "")
-    # the lock screen and login run before / outside the session; anything else (sudo,
+    # the lock screen and console login run before / outside the session; anything else (sudo,
     # polkit) only for the person at the computer
-    if not service.startswith("gdm") and not at_the_seat(user):
+    before_session = service.startswith("gdm") or service == "login"
+    if not before_session and not at_the_seat(user):
         return 1
-    rc = ask_warm(user, 3.5)
-    if rc is None:                              # no warm engine: do it here
-        rc = verify(user, 3.5, quiet=True)
+    seconds = 5.0 if before_session else 3.5
+    try:
+        # The warm engine first: a system service that reads the saved face and the camera
+        # itself. GDM runs this check confined (SELinux xdm_t), where /var/lib/mk-face and the
+        # camera may be out of reach; only its socket is needed from there (scripts/
+        # setup-face-auth.sh installs the one-rule policy that allows that).
+        rc = ask_warm(user, seconds)
+        if rc is None:
+            if not os.path.exists(model_path(user)):
+                pam_log(f"{service}: {user}: no warm engine, and the saved face can't be read here")
+                return 1
+            rc = verify(user, seconds, quiet=True)
+    except Exception as e:                      # (never a traceback in the middle of a login)
+        pam_log(f"{service}: {user}: {type(e).__name__}: {e}")
+        return 1
+    if rc != 0:
+        pam_log(f"{service}: {user}: {PAM_OUTCOMES.get(rc, rc)}")
     return 0 if rc == 0 else 1
 
 

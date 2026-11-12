@@ -379,3 +379,6 @@
 .mk-cal-math-answer { border-radius: 10px; padding: 5px 10px; font-weight: 700; font-feature-settings: "tnum";
   background-color: st-transparentize(-st-accent-color, 0.78); color: #fff; }
 .mk-cal-math-answer:hover, .mk-cal-math-answer:focus { background-color: st-transparentize(-st-accent-color, 0.6); }
+
+/* Glass Tint's swatches (glassControls.js) */
+.mk-tint-swatch { width: 14px; height: 14px; border-radius: 99px; border: 1px solid rgba(255, 255, 255, 0.35); margin-right: 8px; }

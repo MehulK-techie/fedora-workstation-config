@@ -16,6 +16,7 @@
 //   modules/windowAnimations.js  windows open and close with a little spring (while Burn My Windows is off)
 //   modules/calendarDeck.js      the calendar as glass, and a reminder for any day ahead
 //   modules/wallpaperEngine.js   Super+W: the next wallpaper, with the contour-trace transition
+//   modules/glassControls.js     Quick Settings: Frost (blur 0-64) and Glass Tint (colour, 0-45 %) for the shell's glass
 //   modules/colorPicker.js       the eyedropper in the top bar: a pixel's #hex to the clipboard
 //   modules/showDesktop.js       Super+D, per workspace: the same windows back, the top one focused
 //   modules/focusRing.js         a 1.5 px accent outline around the focused window (focus-ring)
@@ -43,6 +44,7 @@ import { Bridge } from './modules/bridge.js';
 import { FocusRing } from './modules/focusRing.js';
 import { ShowDesktop } from './modules/showDesktop.js';
 import { ColorPicker } from './modules/colorPicker.js';
+import { GlassControls } from './modules/glassControls.js';
 import { WallpaperEngine } from './modules/wallpaperEngine.js';
 import { NotifyCenter } from './modules/notifyCenter.js';
 import { ScreenshotActions } from './modules/screenshotActions.js';
@@ -134,6 +136,7 @@ export default class MKShellEngine extends Extension {
         this._start('focus ring', () => new FocusRing(this._settings));
         this._start('show desktop', () => new ShowDesktop());
         this._start('color picker', () => new ColorPicker());
+        this._start('glass controls', () => new GlassControls(this._settings));
         this._start('wallpaper shuffle', () => new WallpaperEngine(this._settings));
         this._start('calendar', () => new CalendarDeck(this._settings));
         this._start('notification centre', () => new NotifyCenter());

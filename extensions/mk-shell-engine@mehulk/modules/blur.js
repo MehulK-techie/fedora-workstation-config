@@ -17,6 +17,33 @@ export const DOCK_GLASS = {sigma: 32, brightness: 0.62};
 
 const live = new Set();        // every blur effect made here: [actor, effects]
 
+// Frost, set from Quick Settings (panel-blur-enabled, panel-blur-sigma; glassControls.js): every blur
+// made here, now and later, scaled from its own strength (the top bar's 38 is the reference), or off.
+const frost = {on: true, sigma: 38};
+const frosted = new Set();     // [effect, its own sigma]
+function frostRadius(base) {
+    return Math.round(base * frost.sigma / 38);
+}
+function track(effect, base) {
+    frosted.add([effect, base]);
+    effect.radius = frostRadius(base);
+    effect.enabled = frost.on && frost.sigma > 0;
+}
+export function setFrost(on, sigma) {
+    frost.on = on;
+    frost.sigma = Math.max(0, Math.min(64, sigma));
+    for (const entry of [...frosted]) {
+        const [effect, base] = entry;
+        if (!effect.get_actor?.()) {              // (its actor is gone: forget it)
+            frosted.delete(entry);
+            continue;
+        }
+        effect.radius = frostRadius(base);
+        effect.enabled = frost.on && frost.sigma > 0;
+    }
+    pauseForFullscreen();                         // (and the ones under a full-screen window stay off)
+}
+
 // Cuts the blurred picture to a rounded rectangle (Shell.BlurEffect has no
 // corners of its own): a fragment snippet that fades out everything past the
 // rounded corners. GNOME 51 builds it on Clutter.ShaderEffect (with a Cogl
@@ -102,8 +129,8 @@ function pauseForFullscreen() {
         } catch {
             full = false;
         }
-        for (const e of effects)
-            e.enabled = !full;
+        for (const e of effects)       // (a blur also stays off while frost is switched off)
+            e.enabled = !full && (!(e instanceof Shell.BlurEffect) || (frost.on && frost.sigma > 0));
     }
 }
 
@@ -126,6 +153,7 @@ export function addGlass(actor, glass, radius = 0) {
     }
     const blur = new Shell.BlurEffect({radius: glass.sigma, brightness: glass.brightness, mode: Shell.BlurMode.BACKGROUND});
     actor.add_effect_with_name('mk-blur', blur);
+    track(blur, glass.sigma);
     effects.push(blur);
     live.add([actor, effects]);
     fullscreenId ||= global.display.connect('in-fullscreen-changed', pauseForFullscreen);
@@ -162,8 +190,9 @@ export function addWallpaperGlass(target, anchor, glass, radius = 0, source = Ma
     const layer = Main.layoutManager.uiGroup;
     const pane = new Clutter.Actor({clip_to_allocation: true, reactive: false, visible: false});
     const copy = typeof source === 'function' ? source() : new Clutter.Clone({source});
-    copy.add_effect_with_name('mk-blur', new Shell.BlurEffect({
-        mode: Shell.BlurMode.ACTOR, radius: glass.sigma, brightness: glass.brightness}));
+    const copyBlur = new Shell.BlurEffect({mode: Shell.BlurMode.ACTOR, radius: glass.sigma, brightness: glass.brightness});
+    copy.add_effect_with_name('mk-blur', copyBlur);
+    track(copyBlur, glass.sigma);
     pane.add_child(copy);
     if (radius > 0) {
         try {

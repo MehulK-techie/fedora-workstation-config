@@ -769,9 +769,9 @@ gsettings set org.gnome.mutter workspaces-only-on-primary true
 # yours in Pictures/Wallpapers); a wallpaper you chose is never replaced.
 case "$(gsettings get org.gnome.desktop.background picture-uri-dark)" in
     *"/usr/share/backgrounds/"*|"''")
-        if [[ -f "$MK_SHARE/assets/wallpapers/obsidian-aurora.jpg" ]]; then
+        if [[ -f "$MK_SHARE/assets/wallpapers/nordic-fjord-aurora.jpg" ]]; then
             for key in picture-uri picture-uri-dark; do
-                gsettings set org.gnome.desktop.background "$key" "file://$MK_SHARE/assets/wallpapers/obsidian-aurora.jpg"
+                gsettings set org.gnome.desktop.background "$key" "file://$MK_SHARE/assets/wallpapers/nordic-fjord-aurora.jpg"
             done
         fi
         ;;

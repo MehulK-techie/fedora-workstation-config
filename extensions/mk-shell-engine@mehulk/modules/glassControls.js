@@ -7,6 +7,7 @@
 //     (`panel-tint-color`, `panel-tint-opacity`). It's a stylesheet of its own for the capsules, the
 //     dock and the popovers, loaded over the engine's: shell surfaces only, never an app's window.
 //     Changes ease in over 220 ms.
+//   Night Light warmth (a slider): GNOME's colour temperature, cool to warm; its icon: Night Light on / off
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
@@ -130,6 +131,26 @@ export class GlassControls {
         syncStrength();
         qs.menu.addItem(this._frost, 2);
         qs.menu.addItem(this._strength, 2);
+        // Night Light warmth: GNOME's own colour temperature, 4700 K (cool, left) to 1700 K (warm,
+        // right); its icon switches Night Light on and off
+        this._color = new Gio.Settings({schema_id: 'org.gnome.settings-daemon.plugins.color'});
+        this._warmth = new QuickSlider({iconName: 'night-light-symbolic', iconReactive: true, iconLabel: 'Night Light'});
+        this._warmth.accessible_name = 'Night Light warmth';
+        const syncWarmth = () => {
+            this._syncing = true;
+            this._warmth.slider.value = (4700 - this._color.get_uint('night-light-temperature')) / 3000;
+            this._warmth.slider.opacity = this._color.get_boolean('night-light-enabled') ? 255 : 110;
+            this._syncing = false;
+        };
+        this._warmth.slider.connect('notify::value', () => {
+            if (!this._syncing)
+                this._color.set_uint('night-light-temperature', Math.round(4700 - this._warmth.slider.value * 3000));
+        });
+        this._warmth.connect('icon-clicked', () => this._color.set_boolean('night-light-enabled',
+            !this._color.get_boolean('night-light-enabled')));
+        this._color.connectObject('changed::night-light-temperature', syncWarmth, 'changed::night-light-enabled', syncWarmth, this);
+        syncWarmth();
+        qs.menu.addItem(this._warmth, 2);
         // Glass Tint: the colour, from a menu of presets (the tile is on while any tint shows)
         this._indicator = new SystemIndicator();
         this._toggle = new TintToggle();
@@ -183,8 +204,10 @@ export class GlassControls {
             this._loaded = null;
         }
         setFrost(true, 38);                          // (MK's own glass when the engine stops)
+        this._color?.disconnectObject(this);
         this._frost?.destroy();
         this._strength?.destroy();
+        this._warmth?.destroy();
         this._indicator?.quickSettingsItems.forEach(item => item.destroy());
         this._indicator?.destroy();
     }

@@ -19,6 +19,8 @@ It installs the engine (`/usr/local/libexec/mk-face`), downloads the two models 
 | `mk-face-auth --status` | Installed? Enrolled? Which PAM files use it? |
 | `mk-face-auth --forget` | Delete your saved face (`/var/lib/mk-face/USER.npy`, root only) |
 | `sudo ./scripts/setup-face-auth.sh --remove` | Take face out of every PAM file |
+| `sudo ./scripts/setup-face-auth.sh --diagnose` | Why the last face checks said no (`journalctl -t mk-face`), SELinux denials, where face is used |
+| `sudo ./scripts/setup-face-auth.sh --selinux` | Only the lock screen's SELinux rule: GDM (confined as `xdm_t`) may connect to the warm face engine's socket; SELinux stays Enforcing |
 
 Settings, optional, in `/etc/mk-face.conf`: `DEVICE=/dev/video0` (another camera), `THRESHOLD=0.45` (higher is stricter; OpenCV suggests 0.363).
 

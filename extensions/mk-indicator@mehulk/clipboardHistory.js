@@ -25,6 +25,24 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
+// a label shown whole, never cut to "Hid..." (the window is wide enough for every tab)
+function fullLabel(text) {
+    const label = new St.Label({text, y_align: Clutter.ActorAlign.CENTER});
+    label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+    return label;
+}
+
+// a copied colour (#rgb, #rrggbb, #rrggbbaa, rgb() / rgba()), checked strictly before it's used in a style
+function colourOf(text) {
+    const t = (text ?? '').trim();
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(t))
+        return t;
+    const m = t.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*(0|1|0?\.\d+)\s*)?\)$/i);
+    if (m && [m[1], m[2], m[3]].every(v => Number(v) <= 255))
+        return m[4] !== undefined ? `rgba(${m[1]},${m[2]},${m[3]},${m[4]})` : `rgb(${m[1]},${m[2]},${m[3]})`;
+    return null;
+}
+
 const TABS = [['all', 'All', 'view-paged-symbolic'], ['text', 'Text', 'text-x-generic-symbolic'],
     ['images', 'Images', 'image-x-generic-symbolic'], ['pinned', 'Pinned', 'starred-symbolic']];
 const PIN_KINDS = [['all', 'All pinned'], ['text', 'Code & text'], ['images', 'Screenshots']];
@@ -380,7 +398,7 @@ export class ClipboardHistory {
         this._tabButtons = TABS.map(([key, label, icon]) => {
             const inner = new St.BoxLayout({style: 'spacing: 6px;'});
             inner.add_child(new St.Icon({icon_name: icon, icon_size: 14, y_align: Clutter.ActorAlign.CENTER}));
-            inner.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
+            inner.add_child(fullLabel(label));
             const b = new St.Button({child: inner, style_class: 'mk-clip-tab', can_focus: true, toggle_mode: true,
                 checked: key === 'all', accessible_name: label});
             b.connect('clicked', () => {
@@ -398,7 +416,7 @@ export class ClipboardHistory {
         const toggle = (icon, label, key, tip) => {
             const inner = new St.BoxLayout({style: 'spacing: 6px;'});
             inner.add_child(new St.Icon({icon_name: icon, icon_size: 14, y_align: Clutter.ActorAlign.CENTER}));
-            inner.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
+            inner.add_child(fullLabel(label));
             const b = new St.Button({child: inner, style_class: 'mk-clip-tab mk-clip-fold', can_focus: true,
                 toggle_mode: true, checked: this._view[key], accessible_name: tip});
             b.connect('clicked', () => {
@@ -613,7 +631,16 @@ export class ClipboardHistory {
             const label = new St.Label({text: item.text.split('\n').slice(0, 4).join('\n').slice(0, 400),
                 style_class: 'mk-clip-text', x_expand: true});
             label.clutter_text.line_wrap = true;
-            main.set_child(label);
+            const colour = colourOf(item.text);
+            if (colour) {                            // a colour: its swatch beside it
+                const row = new St.BoxLayout({style: 'spacing: 10px;', x_expand: true});
+                row.add_child(new St.Widget({style_class: 'mk-clip-swatch', style: `background-color: ${colour};`,
+                    y_align: Clutter.ActorAlign.CENTER}));
+                row.add_child(label);
+                main.set_child(row);
+            } else {
+                main.set_child(label);
+            }
         }
         if (item.tags?.length) {
             const column = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, style: 'spacing: 4px;'});
@@ -654,6 +681,18 @@ export class ClipboardHistory {
             tool('view-reveal-symbolic', 'Preview full size', () => this._preview(item));
         if (item.text)
             tool('document-edit-symbolic', 'Edit', () => this._edit(card, item));
+        if (item.text && /^https?:\/\/\S+$/i.test(item.text.trim())) {
+            tool('web-browser-symbolic', 'Open link', () => {
+                this._hide();
+                try {
+                    Gio.AppInfo.launch_default_for_uri(item.text.trim(), global.create_app_launch_context(0, -1));
+                } catch (e) {
+                    console.warn(`mk-indicator: open link: ${e.message}`);
+                }
+            });
+        }
+        if (item.text)                               // (the text alone, into the window you came from)
+            tool('edit-paste-symbolic', 'Paste as plain text', () => this._copy(item, true));
         tool('bookmark-new-symbolic', 'Tags', () => this._tagEdit(card, item));
         tool('edit-delete-symbolic', 'Delete', () => {
             this._forget(item);

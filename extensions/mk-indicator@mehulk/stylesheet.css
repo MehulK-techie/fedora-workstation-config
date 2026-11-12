@@ -238,7 +238,8 @@
 .mk-clip-search { border-radius: 12px; padding: 8px 12px; }
 .mk-clip-clear { padding: 7px 14px; border-radius: 12px; color: white; font-weight: 600; background-color: rgba(255, 255, 255, 0.10); }
 .mk-clip-clear:hover, .mk-clip-clear:focus { background-color: rgba(255, 92, 110, 0.35); }
-.mk-clip-scroll { min-width: 520px; max-width: 860px; max-height: 560px; min-height: 420px; }
+.mk-clip-scroll { min-width: 600px; max-width: 860px; max-height: 560px; min-height: 420px; }
+.mk-clip-swatch { width: 18px; height: 18px; border-radius: 99px; border: 1px solid rgba(255, 255, 255, 0.35); }
 .mk-clip-list { spacing: 8px; padding-right: 6px; }
 .mk-clip-card { spacing: 4px; padding: 4px; border-radius: 12px; background-color: rgba(255, 255, 255, 0.06); }
 .mk-clip-card.pinned { background-color: rgba(255, 196, 64, 0.12); }
@@ -254,7 +255,7 @@
   border: 1px solid rgba(255, 255, 255, 0.10); color: #eef2f7; }
 /* edit mode: the list steps aside; the text in its own bounded viewport, the actions below it */
 .mk-clip-editor { spacing: 8px; }
-.mk-clip-edit-scroll { min-height: 160px; max-height: 260px; border-radius: 10px; background-color: rgba(14, 16, 22, 0.96); }
+.mk-clip-edit-scroll { min-height: 180px; max-height: 260px; border-radius: 10px; background-color: rgba(14, 16, 22, 0.96); }
 .mk-clip-edit-bar { spacing: 8px; padding-top: 2px; }
 .mk-clip-edit-count { font-size: 9pt; color: rgba(255, 255, 255, 0.5); }
 .mk-clip-tabs { spacing: 4px; }
